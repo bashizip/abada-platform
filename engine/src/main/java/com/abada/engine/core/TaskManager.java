@@ -5,6 +5,7 @@ import com.abada.engine.core.model.TaskInstance;
 import com.abada.engine.core.model.TaskStatus;
 import com.abada.engine.core.model.assignment.AssignmentStrategy;
 import com.abada.engine.observability.EngineMetrics;
+import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.persistence.entity.TaskEntity;
 import com.abada.engine.persistence.repository.TaskRepository;
 import io.micrometer.core.instrument.Timer;
@@ -65,7 +66,7 @@ public class TaskManager {
         Timer.Sample waitingTimeSample = engineMetrics.startTaskWaitingTimer();
         Span span = tracer.spanBuilder("abada.task.create").startSpan();
 
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             TaskInstance task = new TaskInstance();
             task.setId(UUID.randomUUID().toString());
             task.setTaskDefinitionKey(taskDefinitionKey);
@@ -113,7 +114,7 @@ public class TaskManager {
             List<String> userGroups) {
         Span span = tracer.spanBuilder("abada.task.claim").startSpan();
 
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             if (task.getStatus() != TaskStatus.AVAILABLE) {
                 throw new ProcessEngineException(
                         "Task is not available to be claimed. Current status: " + task.getStatus());
@@ -177,7 +178,7 @@ public class TaskManager {
     public void completeTask(TaskInstance task) {
         Span span = tracer.spanBuilder("abada.task.complete").startSpan();
 
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             task.setStatus(TaskStatus.COMPLETED);
             task.setEndDate(Instant.now());
 
@@ -204,7 +205,7 @@ public class TaskManager {
     public void failTask(TaskInstance task) {
         Span span = tracer.spanBuilder("abada.task.fail").startSpan();
 
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             if (task.getStatus() == TaskStatus.COMPLETED || task.getStatus() == TaskStatus.FAILED) {
                 throw new ProcessEngineException(
                         "Task is already in a terminal state: " + task.getStatus());

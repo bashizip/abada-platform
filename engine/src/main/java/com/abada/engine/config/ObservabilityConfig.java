@@ -5,129 +5,151 @@ import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
 
-/**
- * Configuration for OpenTelemetry observability features.
- * Sets up tracing and metrics for the Abada Engine.
- */
+import java.time.Duration;
+import java.net.URI;
+
+/** Configures bounded OTLP export or safe no-op telemetry. */
 @Configuration
-@Profile("!test") // Exclude from test profile
-@ConditionalOnProperty(name = "management.tracing.enabled", matchIfMissing = true)
 public class ObservabilityConfig {
 
-    @Value("${spring.application.version:0.11.0-alpha}")
-    private String appVersion;
-
-    @Value("${app.project:abada}")
-    private String project;
-
-    @Value("${spring.application.name:abada-engine}")
-    private String serviceName;
-
-    @Value("${management.tracing.sampling.probability:1.0}")
-    private double samplingProbability;
-
-    @Value("${spring.profiles.active:default}")
-    private String environment;
-
-    @Value("${management.otlp.metrics.export.step:10s}")
-    private String metricExportInterval;
-
-    @Value("${management.otlp.metrics.endpoint:http://otel-collector:4318/v1/metrics}")
-    private String otlpMetricsEndpoint;
-
-    @Value("${management.otlp.tracing.endpoint:http://otel-collector:4318/v1/traces}")
-    private String otlpTracingEndpoint;
-
-    /**
-     * Configures the OpenTelemetry SDK with resource attributes and sampling.
-     */
     @Bean
     @Primary
-    public OpenTelemetry openTelemetry() {
-        Resource resource = Resource.getDefault()
-                .merge(Resource.create(Attributes.builder()
-                        .put("service.name", serviceName)
-                        .put("service.version", appVersion)
-                        .put("deployment.environment", environment)
-                        .put("service.namespace", "abada")
-                        .put("project", project)
-                        .build()));
+    @ConditionalOnProperty(name = "abada.telemetry.enabled", havingValue = "false", matchIfMissing = true)
+    OpenTelemetry disabledOpenTelemetry() {
+        return OpenTelemetry.noop();
+    }
 
-        io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter spanExporter = io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
-                .builder()
-                .setEndpoint(otlpTracingEndpoint)
+    @Bean(destroyMethod = "close")
+    @Primary
+    @ConditionalOnProperty(name = "abada.telemetry.enabled", havingValue = "true")
+    OpenTelemetrySdk enabledOpenTelemetry(
+            @Value("${spring.application.version:0.11.0-alpha}") String appVersion,
+            @Value("${app.project:abada}") String project,
+            @Value("${spring.application.name:abada-engine}") String serviceName,
+            @Value("${abada.telemetry.environment:${spring.profiles.active:default}}") String environment,
+            @Value("${management.tracing.sampling.probability:0.1}") double samplingProbability,
+            @Value("${abada.telemetry.otlp.endpoint:}") String otlpEndpoint) {
+        String endpoint = requireEndpoint(otlpEndpoint);
+        Resource resource = Resource.getDefault().merge(Resource.create(Attributes.builder()
+                .put("service.name", serviceName)
+                .put("service.version", appVersion)
+                .put("deployment.environment", environment)
+                .put("service.namespace", "abada")
+                .put("project", project)
+                .build()));
+
+        var spanExporter = io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter.builder()
+                .setEndpoint(endpoint + "/v1/traces")
+                .setTimeout(Duration.ofSeconds(5))
                 .build();
-
+        var spanProcessor = BatchSpanProcessor.builder(spanExporter)
+                .setMaxQueueSize(2048)
+                .setMaxExportBatchSize(512)
+                .setScheduleDelay(Duration.ofSeconds(2))
+                .setExporterTimeout(Duration.ofSeconds(5))
+                .build();
         SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
                 .setResource(resource)
                 .setSampler(Sampler.traceIdRatioBased(samplingProbability))
-                .addSpanProcessor(io.opentelemetry.sdk.trace.export.BatchSpanProcessor.builder(spanExporter).build())
+                .addSpanProcessor(spanProcessor)
                 .build();
 
         return OpenTelemetrySdk.builder()
                 .setTracerProvider(tracerProvider)
                 .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
-                .buildAndRegisterGlobal();
+                .build();
     }
 
-    /**
-     * Creates a tracer instance for manual instrumentation.
-     */
     @Bean
-    public Tracer tracer(OpenTelemetry openTelemetry) {
+    Tracer tracer(OpenTelemetry openTelemetry,
+            @Value("${spring.application.name:abada-engine}") String serviceName,
+            @Value("${spring.application.version:0.11.0-alpha}") String appVersion) {
         return openTelemetry.getTracer(serviceName, appVersion);
     }
 
-    /**
-     * Configure OTLP meter registry for metrics with appropriate step interval.
-     * Note: Spring Boot auto-configuration should handle OTLP registry setup,
-     * but we provide this as a fallback if auto-configuration doesn't work.
-     */
-    @Bean
-    @ConditionalOnProperty(name = "management.otlp.metrics.endpoint")
-    public OtlpMeterRegistry otlpMeterRegistry() {
+    @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(name = "abada.telemetry.enabled", havingValue = "true")
+    OtlpMeterRegistry otlpMeterRegistry(
+            @Value("${abada.telemetry.otlp.endpoint:}") String otlpEndpoint,
+            @Value("${management.otlp.metrics.export.step:10s}") String configuredStep,
+            @Value("${spring.application.version:0.11.0-alpha}") String appVersion,
+            @Value("${app.project:abada}") String project,
+            @Value("${spring.application.name:abada-engine}") String serviceName,
+            @Value("${abada.telemetry.environment:${spring.profiles.active:default}}") String environment) {
+        String metricsUrl = requireEndpoint(otlpEndpoint) + "/v1/metrics";
+        Duration step = parseDuration(configuredStep);
         OtlpConfig config = new OtlpConfig() {
             @Override
             public String get(String key) {
-                return getConfigValue(key);
+                return "url".equals(key) || "otlp.url".equals(key) ? metricsUrl : null;
             }
 
             @Override
-            public java.time.Duration step() {
-                try {
-                    // Parse duration string like "10s" to Duration
-                    String stepStr = metricExportInterval;
-                    if (stepStr.endsWith("s")) {
-                        long seconds = Long.parseLong(stepStr.substring(0, stepStr.length() - 1));
-                        return java.time.Duration.ofSeconds(seconds);
-                    }
-                    return java.time.Duration.ofSeconds(10);
-                } catch (Exception e) {
-                    return java.time.Duration.ofSeconds(10);
-                }
+            public Duration step() {
+                return step;
             }
 
-            private String getConfigValue(String key) {
-                return switch (key) {
-                    case "otlp.url" -> otlpMetricsEndpoint;
-                    default -> null;
-                };
+            @Override
+            public java.util.Map<String, String> resourceAttributes() {
+                return java.util.Map.of(
+                        "service.name", serviceName,
+                        "service.version", appVersion,
+                        "service.namespace", "abada",
+                        "deployment.environment", environment,
+                        "project", project);
+            }
+
+            @Override
+            public io.micrometer.registry.otlp.HistogramFlavor histogramFlavor() {
+                return io.micrometer.registry.otlp.HistogramFlavor.EXPLICIT_BUCKET_HISTOGRAM;
             }
         };
-
         return new OtlpMeterRegistry(config, io.micrometer.core.instrument.Clock.SYSTEM);
+    }
+
+    private static String requireEndpoint(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(
+                    "ABADA_TELEMETRY_OTLP_ENDPOINT is required when ABADA_TELEMETRY_ENABLED=true");
+        }
+        String endpoint = value.replaceAll("/+$", "");
+        URI uri;
+        try {
+            uri = URI.create(endpoint);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("ABADA_TELEMETRY_OTLP_ENDPOINT must be a valid HTTP(S) URL", exception);
+        }
+        if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null) {
+            throw new IllegalStateException("ABADA_TELEMETRY_OTLP_ENDPOINT must be a valid HTTP(S) URL");
+        }
+        return endpoint;
+    }
+
+    private static Duration parseDuration(String value) {
+        if (value == null || value.isBlank()) {
+            return Duration.ofSeconds(10);
+        }
+        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.endsWith("ms")) {
+            return Duration.ofMillis(Long.parseLong(normalized.substring(0, normalized.length() - 2)));
+        }
+        if (normalized.endsWith("s")) {
+            return Duration.ofSeconds(Long.parseLong(normalized.substring(0, normalized.length() - 1)));
+        }
+        return Duration.parse(value);
     }
 }

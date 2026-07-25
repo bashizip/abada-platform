@@ -20,17 +20,15 @@ datasources:
     url: http://jaeger:16686
     editable: true
     jsonData:
-      tracesToLogs:
+      tracesToLogsV2:
         datasourceUid: 'loki'
-        tags: ['job', 'instance', 'pod', 'namespace']
-        mappedTags: [{ key: 'service.name', value: 'service' }]
-        mapTagNamesEnabled: false
-        spanStartTimeShift: '1h'
-        spanEndTimeShift: '1h'
-        filterByTraceID: false
-        filterBySpanID: false
+        tags: [{ key: 'service.name', value: 'service_name' }]
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
+        filterByTraceID: true
+        filterBySpanID: true
         customQuery: true
-        query: '{service_name="${__data.fields.service}"}'
+        query: '{$${__tags}} | json'
 
   - name: Loki
     type: loki
@@ -40,3 +38,8 @@ datasources:
     editable: true
     jsonData:
       maxLines: 1000
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"traceId":"([0-9a-f]{32})"'
+          datasourceUid: jaeger
+          url: '$${__value.raw}'

@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Recreate Abada Tenda container in the dev stack.
-# Uses Docker Compose so all service settings (network, labels, env, routing)
-# remain consistent with docker-compose.dev.yml.
+# Builds one local immutable image, then recreates the service through the
+# canonical development Compose profile.
 
 set -euo pipefail
 
@@ -10,8 +10,8 @@ SERVICE_NAME="abada-tenda"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TENDA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ROOT_DIR="$(cd "${TENDA_DIR}/.." && pwd)"
-COMPOSE_BASE="${ROOT_DIR}/docker-compose.yml"
-COMPOSE_DEV="${ROOT_DIR}/docker-compose.dev.yml"
+COMPOSE_BASE="${ROOT_DIR}/compose.yaml"
+COMPOSE_DEV="${ROOT_DIR}/compose.dev.yaml"
 
 usage() {
   cat <<EOF
@@ -73,7 +73,7 @@ if [[ ! -f "${COMPOSE_BASE}" || ! -f "${COMPOSE_DEV}" ]]; then
   exit 1
 fi
 
-COMPOSE_CMD=(docker compose -f "${COMPOSE_BASE}" -f "${COMPOSE_DEV}")
+COMPOSE_CMD=(docker compose --env-file "${ROOT_DIR}/release/.env.dev.example" -f "${COMPOSE_BASE}" -f "${COMPOSE_DEV}")
 
 echo "=========================================="
 echo "Refreshing Tenda service in dev stack"
@@ -85,9 +85,9 @@ echo
 if [[ "${NO_BUILD}" == false ]]; then
   echo "Step 1: Rebuilding ${SERVICE_NAME} image"
   if [[ "${NO_CACHE}" == true ]]; then
-    "${COMPOSE_CMD[@]}" build --no-cache "${SERVICE_NAME}"
+    docker build --no-cache -f "${TENDA_DIR}/Dockerfile.prod" -t abada-tenda:local "${TENDA_DIR}"
   else
-    "${COMPOSE_CMD[@]}" build "${SERVICE_NAME}"
+    docker build -f "${TENDA_DIR}/Dockerfile.prod" -t abada-tenda:local "${TENDA_DIR}"
   fi
   echo
 else
@@ -100,7 +100,7 @@ UP_ARGS=(up -d --force-recreate --no-deps)
 if [[ "${NO_BUILD}" == true ]]; then
   UP_ARGS+=(--no-build)
 fi
-"${COMPOSE_CMD[@]}" "${UP_ARGS[@]}" "${SERVICE_NAME}"
+ABADA_TENDA_IMAGE=abada-tenda:local "${COMPOSE_CMD[@]}" "${UP_ARGS[@]}" "${SERVICE_NAME}"
 echo
 
 echo "Step 3: Service status"
@@ -108,4 +108,4 @@ echo "Step 3: Service status"
 echo
 
 echo "Refresh complete."
-echo "Tenda URL: https://tenda.localhost"
+echo "Tenda URL: http://tenda.localhost"

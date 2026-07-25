@@ -39,7 +39,7 @@ public class SecurityConfig {
 
     private void authorize(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/v1", "/v1/info", "/actuator/health", "/swagger-ui/**", "/swagger-ui.html",
+                .requestMatchers("/v1", "/v1/info", "/actuator/health", "/actuator/health/**", "/swagger-ui/**", "/swagger-ui.html",
                         "/v3/api-docs/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/v1/processes/deploy")
                         .hasAnyAuthority("SCOPE_process:deploy", AbadaRoles.DEPLOYER, AbadaRoles.ADMIN)

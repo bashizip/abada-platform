@@ -22,7 +22,33 @@ otel:
     jdbc:
       enabled: false
   sdk:
-    disabled: false
+    disabled: ${OTEL_SDK_DISABLED:true}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "abada.process.duration": true
+        "abada.task.waiting_time": true
+        "abada.task.processing_time": true
+  otlp:
+    metrics:
+      export:
+        enabled: false
+
+abada:
+  telemetry:
+    enabled: ${ABADA_TELEMETRY_ENABLED:false}
+    environment: ${ABADA_ENVIRONMENT:${spring.profiles.active:default}}
+    otlp:
+      endpoint: ${ABADA_TELEMETRY_OTLP_ENDPOINT:}
 
 # SpringDoc OpenAPI / Swagger UI
 springdoc:

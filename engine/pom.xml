@@ -241,6 +241,8 @@
                 <version>3.5.2</version>
                 <configuration>
                     <runOrder>random</runOrder>
+                    <!-- Java 21+ no longer guarantees Mockito can self-attach. -->
+                    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                 </configuration>
 
             </plugin>

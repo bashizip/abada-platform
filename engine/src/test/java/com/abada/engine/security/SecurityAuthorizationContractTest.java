@@ -78,6 +78,12 @@ class SecurityAuthorizationContractTest {
     }
 
     @Test
+    void readinessIsPublicButDoesNotExposeProtectedApis() throws Exception {
+        mvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
+        mvc.perform(get("/v1/tasks")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void enforcesEveryPermissionBoundary() throws Exception {
         assertForbidden(post("/v1/processes/deploy").contentType(MediaType.MULTIPART_FORM_DATA), "tasks");
         assertForbidden(post("/v1/processes/start").param("processId", "missing"), "tasks");

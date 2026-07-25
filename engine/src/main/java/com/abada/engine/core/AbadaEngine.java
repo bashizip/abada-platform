@@ -10,6 +10,7 @@ import com.abada.engine.core.model.TaskInstance;
 import com.abada.engine.core.model.ProcessStatus;
 import com.abada.engine.dto.UserTaskPayload;
 import com.abada.engine.observability.EngineMetrics;
+import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.parser.BpmnParser;
 import com.abada.engine.persistence.PersistenceService;
 import com.abada.engine.persistence.entity.ExternalTaskEntity;
@@ -96,7 +97,7 @@ public class AbadaEngine {
         Span span = tracer.spanBuilder("abada.process.deploy").startSpan();
         Timer.Sample deploymentSample = engineMetrics.startBpmnDeploymentTimer();
         boolean succeeded = false;
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             BpmnParseResult parseResult = parser.parseDetailed(bpmnXml, options);
             ParsedProcessDefinition definition = parseResult.definition();
             ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult);
@@ -165,7 +166,7 @@ public class AbadaEngine {
         Timer.Sample sample = engineMetrics.startProcessTimer();
         Span span = tracer.spanBuilder("abada.process.start").startSpan();
 
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             ProcessDefinitionEntity deployment = persistenceService.findProcessDefinitionById(processDefinitionId);
             if (deployment == null) {
                 throw new ProcessEngineException("Unknown process ID: " + processDefinitionId);
@@ -629,7 +630,7 @@ public class AbadaEngine {
     @Transactional(readOnly = true)
     public ProcessInstance getProcessInstanceById(@SpanTag("process.instance.id") String id) {
         Span span = tracer.spanBuilder("abada.process.get").startSpan();
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             span.setAttribute("process.instance.id", id);
             ProcessInstanceEntity entity = persistenceService.findProcessInstanceById(id);
             ProcessInstance instance = entity == null ? null : materializeProcessInstance(entity);

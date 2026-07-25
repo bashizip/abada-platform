@@ -3,11 +3,12 @@ import Keycloak, {
   type KeycloakProfile,
   type KeycloakTokenParsed,
 } from "keycloak-js";
+import { runtimeConfig } from "../config/runtime";
 
 const keycloak = new Keycloak({
-  url: import.meta.env.VITE_KEYCLOAK_URL,
-  realm: import.meta.env.VITE_KEYCLOAK_REALM,
-  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
+  url: runtimeConfig.oidcUrl,
+  realm: runtimeConfig.oidcRealm,
+  clientId: runtimeConfig.oidcClientId,
 });
 let keycloakInitPromise: Promise<boolean> | null = null;
 let keycloakInitialized = false;
@@ -87,7 +88,7 @@ export function hasOrunAdminRole(tokenParsed?: KeycloakTokenParsed): boolean {
     normalize,
   );
   const groups: string[] = (parsed?.groups || []).map(normalize);
-  const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+  const clientId = runtimeConfig.oidcClientId;
   const directClientRoles: string[] = (
     parsed?.resource_access?.[clientId]?.roles || []
   ).map(normalize);

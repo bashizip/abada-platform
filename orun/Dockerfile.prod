@@ -16,16 +16,19 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM nginx:1.28.0-alpine
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
+COPY docker-entrypoint.sh /usr/local/bin/abada-frontend-entrypoint
+RUN chmod +x /usr/local/bin/abada-frontend-entrypoint
 
 # Expose port 5603
 EXPOSE 5603
 
 # Start nginx
+ENTRYPOINT ["/usr/local/bin/abada-frontend-entrypoint"]
 CMD ["nginx", "-g", "daemon off;"]

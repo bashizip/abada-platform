@@ -1,6 +1,7 @@
 package com.abada.engine.core;
 
 import com.abada.engine.observability.EngineMetrics;
+import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.persistence.entity.JobEntity;
 import com.abada.engine.persistence.repository.JobRepository;
 import io.micrometer.core.instrument.Timer;
@@ -53,7 +54,7 @@ public class JobScheduler {
                            @SpanTag("execution.timestamp") Instant executionTimestamp) {
         Span span = tracer.spanBuilder("abada.job.schedule").startSpan();
         
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             if (jobRepository.existsByProcessInstanceIdAndEventIdAndStatusIn(processInstanceId, eventId,
                     List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED))) {
                 return;
@@ -87,7 +88,7 @@ public class JobScheduler {
     public void executeDueJobs() {
         Span span = tracer.spanBuilder("abada.job.execute.due").startSpan();
         
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             if (abadaEngine == null) {
                 // Engine may not be ready during initial startup
                 return;
@@ -108,7 +109,7 @@ public class JobScheduler {
                 Timer.Sample sample = engineMetrics.startJobExecutionTimer();
                 Span jobSpan = tracer.spanBuilder("abada.job.execute").startSpan();
                 
-                try (var jobScope = jobSpan.makeCurrent()) {
+                try (var jobScope = TraceLogContext.open(jobSpan)) {
                     jobSpan.setAttribute("job.id", job.getId());
                     jobSpan.setAttribute("process.instance.id", job.getProcessInstanceId());
                     jobSpan.setAttribute("event.id", job.getEventId());
