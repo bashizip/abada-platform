@@ -265,7 +265,7 @@ are rejected at deployment instead of being silently ignored.
 - ⏳ Additional BPMN compatibility profiles
 - ⏳ TypeScript and Python SDKs
 - ⏳ DMN
-- ⏳ CMMN
+- ⏳ ❌ CMMN (superseded by agentic adaptive subprocesses)
 - ⏳ Public Agentic Runtime
 - ⏳ AI Worker SDK
 - ⏳ Agent Memory Integrations
