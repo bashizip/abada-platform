@@ -73,3 +73,71 @@ jobs:
           cache: maven
       - name: Test Java worker SDK
         run: engine/mvnw -f sdk/java/pom.xml verify
+
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: documentation/package-lock.json
+      - name: Install documentation dependencies
+        working-directory: documentation
+        run: npm ci
+      - name: Audit documentation dependencies
+        working-directory: documentation
+        run: npm audit --audit-level=low
+      - name: Check documentation
+        working-directory: documentation
+        run: npm run check
+      - name: Build documentation
+        working-directory: documentation
+        run: npm run build
+
+  platform-deployment-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose profiles, runtime config and release archive
+        run: ./scripts/test/validate-platform-deployment.sh
+
+  platform-dev-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ABADA_ENGINE_IMAGE: abada-engine:platform-ci
+      ABADA_TENDA_IMAGE: abada-tenda:platform-ci
+      ABADA_ORUN_IMAGE: abada-orun:platform-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build immutable platform images
+        run: |
+          docker build -f engine/Dockerfile.prod.engine -t "$ABADA_ENGINE_IMAGE" engine
+          docker build -f tenda/Dockerfile.prod -t "$ABADA_TENDA_IMAGE" tenda
+          docker build -f orun/Dockerfile.prod -t "$ABADA_ORUN_IMAGE" orun
+      - name: Start telemetry-disabled development platform
+        run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml up -d --wait
+      - name: Verify workflow persistence and telemetry-disabled behavior
+        run: ./scripts/test/smoke-dev-platform.sh
+      - name: Verify PostgreSQL backup and restore
+        run: ./scripts/test/verify-backup-restore.sh
+      - name: Reset to clean volumes
+        run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml down -v
+      - name: Verify external OTLP without bundled telemetry services
+        run: ./scripts/test/smoke-external-otlp.sh
+      - name: Reset external OTLP test to clean volumes
+        run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml -f deployment/tests/compose.external-otlp-test.yaml down -v
+      - name: Verify bundled telemetry and collector failure isolation
+        run: ./scripts/test/smoke-telemetry-platform.sh
+      - name: Capture service logs on failure
+        if: failure()
+        run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml -f compose.telemetry.yaml logs --no-color
+      - name: Capture external collector logs on failure
+        if: failure()
+        run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml -f deployment/tests/compose.external-otlp-test.yaml logs --no-color otel-test-collector
+      - name: Remove test platform and volumes
+        if: always()
+        run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml -f compose.telemetry.yaml -f deployment/tests/compose.external-otlp-test.yaml down -v

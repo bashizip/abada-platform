@@ -1,44 +1,7 @@
-#!/bin/bash
-
-# Production build script for Abada Engine
-# This builds the Docker image from source (no local JAR required)
-
-set -e
-
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo -e "${BLUE}=== Abada Engine Production Build ===${NC}\n"
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-
-# Parse command line arguments
-BUILD_ONLY=false
-if [ "$1" = "--build-only" ]; then
-    BUILD_ONLY=true
-fi
-
-echo -e "${YELLOW}Building Docker image from source...${NC}"
-echo -e "${BLUE}This will download Maven dependencies and build inside Docker${NC}\n"
-
-# Build the image (USE_LOCAL_JAR defaults to false)
-docker-compose -f "${ROOT_DIR}/docker-compose.yml" -f "${ROOT_DIR}/docker-compose.prod.yml" build abada-engine
-
-echo -e "\n${GREEN}✓ Docker image built successfully!${NC}"
-
-if [ "$BUILD_ONLY" = "false" ]; then
-    echo -e "\n${YELLOW}Starting production stack...${NC}"
-    docker-compose -f "${ROOT_DIR}/docker-compose.yml" -f "${ROOT_DIR}/docker-compose.prod.yml" up -d
-
-    echo -e "\n${GREEN}✓ Production stack started!${NC}"
-    echo -e "${BLUE}Application: http://localhost/api (via Traefik)${NC}"
-    echo -e "${BLUE}Jaeger UI: http://localhost:16686${NC}"
-    echo -e "${BLUE}Grafana: http://localhost:3000${NC}"
-    echo -e "\n${YELLOW}To view logs:${NC} docker-compose -f ${ROOT_DIR}/docker-compose.yml -f ${ROOT_DIR}/docker-compose.prod.yml logs -f"
-else
-    echo -e "\n${BLUE}Image built but not started (--build-only flag)${NC}"
-    echo -e "${YELLOW}To start:${NC} docker-compose -f ${ROOT_DIR}/docker-compose.yml -f ${ROOT_DIR}/docker-compose.prod.yml up -d"
-fi
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+docker build -f "$ROOT_DIR/engine/Dockerfile.prod.engine" -t abada-engine:local "$ROOT_DIR/engine"
+docker build -f "$ROOT_DIR/tenda/Dockerfile.prod" -t abada-tenda:local "$ROOT_DIR/tenda"
+docker build -f "$ROOT_DIR/orun/Dockerfile.prod" -t abada-orun:local "$ROOT_DIR/orun"
+echo "Built abada-engine:local, abada-tenda:local and abada-orun:local."

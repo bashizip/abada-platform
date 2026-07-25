@@ -1,210 +1,54 @@
+param(
+  [string]$Version = $(if ($env:ABADA_VERSION) { $env:ABADA_VERSION } else { "1.0.0-rc.1" }),
+  [ValidateSet("dev", "prod")]
+  [string]$Profile = $(if ($env:ABADA_PROFILE) { $env:ABADA_PROFILE } else { "dev" }),
+  [string]$Repository = $(if ($env:ABADA_REPOSITORY) { $env:ABADA_REPOSITORY } else { "bashizip/abada-engine" }),
+  [string]$InstallDirectory = $(if ($env:ABADA_INSTALL_DIR) { $env:ABADA_INSTALL_DIR } else { Join-Path (Get-Location) "abada-platform-$Version" })
+)
+
 $ErrorActionPreference = "Stop"
-
-# Abada Platform Quickstart Script (Windows/PowerShell)
-# Downloads and starts the Abada Platform
-
-# Configuration
-$ReleaseUrl = "https://raw.githubusercontent.com/bashizip/abada-engine/main/release/docker-compose.release.yml"
-$LocalFile = "docker-compose.release.yml"
-
-function Write-Header {
-    Write-Host ""
-    Write-Host "    _    _               _        "
-    Write-Host "   / \  | |__   __ _  __| | __ _  "
-    Write-Host "  / _ \ | '_ \ / _` |/ _` |/ _` | "
-    Write-Host " / ___ \| |_) | (_| | (_| | (_| | "
-    Write-Host "/_/   \_\_.__/ \__,_|\__,_|\__,_| "
-    Write-Host "                                  "
-    Write-Host "   Quickstart Launcher            "
-    Write-Host ""
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?$') {
+  throw 'Version must be an immutable semantic version'
 }
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker is required" }
+& docker compose version | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Docker Compose v2 is required" }
 
-function Write-Step {
-    param([string]$Message)
-    Write-Host "==> $Message"
+$Archive = "abada-platform-$Version.tar.gz"
+$BaseUrl = if ($env:ABADA_RELEASE_BASE_URL) { $env:ABADA_RELEASE_BASE_URL } else { "https://github.com/$Repository/releases/download/v$Version" }
+$TemporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Path $TemporaryDirectory | Out-Null
+
+try {
+  $ArchivePath = Join-Path $TemporaryDirectory $Archive
+  $ChecksumPath = "$ArchivePath.sha256"
+  Write-Host "Downloading Abada $Version release bundle..."
+  Invoke-WebRequest -Uri "$BaseUrl/$Archive" -OutFile $ArchivePath
+  Invoke-WebRequest -Uri "$BaseUrl/$Archive.sha256" -OutFile $ChecksumPath
+
+  $Expected = ((Get-Content $ChecksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+  $Actual = (Get-FileHash -Algorithm SHA256 $ArchivePath).Hash.ToLowerInvariant()
+  if ($Expected -ne $Actual) { throw "Release archive checksum verification failed" }
+
+  New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
+  tar -xzf $ArchivePath --strip-components=1 -C $InstallDirectory
+  Write-Host "Verified and installed Abada at $InstallDirectory"
+  $PlatformScript = Join-Path $InstallDirectory "release/abada-platform.ps1"
+  if ($Profile -eq 'dev') {
+    & $PlatformScript -Command up -Profile dev
+    if ($LASTEXITCODE -ne 0) { throw "Abada development quickstart failed" }
+  }
+  else {
+    $ProductionEnv = Join-Path $InstallDirectory '.env.prod'
+    if (-not (Test-Path $ProductionEnv)) {
+      Copy-Item (Join-Path $InstallDirectory 'release/.env.prod.example') $ProductionEnv
+    }
+    Write-Host 'Production files are ready, but no services were started.'
+    Write-Host "1. Replace every placeholder in $ProductionEnv."
+    Write-Host "2. Validate: & '$PlatformScript' -Command doctor -Profile prod -EnvFile '$ProductionEnv'"
+    Write-Host "3. Start:    & '$PlatformScript' -Command up -Profile prod -EnvFile '$ProductionEnv'"
+  }
 }
-
-function Test-Command {
-    param([string]$Name)
-    return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
+finally {
+  Remove-Item -Recurse -Force $TemporaryDirectory -ErrorAction SilentlyContinue
 }
-
-function Check-Prerequisites {
-    Write-Step "Checking prerequisites..."
-
-    if (-not (Test-Command "docker")) {
-        throw "docker is not installed. Please install Docker Desktop from https://www.docker.com/products/docker-desktop"
-    }
-
-    & docker compose version | Out-Null
-    Write-Host "Docker and Docker Compose found"
-}
-
-function Download-Compose {
-    Write-Step "Downloading latest configuration..."
-    Invoke-WebRequest -Uri $ReleaseUrl -OutFile $LocalFile -UseBasicParsing
-    Write-Host "Configuration downloaded"
-}
-
-function Setup-LocalTls {
-    Write-Step "Preparing local HTTPS certificates..."
-
-    if (-not (Test-Path $LocalFile)) {
-        Write-Host "i Compose file '$LocalFile' not found. Skipping local TLS setup."
-        return
-    }
-
-    $composeText = Get-Content -Raw -Path $LocalFile
-    $hasLocalhostRoutes = $composeText -match 'Host\(`[^`]*localhost`\)|\.localhost'
-    $hasHttps = $composeText -match '443:443|published:\s*"?443"?|--entrypoints\.websecure\.address=:443|entrypoints=web,websecure|\.tls=true'
-
-    if (-not $hasLocalhostRoutes) {
-        Write-Host "i No localhost host rules detected in $LocalFile; skipping mkcert setup."
-        return
-    }
-
-    if (-not $hasHttps) {
-        Write-Host "i No HTTPS entrypoint detected in $LocalFile; skipping mkcert setup."
-        return
-    }
-
-    if (-not (Test-Command "mkcert")) {
-        throw "mkcert is required to generate trusted local HTTPS certificates. Install from https://github.com/FiloSottile/mkcert"
-    }
-
-    $certDir = "docker/traefik/certs"
-    $certFile = Join-Path $certDir "localhost.pem"
-    $keyFile = Join-Path $certDir "localhost-key.pem"
-
-    New-Item -ItemType Directory -Force -Path $certDir | Out-Null
-
-    $needsGenerate = $true
-    if ((Test-Path $certFile) -and (Test-Path $keyFile)) {
-        $needsGenerate = $false
-    }
-
-    if ($needsGenerate) {
-        Write-Step "Installing mkcert local CA (if not already installed)..."
-        & mkcert -install
-
-        Write-Step "Generating TLS certificate for localhost domains..."
-        & mkcert `
-            -cert-file $certFile `
-            -key-file $keyFile `
-            localhost `
-            "*.localhost" `
-            tenda.localhost `
-            orun.localhost `
-            grafana.localhost `
-            jaeger.localhost `
-            keycloak.localhost `
-            traefik.localhost
-
-        Write-Step "Local TLS certs ready at $certDir"
-    } else {
-        Write-Host "i Local TLS certs already exist at $certDir."
-    }
-}
-
-function Check-ReleaseAssets {
-    $requiredPaths = @(
-        "docker/grafana/provisioning",
-        "docker/grafana/dashboards",
-        "docker/loki-config-prod.yaml",
-        "docker/otel-collector-config.yaml",
-        "docker/prometheus.yml",
-        "docker/promtail-config.yaml",
-        "docker/traefik/dynamic.yml",
-        "docker/traefik/traefik.yml"
-    )
-
-    $missing = @()
-    foreach ($path in $requiredPaths) {
-        if (-not (Test-Path $path)) {
-            $missing += $path
-        }
-    }
-
-    if ($missing.Count -gt 0) {
-        Write-Host "Error: release assets are missing for docker-compose.release.yml."
-        Write-Host "Run this quickstart from the repository root, or use a release bundle that includes the docker/ directory."
-        Write-Host "Missing paths:"
-        foreach ($path in $missing) {
-            Write-Host "  - $path"
-        }
-        throw "Required release assets are missing."
-    }
-
-    New-Item -ItemType Directory -Force -Path "logs" | Out-Null
-}
-
-function Verify-LocalTls {
-    Write-Step "Verifying local TLS certificate and trust..."
-
-    if (-not (Test-Command "mkcert")) {
-        throw "mkcert is required to verify trusted local HTTPS certificates."
-    }
-
-    $certFile = "docker/traefik/certs/localhost.pem"
-    $keyFile = "docker/traefik/certs/localhost-key.pem"
-    if (-not (Test-Path $certFile) -or -not (Test-Path $keyFile)) {
-        throw "Local TLS cert files are missing: $certFile and/or $keyFile"
-    }
-
-    $caroot = (& mkcert -CAROOT).Trim()
-    if ([string]::IsNullOrWhiteSpace($caroot)) {
-        throw "mkcert CAROOT not found. Run 'mkcert -install' and retry."
-    }
-
-    $rootCa = Join-Path $caroot "rootCA.pem"
-    if (-not (Test-Path $rootCa)) {
-        throw "mkcert root CA not found at $rootCa. Run 'mkcert -install' and retry."
-    }
-
-    if (Test-Command "certutil") {
-        $dump = & certutil -dump $certFile 2>$null
-        $requiredDns = @(
-            "localhost",
-            "tenda.localhost",
-            "orun.localhost",
-            "grafana.localhost",
-            "keycloak.localhost",
-            "jaeger.localhost",
-            "traefik.localhost"
-        )
-
-        foreach ($dns in $requiredDns) {
-            if ($dump -notmatch [regex]::Escape($dns)) {
-                throw "TLS certificate is missing SAN '$dns'."
-            }
-        }
-    }
-
-    Write-Host "Local HTTPS certificate is installed and valid for *.localhost"
-}
-
-function Start-Platform {
-    Write-Step "Starting Abada Platform..."
-    & docker compose -f $LocalFile up -d
-
-    Write-Host ""
-    Write-Step "Platform available at:"
-    Write-Host "  - Engine API : https://localhost/api/"
-    Write-Host "  - Swagger UI : https://localhost/api/swagger-ui.html"
-    Write-Host "  - Tenda UI   : https://tenda.localhost"
-    Write-Host "  - Orun UI    : https://orun.localhost"
-    Write-Host "  - Grafana    : https://grafana.localhost"
-    Write-Host "  - Keycloak   : https://keycloak.localhost"
-    Write-Host "  - Jaeger     : https://jaeger.localhost"
-    Write-Host "  - Traefik    : https://traefik.localhost"
-    Write-Host ""
-    Write-Host "Run 'docker compose -f $LocalFile down' to stop."
-}
-
-Write-Header
-Check-Prerequisites
-Download-Compose
-Check-ReleaseAssets
-Setup-LocalTls
-Verify-LocalTls
-Start-Platform

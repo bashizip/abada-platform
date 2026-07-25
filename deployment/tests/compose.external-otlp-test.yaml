@@ -1,0 +1,34 @@
+# Test-only fixture. This is not part of the supported release Compose family.
+services:
+  abada-engine:
+    environment:
+      ABADA_TELEMETRY_ENABLED: "true"
+      ABADA_TELEMETRY_OTLP_ENDPOINT: http://otel-test-collector:4318
+      OTEL_SDK_DISABLED: "false"
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+    networks:
+      - telemetry_test
+
+  otel-test-collector:
+    image: otel/opentelemetry-collector-contrib:0.130.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deployment/tests/otel-collector-sink.yaml:/etc/otelcol/config.yaml:ro
+    networks:
+      - telemetry_test
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  telemetry_test:
+    driver: bridge
+    internal: true
