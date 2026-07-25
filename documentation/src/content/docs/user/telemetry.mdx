@@ -22,18 +22,15 @@ container logs and local rolling JSON logs remain available.
 ./release/abada-platform up dev --telemetry
 ```
 
-The overlay starts OpenTelemetry Collector, Prometheus, Jaeger, Loki, Promtail
+The overlay starts OpenTelemetry Collector, Prometheus, Jaeger, Loki, Alloy
 and Grafana. Grafana is loopback-only at `http://127.0.0.1:3000`; production
 requires a non-placeholder `GRAFANA_ADMIN_PASSWORD` of at least 16 characters.
 Datasources and dashboards are provisioned automatically. The internal
 `telemetry-health` container checks every bundled backend; it does not gate the
 engine health endpoint.
 
-:::caution
-The RC keeps the specified Promtail-based log path for compatibility. Promtail
-is upstream end-of-life; migration to [Grafana Alloy](https://grafana.com/docs/loki/latest/send-data/alloy/)
-is planned after the RC deployment contract is certified.
-:::
+Alloy tails only the named `engine_logs` volume, persists offsets, and runs
+with anonymous usage reporting disabled. It has no Docker socket access.
 
 ## External OTLP
 

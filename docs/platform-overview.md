@@ -8,7 +8,7 @@ optional telemetry overlay.
 Development includes local Keycloak and HTTP routing. Production uses exact
 versioned images, TLS and an external OIDC provider. Telemetry is disabled by
 default; the optional stack includes OpenTelemetry Collector, Prometheus,
-Jaeger, Loki, Promtail and Grafana. Consul is not part of the supported
+Jaeger, Loki, Grafana Alloy and Grafana. Consul is not part of the supported
 platform.
 
 Start with the [user guide](../documentation/src/content/docs/user/index.mdx),

@@ -38,11 +38,11 @@ jq -e '.services.postgres.ports == null and .services["keycloak-db"].ports == nu
 jq -e '[.services[] | has("build")] | any | not' "$TMP_DIR/dev-config.json" >/dev/null
 "${DEV[@]}" config --services > "$TMP_DIR/dev-services"
 "${DEV_TELEMETRY[@]}" config --services > "$TMP_DIR/dev-telemetry-services"
-if grep -Eq '^(otel-collector|grafana|prometheus|jaeger|loki|promtail|telemetry-health)$' "$TMP_DIR/dev-services"; then
+if grep -Eq '^(otel-collector|grafana|prometheus|jaeger|loki|alloy|telemetry-health)$' "$TMP_DIR/dev-services"; then
   echo "Telemetry service leaked into the disabled development profile" >&2
   exit 1
 fi
-for service in otel-collector grafana prometheus jaeger loki promtail telemetry-health; do
+for service in otel-collector grafana prometheus jaeger loki alloy telemetry-health; do
   grep -qx "$service" "$TMP_DIR/dev-telemetry-services" || { echo "Missing telemetry service: $service" >&2; exit 1; }
 done
 
@@ -152,9 +152,13 @@ fi
 
 "${DEV_TELEMETRY[@]}" config --format json >"$TMP_DIR/telemetry-config.json"
 jq -e '.services.grafana.ports | all(.host_ip == "127.0.0.1")' "$TMP_DIR/telemetry-config.json" >/dev/null
-jq -e '[.services.promtail.volumes[]?.source] | index("/var/run/docker.sock") | not' \
+jq -e '[.services.alloy.volumes[]?.source] | index("/var/run/docker.sock") | not' \
   "$TMP_DIR/telemetry-config.json" >/dev/null
-jq -e '.services["telemetry-health"].healthcheck.test[1] | contains("otel-collector:13133") and contains("jaeger:16686") and contains("prometheus:9090/-/ready") and contains("loki:3100/ready") and contains("promtail:9080/ready") and contains("grafana:3000/api/health")' \
+jq -e '.services.alloy.image == "grafana/alloy:v1.18.0"' \
+  "$TMP_DIR/telemetry-config.json" >/dev/null
+jq -e '.services.alloy.command | index("--disable-reporting") != null' \
+  "$TMP_DIR/telemetry-config.json" >/dev/null
+jq -e '.services["telemetry-health"].healthcheck.test[1] | contains("otel-collector:13133") and contains("jaeger:16686") and contains("prometheus:9090/-/ready") and contains("loki:3100/ready") and contains("alloy:12345/-/ready") and contains("alloy:12345/-/healthy") and contains("grafana:3000/api/health")' \
   "$TMP_DIR/telemetry-config.json" >/dev/null
 if grep -En '(^|:)latest([[:space:]]|$)' "$ROOT_DIR"/compose*.yaml >/dev/null; then
   echo "A supported Compose file uses the prohibited latest tag" >&2
@@ -197,6 +201,13 @@ done
 grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.1-test\.tar\.gz$' \
   "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.1-test.tar.gz.sha256"
 tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.1-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
+test -f "$TMP_DIR/deployment/telemetry/config.alloy"
+test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"
+grep -q 'grafana/alloy:v1.18.0' "$TMP_DIR/compose.telemetry.yaml"
+if grep -Eqi 'promtail' "$TMP_DIR/compose.telemetry.yaml"; then
+  echo "The release archive still references the retired Promtail service" >&2
+  exit 1
+fi
 (
   cd "$ROOT_DIR/release/dist"
   if command -v sha256sum >/dev/null 2>&1; then
@@ -210,6 +221,7 @@ if [[ "${ABADA_CONTRACT_SKIP_LIVE_PREFLIGHT:-false}" == "true" ]]; then
     -f "$TMP_DIR/compose.yaml" -f "$TMP_DIR/compose.dev.yaml" config --quiet
   echo "Clean-directory live preflight skipped by ABADA_CONTRACT_SKIP_LIVE_PREFLIGHT"
 else
+  "$ROOT_DIR/scripts/test/validate-alloy-config.sh"
   "$TMP_DIR/release/abada-platform" doctor dev --env-file "$TMP_DIR/release/.env.dev.example" --no-pull
 fi
 

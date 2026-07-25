@@ -84,13 +84,18 @@ services:
           cpus: "1.0"
           memory: 1G
 
-  promtail:
-    image: grafana/promtail:2.9.1
-    command: ["-config.file=/etc/promtail/config.yaml"]
+  alloy:
+    image: grafana/alloy:v1.18.0
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
     volumes:
-      - ./deployment/telemetry/promtail.yaml:/etc/promtail/config.yaml:ro
+      - ./deployment/telemetry/config.alloy:/etc/alloy/config.alloy:ro
       - engine_logs:/var/log/abada:ro
-      - promtail_data:/var/lib/promtail
+      - alloy_data:/var/lib/alloy/data
     networks:
       - telemetry
     restart: unless-stopped
@@ -100,7 +105,14 @@ services:
           cpus: "0.5"
           memory: 256M
     depends_on:
-      - loki
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "alloy", "validate", "/etc/alloy/config.alloy"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
 
   grafana:
     image: grafana/grafana:10.4.8
@@ -155,7 +167,7 @@ services:
         condition: service_started
       loki:
         condition: service_started
-      promtail:
+      alloy:
         condition: service_started
       grafana:
         condition: service_started
@@ -167,7 +179,8 @@ services:
           curl --fail --silent http://jaeger:16686/ >/dev/null &&
           curl --fail --silent http://prometheus:9090/-/ready >/dev/null &&
           curl --fail --silent http://loki:3100/ready >/dev/null &&
-          curl --fail --silent http://promtail:9080/ready >/dev/null &&
+          curl --fail --silent http://alloy:12345/-/ready >/dev/null &&
+          curl --fail --silent http://alloy:12345/-/healthy >/dev/null &&
           curl --fail --silent http://grafana:3000/api/health >/dev/null
       interval: 15s
       timeout: 10s
@@ -183,5 +196,5 @@ volumes:
   prometheus_data:
   loki_data:
   grafana_data:
-  promtail_data:
+  alloy_data:
   jaeger_data:

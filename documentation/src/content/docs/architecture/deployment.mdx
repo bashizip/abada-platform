@@ -26,7 +26,7 @@ flowchart LR
       C[OpenTelemetry Collector]
       P[Prometheus]
       J[Jaeger]
-      L[Loki and Promtail]
+      L[Loki and Alloy]
       G[Grafana]
     end
   end
@@ -89,8 +89,8 @@ but cannot roll back a committed task or make readiness fail.
 ## Persistent and replaceable state
 
 - `postgres_data` is authoritative workflow state and must be backed up.
-- `engine_logs` carries structured rolling logs to Promtail when the overlay is
-  present; logging continues without Promtail.
+- `engine_logs` carries structured rolling logs to Alloy when the overlay is
+  present; logging continues without Alloy.
 - `letsencrypt_data` preserves production ACME state.
 - Prometheus, Loki and Grafana volumes are operational telemetry state. Their
   loss does not change workflow correctness.

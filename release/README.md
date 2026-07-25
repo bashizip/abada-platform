@@ -21,7 +21,7 @@ cp release/.env.prod.example .env.prod
 ```
 
 Add `--telemetry` to either command to run the bundled Grafana, Prometheus,
-Jaeger, Loki, Promtail, and OpenTelemetry Collector stack. To export to an
+Jaeger, Loki, Grafana Alloy, and OpenTelemetry Collector stack. To export to an
 external collector, omit the overlay and set `ABADA_TELEMETRY_ENABLED=true`,
 `ABADA_TELEMETRY_OTLP_ENDPOINT`, and `OTEL_SDK_DISABLED=false` in the profile
 environment file.

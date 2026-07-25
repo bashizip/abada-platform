@@ -31,7 +31,7 @@ wait_for_health() {
 }
 
 "${COMPOSE[@]}" config --services >"$TMP_DIR/services"
-if grep -Eq '^(otel-collector|grafana|prometheus|jaeger|loki|promtail|telemetry-health)$' "$TMP_DIR/services"; then
+if grep -Eq '^(otel-collector|grafana|prometheus|jaeger|loki|alloy|telemetry-health)$' "$TMP_DIR/services"; then
   echo "Error: telemetry services are present in the telemetry-disabled profile" >&2
   exit 1
 fi

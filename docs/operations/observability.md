@@ -16,18 +16,19 @@ docker compose -f compose.yaml -f compose.dev.yaml \
 ```
 
 The overlay contains pinned versions of OpenTelemetry Collector, Prometheus,
-Jaeger, Loki, Promtail and Grafana. It removes the former Consul dependency.
-Promtail reads the named `engine_logs` volume; it has neither a repository log
+Jaeger, Loki, Grafana Alloy and Grafana. It removes the former Consul
+dependency. Alloy reads the named `engine_logs` volume; it has neither a repository log
 mount nor Docker socket access. Grafana datasources and dashboards are
 provisioned from `docker/grafana/` and Grafana is bound to loopback by default.
 The internal `telemetry-health` probe verifies the Collector, Jaeger,
-Prometheus, Loki, Promtail and Grafana readiness endpoints; it is diagnostic
+Prometheus, Loki, Alloy and Grafana readiness endpoints; it is diagnostic
 and is not a dependency of engine readiness.
 
-The RC bundle retains Promtail to satisfy the 1.0-RC compatibility contract.
-Promtail reached upstream end of life on 2026-03-02, so replacing it with
-[Grafana Alloy](https://grafana.com/docs/loki/latest/send-data/alloy/) is a
-post-RC maintenance item rather than a silent change to this release profile.
+Alloy is pinned to an immutable release, persists file offsets under
+`alloy_data`, and starts with `--disable-reporting`; enabling Abada telemetry
+does not opt the installation into Grafana usage reporting. On its first start
+against an existing `engine_logs` volume, Alloy tails from the end so replacing
+Promtail does not replay the complete historical log file into Loki.
 
 Trace export uses a 2,048-span queue, 512-span batch, two-second schedule and
 five-second timeout. OTLP metrics use bounded periodic publication. Logs carry

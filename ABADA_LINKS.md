@@ -20,6 +20,6 @@ This document provides a quick reference for all the accessible service links in
 | **Grafana** | [http://127.0.0.1:3000](http://127.0.0.1:3000) | Loopback-only entry point for provisioned metrics, traces and logs |
 
 ---
-**Note:** Prometheus, Jaeger, Loki, Promtail and the collector stay on the
+**Note:** Prometheus, Jaeger, Loki, Alloy and the collector stay on the
 internal telemetry network. Grafana is their supported user interface. Start
 them with `./release/abada-platform up dev --telemetry`.

@@ -7,7 +7,9 @@ API_URL="${ABADA_SMOKE_API_URL:-http://api.localhost/api}"
 OIDC_URL="${ABADA_SMOKE_OIDC_URL:-http://keycloak.localhost}"
 TMP_DIR="$(mktemp -d)"
 COLLECTOR_STOPPED=false
-trap 'if [[ "$COLLECTOR_STOPPED" == "true" ]]; then "${COMPOSE[@]}" start otel-collector >/dev/null 2>&1 || true; fi; rm -rf "$TMP_DIR"' EXIT
+ALLOY_STOPPED=false
+LOKI_STOPPED=false
+trap 'if [[ "$COLLECTOR_STOPPED" == "true" ]]; then "${COMPOSE[@]}" start otel-collector >/dev/null 2>&1 || true; fi; if [[ "$ALLOY_STOPPED" == "true" ]]; then "${COMPOSE[@]}" start alloy >/dev/null 2>&1 || true; fi; if [[ "$LOKI_STOPPED" == "true" ]]; then "${COMPOSE[@]}" start loki >/dev/null 2>&1 || true; fi; rm -rf "$TMP_DIR"' EXIT
 
 for command in curl docker jq; do
   command -v "$command" >/dev/null 2>&1 || { echo "Error: required command '$command' is unavailable" >&2; exit 69; }
@@ -85,4 +87,39 @@ jq -e '.status == "UP"' "$TMP_DIR/outage-health.json" >/dev/null
 "${COMPOSE[@]}" start otel-collector >/dev/null
 COLLECTOR_STOPPED=false
 
-echo "Bundled telemetry smoke test passed: correlated signals arrived and collector failure did not block workflow commands"
+"${COMPOSE[@]}" stop alloy >/dev/null
+ALLOY_STOPPED=true
+curl --fail --silent --show-error \
+  -X POST \
+  -H @"$TMP_DIR/auth.header" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: alloy-outage-start-$(date +%s)" \
+  --data '{"source":"alloy-outage"}' \
+  "$API_URL/v1/processes/start?processId=approval-quickstart&username=alice" >"$TMP_DIR/alloy-outage-start.json"
+jq -e '.processInstanceId | type == "string" and length > 0' "$TMP_DIR/alloy-outage-start.json" >/dev/null
+curl --fail --silent --show-error "$API_URL/actuator/health/readiness" | jq -e '.status == "UP"' >/dev/null
+"${COMPOSE[@]}" start alloy >/dev/null
+ALLOY_STOPPED=false
+
+"${COMPOSE[@]}" stop loki >/dev/null
+LOKI_STOPPED=true
+curl --fail --silent --show-error \
+  -X POST \
+  -H @"$TMP_DIR/auth.header" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: loki-outage-start-$(date +%s)" \
+  --data '{"source":"loki-outage"}' \
+  "$API_URL/v1/processes/start?processId=approval-quickstart&username=alice" >"$TMP_DIR/loki-outage-start.json"
+jq -e '.processInstanceId | type == "string" and length > 0' "$TMP_DIR/loki-outage-start.json" >/dev/null
+curl --fail --silent --show-error "$API_URL/actuator/health/readiness" | jq -e '.status == "UP"' >/dev/null
+"${COMPOSE[@]}" start loki >/dev/null
+LOKI_STOPPED=false
+
+"${COMPOSE[@]}" up -d --wait
+
+if "${COMPOSE[@]}" logs --no-color alloy | grep -Eqi 'stats\.grafana\.org|alloy-usage-report'; then
+  echo "Error: Alloy attempted anonymous usage reporting" >&2
+  exit 1
+fi
+
+echo "Bundled telemetry smoke test passed: correlated signals arrived and Collector, Alloy, and Loki failures did not block workflow commands"
