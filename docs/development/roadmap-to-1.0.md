@@ -300,6 +300,11 @@ is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
 
 ## 1.0 RC — Evidence and operations
 
+Every candidate must complete the
+[1.0 RC publication gates](1.0-rc-publication-gates.md). Roadmap completion
+shows that a capability exists; it does not replace candidate-specific
+publication evidence.
+
 ### Platform deployment and optional telemetry
 
 - [x] Publish one authoritative Compose family: shared core, development,
@@ -400,10 +405,9 @@ memory and policy-engine work. Future agentic features should consume the
 durable worker, event, variable, policy and telemetry contracts without
 bypassing the BPMN state machine.
 
-The bundled RC telemetry profile retains the specified Promtail log collector.
-Because Promtail is upstream end-of-life, replace it with Grafana Alloy in the
-first post-RC compatibility-profile iteration, preserving the named-log-volume
-and trace-correlation contract.
+The bundled RC telemetry profile uses Grafana Alloy for log collection. It
+preserves the named-log-volume and trace-correlation contract without retaining
+the end-of-life Promtail agent.
 
 See [BPMN support](../reference/bpmn-support.md) and
 [deployment support](../reference/deployment-support.md) for the current

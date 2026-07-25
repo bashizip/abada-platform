@@ -20,6 +20,8 @@ acquisition, stable API/worker contracts and backend RBAC are in scope.
 Use these documents as the authoritative product contract:
 
 - `docs/development/roadmap-to-1.0.md` — release checklist and acceptance gates.
+- `docs/development/1.0-rc-publication-gates.md` — mandatory per-candidate
+  publication evidence and GO/NO-GO sign-off.
 - `docs/reference/bpmn-support.md` — supported and rejected BPMN constructs.
 - `docs/reference/runtime-semantics.md` — command, retry, event, variable,
   cancellation, and suspension semantics.
