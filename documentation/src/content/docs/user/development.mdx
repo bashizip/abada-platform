@@ -1,0 +1,42 @@
+---
+title: Development deployment
+description: Run the complete local HTTP platform with PostgreSQL and Keycloak.
+---
+
+From a repository clone or extracted release archive:
+
+```bash
+./release/abada-platform doctor dev
+./release/abada-platform up dev
+```
+
+The first command creates `.env.dev` from `release/.env.dev.example`, validates
+Docker and Compose, checks ports and image availability, and renders the final
+configuration. The stack exposes only Traefik on port 80 and its loopback-only
+dashboard on 8080. PostgreSQL is not published to the host.
+
+Core Compose equivalent:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml up -d
+```
+
+Bundled telemetry:
+
+```bash
+./release/abada-platform up dev --telemetry
+# equivalent overlay:
+docker compose -f compose.yaml -f compose.dev.yaml \
+  -f compose.telemetry.yaml up -d
+```
+
+Operations:
+
+```bash
+./release/abada-platform status dev
+./release/abada-platform logs dev
+./release/abada-platform down dev
+```
+
+To delete local databases as well, use `docker compose` with the same files and
+run `down -v`. This permanently removes workflow and Keycloak data.

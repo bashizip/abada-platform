@@ -1,0 +1,85 @@
+---
+title: Testing and verification
+description: Select and run the evidence required for each Abada change.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Run the narrowest relevant test while developing, then the complete component
+gate before handing off the change. PostgreSQL is mandatory whenever a claim
+depends on schema, locking, persistence or recovery.
+
+## Commands
+
+<Tabs>
+  <TabItem label="Engine">
+    ```bash
+    cd engine
+    ./mvnw test
+    ./mvnw clean package
+    ```
+  </TabItem>
+  <TabItem label="Tenda">
+    ```bash
+    cd tenda
+    npm ci
+    npm run lint
+    npm run build
+    ```
+  </TabItem>
+  <TabItem label="Orun">
+    ```bash
+    cd orun
+    npm ci
+    npm run build
+    ```
+  </TabItem>
+  <TabItem label="Worker SDK">
+    ```bash
+    engine/mvnw -f sdk/java/pom.xml verify
+    ```
+  </TabItem>
+  <TabItem label="Documentation">
+    ```bash
+    cd documentation
+    npm ci
+    npm audit --audit-level=low
+    npm run check
+    npm run build
+    ```
+  </TabItem>
+</Tabs>
+
+Orun currently defines neither lint nor test scripts. Report that limitation
+instead of claiming those checks ran.
+
+## Evidence matrix
+
+| Change | Required evidence |
+| --- | --- |
+| Core logic or REST behavior | Relevant tests and full engine test suite |
+| BPMN behavior | Parser/validation test, executable BPMN fixture, success and rejection semantics |
+| Migration or repository lock | PostgreSQL fresh/upgrade, rollback, restart and concurrency tests |
+| Public API | OpenAPI compatibility test, typed errors and documentation |
+| Authentication or authorization | Positive and negative JWT/proxy/role/resource tests |
+| Tenda | Lint and production build |
+| Orun | Production build |
+| Documentation | Dependency audit, Astro check, build and internal-link validation |
+| Release metadata | Backend/frontends/SDK/docs, JAR hash, image and Compose validation |
+
+## Failure-injection expectations
+
+For atomicity and cluster changes, test crashes or exceptions before and after
+commit. Verify that failed commands leave no partial state/history/outbox and
+that committed work is recoverable without a duplicate workflow transition.
+
+<Aside type="note" title="Exactly-once has a narrow meaning">
+  Tests may prove exactly one committed internal workflow transition. They must
+  still describe uncontrolled remote effects as at-least-once.
+</Aside>
+
+## Reporting results
+
+Record the exact commands, test counts, failures/skips and non-blocking
+warnings. Do not call a release ready when Docker/PostgreSQL evidence was
+skipped or a critical correctness defect remains.

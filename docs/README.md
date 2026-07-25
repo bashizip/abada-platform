@@ -2,6 +2,12 @@
 
 Welcome to the Abada Engine documentation. This documentation is organized to help you quickly find the information you need, whether you are an architect, developer, or operator.
 
+The reader-oriented user, architecture and developer guide lives in the Starlight
+application at [`../documentation`](../documentation/) and is published at
+<https://abada-engine-docs.vercel.app>. The Markdown files in this directory
+remain the detailed product contracts, specifications, ADRs, release notes and
+operational records that the site summarizes and links to.
+
 ## 📚 Table of Contents
 
 ### 🏗️ Architecture
@@ -30,10 +36,8 @@ Detailed guides on specific engine features.
 Guides for deploying, monitoring, and managing the engine.
 
 - [Docker Deployment](operations/docker-deployment.md) - Deploying Abada Engine using Docker.
-- [Docker Build Strategy](operations/docker-build-strategy.md) - How container images are built.
 - [Observability](operations/observability.md) - Monitoring, metrics, tracing, and logging.
-- [Loki Integration](operations/loki-integration.md) - Setting up log aggregation with Loki.
-- [Sample Data Generator](operations/sample-data-generator.md) - Generating test data for development.
+- [User Guide](../documentation/src/content/docs/user/index.mdx) - Quickstart, production, identity, telemetry, backup, upgrades and troubleshooting.
 
 ### 💻 Development
 
@@ -43,7 +47,6 @@ Resources for developers building on or contributing to Abada Engine.
 - [Authentication Guide](ENGINE-AUTHENTICATION.md) - Practical guide for app developers on using Keycloak and Traefik.
 - [Frontend Guide](development/frontend-guide.md) - Guide for frontend development.
 - [Orun App Specification](development/orun-app-spec.md) - Specifications for the Orun application.
-- [Project Configuration](development/project-config.md) - Review of project configuration settings.
 - [Roadmap to 1.0](development/roadmap-to-1.0.md) - Release gates and acceptance evidence.
 - [BPMN Support](reference/bpmn-support.md) - Guaranteed and rejected BPMN constructs.
 - [Deployment Support](reference/deployment-support.md) - Supported runtime and security modes.

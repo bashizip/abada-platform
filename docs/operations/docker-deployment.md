@@ -1,411 +1,66 @@
-# Docker Deployment Guide for Abada Engine
+# Docker platform deployment
 
-This guide covers deploying the Abada Engine with a complete observability stack using Docker Compose.
+This is the authoritative operational contract for the 1.0 release-candidate
+Compose distribution. The reader-oriented procedures are published in the
+[Starlight user guide](../../documentation/src/content/docs/user/index.mdx).
 
-## Architecture Overview
+## Supported composition
 
-The deployment includes:
+| Files | Result |
+| --- | --- |
+| `compose.yaml` + `compose.dev.yaml` | PostgreSQL, Engine, Tenda, Orun, bundled Keycloak and local HTTP routing |
+| `compose.yaml` + `compose.prod.yaml` | PostgreSQL, versioned application images, external OIDC and Traefik TLS |
+| either profile + `compose.telemetry.yaml` | Optional bundled metrics, traces and logs |
 
-- **Abada Engine**: BPMN process engine (scalable instances)
-- **OpenTelemetry Collector**: Receives and routes telemetry data
-- **Jaeger**: Distributed tracing visualization
-- **Prometheus**: Metrics storage and querying
-- **Grafana**: Observability dashboards
-- **PostgreSQL**: Production database
-- **Traefik**: Load balancer and reverse proxy
+The older `docker-compose*.yml` and generated release Compose files are
+removed. H2 is not a certified platform deployment.
 
-## Quick Start
-
-### Prerequisites
-
-- Docker and Docker Compose installed
-- At least 4GB RAM available
-- Ports 80, 3000, 4318, 5432, 5601, 8080, 9090, 16686 available
-
-### Environment Setup
-
-1. Copy the environment template:
+## Development
 
 ```bash
-cp env.example .env
+./release/abada-platform doctor dev
+./release/abada-platform up dev
 ```
 
-2. Edit `.env` with your preferred settings:
+The development environment creates `.env.dev` from safe defaults, uses HTTP
+on `.localhost`, and requires no `mkcert`. PostgreSQL and the Keycloak database
+are available only on the internal Compose network.
+
+## Production
 
 ```bash
-# For development
-SPRING_PROFILES_ACTIVE=dev
-GRAFANA_ADMIN_PASSWORD=admin123
-POSTGRES_PASSWORD=secure_password
+cp release/.env.prod.example .env.prod
+# Replace every placeholder.
+./release/abada-platform doctor prod --env-file .env.prod
+./release/abada-platform up prod --env-file .env.prod
 ```
 
-## Building Local Images
+Production Compose interpolation requires a database secret, exact image
+version, API/Tenda/Orun hostnames, ACME email, explicit CORS origins and OIDC
+settings. Missing values fail during `docker compose config`, before a
+container is created. Only Traefik publishes 80/443. Production identity is
+external; bundled Keycloak is development-only.
 
-You can build the Docker image locally for either production or development.
-
-### Production Build
-
-The standard build is a multi-stage process that compiles the code inside the container. This ensures a consistent build environment but takes longer.
+## Release artifact
 
 ```bash
-docker build -t abada-engine:latest .
+./release/build-bundle.sh 1.0.0-rc.1
 ```
 
-### Development Build (Fast)
+The result under `release/dist/` contains all Compose/configuration assets,
+environment templates, launchers, sample workflows and a SHA-256 file. It has
+no build context or dependency on a repository clone. The Linux/macOS and
+PowerShell quickstarts download both files and verify the checksum before
+extracting.
 
-For faster iteration, you can build the JAR locally and inject it into the image. This skips the dependency download and build steps inside Docker.
-
-1. Build the JAR file locally:
-
-   ```bash
-   ./mvnw clean package -DskipTests
-   ```
-
-2. Build the Docker image using the local JAR:
-
-   ```bash
-   docker build --build-arg USE_LOCAL_JAR=true -t abada-engine:dev .
-   ```
-
-> [!TIP]
-> **Helper Scripts available!**
-> You can automate this process using the scripts in the `scripts/` directory:
-> - `scripts/build-and-run-dev.sh`: Builds JAR, builds image, and starts full stack.
-> - `scripts/build-dev.sh`: Rebuilds engine only (useful for iteration).
-
-
-## Deployment Commands
-
-### Development Environment
-
-Single instance with H2 database, full observability, debug logging:
+## Verification
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+./scripts/test/validate-platform-deployment.sh
 ```
 
-**Access URLs:**
-
-- Abada Engine: <http://localhost:5601/api>
-- Abada Tenda: <http://localhost:5602>
-- Abada Orun: <http://localhost:5603>
-- H2 Console: <http://localhost:5601/api/h2-console>
-- Grafana: <http://localhost:3000> (admin/admin123)
-- Jaeger: <http://localhost:16686>
-- Prometheus: <http://localhost:9090>
-
-### Test Environment
-
-Single instance with in-memory H2, reduced sampling:
-
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.test.yml up
-```
-
-### Production Environment
-
-Multiple instances with PostgreSQL, load balancing via Traefik, optimized settings:
-
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-**Access URLs:**
-
-- Abada Engine: <http://localhost/api> (via Traefik on port 80)
-- Traefik Dashboard: <http://localhost:8080>
-- Grafana: <http://localhost:3000>
-- Jaeger: <http://localhost:16686>
-- Prometheus: <http://localhost:9090>
-
-## Scaling
-
-### Scale Engine Instances
-
-```bash
-# Scale to 5 instances
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale abada-engine=5
-
-# Scale down to 2 instances
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale abada-engine=2
-```
-
-### View Running Instances
-
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps
-```
-
-## Quick Start (Recommended)
-
-The easiest way to run the platform is using the automated quickstart script.
-
-### 1. Download and Run
-You only need `docker` and `docker compose` installed.
-
-```bash
-# Download and run the quickstart script
-curl -sSL https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh | bash
-```
-
-This script will:
-1. Download the production configuration.
-2. Start all services using `docker compose`.
-3. Show you the access URLs.
-
-### 2. Manual Setup (Alternative)
-
-If you prefer to start it manually:
-
-1. Download the [release configuration](https://raw.githubusercontent.com/bashizip/abada-engine/main/release/docker-compose.release.yml) to a file named `docker-compose.yml`.
-2. Run:
-   ```bash
-   docker compose up -d
-   ```
-
-### Access URLs (Quickstart)
-
-- **Abada Engine**: <http://localhost:5601/api> (Direct Access)
-- **Abada Tenda**: <http://localhost:5602>
-- **Abada Orun**: <http://localhost:5603>
-- **Grafana**: <http://localhost:3000>
-
-## Monitoring and Observability
-
-### Metrics Flow
-
-1. **Abada Engine** → OpenTelemetry Collector (OTLP)
-2. **OpenTelemetry Collector** → Prometheus (metrics)
-3. **Prometheus** → Grafana (visualization)
-
-### Traces Flow
-
-1. **Abada Engine** → OpenTelemetry Collector (OTLP)
-2. **OpenTelemetry Collector** → Jaeger (traces)
-3. **Jaeger** → Grafana (trace visualization)
-
-### Key Metrics
-
-- `abada_process_instances_started` - Process instance creation rate
-- `abada_process_instances_completed` - Process completion rate
-- `abada_tasks_created` - Task creation rate
-- `abada_tasks_completed` - Task completion rate
-- `abada_events_published` - Event publication rate
-- `abada_events_correlated` - Event correlation success rate
-
-### Dashboards
-
-Pre-configured dashboards available in Grafana:
-
-- **Abada Engine Overview**: High-level process and task metrics
-- **Task Details**: Detailed task performance and timing
-
-## Database Configuration
-
-### Development/Test
-
-- Uses embedded H2 database
-- Data persisted in `./data` directory
-- H2 console available at `/h2-console`
-
-### Production
-
-- Uses PostgreSQL 15
-- Connection pooling: 10 connections per instance
-- Database: `abada_engine`
-- User: `abada`
-- Password: Set via `POSTGRES_PASSWORD` environment variable
-
-## Load Balancing
-
-### Traefik Configuration
-
-Production environment uses Traefik for load balancing:
-
-- **Strategy**: Round-robin
-- **Health Checks**: `/api/actuator/health`
-- **Path**: `/abada` prefix
-- **Sticky Sessions**: Not required. The 0.10 PostgreSQL runtime coordinates
-  commands and acquired work through database locks, leases and idempotency
-  records.
-
-### Health Checks
-
-All services include health checks:
-
-- **Abada Engine**: HTTP health endpoint
-- **PostgreSQL**: `pg_isready` command
-- **OTEL Collector**: Internal health extension
-- **Prometheus/Grafana/Jaeger**: HTTP endpoints
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. Port Conflicts
-
-```bash
-# Check which ports are in use
-netstat -tulpn | grep :5601
-# Stop conflicting services or change ports in docker-compose files
-```
-
-#### 2. Database Connection Issues
-
-```bash
-# Check PostgreSQL logs
-docker-compose logs postgres
-
-# Check Abada Engine logs
-docker-compose logs abada-engine
-```
-
-#### 3. Memory Issues
-
-```bash
-# Check Docker memory usage
-docker stats
-
-# Increase Docker memory limit in Docker Desktop settings
-```
-
-#### 4. Telemetry Not Appearing
-
-```bash
-# Check OTEL Collector logs
-docker-compose logs otel-collector
-
-# Verify OTLP endpoints are accessible
-curl http://localhost:4318/v1/metrics
-```
-
-### Logs
-
-View logs for specific services:
-
-```bash
-# All services
-docker-compose logs
-
-# Specific service
-docker-compose logs abada-engine
-docker-compose logs otel-collector
-docker-compose logs prometheus
-```
-
-### Debug Mode
-
-Enable debug logging for development:
-
-```bash
-# Set in .env file
-MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SPRING_PROFILES_ACTIVE` | `dev` | Spring profile (dev/test/prod) |
-| `DB_PASSWORD` | `abada123` | H2 database password |
-| `POSTGRES_PASSWORD` | `postgres_secure_password` | PostgreSQL password |
-| `GRAFANA_ADMIN_PASSWORD` | `admin` | Grafana admin password |
-| `ABADA_ENGINE_REPLICAS` | `3` | Number of engine instances (prod) |
-| `MANAGEMENT_TRACING_SAMPLING_PROBABILITY` | `1.0` | Trace sampling rate |
-
-## Security Considerations
-
-### Production Deployment
-
-1. **Change Default Passwords**:
-
-   ```bash
-   POSTGRES_PASSWORD=your_secure_password
-   GRAFANA_ADMIN_PASSWORD=your_secure_password
-   ```
-
-2. **Use Secrets Management**:
-   - Consider using Docker secrets
-   - Use external secret management systems
-
-3. **Network Security**:
-   - Use custom networks
-   - Implement firewall rules
-   - Consider using reverse proxy with SSL
-
-4. **Resource Limits**:
-   - Set appropriate CPU/memory limits
-   - Monitor resource usage
-
-## Backup and Recovery
-
-### Database Backup
-
-```bash
-# PostgreSQL backup
-docker-compose exec postgres pg_dump -U abada abada_engine > backup.sql
-
-# Restore
-docker-compose exec -T postgres psql -U abada abada_engine < backup.sql
-```
-
-### Configuration Backup
-
-```bash
-# Backup all configuration files
-tar -czf abada-config-backup.tar.gz docker/ *.yml env.example
-```
-
-## Performance Tuning
-
-### Database Optimization
-
-1. **Connection Pooling**: Adjust HikariCP settings in `application-prod.yaml`
-2. **Query Optimization**: Monitor slow queries in logs
-3. **Indexing**: Add appropriate database indexes
-
-### JVM Tuning
-
-Add JVM options to Dockerfile or docker-compose:
-
-```yaml
-environment:
-  - JAVA_OPTS=-Xms512m -Xmx1g -XX:+UseG1GC
-```
-
-### Monitoring Tuning
-
-1. **Sampling Rate**: Adjust based on load
-2. **Retention**: Configure Prometheus retention
-3. **Scraping Interval**: Balance between detail and performance
-
-## CI/CD Integration
-
-### Build and Deploy
-
-```bash
-# Build image
-docker build -t abada-engine:latest .
-
-# Deploy to production
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-### Health Checks
-
-```bash
-# Check all services are healthy
-docker-compose ps
-
-# Check specific service health
-curl http://localhost:5601/api/actuator/health
-```
-
-## Support
-
-For issues and questions:
-
-1. Check the troubleshooting section above
-2. Review service logs
-3. Check the project documentation
-4. Create an issue in the project repository
+This validates dev and production configuration with telemetry disabled,
+bundled and external, required-variable failure, frontend startup validation,
+release checksums and execution of preflight from a clean temporary directory.
+Live release certification additionally runs authentication, deployment, task
+completion, restart recovery, collector failure and backup/restore drills.

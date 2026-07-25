@@ -95,7 +95,7 @@ src/
    VITE_API_URL=/api
 
    # Keycloak Configuration
-   VITE_KEYCLOAK_URL=https://keycloak.localhost
+   VITE_KEYCLOAK_URL=http://keycloak.localhost
    VITE_KEYCLOAK_REALM=abada-dev
    VITE_KEYCLOAK_CLIENT_ID=abada-frontend
    ```
@@ -146,7 +146,7 @@ If the login page doesn't redirect to Keycloak or you encounter CORS errors, ens
    ./scripts/build-and-run-dev.sh
    ```
 
-2. The Keycloak service is accessible at `https://keycloak.localhost`
+2. The development Keycloak service is accessible at `http://keycloak.localhost`
 
 3. Your hosts file includes the necessary entries:
    ```
@@ -157,13 +157,15 @@ If the login page doesn't redirect to Keycloak or you encounter CORS errors, ens
    ```
 
 4. For local development, access the application through the proper domain:
-   - Instead of `http://localhost:5602`, access via `https://tenda.localhost`
+   - Instead of `http://localhost:5602`, access via `http://tenda.localhost`
    - This ensures that both Tenda and Keycloak are on the same domain scheme (both HTTPS)
    - The Traefik reverse proxy will route to the development container
 
 5. The environment variables in `.env.local` are correctly set as shown above.
 
-**Note**: When running the development server with `npm run dev`, the recommended approach is to access the application through the Traefik proxy at `https://tenda.localhost` rather than directly on `http://localhost:5602` to avoid CORS issues with Keycloak authentication.
+**Note**: The supported Compose profile serves Tenda through Traefik at
+`http://tenda.localhost`. Direct Vite development on `http://localhost:5602`
+is a contributor convenience rather than the certified platform profile.
 
 ## 🔧 Configuration
 

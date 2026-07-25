@@ -1,0 +1,39 @@
+---
+title: Choose a deployment
+description: Select the supported Abada platform profile and telemetry mode.
+---
+
+import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Abada ships as a self-contained Compose release bundle. PostgreSQL is the
+source of truth in every supported platform profile.
+
+<CardGrid>
+  <Card title="Development" icon="laptop">
+    PostgreSQL, Engine, Tenda, Orun, local Keycloak and HTTP routing. Safe
+    defaults are included; no local certificate tool is required.
+  </Card>
+  <Card title="Production" icon="rocket">
+    Versioned images, PostgreSQL, Tenda, Orun and Traefik TLS. You supply an
+    externally managed OIDC provider, public DNS and secrets.
+  </Card>
+  <Card title="Telemetry" icon="seti">
+    Disabled by default. Add the bundled overlay, or configure an external
+    OTLP collector without changing the core deployment.
+  </Card>
+</CardGrid>
+
+| Need | Choose |
+| --- | --- |
+| Evaluate Abada on one workstation | Development, telemetry off |
+| Develop dashboards or instrumentation | Development, bundled telemetry |
+| Operate the platform | Production, telemetry off or external OTLP |
+| Self-host the complete monitoring stack | Production, bundled telemetry |
+
+<Aside type="caution" title="Not certified platform profiles">
+  H2, the old `docker-compose*.yml` files, bundled production Keycloak and an
+  embedded Java engine are not supported deployment contracts.
+</Aside>
+
+Continue with the [quickstart](/user/quickstart/) or the full
+[production deployment](/user/production/).

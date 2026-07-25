@@ -1,7 +1,7 @@
 # Authentication and RBAC
 
 Production defaults to direct OIDC JWT validation. The engine verifies issuer,
-signature, lifetime and standard JWT validation through Spring Security. A
+signature, lifetime and the required `OIDC_AUDIENCE` through Spring Security. A
 `preferred_username` claim becomes the actor, while the `groups` claim remains
 the BPMN candidate-group identity.
 
@@ -39,5 +39,5 @@ task scope; claim, unclaim and completion retain assignee/candidate checks.
 - Activity history records actor, action, timestamp, workflow/activity IDs and
   trace ID for committed mutations.
 
-Executable negative coverage is in `SecurityAuthorizationContractTest` and
-`ProxyHeaderAuthenticationFilterTest`.
+Executable negative coverage is in `SecurityAuthorizationContractTest`,
+`AudienceValidatorTest` and `ProxyHeaderAuthenticationFilterTest`.

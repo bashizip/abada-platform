@@ -1,0 +1,117 @@
+{
+  "realm": "abada",
+  "enabled": true,
+  "sslRequired": "none",
+  "roles": {
+    "realm": [
+      {
+        "name": "managers"
+      },
+      {
+        "name": "customers"
+      },
+      {
+        "name": "cuistos"
+      },
+      {
+        "name": "orun-admin"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "managers"
+    },
+    {
+      "name": "customers"
+    },
+    {
+      "name": "cuistos"
+    },
+    {
+      "name": "orun-admin",
+      "realmRoles": ["orun-admin"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "abada-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:5602/*",
+        "http://localhost:5603/*",
+        "https://localhost/*",
+        "https://tenda.localhost/*",
+        "https://orun.localhost/*",
+        "https://keycloak.localhost/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5602",
+        "http://localhost:5603",
+        "https://localhost",
+        "https://tenda.localhost",
+        "https://orun.localhost",
+        "https://keycloak.localhost"
+      ],
+      "protocol": "openid-connect",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@abada.dev",
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["orun-admin"],
+      "groups": ["orun-admin", "managers"]
+    },
+    {
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "alice@abada.dev",
+      "firstName": "Alice",
+      "lastName": "Customer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["customers"],
+      "groups": ["customers"]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "bob@abada.dev",
+      "firstName": "Bob",
+      "lastName": "Custos",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["cuistos"],
+      "groups": ["cuistos"]
+    }
+  ]
+}

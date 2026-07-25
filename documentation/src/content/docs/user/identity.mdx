@@ -1,0 +1,35 @@
+---
+title: Production identity
+description: Configure external OIDC for the engine, Tenda and Orun.
+---
+
+Production does not start Keycloak. Configure an external Keycloak realm or a
+provider compatible with the frontend Keycloak adapter.
+
+Create a public browser client with Authorization Code + PKCE and set:
+
+- redirect URIs for `https://<tasks-host>/*` and `https://<ops-host>/*`;
+- web origins for those exact origins;
+- access-token audience matching `OIDC_AUDIENCE`;
+- a `groups` claim containing Abada permission groups.
+
+Then configure `.env.prod`:
+
+```dotenv
+OIDC_ISSUER_URI=https://identity.example.net/realms/abada
+OIDC_AUDIENCE=abada-api
+# Optional private back-channel URL; omit for issuer discovery.
+OIDC_JWK_SET_URI=
+ABADA_OIDC_URL=https://identity.example.net
+ABADA_OIDC_REALM=abada
+ABADA_OIDC_CLIENT_ID=abada-frontend
+ABADA_ALLOWED_ORIGINS=https://tasks.example.net,https://ops.example.net
+```
+
+The engine validates JWT signatures and issuer directly. Traefik does not
+authenticate requests. Trusted proxy-header authentication is a separate,
+explicit deployment mode and is not part of this Compose production profile.
+
+Before go-live, verify an invalid, expired, wrong-issuer and wrong-audience JWT
+are rejected, and verify each deployer, task user, operator and worker role at
+the backend API—not only in the frontend.

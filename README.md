@@ -6,7 +6,9 @@ Abada is a modular, cloud-native workflow platform built with **Java 21** and **
 
 Abada is designed around a simple principle: autonomous agents may reason and act dynamically, but production workflows still require deterministic control over state, sequencing, permissions, timeouts, approvals, recovery, and observability.
 
-The open-source platform currently includes the BPMN execution core, task management, operational monitoring, secure containerized deployment, and workflow-aware telemetry.
+The open-source platform currently includes the BPMN execution core, task
+management, operational monitoring, a release-candidate container deployment,
+and optional workflow-aware telemetry.
 
 > **🚧 Agentic development status**
 >
@@ -74,11 +76,11 @@ The BPMN engine remains the authoritative execution model while AI agents become
 
 ---
 
-# Built-in Observability
+# Optional observability
 
-Observability is not an afterthought.
-
-It is part of Abada's execution model.
+Telemetry export is disabled by default and never participates in workflow
+correctness. Add the bundled overlay or point the engine at an external OTLP
+collector when observability is required.
 
 The engine emits **workflow-aware telemetry** using **OpenTelemetry**, allowing operators to follow execution from API request to BPMN activity, event correlation, task lifecycle, persistence layer, and infrastructure.
 
@@ -160,24 +162,27 @@ For runtime topology, deployment strategies and system architecture, see the [Ar
 
 # Quick Start
 
-## Clone & Launch
+## Clone and launch development
 
 ```bash
 git clone https://github.com/bashizip/abada-engine.git
 cd abada-engine
-./release/quickstart.sh
+./release/abada-platform up dev
 ```
 
-## One-line Installation
+## Versioned release bundle
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh | bash
+curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
+chmod +x quickstart.sh
+./quickstart.sh 1.0.0-rc.1
 ```
 
 Windows:
 
 ```powershell
-irm https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 | iex
+Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 -OutFile quickstart.ps1
+.\quickstart.ps1 -Version 1.0.0-rc.1
 ```
 
 ---
@@ -196,10 +201,10 @@ Start previously built images.
 ./scripts/dev/start-dev.sh
 ```
 
-Generate trusted localhost certificates.
+Validate the deployment without starting it.
 
 ```bash
-./scripts/dev/setup-local-tls.sh docker-compose.dev.yml
+./release/abada-platform doctor dev
 ```
 
 ---
@@ -208,14 +213,13 @@ Generate trusted localhost certificates.
 
 | Service | URL |
 |---------|-----|
-| Gateway | https://localhost |
-| Engine API | https://localhost/api |
-| Swagger | https://localhost/api/swagger-ui.html |
-| Tenda | https://tenda.localhost |
-| Orun | https://orun.localhost |
-| Keycloak | https://keycloak.localhost |
-| Grafana | http://localhost:3000 |
-| Jaeger | http://localhost:16686 |
+| Gateway | http://localhost |
+| Engine API | http://api.localhost/api |
+| Swagger | http://api.localhost/api/swagger-ui.html |
+| Tenda | http://tenda.localhost |
+| Orun | http://orun.localhost |
+| Keycloak | http://keycloak.localhost |
+| Grafana (telemetry overlay) | http://127.0.0.1:3000 |
 
 ---
 
@@ -227,6 +231,15 @@ PostgreSQL runtime.
 Two or more replicas can contend safely for timers, external tasks, messages,
 signals and user-task transitions. Public mutation retries can use
 `Idempotency-Key` for a deterministic response.
+
+The curated architecture and developer documentation is built with Astro 7,
+Starlight 0.41, MDX and Mermaid under [`documentation/`](documentation/).
+Browse the [published documentation](https://abada-engine-docs.vercel.app), or
+run `cd documentation && npm ci && npm run dev` to browse it locally. The site
+now includes deployment, telemetry, first-workflow, backup, upgrade and
+troubleshooting user guides for the 1.0 release candidate. Certification
+evidence is tracked in the
+[1.0 roadmap](docs/development/roadmap-to-1.0.md).
 
 The BPMN execution core is operational, while APIs and platform capabilities continue to evolve.
 

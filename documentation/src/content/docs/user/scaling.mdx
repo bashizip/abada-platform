@@ -1,0 +1,22 @@
+---
+title: Scaling
+description: Scale stateless engine processes over PostgreSQL-authoritative state.
+---
+
+Engine replicas coordinate durable jobs, subscriptions and mutation commands
+through PostgreSQL locks, versions and leases. Frontend containers are also
+stateless because `/config.js` is generated at startup.
+
+```bash
+docker compose --env-file .env.prod \
+  -f compose.yaml -f compose.prod.yaml \
+  up -d --scale abada-engine=2
+```
+
+Do not scale PostgreSQL with this command. Production database replication,
+failover and backups belong to your PostgreSQL operating model. Before raising
+replica count, size the database connection limit for the combined Hikari pools
+and run a replica-termination test against representative workflows.
+
+Traefik discovers engine replicas through Docker labels. Fixed container names
+are intentionally absent because they prevent Compose scaling.

@@ -1,0 +1,60 @@
+---
+title: Abada Engine documentation
+description: Architecture and developer guidance for the PostgreSQL-backed BPMN orchestration engine.
+template: splash
+hero:
+  tagline: Understand the durable BPMN runtime, then change it without weakening its guarantees.
+  actions:
+    - text: Deploy Abada
+      link: /user/quickstart/
+      icon: rocket
+      variant: primary
+    - text: Explore the architecture
+      link: /architecture/
+      icon: right-arrow
+      variant: secondary
+    - text: Start developing
+      link: /developer/
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="PostgreSQL is authoritative" icon="database">
+    Mutable workflow state is reconstructed inside each command. Replica-local
+    memory caches only immutable parsed definitions.
+  </Card>
+  <Card title="Commands are atomic" icon="approve-check-circle">
+    Lock, validate, advance, persist, write history and outbox records, then
+    commit as one workflow-state transaction.
+  </Card>
+  <Card title="Clusters coordinate through leases" icon="seti">
+    Timers, external work, correlations and outbox delivery use durable rows,
+    database locks and recoverable leases.
+  </Card>
+  <Card title="Contracts are executable" icon="document">
+    The BPMN subset, API v1, worker protocol, security model and migrations are
+    backed by compatibility and PostgreSQL tests.
+  </Card>
+</CardGrid>
+
+## Documentation tracks
+
+This site serves three audiences:
+
+1. **User guide** provides tested development and production deployments,
+   telemetry choices, a first workflow, backup, upgrades and troubleshooting.
+2. **Architecture** explains system boundaries, state ownership, transaction
+   behavior, cluster safety, security and the canonical BPMN model.
+3. **Developer guide** explains how to navigate the repository, implement
+   changes, evolve migrations and contracts, and select the required tests.
+
+## Current release boundary
+
+These guides describe the `0.11.x` line moving toward the 1.0 release
+candidate. PostgreSQL is the production source of truth, API v1 and worker
+protocol v1 are frozen, and multi-replica execution is certified for the
+documented BPMN subset. Conformance publication, rolling-upgrade evidence,
+security review, benchmarks and runbooks remain 1.0 RC gates.

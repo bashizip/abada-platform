@@ -1,0 +1,44 @@
+---
+title: Authoritative contracts
+description: Direct links to Abada's specifications, runtime contracts, ADRs and release evidence.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+These repository documents are normative. Links target the `dev` branch so the
+site follows the current integration contract; release tags preserve the
+versioned historical copy.
+
+## Runtime and public behavior
+
+- [Runtime state architecture](https://github.com/bashizip/abada-engine/blob/dev/docs/architecture/runtime-state.md)
+- [Runtime semantics](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/runtime-semantics.md)
+- [BPMN support contract](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/bpmn-support.md)
+- [Deployment support matrix](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/deployment-support.md)
+- [API v1 contract](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/api-v1.md)
+- [API pagination](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/api-pagination.md)
+- [External-worker protocol v1](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/external-worker-protocol-v1.md)
+- [Security and RBAC](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/security-and-rbac.md)
+
+## BPMN dialects and compatibility
+
+- [Normative dialect specification](https://github.com/bashizip/abada-engine/blob/dev/docs/specifications/bpmn-dialects-and-compatibility.md)
+- [Dialect compatibility ADR](https://github.com/bashizip/abada-engine/blob/dev/docs/adr/ADR-001-bpmn-dialects-and-vendor-compatibility.md)
+- [Compatibility profiles](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/compatibility-profiles.md)
+- [Abada-native extensions](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/abada-native-extensions.md)
+- [Camunda 7 profile](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/camunda-7-profile.md)
+- [Assignment semantics](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/assignment-semantics.md)
+- [Migration guide](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/migration.md)
+
+## Delivery and release evidence
+
+- [Roadmap to 1.0](https://github.com/bashizip/abada-engine/blob/dev/docs/development/roadmap-to-1.0.md)
+- [0.11 implementation plan](https://github.com/bashizip/abada-engine/blob/dev/docs/development/0.11-implementation-plan.md)
+- [BPMN dialect acceptance evidence](https://github.com/bashizip/abada-engine/blob/dev/docs/development/bpmn-dialects-acceptance.md)
+- [0.11.0-alpha release notes](https://github.com/bashizip/abada-engine/blob/dev/docs/release-notes/0.11.0-alpha-release-notes.md)
+
+<Aside type="note">
+  Physical table and column names are defined by released Flyway migrations,
+  while executable API compatibility is defined by the generated OpenAPI test
+  and `api-v1-contract.json` manifest.
+</Aside>
