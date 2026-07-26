@@ -1,0 +1,61 @@
+---
+title: Repository map
+description: Where runtime, APIs, applications, infrastructure and technical contracts live.
+---
+
+## Top-level components
+
+```text
+abada-engine/
+├── engine/          Java 21 runtime, persistence, API and security
+├── sdk/java/        Java external-worker protocol v1 client
+├── tenda/           React task application
+├── orun/            React operations application
+├── docker/          Keycloak, Traefik and observability configuration
+├── release/         Versioned release composition
+├── docs/            Contracts, ADRs, specifications and release evidence
+├── documentation/   Astro/Starlight architecture and developer guide
+├── examples/        Runnable BPMN examples
+└── scripts/         Development and verification helpers
+```
+
+## Engine packages
+
+```text
+com.abada.engine/
+├── api/             REST controllers and HTTP error translation
+├── bpmn/            Compatibility detection, validation and migration
+├── cli/             BPMN migration command-line entry points
+├── config/          OpenAPI and observability configuration
+├── core/            Atomic commands and BPMN state advancement
+├── dto/             Stable public request and response models
+├── observability/   Metrics and tracing
+├── parser/          Secure XML parsing and dialect translation
+├── persistence/     JPA entities, repositories and persistence adapters
+└── security/        OIDC, proxy authentication and permission mapping
+```
+
+## Find behavior by responsibility
+
+| Question | Begin at |
+| --- | --- |
+| Which HTTP contract handles this request? | `engine/src/main/java/com/abada/engine/api/` |
+| Where is workflow state advanced? | `core/AbadaEngine`, `TaskManager`, and command services |
+| How is BPMN XML normalized? | `parser/` and `bpmn/compatibility/` |
+| Which row is authoritative? | `persistence/entity/` and the latest Flyway migration |
+| How is a permission granted? | `security/SecurityConfig` and `AbadaRoles` |
+| What is guaranteed publicly? | `docs/reference/` and executable contract tests |
+| Which release gate owns the work? | `docs/development/roadmap-to-1.0.md` |
+
+## Test layout
+
+Tests mirror production packages under `engine/src/test/java`. Executable BPMN
+models live under `engine/src/test/resources/bpmn`, while stable API shapes live
+under `engine/src/test/resources/contracts`. PostgreSQL suites use two or more
+Spring contexts when they must prove behavior across replicas.
+
+## Local instructions
+
+Repository-wide contribution rules live in `AGENTS.md`. A more specific
+`AGENTS.md` may override them for a subtree. Generated output, local databases,
+logs, credentials, `.env` files and IDE metadata must not be committed.

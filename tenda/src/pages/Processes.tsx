@@ -21,7 +21,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Eye } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "@/router";
 import { apiClient, ProcessDefinition } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { ApiErrorToast } from "@/components/ApiErrorToast";

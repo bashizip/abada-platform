@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "@/router";
 import { ShieldCheck, Workflow } from "lucide-react";
 import { Button, Card } from "@/components/ui/Common";
 import { useAuth } from "@/hooks/useAuth";

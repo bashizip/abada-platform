@@ -1,6 +1,7 @@
 import { refreshToken, keycloak } from "@/auth/keycloakClient";
+import { runtimeConfig } from "@/config/runtime";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const API_BASE_URL = runtimeConfig.apiUrl;
 
 export interface ApiResponse<T> {
   data?: T;

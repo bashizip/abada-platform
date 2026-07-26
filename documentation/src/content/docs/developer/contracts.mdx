@@ -1,0 +1,68 @@
+---
+title: API and worker contracts
+description: Compatibility rules for REST API v1, typed errors, idempotency and external workers.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Abada 0.11 freezes the public REST surface under `/api/v1` and external-worker
+protocol v1. Evolve them additively and prove compatibility from generated
+OpenAPI.
+
+## REST API v1
+
+- Keep persistence entities out of public schemas; map them to stable DTOs.
+- Existing paths, methods, field names, types and status meanings are stable.
+- New optional fields, endpoints, response headers and enum values are allowed.
+- List bodies remain JSON arrays. Pagination metadata uses `X-Page`,
+  `X-Page-Size`, `X-Total-Count` and `X-Total-Pages`.
+- Mutation endpoints accept `Idempotency-Key` where deterministic replay is
+  defined.
+- JSON errors use the stable `ErrorResponse` envelope and machine-readable
+  `ApiErrorCode` values.
+
+The generated OpenAPI document is checked against
+`engine/src/test/resources/contracts/api-v1-contract.json` by
+`OpenApiContractTest`.
+
+## Worker protocol v1
+
+```mermaid
+sequenceDiagram
+    participant W as Worker
+    participant E as Engine
+    participant DB as PostgreSQL
+
+    W->>E: fetch-and-lock topics, maxTasks and duration
+    E->>DB: atomically claim available tasks
+    E-->>W: tasks, lease expiry, retries and trace context
+    W->>E: heartbeat or extend-lock
+    E->>DB: verify owner and active lease
+    alt success
+      W->>E: complete with workerId and variables
+    else business outcome
+      W->>E: BPMN error
+    else technical failure
+      W->>E: failure and retry policy
+    end
+    E->>DB: atomic transition and history
+```
+
+Completion, heartbeat, extension, failure and BPMN error validate worker
+ownership and lease expiry. Trace context propagates with acquired work. The
+Java SDK under `sdk/java` is the executable reference client.
+
+<Aside type="caution" title="External effects are at-least-once">
+  A worker may finish its remote side effect and lose the completion response.
+  Use a stable business or idempotency key at the external system; the engine
+  cannot roll that effect back.
+</Aside>
+
+## Contract change checklist
+
+1. Update the DTO and controller without leaking an entity.
+2. Preserve old input unless a versioned migration explicitly changes it.
+3. Add typed success, invalid-input and authorization tests.
+4. Update the OpenAPI compatibility manifest.
+5. Update Tenda, Orun or the Java SDK if they consume the contract.
+6. Update the API or worker protocol reference in the same change.

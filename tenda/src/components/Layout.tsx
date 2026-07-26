@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from "@/router";
 import { ThemeToggle } from './ThemeToggle';
 
 interface LayoutProps {

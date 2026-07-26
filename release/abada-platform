@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMMAND="${1:-}"
+MODE="${2:-dev}"
+
+if [[ -z "$COMMAND" || "$COMMAND" == "--help" || "$COMMAND" == "-h" ]]; then
+  cat <<'USAGE'
+Usage: ./release/abada-platform <doctor|up|down|status|logs> <dev|prod> [options]
+
+Options:
+  --telemetry        Add the bundled metrics, traces and logs stack
+  --env-file PATH    Use an explicit environment file
+  --no-pull          Skip image availability/pull checks during doctor
+USAGE
+  exit 0
+fi
+
+case "$MODE" in
+  dev|prod) ;;
+  *) echo "Error: profile must be 'dev' or 'prod'" >&2; exit 64 ;;
+esac
+
+shift 2 || true
+TELEMETRY=false
+SKIP_PULL=false
+ENV_FILE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --telemetry) TELEMETRY=true ;;
+    --no-pull) SKIP_PULL=true ;;
+    --env-file)
+      [[ $# -ge 2 ]] || { echo "Error: --env-file requires a path" >&2; exit 64; }
+      ENV_FILE="$2"
+      shift
+      ;;
+    *) echo "Error: unknown option '$1'" >&2; exit 64 ;;
+  esac
+  shift
+done
+
+if [[ -z "$ENV_FILE" ]]; then
+  ENV_FILE="$ROOT_DIR/.env.$MODE"
+fi
+
+if [[ "$MODE" == "dev" && ! -f "$ENV_FILE" ]]; then
+  cp "$ROOT_DIR/release/.env.dev.example" "$ENV_FILE"
+  echo "Created $ENV_FILE from the safe development defaults."
+fi
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "Error: environment file not found: $ENV_FILE" >&2
+  [[ "$MODE" == "prod" ]] && echo "Copy release/.env.prod.example to .env.prod and replace every placeholder." >&2
+  exit 66
+fi
+
+COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.$MODE.yaml")
+if [[ "$TELEMETRY" == "true" ]]; then
+  COMPOSE+=(-f "$ROOT_DIR/compose.telemetry.yaml")
+fi
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || { echo "Error: required command '$1' was not found" >&2; exit 69; }
+}
+
+validate_production_values() {
+  if awk -F= '
+    /^[[:space:]]*#/ || NF < 2 || $1 == "GRAFANA_ADMIN_PASSWORD" { next }
+    /change-me|example\.com/ { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$ENV_FILE"; then
+    echo "Error: production environment still contains change-me/example.com placeholders" >&2
+    exit 65
+  fi
+  local postgres_password version api_host tasks_host ops_host acme_email issuer audience oidc_url cors
+  postgres_password="$(env_value POSTGRES_PASSWORD)"
+  version="$(env_value ABADA_VERSION)"
+  api_host="$(env_value ABADA_API_HOST)"
+  tasks_host="$(env_value ABADA_TASKS_HOST)"
+  ops_host="$(env_value ABADA_OPS_HOST)"
+  acme_email="$(env_value ABADA_ACME_EMAIL)"
+  issuer="$(env_value OIDC_ISSUER_URI)"
+  audience="$(env_value OIDC_AUDIENCE)"
+  oidc_url="$(env_value ABADA_OIDC_URL)"
+  cors="$(env_value ABADA_ALLOWED_ORIGINS)"
+
+  [[ ${#postgres_password} -ge 16 ]] || { echo "Error: POSTGRES_PASSWORD must contain at least 16 characters" >&2; exit 65; }
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ && "$version" != "latest" ]] || {
+    echo "Error: ABADA_VERSION must be an exact immutable semantic version" >&2; exit 65;
+  }
+  validate_hostname ABADA_API_HOST "$api_host"
+  validate_hostname ABADA_TASKS_HOST "$tasks_host"
+  validate_hostname ABADA_OPS_HOST "$ops_host"
+  [[ "$api_host" != "$tasks_host" && "$api_host" != "$ops_host" && "$tasks_host" != "$ops_host" ]] || {
+    echo "Error: API, task and operations hostnames must be distinct" >&2; exit 65;
+  }
+  [[ "$acme_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || {
+    echo "Error: ABADA_ACME_EMAIL must be a valid email address" >&2; exit 65;
+  }
+  validate_https_url OIDC_ISSUER_URI "$issuer"
+  [[ "$audience" =~ ^[A-Za-z0-9._:/-]+$ ]] || {
+    echo "Error: OIDC_AUDIENCE must be a non-empty audience identifier" >&2; exit 65;
+  }
+  validate_https_url ABADA_OIDC_URL "$oidc_url"
+  validate_cors "$cors"
+
+  if [[ "$TELEMETRY" == "true" ]]; then
+    local grafana_password
+    grafana_password="$(awk -F= '$1 == "GRAFANA_ADMIN_PASSWORD" { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE")"
+    if [[ ${#grafana_password} -lt 16 || "$grafana_password" == *change-me* ]]; then
+      echo "Error: telemetry requires a non-placeholder GRAFANA_ADMIN_PASSWORD with at least 16 characters" >&2
+      exit 65
+    fi
+  fi
+}
+
+validate_telemetry_values() {
+  local telemetry_enabled endpoint sdk_disabled
+  telemetry_enabled="$(env_value ABADA_TELEMETRY_ENABLED)"
+  endpoint="$(env_value ABADA_TELEMETRY_OTLP_ENDPOINT)"
+  sdk_disabled="$(env_value OTEL_SDK_DISABLED)"
+  [[ "$telemetry_enabled" == "true" || "$telemetry_enabled" == "false" ]] || {
+    echo "Error: ABADA_TELEMETRY_ENABLED must be true or false" >&2; exit 65;
+  }
+  if [[ "$TELEMETRY" != "true" && "$telemetry_enabled" == "true" ]]; then
+    [[ "$endpoint" =~ ^https?://[^[:space:]]+$ ]] || {
+      echo "Error: external telemetry requires a valid ABADA_TELEMETRY_OTLP_ENDPOINT" >&2; exit 65;
+    }
+    [[ "$sdk_disabled" == "false" ]] || {
+      echo "Error: external telemetry requires OTEL_SDK_DISABLED=false" >&2; exit 65;
+    }
+  elif [[ "$TELEMETRY" != "true" && "$telemetry_enabled" == "false" ]]; then
+    [[ -z "$endpoint" && "$sdk_disabled" == "true" ]] || {
+      echo "Error: disabled telemetry requires an empty endpoint and OTEL_SDK_DISABLED=true" >&2; exit 65;
+    }
+  fi
+}
+
+env_value() {
+  local key="$1"
+  awk -v key="$key" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
+}
+
+validate_hostname() {
+  local key="$1" value="$2"
+  if [[ ! "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ || "$value" != *.* || "$value" == *..* || "$value" == *://* || "$value" == */* || "$value" == "localhost" || "$value" == *.localhost ]]; then
+    echo "Error: $key must be a DNS hostname without a scheme or path" >&2
+    exit 65
+  fi
+}
+
+validate_https_url() {
+  local key="$1" value="$2"
+  if [[ ! "$value" =~ ^https://[^[:space:]/]+(/[^[:space:]]*)?$ || "$value" == *"*"* ]]; then
+    echo "Error: $key must be an HTTPS URL without wildcards" >&2
+    exit 65
+  fi
+}
+
+validate_cors() {
+  local value="$1" origin
+  IFS=',' read -r -a origins <<<"$value"
+  [[ ${#origins[@]} -gt 0 ]] || { echo "Error: ABADA_ALLOWED_ORIGINS is required" >&2; exit 65; }
+  for origin in "${origins[@]}"; do
+    if [[ ! "$origin" =~ ^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]+)?$ || "$origin" == *"*"* ]]; then
+      echo "Error: every production CORS origin must be an exact HTTPS origin" >&2
+      exit 65
+    fi
+  done
+}
+
+check_ports() {
+  command -v lsof >/dev/null 2>&1 || return 0
+  if [[ -n "$("${COMPOSE[@]}" ps --status running -q traefik 2>/dev/null)" ]]; then
+    return 0
+  fi
+  local ports=(80)
+  [[ "$MODE" == "prod" ]] && ports+=(443)
+  if [[ "$TELEMETRY" == "true" ]]; then
+    local grafana_port
+    grafana_port="$(env_value GRAFANA_PORT)"
+    ports+=("${grafana_port:-3000}")
+  fi
+  local port
+  for port in "${ports[@]}"; do
+    if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+      echo "Error: TCP port $port is already in use" >&2
+      exit 69
+    fi
+  done
+}
+
+check_docker_storage() {
+  local probe_volume="abada-preflight-${USER:-user}-$$"
+  if ! docker volume create "$probe_volume" >/dev/null; then
+    echo "Error: Docker cannot create named-volume storage" >&2
+    exit 73
+  fi
+  if ! docker volume inspect "$probe_volume" >/dev/null; then
+    docker volume rm "$probe_volume" >/dev/null 2>&1 || true
+    echo "Error: Docker cannot inspect named-volume storage" >&2
+    exit 73
+  fi
+  docker volume rm "$probe_volume" >/dev/null || {
+    echo "Error: Docker could not clean up the preflight storage probe" >&2
+    exit 73
+  }
+}
+
+doctor() {
+  require_command docker
+  [[ "$MODE" == "prod" ]] && validate_production_values
+  validate_telemetry_values
+  docker info >/dev/null
+  docker compose version >/dev/null
+  [[ -w "$ROOT_DIR" ]] || { echo "Error: $ROOT_DIR is not writable" >&2; exit 73; }
+  check_docker_storage
+  "${COMPOSE[@]}" config --quiet
+  check_ports
+  if [[ "$SKIP_PULL" != "true" ]]; then
+    "${COMPOSE[@]}" pull --quiet
+  fi
+  echo "Preflight passed: profile=$MODE telemetry=$TELEMETRY"
+}
+
+case "$COMMAND" in
+  doctor) doctor ;;
+  up)
+    doctor
+    "${COMPOSE[@]}" up -d --wait
+    if [[ "$MODE" == "dev" ]]; then
+      cat <<'URLS'
+Abada is ready:
+  API:      http://api.localhost/api/v1/info
+  Tenda:    http://tenda.localhost
+  Orun:     http://orun.localhost
+  Keycloak: http://keycloak.localhost (admin/admin)
+  Workflow user: alice/alice (development only)
+  Health: all required containers passed their health checks
+URLS
+    else
+      cat <<URLS
+Abada production services are healthy:
+  API:   https://$(env_value ABADA_API_HOST)/api/v1/info
+  Tenda: https://$(env_value ABADA_TASKS_HOST)
+  Orun:  https://$(env_value ABADA_OPS_HOST)
+URLS
+    fi
+    if [[ "$TELEMETRY" == "true" ]]; then
+      grafana_port="$(env_value GRAFANA_PORT)"
+      echo "  Grafana: http://127.0.0.1:${grafana_port:-3000}"
+    fi
+    echo "Logs:     ./release/abada-platform logs $MODE --env-file $ENV_FILE$([[ "$TELEMETRY" == "true" ]] && echo ' --telemetry')"
+    echo "Teardown: ./release/abada-platform down $MODE --env-file $ENV_FILE$([[ "$TELEMETRY" == "true" ]] && echo ' --telemetry')"
+    ;;
+  down) "${COMPOSE[@]}" down ;;
+  status) "${COMPOSE[@]}" ps ;;
+  logs) "${COMPOSE[@]}" logs -f ;;
+  *) echo "Error: unknown command '$COMMAND'" >&2; exit 64 ;;
+esac

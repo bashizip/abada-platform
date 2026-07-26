@@ -3,6 +3,8 @@ data/
 
 # ignore logs
 /logs/
+engine/logs/
+.DS_Store
 
 HELP.md
 target/
@@ -61,6 +63,13 @@ orun/build/
 orun/.next/
 orun/.env*.local
 orun/coverage/
+documentation/node_modules/
+documentation/dist/
+documentation/.astro/
+documentation/.vercel/
+release/dist/
+.env.dev
+.env.prod
 
 # Docker build artifacts
 engine/docker/

@@ -1,0 +1,63 @@
+---
+title: Telemetry
+description: Run Abada with telemetry disabled, bundled, or exported externally.
+---
+
+Telemetry is off by default. Workflow readiness and transactions never depend
+on a collector.
+
+## Disabled
+
+```dotenv
+ABADA_TELEMETRY_ENABLED=false
+OTEL_SDK_DISABLED=true
+```
+
+Start only the core profile. No exporter or collector is created; structured
+container logs and local rolling JSON logs remain available.
+
+## Bundled stack
+
+```bash
+./release/abada-platform up dev --telemetry
+```
+
+The overlay starts OpenTelemetry Collector, Prometheus, Jaeger, Loki, Alloy
+and Grafana. Grafana is loopback-only at `http://127.0.0.1:3000`; production
+requires a non-placeholder `GRAFANA_ADMIN_PASSWORD` of at least 16 characters.
+Datasources and dashboards are provisioned automatically. The internal
+`telemetry-health` container checks every bundled backend; it does not gate the
+engine health endpoint.
+
+Alloy tails only the named `engine_logs` volume, persists offsets, and runs
+with anonymous usage reporting disabled. It has no Docker socket access.
+
+The one-shot `jaeger-volume-init` container prepares the persistent Badger
+volume for Jaeger's non-root UID and exits before Jaeger starts. It has no
+network access and is expected to show as `Exited (0)` after initialization.
+
+## External OTLP
+
+Do not add `compose.telemetry.yaml`. Set:
+
+```dotenv
+ABADA_TELEMETRY_ENABLED=true
+ABADA_TELEMETRY_OTLP_ENDPOINT=https://collector.example.net:4318
+OTEL_SDK_DISABLED=false
+ABADA_TRACING_SAMPLING_PROBABILITY=0.1
+```
+
+The endpoint must be an HTTP(S) OTLP base URL; Abada appends `/v1/traces` and
+`/v1/metrics`. Export uses bounded batches, queueing and five-second timeouts.
+Collector failure may lose telemetry but cannot roll back a workflow command.
+
+Verify engine readiness separately from telemetry configuration:
+
+```bash
+curl -fsS http://api.localhost/api/actuator/health/readiness
+curl -fsS http://api.localhost/api/actuator/health/telemetryExport
+```
+
+For a failure drill, stop `otel-collector`, complete a task, confirm the task
+commits, then restart the collector. At-least-once workflow behavior does not
+imply lossless telemetry delivery.

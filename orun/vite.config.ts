@@ -10,8 +10,8 @@ export default defineConfig(() => {
       strictPort: true,
       hmr: {
         host: "orun.localhost",
-        protocol: "wss",
-        clientPort: 443,
+        protocol: "ws",
+        clientPort: 80,
       },
       allowedHosts: ["orun.localhost", "localhost"],
     },

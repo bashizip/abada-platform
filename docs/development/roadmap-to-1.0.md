@@ -1,8 +1,9 @@
 # Abada Reliable OSS Core Roadmap
 
 This is the authoritative checklist for the Abada 1.0 reliable open-source
-core. The current completed milestone is **0.11 — Stable contracts and
-security**; the next milestone is **1.0 RC — Evidence and operations**.
+core. The pre-RC architecture and developer documentation foundation is
+complete; the next milestone is **1.0 RC — Platform deployment, optional
+telemetry, evidence and operations**.
 
 Last reviewed: 2026-07-19.
 
@@ -280,7 +281,83 @@ is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
   is implemented and verified, or explicitly documented as blocked with
   concrete technical evidence.
 
+## Pre-1.0 RC — Documentation foundation
+
+- [x] Build a versioned documentation application with Astro 7 and Starlight
+  0.41 on the repository's Node.js 24 toolchain.
+- [x] Support structured MDX content and executable Mermaid diagrams.
+- [x] Publish a curated architecture guide covering components, database
+  authority, atomic commands, cluster execution, security and BPMN dialects.
+- [x] Publish a developer guide covering repository structure, local setup,
+  backend/API/database changes, testing and documentation contribution.
+- [x] Link every guide to the authoritative repository contracts and make
+  documentation checks part of CI.
+- [x] Keep the end-user guide explicitly deferred until the architecture and
+  developer contracts stabilize. The user guide is activated by the platform
+  deployment milestone below.
+- [x] **Documentation foundation gate:** type checking, production build,
+  dependency audit and internal-link validation pass reproducibly.
+
 ## 1.0 RC — Evidence and operations
+
+Every candidate must complete the
+[1.0 RC publication gates](1.0-rc-publication-gates.md). Roadmap completion
+shows that a capability exists; it does not replace candidate-specific
+publication evidence.
+
+### Platform deployment and optional telemetry
+
+- [x] Publish one authoritative Compose family: shared core, development,
+  production and optional telemetry overlays. Evidence: `compose.yaml`,
+  `compose.dev.yaml`, `compose.prod.yaml`, `compose.telemetry.yaml` and
+  [`validate-platform-deployment.sh`](../../scripts/test/validate-platform-deployment.sh).
+- [ ] Certify PostgreSQL-backed development with bundled local Keycloak and
+  direct OIDC validation; keep H2 outside the platform certification matrix.
+  The executable workflow/restart check is
+  [`smoke-dev-platform.sh`](../../scripts/test/smoke-dev-platform.sh). Live
+  cloud evidence is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
+- [ ] Certify PostgreSQL-backed production with external OIDC, required
+  secrets/domains/origins, TLS ingress and no publicly exposed database. The
+  configuration and negative preflight contract passes; reference-host live
+  certification is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
+- [x] Make telemetry disabled by default with no exporters, collector
+  dependency or telemetry-related readiness failure. Evidence:
+  [`TelemetryModeConfigurationTest`](../../engine/src/test/java/com/abada/engine/observability/TelemetryModeConfigurationTest.java),
+  [`TelemetryExportHealthIndicatorTest`](../../engine/src/test/java/com/abada/engine/observability/TelemetryExportHealthIndicatorTest.java)
+  and the telemetry-free Compose contract check.
+- [ ] Certify the bundled metrics, traces and logs overlay and an external
+  OTLP mode; prove collector failure cannot roll workflow state back. The
+  executable checks are
+  [`smoke-telemetry-platform.sh`](../../scripts/test/smoke-telemetry-platform.sh)
+  and [`smoke-external-otlp.sh`](../../scripts/test/smoke-external-otlp.sh);
+  live cloud certification is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
+- [x] Serve runtime API and OIDC configuration from immutable Tenda and Orun
+  images and fail startup on incomplete configuration. Evidence: runtime
+  `/config.js` entrypoints and deployment contract tests.
+- [x] Publish a versioned, checksummed release bundle with no build contexts
+  or repository-relative missing assets. Evidence:
+  [`build-bundle.sh`](../../release/build-bundle.sh).
+- [x] Provide a Linux/macOS quickstart plus a production preflight that
+  validates configuration before startup.
+- [ ] Execute the PowerShell quickstart and preflight in Windows CI. Deferred
+  to the [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
+- [ ] Test development/production with telemetry off/on from clean Docker
+  state, including authentication, BPMN deployment, task completion, engine
+  restart and persisted progress. Development CI jobs are defined; production
+  reference-host evidence is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
+- [ ] Publish the user guide: choose a mode, quickstart, first workflow,
+  development, production/OIDC, telemetry, scaling, backup/restore, upgrades
+  and troubleshooting. The complete source passes Astro checks/build; Vercel
+  publication waits for every documented live deployment command to pass.
+- [x] **1.0 RC Compose distribution gate:** development and production
+  Compose configurations, negative preflight cases, runtime frontend
+  configuration and the self-contained release archive pass the executable
+  deployment contract. `1.0.0-rc.1` is an evaluation prerelease, not a
+  public-cloud production certification; live certification moves to 1.1.
 
 ### Conformance and quality
 
@@ -298,7 +375,9 @@ is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
 
 - [ ] Test migrations from every supported minor version.
 - [ ] Test a supported rolling upgrade across multiple replicas.
-- [ ] Publish and verify backup and restore instructions.
+- [ ] Publish and verify backup and restore instructions. The guide and
+  [`verify-backup-restore.sh`](../../scripts/test/verify-backup-restore.sh) are
+  implemented; production-profile execution evidence remains outstanding.
 - [ ] Publish incident, recovery and operational runbooks.
 - [ ] Provide one reproducible quickstart and one production reference
   deployment.
@@ -329,9 +408,20 @@ is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
 
 These items do not count toward the 1.0 completion percentage: hosted SaaS,
 multi-tenancy, billing, Kubernetes packaging, DMN, CMMN, TypeScript and Python
-worker SDKs, public agent runtime, AI memory and policy-engine work. Future
-agentic features should consume the durable worker, event, variable, policy and
-telemetry contracts without bypassing the BPMN state machine.
+worker SDKs, an embeddable Java engine/Maven artifact, public agent runtime, AI
+memory and policy-engine work. Future agentic features should consume the
+durable worker, event, variable, policy and telemetry contracts without
+bypassing the BPMN state machine.
+
+The next planned milestone is the
+[1.1.0 RC Google AI Lab candidature](roadmap-to-1.1.0-rc.md). Its agentic
+track may begin on the validated Compose baseline; public-cloud deployment,
+multi-host failover, rolling-upgrade and supply-chain certification remain a
+separately visible infrastructure-debt track.
+
+The bundled RC telemetry profile uses Grafana Alloy for log collection. It
+preserves the named-log-volume and trace-correlation contract without retaining
+the end-of-life Promtail agent.
 
 See [BPMN support](../reference/bpmn-support.md) and
 [deployment support](../reference/deployment-support.md) for the current

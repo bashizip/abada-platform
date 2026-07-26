@@ -10,58 +10,62 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidationException;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.filter.CommonsRequestLoggingFilter;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+
 @SpringBootTest(properties = {
         "abada.security.mode=oidc",
-        "abada.security.allowed-origins=https://tenda.example"
+        "abada.security.allowed-origins=https://tenda.example",
+        "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://identity.test/realms/abada",
+        "abada.security.audience=abada-api"
 })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class SecurityAuthorizationContractTest {
     @Autowired MockMvc mvc;
     @Autowired CommonsRequestLoggingFilter requestLoggingFilter;
+    @MockitoBean JwtDecoder jwtDecoder;
 
-    @TestConfiguration
-    static class JwtConfiguration {
-        @Bean
-        JwtDecoder jwtDecoder() {
-            return token -> {
-                if ("invalid".equals(token)) throw invalid("JWT signature is invalid");
-                if ("expired".equals(token)) throw invalid("JWT has expired");
-                String scope = switch (token) {
-                    case "deployer" -> "process:deploy";
-                    case "controller" -> "process:control process:read";
-                    case "tasks" -> "task:read task:write process:read";
-                    case "operator" -> "operations:read operations:write process:read";
-                    case "worker" -> "worker:execute";
-                    default -> "";
-                };
-                return Jwt.withTokenValue(token).header("alg", "RS256").subject("user-1")
-                        .claim("preferred_username", "alice").claim("groups", List.of("customers"))
-                        .claim("scope", scope).issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build();
-            };
+    @BeforeEach
+    void configureJwtDecoder() {
+        when(jwtDecoder.decode(anyString())).thenAnswer(invocation -> jwt(invocation.getArgument(0)));
+    }
 
-        }
+    private Jwt jwt(String token) {
+        if ("invalid".equals(token)) throw invalid("JWT signature is invalid");
+        if ("expired".equals(token)) throw invalid("JWT has expired");
+        String scope = switch (token) {
+            case "deployer" -> "process:deploy";
+            case "controller" -> "process:control process:read";
+            case "tasks" -> "task:read task:write process:read";
+            case "operator" -> "operations:read operations:write process:read";
+            case "worker" -> "worker:execute";
+            default -> "";
+        };
+        return Jwt.withTokenValue(token).header("alg", "RS256").subject("user-1")
+                .claim("preferred_username", "alice").claim("groups", List.of("customers"))
+                .claim("scope", scope).issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build();
+    }
 
-        private JwtValidationException invalid(String message) {
-            return new JwtValidationException(message,
-                    List.of(new OAuth2Error("invalid_token", message, null)));
-        }
+    private JwtValidationException invalid(String message) {
+        return new JwtValidationException(message,
+                List.of(new OAuth2Error("invalid_token", message, null)));
     }
 
     @Test
@@ -75,6 +79,12 @@ class SecurityAuthorizationContractTest {
         mvc.perform(get("/v1/tasks").header("Authorization", "Bearer expired"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    }
+
+    @Test
+    void readinessIsPublicButDoesNotExposeProtectedApis() throws Exception {
+        mvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
+        mvc.perform(get("/v1/tasks")).andExpect(status().isUnauthorized());
     }
 
     @Test

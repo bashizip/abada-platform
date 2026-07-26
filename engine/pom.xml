@@ -11,7 +11,7 @@
     </parent>
     <groupId>dev.abada</groupId>
     <artifactId>abada-engine</artifactId>
-    <version>0.11.0-alpha</version>
+    <version>1.0.0-rc.1</version>
     <name>Abada Engine</name>
     <description>Lightweight, pluggable BPMN-based workflow engine</description>
     <url />
@@ -241,6 +241,8 @@
                 <version>3.5.2</version>
                 <configuration>
                     <runOrder>random</runOrder>
+                    <!-- Java 21+ no longer guarantees Mockito can self-attach. -->
+                    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                 </configuration>
 
             </plugin>

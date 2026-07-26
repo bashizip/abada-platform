@@ -1,0 +1,38 @@
+---
+title: Backup and upgrades
+description: Back up PostgreSQL and perform a versioned Compose upgrade.
+---
+
+## Backup
+
+Keep the database running and write a custom-format backup outside the volume:
+
+```bash
+docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
+  exec -T postgres pg_dump -U abada -d abada_engine -Fc > abada-engine.dump
+shasum -a 256 abada-engine.dump > abada-engine.dump.sha256
+```
+
+Test restore into a separate environment. For an in-place restore, stop the
+engine first, verify the checksum, and stream the backup to PostgreSQL:
+
+```bash
+shasum -a 256 -c abada-engine.dump.sha256
+docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml stop abada-engine
+docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
+  exec -T postgres pg_restore -U abada -d abada_engine --clean --if-exists < abada-engine.dump
+```
+
+## Upgrade
+
+1. Read every intervening release note and take a tested backup.
+2. Download the new release archive and verify its SHA-256 checksum.
+3. Copy your `.env.prod`, set `ABADA_VERSION` to the exact new version, and run
+   `./release/abada-platform doctor prod --env-file .env.prod`.
+4. Pull the images, then run the explicit production `up` command.
+5. Wait for health, verify Flyway, start and complete a canary workflow, and
+   inspect Orun history before removing the prior archive.
+
+Never edit a released Flyway migration or downgrade a database without a
+release-specific rollback procedure. Image rollback alone cannot undo a schema
+migration.

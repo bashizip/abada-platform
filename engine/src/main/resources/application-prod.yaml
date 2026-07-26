@@ -1,6 +1,6 @@
 spring:
   application:
-    name: abada-engine-${spring.profiles.active}
+    name: abada-engine
 
   datasource:
     url: jdbc:postgresql://postgres:5432/abada_engine
@@ -32,13 +32,6 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
-  otlp:
-    tracing:
-      endpoint: http://otel-collector:4318/v1/traces
-    metrics:
-      endpoint: http://otel-collector:4318/v1/metrics
-    logs:
-      endpoint: http://otel-collector:4318/v1/logs
 
 otel:
   resource:
@@ -59,8 +52,14 @@ logging:
     com.abada.engine: DEBUG
 
 abada:
+  telemetry:
+    enabled: ${ABADA_TELEMETRY_ENABLED:false}
+    otlp:
+      endpoint: ${ABADA_TELEMETRY_OTLP_ENDPOINT:}
   security:
     mode: ${ABADA_SECURITY_MODE:oidc}
+    audience: ${OIDC_AUDIENCE}
+    jwk-set-uri: ${OIDC_JWK_SET_URI:}
     allowed-origins: ${ABADA_ALLOWED_ORIGINS}
 
 spring.security.oauth2.resourceserver.jwt.issuer-uri: ${OIDC_ISSUER_URI}

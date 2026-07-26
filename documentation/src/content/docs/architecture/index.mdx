@@ -1,0 +1,91 @@
+---
+title: Architecture overview
+description: Components, boundaries and authoritative data flow in Abada Engine.
+---
+
+import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Abada is a self-hosted BPMN orchestration platform. Clients and workers use the
+versioned API, any engine replica may handle a command, and PostgreSQL owns the
+workflow truth.
+
+```mermaid
+flowchart TB
+    subgraph Clients
+      T[Tenda task application]
+      R[Orun operations application]
+      W[External workers and Java SDK]
+      A[API clients]
+    end
+    P[Traefik or trusted ingress]
+    subgraph Engine cluster
+      E1[Engine replica 1]
+      E2[Engine replica 2]
+      EN[Engine replica N]
+    end
+    DB[(PostgreSQL)]
+    O[OpenTelemetry collector]
+    IDP[OIDC identity provider]
+
+    T --> P
+    R --> P
+    W --> P
+    A --> P
+    P --> E1
+    P --> E2
+    P --> EN
+    IDP -. signed JWT .-> E1
+    IDP -. signed JWT .-> E2
+    IDP -. signed JWT .-> EN
+    E1 <--> DB
+    E2 <--> DB
+    EN <--> DB
+    E1 -. optional OTLP .-> O
+    E2 -. optional OTLP .-> O
+    EN -. optional OTLP .-> O
+```
+
+## Architectural boundaries
+
+<CardGrid>
+  <Card title="Public boundary" icon="puzzle">
+    `/api/v1` and worker protocol v1 expose stable DTOs, typed errors,
+    pagination, idempotency and trace propagation.
+  </Card>
+  <Card title="Execution boundary" icon="setting">
+    Core command services reconstruct state and execute the supported BPMN
+    semantics inside explicit transactions.
+  </Card>
+  <Card title="Persistence boundary" icon="database">
+    JPA repositories and Flyway migrations map durable definitions, instances,
+    tasks, subscriptions, jobs, variables, history and outbox records.
+  </Card>
+  <Card title="Presentation boundary" icon="laptop">
+    Tenda and Orun consume public DTOs. They do not define authorization or
+    reconstruct authoritative workflow history.
+  </Card>
+</CardGrid>
+
+## State ownership
+
+| State | Authority | Replica memory policy |
+| --- | --- | --- |
+| Definitions and versions | PostgreSQL deployment rows | Parsed immutable model may be cached by deployment ID |
+| Instances, tokens and joins | PostgreSQL | Command-local only |
+| Variables and user tasks | PostgreSQL | Detached read snapshots or command-local models |
+| Subscriptions, timers and work | PostgreSQL | Acquired through locks and leases |
+| Audit history and lifecycle events | PostgreSQL | Lifecycle delivery originates from the outbox |
+
+<Aside type="note" title="H2 is not the production reference">
+  H2 exists for local convenience. PostgreSQL Testcontainers provide the
+  evidence for migrations, locking, concurrency, restart recovery and
+  multi-replica behavior.
+</Aside>
+
+## Continue exploring
+
+- [Runtime and transaction boundaries](/architecture/runtime/)
+- [Platform deployment and telemetry boundaries](/architecture/deployment/)
+- [Cluster acquisition and recovery](/architecture/cluster/)
+- [Authentication and authorization](/architecture/security/)
+- [BPMN parsing and canonical execution](/architecture/bpmn/)

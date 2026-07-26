@@ -1,0 +1,43 @@
+---
+title: Quickstart
+description: Install and validate a versioned Abada release from an empty directory.
+---
+
+The downloader retrieves both the release archive and its SHA-256 file. It
+refuses to extract the archive when verification fails, then runs the
+development preflight and starts the local HTTP platform.
+
+```bash
+mkdir abada-quickstart && cd abada-quickstart
+curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
+chmod +x quickstart.sh
+./quickstart.sh 1.0.0-rc.1
+```
+
+Expected final output includes `Preflight passed` followed by these URLs:
+
+- Tenda: `http://tenda.localhost`
+- Orun: `http://orun.localhost`
+- Engine readiness: `http://api.localhost/api/actuator/health/readiness`
+- Keycloak: `http://keycloak.localhost`
+
+Use `alice` / `alice` for the first workflow. These credentials are local
+development data and must never be reused in production.
+
+Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory abada-quickstart
+Set-Location abada-quickstart
+Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 -OutFile quickstart.ps1
+.\quickstart.ps1 -Version 1.0.0-rc.1
+```
+
+Verify and tear down:
+
+```bash
+curl -fsS http://api.localhost/api/actuator/health/readiness
+cd abada-platform-1.0.0-rc.1
+./release/abada-platform status dev
+./release/abada-platform down dev
+```

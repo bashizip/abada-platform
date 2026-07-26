@@ -2,27 +2,24 @@
 
 This document provides a quick reference for all the accessible service links in the Abada development environment.
 
-## Main Application Gateways (HTTPS)
+## Development platform (HTTP)
 
 | Service | URL | Description |
 | :--- | :--- | :--- |
-| **Abada Gateway** | [https://localhost](https://localhost) | Main entry point (redirects to API Info) |
-| **Abada Engine API** | [https://localhost/api](https://localhost/api) | Core BPMN execution engine API |
-| **Swagger UI** | [https://localhost/api/swagger-ui.html](https://localhost/api/swagger-ui.html) | Interactive API documentation |
-| **Abada Tenda** | [https://tenda.localhost](https://tenda.localhost) | Task Management UI (Protected by Auth) |
-| **Abada Orun** | [https://orun.localhost](https://orun.localhost) | Operations Cockpit (Protected by Auth) |
-| **Keycloak Admin** | [https://keycloak.localhost](https://keycloak.localhost) | Identity & Access Management console |
-| **Traefik Dashboard** | [https://traefik.localhost/dashboard/](https://traefik.localhost/dashboard/) | Traefik routing & proxy overview |
+| **Abada Engine API** | [http://api.localhost/api](http://api.localhost/api) | Core BPMN execution engine API |
+| **Swagger UI** | [http://api.localhost/api/swagger-ui.html](http://api.localhost/api/swagger-ui.html) | Interactive API documentation |
+| **Abada Tenda** | [http://tenda.localhost](http://tenda.localhost) | Task management UI |
+| **Abada Orun** | [http://orun.localhost](http://orun.localhost) | Operations cockpit |
+| **Keycloak Admin** | [http://keycloak.localhost](http://keycloak.localhost) | Development identity provider |
+| **Traefik Dashboard** | [http://127.0.0.1:8080/dashboard/](http://127.0.0.1:8080/dashboard/) | Loopback-only local routing dashboard |
 
-## Monitoring & Infrastructure (Local Ports)
+## Optional telemetry overlay
 
 | Service | URL | Description |
 | :--- | :--- | :--- |
-| **Grafana** | [http://localhost:3000](http://localhost:3000) | Metrics dashboards and visualization |
-| **Prometheus** | [http://localhost:9090](http://localhost:9090) | Metrics collection and alerting engine |
-| **Jaeger UI** | [http://localhost:16686](http://localhost:16686) | Distributed tracing visualization |
-| **Consul UI** | [http://localhost:8500](http://localhost:8500) | Service discovery and KV store |
-| **Loki API** | [http://localhost:3100](http://localhost:3100) | Log aggregation system (Ready endpoint) |
+| **Grafana** | [http://127.0.0.1:3000](http://127.0.0.1:3000) | Loopback-only entry point for provisioned metrics, traces and logs |
 
 ---
-**Note:** All `.localhost` domains require the Abada Traefik container to be running.
+**Note:** Prometheus, Jaeger, Loki, Alloy and the collector stay on the
+internal telemetry network. Grafana is their supported user interface. Start
+them with `./release/abada-platform up dev --telemetry`.

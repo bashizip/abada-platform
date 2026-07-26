@@ -11,8 +11,8 @@ is a dependable PostgreSQL-backed core with a documented and executable BPMN
 subset. Agentic workflows are future consumers of this core; do not bypass or
 weaken the BPMN state machine to add agent features.
 
-The current release line is 0.11.x. Its certified production topology is one
-or more engine instances backed by PostgreSQL. Database-authoritative
+The current release line is 1.0.0-rc.x. Its certified production topology is
+one or more engine instances backed by PostgreSQL. Database-authoritative
 execution, restart recovery, atomic mutation commands, versioned definitions,
 durable jobs/subscriptions, transactional outbox delivery, cluster-safe work
 acquisition, stable API/worker contracts and backend RBAC are in scope.
@@ -20,6 +20,10 @@ acquisition, stable API/worker contracts and backend RBAC are in scope.
 Use these documents as the authoritative product contract:
 
 - `docs/development/roadmap-to-1.0.md` — release checklist and acceptance gates.
+- `docs/development/roadmap-to-1.1.0-rc.md` — Google AI Lab candidature and
+  deferred cloud/CI certification debt.
+- `docs/development/1.0-rc-publication-gates.md` — mandatory per-candidate
+  publication evidence and GO/NO-GO sign-off.
 - `docs/reference/bpmn-support.md` — supported and rejected BPMN constructs.
 - `docs/reference/runtime-semantics.md` — command, retry, event, variable,
   cancellation, and suspension semantics.
@@ -38,6 +42,7 @@ contract and test in the same change.
 | `engine/` | BPMN runtime, persistence, REST API and security | Java 21, Spring Boot 3.5, Maven |
 | `tenda/` | End-user task application | React 18, TypeScript, Vite |
 | `orun/` | Operations and workflow-state application | React 19, TypeScript, Vite |
+| `documentation/` | Curated user, architecture and developer guide | Astro 7, Starlight 0.41, MDX, Mermaid |
 | `docker/` | Traefik, Keycloak and observability configuration | Docker Compose |
 | `scripts/` | Development, production and test helpers | Shell |
 | `docs/` | Architecture, operations, references and release notes | Markdown |
@@ -111,15 +116,32 @@ npm run build
 
 Orun currently has no lint or test script; do not claim those checks ran.
 
+### Documentation
+
+```bash
+cd documentation
+npm ci
+npm audit --audit-level=low
+npm run check
+npm run build
+```
+
+Starlight validates internal links during the production build. A missing
+deployment `site` URL and Mermaid's client bundle may produce non-blocking
+sitemap and chunk-size warnings; content, type, link or diagram failures are
+blocking.
+
 ### Compose validation
 
 ```bash
-docker compose -f docker-compose.prod.yml config --quiet
-docker compose -f release/docker-compose.release.yml config --quiet
+docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml config --quiet
+./scripts/test/validate-platform-deployment.sh
 ```
 
-Environment-variable warnings are expected when validating without a local
-`.env`; structural errors are not.
+The contract test validates dev/prod with telemetry disabled, bundled and
+external, required-variable failure, frontend runtime configuration and the
+self-contained release archive. Documented environment files must produce no
+Compose warnings.
 
 ## Runtime invariants
 
@@ -221,6 +243,7 @@ Test in proportion to the change:
 | Persistence/migration/locking | PostgreSQL Testcontainers, fresh migration, supported upgrade paths, rollback/restart tests |
 | Tenda | `npm run lint` and `npm run build` |
 | Orun | `npm run build` |
+| Documentation | `npm audit --audit-level=low`, `npm run check` and `npm run build` |
 | Docker/Compose | Image build and `docker compose ... config --quiet` |
 | Public contract | API compatibility/OpenAPI checks and documentation update |
 | Release metadata | Full backend/frontend checks, executable JAR, image build, release notes and deployment matrix review |
@@ -251,3 +274,9 @@ state ownership, transaction boundaries, failure recovery, API contracts,
 security modes, deployment guarantees, or operational procedures change.
 Place superseded design material under `docs/archive/`; do not leave multiple
 documents claiming to be the authoritative roadmap.
+
+The curated Starlight site under `documentation/` explains and connects the
+authoritative contracts under `docs/`; it does not replace them. Use MDX for
+structured components and Mermaid only where a diagram materially clarifies a
+relationship or sequence. Keep the user guide deferred until its roadmap
+milestone is explicitly started.

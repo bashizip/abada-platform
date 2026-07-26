@@ -201,7 +201,7 @@ Orun now uses the same Keycloak SPA authentication mechanism as Tenda:
 Set these environment variables for Vite:
 
 ```env
-VITE_KEYCLOAK_URL=https://keycloak.localhost
+VITE_KEYCLOAK_URL=http://keycloak.localhost
 VITE_KEYCLOAK_REALM=abada-dev
 VITE_KEYCLOAK_CLIENT_ID=abada-frontend
 VITE_API_URL=/api

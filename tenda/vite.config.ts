@@ -10,14 +10,14 @@ export default defineConfig(({ mode }) => ({
     port: 5602,
     proxy: {
       "/api": {
-        target: "https://localhost",
+        target: "http://api.localhost",
         changeOrigin: true,
-        secure: false, // Set to false for self-signed certificates in development
+        secure: true,
       },
       "/auth": {
-        target: "https://keycloak.localhost",
+        target: "http://keycloak.localhost",
         changeOrigin: true,
-        secure: false, // Set to false for self-signed certificates in development
+        secure: true,
         rewrite: (path) => path.replace(/^\/auth/, ""),
       },
     },

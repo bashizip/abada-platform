@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "@/router";
 import { Card, Badge, Button, Modal, Input } from "./ui/Common.tsx";
 import {
   Play,

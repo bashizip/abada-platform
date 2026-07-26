@@ -2,6 +2,7 @@ package com.abada.engine.core;
 
 import com.abada.engine.core.model.EventMeta;
 import com.abada.engine.observability.EngineMetrics;
+import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.persistence.entity.EventSubscriptionEntity;
 import com.abada.engine.persistence.repository.EventSubscriptionRepository;
 import io.micrometer.core.instrument.Timer;
@@ -92,7 +93,7 @@ public class EventManager {
                                 Map<String, Object> variables) {
         Span span = tracer.spanBuilder("abada.event.correlate.message").startSpan();
         
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             span.setAttribute("event.name", messageName);
             span.setAttribute("event.type", "MESSAGE");
             span.setAttribute("correlation.key", correlationKey);
@@ -131,7 +132,7 @@ public class EventManager {
     public void broadcastSignal(@SpanTag("event.name") String signalName, Map<String, Object> variables) {
         Span span = tracer.spanBuilder("abada.event.broadcast.signal").startSpan();
         
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             span.setAttribute("event.name", signalName);
             span.setAttribute("event.type", "SIGNAL");
             
@@ -174,7 +175,7 @@ public class EventManager {
         Span span = tracer.spanBuilder("abada.event.publish.message").startSpan();
         Timer.Sample processingSample = engineMetrics.startEventProcessingTimer();
         
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             span.setAttribute("event.name", messageName);
             span.setAttribute("event.type", "MESSAGE");
             span.setAttribute("correlation.key", correlationKey);
@@ -213,7 +214,7 @@ public class EventManager {
         Span span = tracer.spanBuilder("abada.event.publish.signal").startSpan();
         Timer.Sample processingSample = engineMetrics.startEventProcessingTimer();
         
-        try (var scope = span.makeCurrent()) {
+        try (var scope = TraceLogContext.open(span)) {
             span.setAttribute("event.name", signalName);
             span.setAttribute("event.type", "SIGNAL");
             

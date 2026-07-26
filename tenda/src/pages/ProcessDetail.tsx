@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "@/router";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";

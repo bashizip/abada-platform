@@ -1,0 +1,48 @@
+:root {
+  --sl-color-accent-low: #103b35;
+  --sl-color-accent: #16a37e;
+  --sl-color-accent-high: #a8f3dc;
+  --sl-color-white: #f7fbfa;
+  --sl-color-gray-1: #dce7e5;
+  --sl-color-gray-2: #9fb2af;
+  --sl-color-gray-3: #647875;
+  --sl-color-gray-4: #394b49;
+  --sl-color-gray-5: #233230;
+  --sl-color-gray-6: #172321;
+  --sl-color-black: #0e1716;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d8f7ed;
+  --sl-color-accent: #08775d;
+  --sl-color-accent-high: #064d3d;
+  --sl-color-white: #172321;
+  --sl-color-gray-1: #233230;
+  --sl-color-gray-2: #445754;
+  --sl-color-gray-3: #71827f;
+  --sl-color-gray-4: #aab8b5;
+  --sl-color-gray-5: #dce4e2;
+  --sl-color-gray-6: #edf2f1;
+  --sl-color-gray-7: #f7faf9;
+  --sl-color-black: #ffffff;
+}
+
+.hero {
+  background:
+    radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--sl-color-accent) 20%, transparent), transparent 36%),
+    linear-gradient(135deg, color-mix(in srgb, var(--sl-color-accent-low) 35%, transparent), transparent 65%);
+  border-radius: 1.5rem;
+  padding-inline: clamp(1rem, 3vw, 3rem);
+}
+
+.mermaid {
+  overflow-x: auto;
+  padding: 1rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.75rem;
+  background: var(--sl-color-gray-6);
+}
+
+:root[data-theme='light'] .mermaid {
+  background: var(--sl-color-gray-7);
+}

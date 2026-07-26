@@ -21,7 +21,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
-        @Value("${spring.application.version:0.11.0-alpha}")
+        @Value("${spring.application.version:1.0.0-rc.1}")
         private String appVersion;
 
         @Value("${spring.application.name:Abada Engine}")

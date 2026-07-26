@@ -1,0 +1,47 @@
+---
+title: Production deployment
+description: Validate and start the TLS platform with external identity.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Prerequisites: Linux host or Docker Desktop with Compose v2, three DNS names
+pointing to the host, ports 80 and 443, and an externally managed OIDC provider.
+
+```bash
+cp release/.env.prod.example .env.prod
+# Replace every change-me/example.com value.
+./release/abada-platform doctor prod --env-file .env.prod
+./release/abada-platform up prod --env-file .env.prod
+```
+
+The direct canonical command is:
+
+```bash
+docker compose --env-file .env.prod \
+  -f compose.yaml -f compose.prod.yaml up -d
+```
+
+Compose configuration fails before startup if the database password, version,
+domains, ACME email, CORS origins or OIDC values are missing. The preflight also
+rejects template placeholders, busy ports, an unavailable Docker daemon and
+unavailable images.
+
+<Aside type="caution" title="Network boundary">
+  PostgreSQL and internal services have no published ports. Only Traefik
+  publishes 80/443. The Docker socket is read-only but still security
+  sensitive; protect host access and keep Docker patched.
+</Aside>
+
+Verify:
+
+```bash
+curl -fsS https://api.example.net/api/actuator/health/readiness
+./release/abada-platform status prod --env-file .env.prod
+```
+
+Stop without deleting data:
+
+```bash
+./release/abada-platform down prod --env-file .env.prod
+```

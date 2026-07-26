@@ -3,11 +3,12 @@ import Keycloak, {
   type KeycloakProfile,
   type KeycloakTokenParsed,
 } from "keycloak-js";
+import { runtimeConfig } from "@/config/runtime";
 
 const keycloak = new Keycloak({
-  url: import.meta.env.VITE_KEYCLOAK_URL,
-  realm: import.meta.env.VITE_KEYCLOAK_REALM,
-  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
+  url: runtimeConfig.oidcUrl,
+  realm: runtimeConfig.oidcRealm,
+  clientId: runtimeConfig.oidcClientId,
 });
 let keycloakInitPromise: Promise<boolean> | null = null;
 let keycloakInitialized = false;

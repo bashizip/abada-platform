@@ -1,0 +1,116 @@
+name: abada
+
+services:
+  postgres:
+    image: postgres:15.13-alpine
+    environment:
+      POSTGRES_DB: abada_engine
+      POSTGRES_USER: abada
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-abada_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U abada -d abada_engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  abada-engine:
+    image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.0.0-rc.1}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: "5601"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/abada_engine
+      SPRING_DATASOURCE_USERNAME: abada
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-abada_dev_password}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      ABADA_SECURITY_MODE: oidc
+      ABADA_TELEMETRY_ENABLED: "false"
+      ABADA_TELEMETRY_OTLP_ENDPOINT: ${ABADA_TELEMETRY_OTLP_ENDPOINT:-}
+      ABADA_ENVIRONMENT: ${ABADA_ENVIRONMENT:-development}
+      OTEL_SDK_DISABLED: "true"
+      ABADA_OUTBOX_DISPATCHER_ENABLED: "true"
+    volumes:
+      - engine_logs:/app/logs
+    networks:
+      - edge
+      - data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:5601/api/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  abada-tenda:
+    image: ${ABADA_TENDA_IMAGE:-ghcr.io/bashizip/abada-tenda:1.0.0-rc.1}
+    environment:
+      ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
+      ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
+      ABADA_OIDC_REALM: ${ABADA_OIDC_REALM:-abada-dev}
+      ABADA_OIDC_CLIENT_ID: ${ABADA_OIDC_CLIENT_ID:-abada-frontend}
+    networks:
+      - edge
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:5602/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  abada-orun:
+    image: ${ABADA_ORUN_IMAGE:-ghcr.io/bashizip/abada-orun:1.0.0-rc.1}
+    environment:
+      ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
+      ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
+      ABADA_OIDC_REALM: ${ABADA_OIDC_REALM:-abada-dev}
+      ABADA_OIDC_CLIENT_ID: ${ABADA_OIDC_CLIENT_ID:-abada-frontend}
+    networks:
+      - edge
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:5603/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+networks:
+  edge:
+    driver: bridge
+  data:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres_data:
+  engine_logs:

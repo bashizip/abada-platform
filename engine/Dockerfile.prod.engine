@@ -24,8 +24,8 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Install su-exec for user switching
-RUN apk add --no-cache su-exec
+# Install the privilege-drop helper and the health-check client.
+RUN apk add --no-cache su-exec wget
 
 # Create a non-root user and group for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -39,7 +39,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create logs directory and log file
 RUN mkdir -p /app/logs && \
-    touch /app/logs/abada-engine.logs && \
+    touch /app/logs/abada-engine.log && \
     chown -R appuser:appgroup /app/logs
 
 # Create data directory for dev profile

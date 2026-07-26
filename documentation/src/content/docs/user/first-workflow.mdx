@@ -1,0 +1,29 @@
+---
+title: Your first workflow
+description: Deploy, start, complete and inspect the bundled approval process.
+---
+
+1. Start the development profile and open `http://tenda.localhost`.
+2. Sign in as `alice` with password `alice`.
+3. Open **Processes → Upload process** and select
+   `release/samples/approval.bpmn` from the extracted bundle.
+4. Return to **Processes**, choose **Approval quickstart**, and select
+   **Start process**. No variables are required.
+5. Open **Tasks**, select **Review request**, claim it, then complete it.
+6. Open `http://orun.localhost`, sign in as `orun-admin` with password
+   `orun-admin`, and locate the completed instance. Its activity history must
+   show the start event, user task and end event.
+
+The workflow has completed when Tenda no longer lists an active task and Orun
+shows the instance as `COMPLETED`.
+
+Restart recovery check:
+
+```bash
+docker compose --env-file .env.dev \
+  -f compose.yaml -f compose.dev.yaml restart abada-engine
+./release/abada-platform status dev
+```
+
+Previously deployed definitions and instance history remain visible because
+PostgreSQL, not engine memory, owns workflow state.
