@@ -1,7 +1,7 @@
 {
   "name": "orun---active-operations-cockpit",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0-rc.1",
   "type": "module",
   "packageManager": "npm@11.16.0",
   "engines": {
@@ -19,7 +19,6 @@
     "lucide-react": "^0.555.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.18.1",
     "recharts": "^3.5.0"
   },
   "devDependencies": {

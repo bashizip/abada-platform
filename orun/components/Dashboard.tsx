@@ -9,7 +9,7 @@ import {
   ArrowRight,
   Loader2,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@/router";
 import { api } from "../services/api.ts";
 import { ProcessInstance, Job } from "../types.ts";
 import { getRelativeTime } from "../utils.ts";

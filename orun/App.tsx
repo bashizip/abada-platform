@@ -6,7 +6,7 @@ import {
   Navigate,
   useLocation,
   useNavigate,
-} from "react-router-dom";
+} from "./router";
 import { Layout } from "./components/Layout.tsx";
 import { Dashboard } from "./components/Dashboard.tsx";
 import { InstanceList } from "./components/InstanceList.tsx";

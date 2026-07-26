@@ -3,7 +3,7 @@ import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, CheckCircle, Eye } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from "@/router";
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { ApiErrorToast } from '@/components/ApiErrorToast';
