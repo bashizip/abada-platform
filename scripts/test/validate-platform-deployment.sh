@@ -17,6 +17,32 @@ grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform.ps1"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.sh"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.ps1"
+for launcher in "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1"; do
+  grep -q 'ABADA PLATFORM' "$launcher"
+  grep -q 'orun-admin / orun-admin' "$launcher"
+  grep -q 'Sign out and switch account' "$launcher"
+done
+grep -q 'this.request("/v1/processes/deploy"' "$ROOT_DIR/tenda/src/lib/api.ts"
+if grep -q 'this.request("/v1/processes/upload"' "$ROOT_DIR/tenda/src/lib/api.ts"; then
+  echo "Tenda still calls the retired process upload endpoint" >&2
+  exit 1
+fi
+grep -q 'prepareDiagramXml' "$ROOT_DIR/tenda/src/components/BpmnViewer.tsx"
+grep -q 'addSequenceFlowReferences' "$ROOT_DIR/tenda/src/lib/bpmn-diagram.ts"
+if grep -q 'bindTo: window' "$ROOT_DIR/tenda/src/components/BpmnViewer.tsx"; then
+  echo "Tenda still configures the removed diagram-js keyboard binding" >&2
+  exit 1
+fi
+grep -q 'bpmndi:BPMNDiagram' "$ROOT_DIR/release/samples/approval.bpmn"
+jq -e '
+  (.roles.realm | any(.name == "orun-admin"))
+  and (.users | any(
+    .username == "orun-admin"
+    and (.realmRoles | index("orun-admin") != null)
+    and (.groups | index("abada-operator") != null)
+    and (.credentials | any(.type == "password" and .value == "orun-admin" and .temporary == false))
+  ))
+' "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null
 
 DEV=(docker compose --env-file "$ROOT_DIR/release/.env.dev.example" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.dev.yaml")
 DEV_TELEMETRY=("${DEV[@]}" -f "$ROOT_DIR/compose.telemetry.yaml")
@@ -73,7 +99,7 @@ fi
 
 cat > "$TMP_DIR/prod.env" <<'ENV'
 ABADA_REGISTRY=ghcr.io/bashizip
-ABADA_VERSION=1.0.0-rc.1-test
+ABADA_VERSION=1.0.0-rc.2-test
 POSTGRES_PASSWORD=test-only-production-password
 ABADA_API_HOST=api.abada.test
 ABADA_TASKS_HOST=tasks.abada.test
@@ -212,10 +238,10 @@ for entrypoint in "$ROOT_DIR/tenda/docker-entrypoint.sh" "$ROOT_DIR/orun/docker-
   grep -q 'https://api.abada.test' "$TMP_DIR/config.js"
 done
 
-"$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.1-test >/dev/null
-grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.1-test\.tar\.gz$' \
-  "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.1-test.tar.gz.sha256"
-tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.1-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
+"$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.2-test >/dev/null
+grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.2-test\.tar\.gz$' \
+  "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.2-test.tar.gz.sha256"
+tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.2-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
 test -f "$TMP_DIR/deployment/telemetry/config.alloy"
 test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"
 grep -q 'grafana/alloy:v1.18.0' "$TMP_DIR/compose.telemetry.yaml"
@@ -226,9 +252,9 @@ fi
 (
   cd "$ROOT_DIR/release/dist"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum --check abada-platform-1.0.0-rc.1-test.tar.gz.sha256
+    sha256sum --check abada-platform-1.0.0-rc.2-test.tar.gz.sha256
   else
-    shasum -a 256 --check abada-platform-1.0.0-rc.1-test.tar.gz.sha256
+    shasum -a 256 --check abada-platform-1.0.0-rc.2-test.tar.gz.sha256
   fi
 )
 if [[ "${ABADA_CONTRACT_SKIP_LIVE_PREFLIGHT:-false}" == "true" ]]; then

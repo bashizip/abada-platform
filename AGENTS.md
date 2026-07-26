@@ -20,7 +20,7 @@ acquisition, stable API/worker contracts and backend RBAC are in scope.
 Use these documents as the authoritative product contract:
 
 - `docs/development/roadmap-to-1.0.md` — release checklist and acceptance gates.
-- `docs/development/roadmap-to-1.1.0-rc.md` — Google AI Lab candidature and
+- `docs/development/roadmap-to-1.1.0-rc.md` — agentic workflow integration and
   deferred cloud/CI certification debt.
 - `docs/development/1.0-rc-publication-gates.md` — mandatory per-candidate
   publication evidence and GO/NO-GO sign-off.

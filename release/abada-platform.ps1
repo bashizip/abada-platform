@@ -179,34 +179,89 @@ function Invoke-Doctor {
   Write-Host "Preflight passed: profile=$Profile telemetry=$Telemetry"
 }
 
+function Write-Section([string]$Title) {
+  Write-Host ""
+  Write-Host $Title -ForegroundColor White
+}
+
+function Write-Url([string]$Label, [string]$Url) {
+  Write-Host ("  {0,-12}" -f $Label) -ForegroundColor DarkGray -NoNewline
+  Write-Host $Url -ForegroundColor Cyan
+}
+
+function Write-Value([string]$Label, [string]$Value) {
+  Write-Host ("  {0,-12}" -f $Label) -ForegroundColor DarkGray -NoNewline
+  Write-Host $Value
+}
+
+function Show-SuccessPanel {
+  $ProfileLabel = if ($Profile -eq 'dev') { 'Development' } else { 'Production' }
+  $TelemetryStatus = if ($Telemetry) {
+    'Bundled'
+  }
+  elseif ((Get-EnvValue 'ABADA_TELEMETRY_ENABLED') -eq 'true') {
+    'External OTLP'
+  }
+  else {
+    'Off'
+  }
+
+  Write-Host ""
+  Write-Host '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' -ForegroundColor Cyan
+  Write-Host '  ABADA PLATFORM' -ForegroundColor White
+  Write-Host "  ✓ Ready  $ProfileLabel · Telemetry $TelemetryStatus" -ForegroundColor Green
+  Write-Host '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' -ForegroundColor Cyan
+
+  Write-Section 'Open Abada'
+  if ($Profile -eq 'dev') {
+    Write-Url 'Tenda' 'http://tenda.localhost'
+    Write-Url 'Orun' 'http://orun.localhost'
+    Write-Url 'Engine API' 'http://api.localhost/api/v1/info'
+    Write-Url 'Keycloak' 'http://keycloak.localhost'
+  }
+  else {
+    Write-Url 'Tenda' "https://$(Get-EnvValue 'ABADA_TASKS_HOST')"
+    Write-Url 'Orun' "https://$(Get-EnvValue 'ABADA_OPS_HOST')"
+    Write-Url 'Engine API' "https://$(Get-EnvValue 'ABADA_API_HOST')/api/v1/info"
+    Write-Value 'Identity' 'External OIDC'
+  }
+  if ($Telemetry) {
+    $GrafanaPort = Get-EnvValue 'GRAFANA_PORT'
+    if (-not $GrafanaPort) { $GrafanaPort = '3000' }
+    Write-Url 'Grafana' "http://127.0.0.1:$GrafanaPort"
+  }
+
+  if ($Profile -eq 'dev') {
+    Write-Section 'Development accounts'
+    Write-Value 'Tenda user' 'alice / alice'
+    Write-Value 'Orun admin' 'orun-admin / orun-admin'
+    Write-Value 'Keycloak' 'admin / admin'
+
+    Write-Section 'First run'
+    Write-Host '  1. Complete workflow work in Tenda as alice.'
+    Write-Host '  2. In Orun, choose Sign out and switch account if Alice is active.'
+    Write-Host '  3. Sign in as orun-admin to inspect workflow history and operations.'
+  }
+
+  $DefaultEnvFile = Join-Path $Root ".env.$Profile"
+  $EnvOption = if ($EnvFile -ne $DefaultEnvFile) { " -EnvFile '$EnvFile'" } else { '' }
+  $TelemetryOption = if ($Telemetry) { ' -Telemetry' } else { '' }
+
+  Write-Section 'Manage'
+  Write-Host "  Set-Location '$Root'"
+  Write-Host "  Logs  .\release\abada-platform.ps1 -Command logs -Profile $Profile$EnvOption$TelemetryOption"
+  Write-Host "  Stop  .\release\abada-platform.ps1 -Command down -Profile $Profile$EnvOption$TelemetryOption"
+  Write-Host ""
+  Write-Host '✓ All required containers passed their health checks.' -ForegroundColor Green
+  Write-Host ""
+}
+
 switch ($Command) {
   "doctor" { Invoke-Doctor }
   "up" {
     Invoke-Doctor
     Invoke-Compose @("up", "-d", "--wait")
-    if ($Profile -eq 'dev') {
-      Write-Host 'Abada is ready:'
-      Write-Host '  API:      http://api.localhost/api/v1/info'
-      Write-Host '  Tenda:    http://tenda.localhost'
-      Write-Host '  Orun:     http://orun.localhost'
-      Write-Host '  Keycloak: http://keycloak.localhost (admin/admin)'
-      Write-Host '  Workflow user: alice/alice (development only)'
-    }
-    else {
-      Write-Host 'Abada production services are healthy:'
-      Write-Host "  API:   https://$(Get-EnvValue 'ABADA_API_HOST')/api/v1/info"
-      Write-Host "  Tenda: https://$(Get-EnvValue 'ABADA_TASKS_HOST')"
-      Write-Host "  Orun:  https://$(Get-EnvValue 'ABADA_OPS_HOST')"
-    }
-    if ($Telemetry) {
-      $GrafanaPort = Get-EnvValue 'GRAFANA_PORT'
-      if (-not $GrafanaPort) { $GrafanaPort = '3000' }
-      Write-Host "  Grafana: http://127.0.0.1:$GrafanaPort"
-    }
-    $TelemetryOption = if ($Telemetry) { ' --Telemetry' } else { '' }
-    Write-Host "  Health: all required containers passed their health checks"
-    Write-Host ".\release\abada-platform.ps1 -Command logs -Profile $Profile -EnvFile `"$EnvFile`"$TelemetryOption"
-    Write-Host ".\release\abada-platform.ps1 -Command down -Profile $Profile -EnvFile `"$EnvFile`"$TelemetryOption"
+    Show-SuccessPanel
   }
   "down" { Invoke-Compose @("down") }
   "status" { Invoke-Compose @("ps") }

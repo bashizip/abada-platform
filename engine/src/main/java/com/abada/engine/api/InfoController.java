@@ -1,54 +1,60 @@
 package com.abada.engine.api;
 
+import com.abada.engine.dto.InfoResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 @RequestMapping("/v1/info")
 public class InfoController {
 
-        @Value("${spring.application.version}")
-        private String appVersion;
+    private static final String DESCRIPTION =
+            "Open-source, self-hosted BPMN 2.0 workflow orchestration engine";
+    private static final String SERVICE_NAME = "abada-engine";
 
-        @Value("${spring.application.name}")
-        private String appName;
+    private final String appVersion;
+    private final String contextPath;
 
-        @Value("${spring.profiles.active}")
-        private String profile;
+    public InfoController(
+            @Value("${spring.application.version}") String appVersion,
+            @Value("${server.servlet.context-path:}") String contextPath) {
+        this.appVersion = appVersion;
+        this.contextPath = normalizeContextPath(contextPath);
+    }
 
-        public InfoController() {
+    @GetMapping
+    public InfoResponse info() {
+        return new InfoResponse(
+                "Abada Engine",
+                SERVICE_NAME,
+                DESCRIPTION,
+                appVersion,
+                new InfoResponse.Api(
+                        "v1",
+                        endpoint("/v3/api-docs"),
+                        endpoint("/swagger-ui.html")),
+                new InfoResponse.Engine(
+                        "BPMN 2.0",
+                        "documented-subset",
+                        "PostgreSQL"),
+                new InfoResponse.Health(
+                        endpoint("/actuator/health/liveness"),
+                        endpoint("/actuator/health/readiness")));
+    }
 
+    private String endpoint(String path) {
+        return contextPath + path;
+    }
+
+    private static String normalizeContextPath(String path) {
+        if (path == null || path.isBlank() || "/".equals(path)) {
+            return "";
         }
-
-        @GetMapping
-        public Map<String, Object> info() {
-                return Map.of(
-                                "name", appName,
-                                "description", "Abada Engine - High Performance BPMN Execution",
-                                "version", appVersion,
-                                "status", "UP",
-                                "profile", profile,
-                                "runtime", Map.of(
-                                                "javaVersion", System.getProperty("java.version"),
-                                                "hostname", getHostname(),
-                                                "timestamp", java.time.Instant.now().toString(),
-                                                "uptime", java.lang.management.ManagementFactory.getRuntimeMXBean()
-                                                                .getUptime() + "ms"),
-                                "capabilities", Map.of(
-                                                "bpmn", "Core engine features implemented",
-                                                "cmmn", "Planned",
-                                                "dmn", "Planned"));
-        }
-
-        private String getHostname() {
-                try {
-                        return java.net.InetAddress.getLocalHost().getHostName();
-                } catch (java.net.UnknownHostException e) {
-                        return "unknown";
-                }
-        }
+        String normalized = path.startsWith("/") ? path : "/" + path;
+        return normalized.endsWith("/")
+                ? normalized.substring(0, normalized.length() - 1)
+                : normalized;
+    }
 }

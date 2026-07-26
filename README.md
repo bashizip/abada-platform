@@ -175,14 +175,14 @@ cd abada-engine
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
 chmod +x quickstart.sh
-./quickstart.sh 1.0.0-rc.1
+./quickstart.sh 1.0.0-rc.2
 ```
 
 Windows:
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 -OutFile quickstart.ps1
-.\quickstart.ps1 -Version 1.0.0-rc.1
+.\quickstart.ps1 -Version 1.0.0-rc.2
 ```
 
 ## Container platforms
@@ -234,9 +234,22 @@ Validate the deployment without starting it.
 | Keycloak | http://keycloak.localhost |
 | Grafana (telemetry overlay) | http://127.0.0.1:3000 |
 
+Development uses separate starter identities so task work and operational
+access remain visibly distinct:
+
+| Application | Username | Password | Purpose |
+| --- | --- | --- | --- |
+| Tenda | `alice` | `alice` | Deploy, start and complete workflow tasks |
+| Orun | `orun-admin` | `orun-admin` | Inspect workflow history and operations |
+| Keycloak admin | `admin` | `admin` | Manage the development realm |
+
+If Tenda has already signed you in as Alice, Orun may reuse that Keycloak
+session. Choose **Sign out and switch account**, then sign in as
+`orun-admin`. These credentials are development-only.
+
 ---
 
-# Current Status (v1.0.0-rc.1)
+# Current Status (v1.0.0-rc.2)
 
 Abada 1.0 RC combines stable REST and external-worker contracts, direct OIDC
 JWT validation, backend RBAC and a Java worker SDK with the durable,
@@ -245,11 +258,11 @@ Two or more replicas can contend safely for timers, external tasks, messages,
 signals and user-task transitions. Public mutation retries can use
 `Idempotency-Key` for a deterministic response.
 
-`1.0.0-rc.1` is a published evaluation release candidate backed by the
+`1.0.0-rc.2` is a published evaluation release candidate backed by the
 validated Docker Compose distribution and PostgreSQL/Testcontainers evidence.
 Public-cloud production certification is not claimed; that infrastructure
 work is tracked in the
-[1.1 RC Google AI Lab roadmap](docs/development/roadmap-to-1.1.0-rc.md).
+[1.1 RC roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 
 The curated architecture and developer documentation is built with Astro 7,
 Starlight 0.41, MDX and Mermaid under [`documentation/`](documentation/).
@@ -351,10 +364,17 @@ Documentation:
 
 - [API Reference](docs/development/api.md)
 
-Health endpoint:
+Service information:
 
 ```
 /api/v1/info
+```
+
+Operational health probes:
+
+```
+/api/actuator/health/liveness
+/api/actuator/health/readiness
 ```
 
 Swagger:
