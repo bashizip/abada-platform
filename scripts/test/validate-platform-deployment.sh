@@ -38,11 +38,11 @@ jq -e '.services.postgres.ports == null and .services["keycloak-db"].ports == nu
 jq -e '[.services[] | has("build")] | any | not' "$TMP_DIR/dev-config.json" >/dev/null
 "${DEV[@]}" config --services > "$TMP_DIR/dev-services"
 "${DEV_TELEMETRY[@]}" config --services > "$TMP_DIR/dev-telemetry-services"
-if grep -Eq '^(otel-collector|grafana|prometheus|jaeger|loki|alloy|telemetry-health)$' "$TMP_DIR/dev-services"; then
+if grep -Eq '^(otel-collector|grafana|prometheus|jaeger-volume-init|jaeger|loki|alloy|telemetry-health)$' "$TMP_DIR/dev-services"; then
   echo "Telemetry service leaked into the disabled development profile" >&2
   exit 1
 fi
-for service in otel-collector grafana prometheus jaeger loki alloy telemetry-health; do
+for service in otel-collector grafana prometheus jaeger-volume-init jaeger loki alloy telemetry-health; do
   grep -qx "$service" "$TMP_DIR/dev-telemetry-services" || { echo "Missing telemetry service: $service" >&2; exit 1; }
 done
 
@@ -157,6 +157,12 @@ jq -e '[.services.alloy.volumes[]?.source] | index("/var/run/docker.sock") | not
 jq -e '.services.alloy.image == "grafana/alloy:v1.18.0"' \
   "$TMP_DIR/telemetry-config.json" >/dev/null
 jq -e '.services.alloy.command | index("--disable-reporting") != null' \
+  "$TMP_DIR/telemetry-config.json" >/dev/null
+jq -e '.services["jaeger-volume-init"].image == "busybox:1.37.0"
+  and .services["jaeger-volume-init"].user == "0:0"
+  and .services["jaeger-volume-init"].network_mode == "none"
+  and (.services["jaeger-volume-init"].command[2] | contains("chown -R 10001:10001 /badger"))
+  and .services.jaeger.depends_on["jaeger-volume-init"].condition == "service_completed_successfully"' \
   "$TMP_DIR/telemetry-config.json" >/dev/null
 jq -e '.services["telemetry-health"].healthcheck.test[1] | contains("otel-collector:13133") and contains("jaeger:16686") and contains("prometheus:9090/-/ready") and contains("loki:3100/ready") and contains("alloy:12345/-/ready") and contains("alloy:12345/-/healthy") and contains("grafana:3000/api/health")' \
   "$TMP_DIR/telemetry-config.json" >/dev/null

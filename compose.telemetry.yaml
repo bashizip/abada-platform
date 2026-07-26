@@ -29,6 +29,23 @@ services:
       timeout: 5s
       retries: 5
 
+  jaeger-volume-init:
+    image: busybox:1.37.0
+    user: "0:0"
+    command:
+      - sh
+      - -ec
+      - mkdir -p /badger/data /badger/key && chown -R 10001:10001 /badger
+    volumes:
+      - jaeger_data:/badger
+    network_mode: none
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 16M
+
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
     environment:
@@ -47,6 +64,9 @@ services:
         limits:
           cpus: "1.0"
           memory: 1G
+    depends_on:
+      jaeger-volume-init:
+        condition: service_completed_successfully
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -161,6 +181,8 @@ services:
     depends_on:
       otel-collector:
         condition: service_started
+      jaeger-volume-init:
+        condition: service_completed_successfully
       jaeger:
         condition: service_started
       prometheus:

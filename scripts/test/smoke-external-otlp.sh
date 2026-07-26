@@ -17,7 +17,7 @@ COMPOSE=(docker compose --env-file "$ROOT_DIR/release/.env.dev.example" \
 
 "${COMPOSE[@]}" config --services >"$TMP_DIR/services"
 grep -qx 'otel-test-collector' "$TMP_DIR/services"
-if grep -Eq '^(otel-collector|grafana|prometheus|jaeger|loki|alloy|telemetry-health)$' "$TMP_DIR/services"; then
+if grep -Eq '^(otel-collector|grafana|prometheus|jaeger-volume-init|jaeger|loki|alloy|telemetry-health)$' "$TMP_DIR/services"; then
   echo "Error: bundled telemetry service present in external OTLP test" >&2
   exit 1
 fi

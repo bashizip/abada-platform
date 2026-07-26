@@ -30,6 +30,12 @@ does not opt the installation into Grafana usage reporting. On its first start
 against an existing `engine_logs` volume, Alloy tails from the end so replacing
 Promtail does not replay the complete historical log file into Loki.
 
+Jaeger runs as UID `10001`. A short-lived, networkless
+`jaeger-volume-init` service creates the Badger directories and assigns their
+named-volume ownership before Jaeger starts. The initializer runs as root only
+for that ownership change and exits successfully before telemetry becomes
+ready.
+
 Trace export uses a 2,048-span queue, 512-span batch, two-second schedule and
 five-second timeout. OTLP metrics use bounded periodic publication. Logs carry
 `traceId` and `spanId` MDC fields so Grafana can correlate Loki records with

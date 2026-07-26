@@ -32,6 +32,10 @@ engine health endpoint.
 Alloy tails only the named `engine_logs` volume, persists offsets, and runs
 with anonymous usage reporting disabled. It has no Docker socket access.
 
+The one-shot `jaeger-volume-init` container prepares the persistent Badger
+volume for Jaeger's non-root UID and exits before Jaeger starts. It has no
+network access and is expected to show as `Exited (0)` after initialization.
+
 ## External OTLP
 
 Do not add `compose.telemetry.yaml`. Set:
