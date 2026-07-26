@@ -27,6 +27,7 @@ jobs:
             dockerfile: orun/Dockerfile.prod
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -49,10 +50,14 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Verify published image platforms
+        shell: bash
+        run: ./scripts/test/verify-image-platforms.sh "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}:sha-$GITHUB_SHA"
 
   release-bundle:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -72,8 +77,6 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            prerelease=()
-            [[ "$version" == *-* ]] && prerelease=(--prerelease)
             notes=("docs/release-notes/$version-release-notes.md")
             if [[ -f "${notes[0]}" ]]; then
               notes=(--notes-file "${notes[0]}")
@@ -81,7 +84,7 @@ jobs:
               notes=(--generate-notes)
             fi
             gh release create "$GITHUB_REF_NAME" --verify-tag \
-              --title "Abada $version" "${prerelease[@]}" "${notes[@]}"
+              --title "Abada $version" "${notes[@]}"
           fi
           gh release upload "$GITHUB_REF_NAME" \
             "release/dist/abada-platform-$version.tar.gz" \

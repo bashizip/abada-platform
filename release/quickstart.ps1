@@ -14,6 +14,14 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker is 
 & docker compose version | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Docker Compose v2 is required" }
 
+if ($Version -eq '1.0.0-rc.1') {
+  $DockerArchitecture = (& docker info --format '{{.Architecture}}').Trim()
+  if (@('arm64', 'aarch64') -contains $DockerArchitecture -and -not $env:DOCKER_DEFAULT_PLATFORM) {
+    $env:DOCKER_DEFAULT_PLATFORM = 'linux/amd64'
+    Write-Warning 'Abada 1.0.0-rc.1 images are amd64-only; Docker compatibility mode is enabled on this ARM host.'
+  }
+}
+
 $Archive = "abada-platform-$Version.tar.gz"
 $BaseUrl = if ($env:ABADA_RELEASE_BASE_URL) { $env:ABADA_RELEASE_BASE_URL } else { "https://github.com/$Repository/releases/download/v$Version" }
 $TemporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())

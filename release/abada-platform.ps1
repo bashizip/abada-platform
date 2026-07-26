@@ -33,6 +33,25 @@ function Get-EnvValue([string]$Name) {
   return $Line.Substring($Line.IndexOf('=') + 1)
 }
 
+function Enable-Rc1Arm64Compatibility {
+  $DockerArchitecture = (& docker info --format '{{.Architecture}}').Trim()
+  if (@('arm64', 'aarch64') -notcontains $DockerArchitecture) { return }
+
+  $Version = Get-EnvValue 'ABADA_VERSION'
+  $EngineImage = Get-EnvValue 'ABADA_ENGINE_IMAGE'
+  $TendaImage = Get-EnvValue 'ABADA_TENDA_IMAGE'
+  $OrunImage = Get-EnvValue 'ABADA_ORUN_IMAGE'
+  $UsesRc1Images = $Version -eq '1.0.0-rc.1' -or (
+    $EngineImage.EndsWith(':1.0.0-rc.1') -and
+    $TendaImage.EndsWith(':1.0.0-rc.1') -and
+    $OrunImage.EndsWith(':1.0.0-rc.1')
+  )
+  if ($UsesRc1Images -and -not $env:DOCKER_DEFAULT_PLATFORM) {
+    $env:DOCKER_DEFAULT_PLATFORM = 'linux/amd64'
+    Write-Warning 'Abada 1.0.0-rc.1 images are amd64-only; Docker compatibility mode is enabled on this ARM host.'
+  }
+}
+
 function Assert-Hostname([string]$Name, [string]$Value) {
   if ($Value -notmatch '^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$' -or
       $Value -notmatch '\.' -or $Value -match '\.\.|://|/' -or
@@ -150,6 +169,7 @@ function Invoke-Doctor {
   Assert-TelemetryValues
   & docker info | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "Docker is not running" }
+  Enable-Rc1Arm64Compatibility
   Assert-DockerStorage
   Invoke-Compose @("config", "--quiet")
   $WriteTest = Join-Path $Root ".abada-write-test-$([Guid]::NewGuid())"

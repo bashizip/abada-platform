@@ -9,6 +9,15 @@ for command in docker jq; do
   command -v "$command" >/dev/null 2>&1 || { echo "Error: required command '$command' is unavailable" >&2; exit 69; }
 done
 
+grep -q 'docker/setup-qemu-action@v3' "$ROOT_DIR/.github/workflows/docker-publish-ghcr.yml"
+grep -q 'platforms: linux/amd64,linux/arm64' "$ROOT_DIR/.github/workflows/docker-publish-ghcr.yml"
+grep -q 'verify-image-platforms.sh' "$ROOT_DIR/.github/workflows/docker-publish-ghcr.yml"
+test -x "$ROOT_DIR/scripts/test/verify-image-platforms.sh"
+grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform"
+grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform.ps1"
+grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.sh"
+grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.ps1"
+
 DEV=(docker compose --env-file "$ROOT_DIR/release/.env.dev.example" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.dev.yaml")
 DEV_TELEMETRY=("${DEV[@]}" -f "$ROOT_DIR/compose.telemetry.yaml")
 DEV_CANONICAL=(env -u GRAFANA_ADMIN_PASSWORD docker compose -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.dev.yaml")

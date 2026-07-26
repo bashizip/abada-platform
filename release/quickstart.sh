@@ -21,6 +21,17 @@ command -v docker >/dev/null 2>&1 || { echo "Error: Docker is required" >&2; exi
 docker compose version >/dev/null
 command -v curl >/dev/null 2>&1 || { echo "Error: curl is required" >&2; exit 69; }
 
+if [[ "$VERSION" == "1.0.0-rc.1" ]]; then
+  docker_arch="$(docker info --format '{{.Architecture}}')"
+  if [[ "$docker_arch" == "arm64" || "$docker_arch" == "aarch64" ]]; then
+    export DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}"
+    cat >&2 <<'NOTICE'
+Notice: Abada 1.0.0-rc.1 images were published for linux/amd64 only.
+This ARM host will run that immutable release through Docker compatibility mode.
+NOTICE
+  fi
+fi
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 

@@ -15,6 +15,7 @@ Start with configuration and service state:
 | --- | --- |
 | Production config exits immediately | Replace every required placeholder in `.env.prod`; validate DNS, CORS and OIDC URLs |
 | Port 80/443 already used | Stop the conflicting service or move Abada to a dedicated host |
+| `no matching manifest for linux/arm64/v8` with `1.0.0-rc.1` | Use the current repository launcher; it detects the immutable amd64-only RC.1 images and enables Docker compatibility mode |
 | Tenda/Orun shows configuration error | Inspect the generated `/config.js`; all four runtime values are mandatory and URLs must be HTTP(S) |
 | Login loops | Match redirect URI, web origin, issuer, realm and client ID exactly |
 | Engine unhealthy | Check PostgreSQL health and engine logs; telemetry must not be the cause |

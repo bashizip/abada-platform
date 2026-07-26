@@ -33,6 +33,12 @@ Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/r
 .\quickstart.ps1 -Version 1.0.0-rc.1
 ```
 
+Abada's release-image contract supports `linux/amd64` and `linux/arm64`.
+The original `1.0.0-rc.1` images contain only `linux/amd64`; on an ARM64 host,
+the launcher prints a notice and uses Docker's compatibility mode for that
+immutable release. Subsequent release manifests are validated for both native
+platforms.
+
 Verify and tear down:
 
 ```bash

@@ -59,7 +59,8 @@ development baseline until the infrastructure track is complete.
 
 ## Track B — Infrastructure certification debt
 
-These items are intentionally deferred from the `1.0.0-rc.1` prerelease.
+These items are intentionally deferred from the `1.0.0-rc.1` release
+candidate.
 Unchecked items mean that the corresponding public-cloud or production
 certification claim must not be made.
 

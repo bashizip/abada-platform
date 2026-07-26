@@ -15,12 +15,20 @@ An entry becomes certified only when its roadmap evidence is checked. The
 table distinguishes an implemented/configuration-valid profile from a
 release-certified one so documentation never broadens the current guarantee.
 
-`1.0.0-rc.1` is published for evaluation with the executable Compose
-configuration, preflight, archive and PostgreSQL/Testcontainers evidence. It
-does not claim a completed public-cloud production certification. Public TLS,
-external-OIDC reference-host testing, multi-host failover, rolling upgrades
-and supply-chain certification are tracked by the
+`1.0.0-rc.1` is published as an evaluation release candidate with the
+executable Compose configuration, preflight, archive and
+PostgreSQL/Testcontainers evidence. It does not claim a completed public-cloud
+production certification. Public TLS, external-OIDC reference-host testing,
+multi-host failover, rolling upgrades and supply-chain certification are
+tracked by the
 [1.1 RC roadmap](../development/roadmap-to-1.1.0-rc.md).
+
+Abada release images must publish `linux/amd64` and `linux/arm64` manifests.
+The original `1.0.0-rc.1` images are a documented exception: they contain only
+`linux/amd64`. The repository launcher detects those exact images on an ARM64
+Docker host and enables Docker's `amd64` compatibility mode. The tag remains
+immutable; subsequent release-image publication fails unless both native
+platforms are present.
 
 Production uses `ABADA_SECURITY_MODE=oidc` and requires
 `OIDC_ISSUER_URI` and `ABADA_ALLOWED_ORIGINS`. `proxy` mode trusts

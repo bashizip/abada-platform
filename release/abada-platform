@@ -207,11 +207,41 @@ check_docker_storage() {
   }
 }
 
+configure_rc1_arm64_compatibility() {
+  local host_arch version engine_image tenda_image orun_image
+  host_arch="$(docker info --format '{{.Architecture}}')"
+  case "$host_arch" in
+    arm64|aarch64) ;;
+    *) return 0 ;;
+  esac
+
+  version="$(env_value ABADA_VERSION)"
+  engine_image="$(env_value ABADA_ENGINE_IMAGE)"
+  tenda_image="$(env_value ABADA_TENDA_IMAGE)"
+  orun_image="$(env_value ABADA_ORUN_IMAGE)"
+  if [[ "$version" != "1.0.0-rc.1" ]] &&
+     [[ "$engine_image" != *":1.0.0-rc.1" ||
+        "$tenda_image" != *":1.0.0-rc.1" ||
+        "$orun_image" != *":1.0.0-rc.1" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${DOCKER_DEFAULT_PLATFORM:-}" ]]; then
+    export DOCKER_DEFAULT_PLATFORM=linux/amd64
+    cat >&2 <<'NOTICE'
+Notice: Abada 1.0.0-rc.1 images were published for linux/amd64 only.
+This ARM host will run that release through Docker's amd64 compatibility mode.
+Subsequent Abada release images are required to include native linux/arm64.
+NOTICE
+  fi
+}
+
 doctor() {
   require_command docker
   [[ "$MODE" == "prod" ]] && validate_production_values
   validate_telemetry_values
   docker info >/dev/null
+  configure_rc1_arm64_compatibility
   docker compose version >/dev/null
   [[ -w "$ROOT_DIR" ]] || { echo "Error: $ROOT_DIR is not writable" >&2; exit 73; }
   check_docker_storage

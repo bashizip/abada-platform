@@ -185,6 +185,19 @@ Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/r
 .\quickstart.ps1 -Version 1.0.0-rc.1
 ```
 
+## Container platforms
+
+Abada's release-image contract covers both `linux/amd64` and `linux/arm64`.
+The publication workflow builds both variants and rejects an image tag unless
+its manifest contains both platforms.
+
+The original `1.0.0-rc.1` images predate that gate and contain only
+`linux/amd64`. When the repository launcher detects those exact images on an
+ARM64 Docker host, it prints a notice and uses Docker's `amd64` compatibility
+mode. This keeps the published tag immutable while allowing Apple Silicon and
+other ARM64 users to launch the release. Subsequent release images run
+natively on both supported architectures.
+
 ---
 
 # Development
@@ -232,10 +245,11 @@ Two or more replicas can contend safely for timers, external tasks, messages,
 signals and user-task transitions. Public mutation retries can use
 `Idempotency-Key` for a deterministic response.
 
-`1.0.0-rc.1` is an evaluation prerelease backed by the validated Docker
-Compose distribution and PostgreSQL/Testcontainers evidence. Public-cloud
-production certification is not claimed; that infrastructure work is tracked
-in the [1.1 RC Google AI Lab roadmap](docs/development/roadmap-to-1.1.0-rc.md).
+`1.0.0-rc.1` is a published evaluation release candidate backed by the
+validated Docker Compose distribution and PostgreSQL/Testcontainers evidence.
+Public-cloud production certification is not claimed; that infrastructure
+work is tracked in the
+[1.1 RC Google AI Lab roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 
 The curated architecture and developer documentation is built with Astro 7,
 Starlight 0.41, MDX and Mermaid under [`documentation/`](documentation/).
