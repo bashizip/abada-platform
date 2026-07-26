@@ -17,6 +17,32 @@ grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform.ps1"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.sh"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.ps1"
+for launcher in "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1"; do
+  grep -q 'ABADA PLATFORM' "$launcher"
+  grep -q 'orun-admin / orun-admin' "$launcher"
+  grep -q 'Sign out and switch account' "$launcher"
+done
+grep -q 'this.request("/v1/processes/deploy"' "$ROOT_DIR/tenda/src/lib/api.ts"
+if grep -q 'this.request("/v1/processes/upload"' "$ROOT_DIR/tenda/src/lib/api.ts"; then
+  echo "Tenda still calls the retired process upload endpoint" >&2
+  exit 1
+fi
+grep -q 'prepareDiagramXml' "$ROOT_DIR/tenda/src/components/BpmnViewer.tsx"
+grep -q 'addSequenceFlowReferences' "$ROOT_DIR/tenda/src/lib/bpmn-diagram.ts"
+if grep -q 'bindTo: window' "$ROOT_DIR/tenda/src/components/BpmnViewer.tsx"; then
+  echo "Tenda still configures the removed diagram-js keyboard binding" >&2
+  exit 1
+fi
+grep -q 'bpmndi:BPMNDiagram' "$ROOT_DIR/release/samples/approval.bpmn"
+jq -e '
+  (.roles.realm | any(.name == "orun-admin"))
+  and (.users | any(
+    .username == "orun-admin"
+    and (.realmRoles | index("orun-admin") != null)
+    and (.groups | index("abada-operator") != null)
+    and (.credentials | any(.type == "password" and .value == "orun-admin" and .temporary == false))
+  ))
+' "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null
 
 DEV=(docker compose --env-file "$ROOT_DIR/release/.env.dev.example" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.dev.yaml")
 DEV_TELEMETRY=("${DEV[@]}" -f "$ROOT_DIR/compose.telemetry.yaml")
