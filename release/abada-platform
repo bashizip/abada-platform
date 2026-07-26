@@ -253,35 +253,106 @@ doctor() {
   echo "Preflight passed: profile=$MODE telemetry=$TELEMETRY"
 }
 
+configure_console_style() {
+  RESET=""
+  BOLD=""
+  DIM=""
+  GREEN=""
+  CYAN=""
+  UNDERLINE=""
+  if [[ -t 1 && "${TERM:-dumb}" != "dumb" && -z "${NO_COLOR+x}" ]]; then
+    RESET=$'\033[0m'
+    BOLD=$'\033[1m'
+    DIM=$'\033[2m'
+    GREEN=$'\033[32m'
+    CYAN=$'\033[36m'
+    UNDERLINE=$'\033[4m'
+  fi
+}
+
+print_section() {
+  printf '\n%b%s%b\n' "$BOLD" "$1" "$RESET"
+}
+
+print_url() {
+  printf '  %b%-12s%b %b%b%s%b\n' "$DIM" "$1" "$RESET" "$CYAN" "$UNDERLINE" "$2" "$RESET"
+}
+
+print_value() {
+  printf '  %b%-12s%b %s\n' "$DIM" "$1" "$RESET" "$2"
+}
+
+print_success_panel() {
+  local telemetry_status management_env management_telemetry root_quoted env_quoted grafana_port
+  configure_console_style
+
+  telemetry_status="Off"
+  if [[ "$TELEMETRY" == "true" ]]; then
+    telemetry_status="Bundled"
+  elif [[ "$(env_value ABADA_TELEMETRY_ENABLED)" == "true" ]]; then
+    telemetry_status="External OTLP"
+  fi
+
+  printf '\n%b%s%b\n' "$CYAN" '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' "$RESET"
+  printf '  %bABADA PLATFORM%b\n' "$BOLD" "$RESET"
+  if [[ "$MODE" == "dev" ]]; then
+    printf '  %b✓ Ready%b  Development · Telemetry %s\n' "$GREEN" "$RESET" "$telemetry_status"
+  else
+    printf '  %b✓ Ready%b  Production · Telemetry %s\n' "$GREEN" "$RESET" "$telemetry_status"
+  fi
+  printf '%b%s%b\n' "$CYAN" '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' "$RESET"
+
+  print_section "Open Abada"
+  if [[ "$MODE" == "dev" ]]; then
+    print_url "Tenda" "http://tenda.localhost"
+    print_url "Orun" "http://orun.localhost"
+    print_url "Engine API" "http://api.localhost/api/v1/info"
+    print_url "Keycloak" "http://keycloak.localhost"
+  else
+    print_url "Tenda" "https://$(env_value ABADA_TASKS_HOST)"
+    print_url "Orun" "https://$(env_value ABADA_OPS_HOST)"
+    print_url "Engine API" "https://$(env_value ABADA_API_HOST)/api/v1/info"
+    print_value "Identity" "External OIDC"
+  fi
+  if [[ "$TELEMETRY" == "true" ]]; then
+    grafana_port="$(env_value GRAFANA_PORT)"
+    print_url "Grafana" "http://127.0.0.1:${grafana_port:-3000}"
+  fi
+
+  if [[ "$MODE" == "dev" ]]; then
+    print_section "Development accounts"
+    print_value "Tenda user" "alice / alice"
+    print_value "Orun admin" "orun-admin / orun-admin"
+    print_value "Keycloak" "admin / admin"
+
+    print_section "First run"
+    printf '  1. Complete workflow work in Tenda as %balice%b.\n' "$BOLD" "$RESET"
+    printf '  2. In Orun, choose %bSign out and switch account%b if Alice is active.\n' "$BOLD" "$RESET"
+    printf '  3. Sign in as %borun-admin%b to inspect workflow history and operations.\n' "$BOLD" "$RESET"
+  fi
+
+  printf -v root_quoted '%q' "$ROOT_DIR"
+  management_env=""
+  if [[ "$ENV_FILE" != "$ROOT_DIR/.env.$MODE" ]]; then
+    printf -v env_quoted '%q' "$ENV_FILE"
+    management_env=" --env-file $env_quoted"
+  fi
+  management_telemetry=""
+  [[ "$TELEMETRY" == "true" ]] && management_telemetry=" --telemetry"
+
+  print_section "Manage"
+  printf '  %bcd%b %s\n' "$DIM" "$RESET" "$root_quoted"
+  printf '  %bLogs%b  ./release/abada-platform logs %s%s%s\n' "$DIM" "$RESET" "$MODE" "$management_env" "$management_telemetry"
+  printf '  %bStop%b  ./release/abada-platform down %s%s%s\n' "$DIM" "$RESET" "$MODE" "$management_env" "$management_telemetry"
+  printf '\n%b✓ All required containers passed their health checks.%b\n\n' "$GREEN" "$RESET"
+}
+
 case "$COMMAND" in
   doctor) doctor ;;
   up)
     doctor
     "${COMPOSE[@]}" up -d --wait
-    if [[ "$MODE" == "dev" ]]; then
-      cat <<'URLS'
-Abada is ready:
-  API:      http://api.localhost/api/v1/info
-  Tenda:    http://tenda.localhost
-  Orun:     http://orun.localhost
-  Keycloak: http://keycloak.localhost (admin/admin)
-  Workflow user: alice/alice (development only)
-  Health: all required containers passed their health checks
-URLS
-    else
-      cat <<URLS
-Abada production services are healthy:
-  API:   https://$(env_value ABADA_API_HOST)/api/v1/info
-  Tenda: https://$(env_value ABADA_TASKS_HOST)
-  Orun:  https://$(env_value ABADA_OPS_HOST)
-URLS
-    fi
-    if [[ "$TELEMETRY" == "true" ]]; then
-      grafana_port="$(env_value GRAFANA_PORT)"
-      echo "  Grafana: http://127.0.0.1:${grafana_port:-3000}"
-    fi
-    echo "Logs:     ./release/abada-platform logs $MODE --env-file $ENV_FILE$([[ "$TELEMETRY" == "true" ]] && echo ' --telemetry')"
-    echo "Teardown: ./release/abada-platform down $MODE --env-file $ENV_FILE$([[ "$TELEMETRY" == "true" ]] && echo ' --telemetry')"
+    print_success_panel
     ;;
   down) "${COMPOSE[@]}" down ;;
   status) "${COMPOSE[@]}" ps ;;

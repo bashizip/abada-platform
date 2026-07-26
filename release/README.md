@@ -17,6 +17,11 @@ Development:
 ./release/abada-platform up dev
 ```
 
+The success screen prints every local URL and the development-only starter
+accounts. Use `alice` / `alice` in Tenda and `orun-admin` / `orun-admin` in
+Orun. If Keycloak reuses Alice's Tenda session when you open Orun, choose
+**Sign out and switch account** before signing in as the operator.
+
 Production:
 
 ```bash

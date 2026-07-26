@@ -50,6 +50,24 @@ printf 'Authorization: Bearer %s\n' "$(jq -r '.access_token' "$TMP_DIR/token.jso
 chmod 600 "$TMP_DIR/auth.header"
 
 curl --fail --silent --show-error \
+  -X POST "$OIDC_URL/realms/abada-dev/protocol/openid-connect/token" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'client_id=abada-frontend' \
+  --data-urlencode 'username=orun-admin' \
+  --data-urlencode 'password=orun-admin' \
+  --data-urlencode 'grant_type=password' >"$TMP_DIR/orun-token.json"
+jq -e '
+  .access_token
+  | split(".")[1]
+  | gsub("-"; "+")
+  | gsub("_"; "/")
+  | @base64d
+  | fromjson
+  | .realm_access.roles
+  | index("orun-admin") != null
+' "$TMP_DIR/orun-token.json" >/dev/null
+
+curl --fail --silent --show-error \
   -H @"$TMP_DIR/auth.header" \
   -H "Idempotency-Key: platform-smoke-deploy-$(date +%s)" \
   -F "file=@$ROOT_DIR/release/samples/approval.bpmn;type=application/xml" \
@@ -105,4 +123,4 @@ if "${COMPOSE[@]}" logs --no-color abada-engine | grep -Eqi 'failed to export|ot
   exit 1
 fi
 
-echo "Development platform smoke test passed: authenticated deploy, start, restart recovery, claim, and completion"
+echo "Development platform smoke test passed: Orun operator role, authenticated deploy, start, restart recovery, claim, and completion"

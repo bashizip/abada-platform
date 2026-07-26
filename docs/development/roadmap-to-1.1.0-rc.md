@@ -1,9 +1,9 @@
-# Abada 1.1.0 RC Roadmap — Google AI Lab Candidature
+# Abada 1.1.0 RC Roadmap — Agentic Workflows and Infrastructure Certification
 
 This roadmap follows the `1.0.0-rc.1` reliable OSS core. Its primary product
 goal is to demonstrate agentic workflows as durable consumers of Abada's BPMN
-runtime for the Google AI Lab candidature. It does not weaken the BPMN state
-machine or move agent execution into transient, process-local memory.
+runtime. It does not weaken the BPMN state machine or move agent execution
+into transient, process-local memory.
 
 Last reviewed: 2026-07-26.
 
@@ -11,8 +11,8 @@ Last reviewed: 2026-07-26.
 
 The 1.1 RC work has two tracks:
 
-1. **Agentic candidature:** the product and runtime integration needed to
-   demonstrate controlled, observable and recoverable agentic workflows.
+1. **Agentic workflow integration:** the product and runtime integration
+   needed to deliver controlled, observable and recoverable agentic workflows.
 2. **Infrastructure certification debt:** a production-like cloud validation
    environment and delivery pipeline. This track does not block the first
    agentic prototype, but it must close before Abada claims a cloud-certified
@@ -21,7 +21,7 @@ The 1.1 RC work has two tracks:
 The `1.0.0-rc.1` Compose family remains the supported evaluation and
 development baseline until the infrastructure track is complete.
 
-## Track A — Agentic candidature
+## Track A — Agentic workflow integration
 
 ### Runtime integration
 
@@ -45,7 +45,7 @@ development baseline until the infrastructure track is complete.
 - [ ] Make suspension and cancellation stop new agent work and produce
   deterministic late-completion behavior.
 
-### Candidature demonstration
+### Reference demonstration
 
 - [ ] Publish one runnable agentic workflow using the released Compose bundle.
 - [ ] Demonstrate restart recovery while agent work is leased or awaiting
@@ -105,7 +105,7 @@ certification claim must not be made.
 
 ## 1.1 RC acceptance
 
-- [ ] The agentic candidature track has executable evidence and documented
+- [ ] The agentic workflow track has executable evidence and documented
   safety boundaries.
 - [ ] Agent execution uses only durable public worker, event, variable,
   history, policy and telemetry contracts.

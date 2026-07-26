@@ -234,6 +234,19 @@ Validate the deployment without starting it.
 | Keycloak | http://keycloak.localhost |
 | Grafana (telemetry overlay) | http://127.0.0.1:3000 |
 
+Development uses separate starter identities so task work and operational
+access remain visibly distinct:
+
+| Application | Username | Password | Purpose |
+| --- | --- | --- | --- |
+| Tenda | `alice` | `alice` | Deploy, start and complete workflow tasks |
+| Orun | `orun-admin` | `orun-admin` | Inspect workflow history and operations |
+| Keycloak admin | `admin` | `admin` | Manage the development realm |
+
+If Tenda has already signed you in as Alice, Orun may reuse that Keycloak
+session. Choose **Sign out and switch account**, then sign in as
+`orun-admin`. These credentials are development-only.
+
 ---
 
 # Current Status (v1.0.0-rc.1)
@@ -249,7 +262,7 @@ signals and user-task transitions. Public mutation retries can use
 validated Docker Compose distribution and PostgreSQL/Testcontainers evidence.
 Public-cloud production certification is not claimed; that infrastructure
 work is tracked in the
-[1.1 RC Google AI Lab roadmap](docs/development/roadmap-to-1.1.0-rc.md).
+[1.1 RC roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 
 The curated architecture and developer documentation is built with Astro 7,
 Starlight 0.41, MDX and Mermaid under [`documentation/`](documentation/).
@@ -351,10 +364,17 @@ Documentation:
 
 - [API Reference](docs/development/api.md)
 
-Health endpoint:
+Service information:
 
 ```
 /api/v1/info
+```
+
+Operational health probes:
+
+```
+/api/actuator/health/liveness
+/api/actuator/health/readiness
 ```
 
 Swagger:

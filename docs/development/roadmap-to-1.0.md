@@ -419,10 +419,10 @@ durable worker, event, variable, policy and telemetry contracts without
 bypassing the BPMN state machine.
 
 The next planned milestone is the
-[1.1.0 RC Google AI Lab candidature](roadmap-to-1.1.0-rc.md). Its agentic
-track may begin on the validated Compose baseline; public-cloud deployment,
-multi-host failover, rolling-upgrade and supply-chain certification remain a
-separately visible infrastructure-debt track.
+[1.1.0 RC roadmap](roadmap-to-1.1.0-rc.md). Its agentic workflow track may
+begin on the validated Compose baseline; public-cloud deployment, multi-host
+failover, rolling-upgrade and supply-chain certification remain a separately
+visible infrastructure-debt track.
 
 The bundled RC telemetry profile uses Grafana Alloy for log collection. It
 preserves the named-log-volume and trace-correlation contract without retaining

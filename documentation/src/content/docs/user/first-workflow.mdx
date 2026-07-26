@@ -10,9 +10,11 @@ description: Deploy, start, complete and inspect the bundled approval process.
 4. Return to **Processes**, choose **Approval quickstart**, and select
    **Start process**. No variables are required.
 5. Open **Tasks**, select **Review request**, claim it, then complete it.
-6. Open `http://orun.localhost`, sign in as `orun-admin` with password
-   `orun-admin`, and locate the completed instance. Its activity history must
-   show the start event, user task and end event.
+6. Open `http://orun.localhost`. If Keycloak reuses Alice's active session,
+   choose **Sign out and switch account**.
+7. Sign in as `orun-admin` with password `orun-admin`, then locate the
+   completed instance. Its activity history must show the start event, user
+   task and end event.
 
 The workflow has completed when Tenda no longer lists an active task and Orun
 shows the instance as `COMPLETED`.
