@@ -4,6 +4,42 @@ This document provides a detailed and accurate overview of the Abada Engine REST
 
 ---
 
+## Service Information
+
+`GET /v1/info` is the public service-discovery endpoint. It reports stable
+product, release, API and BPMN contract metadata and links clients to the
+OpenAPI document, Swagger UI and operational health probes.
+
+```json
+{
+  "name": "Abada Engine",
+  "service": "abada-engine",
+  "description": "Open-source, self-hosted BPMN 2.0 workflow orchestration engine",
+  "version": "1.0.0-rc.1",
+  "api": {
+    "version": "v1",
+    "openApi": "/api/v3/api-docs",
+    "swaggerUi": "/api/swagger-ui.html"
+  },
+  "engine": {
+    "standard": "BPMN 2.0",
+    "supportLevel": "documented-subset",
+    "persistence": "PostgreSQL"
+  },
+  "health": {
+    "liveness": "/api/actuator/health/liveness",
+    "readiness": "/api/actuator/health/readiness"
+  }
+}
+```
+
+The endpoint does not report health itself. Use the advertised liveness and
+readiness probes for operational decisions. The RC.1 response intentionally
+replaces the earlier untyped payload: `status`, `profile`, host/JVM runtime
+details and DMN/CMMN roadmap claims are no longer returned.
+
+---
+
 ## Authentication
 
 All API endpoints require the following headers to be sent with each request to establish the user's identity and permissions:

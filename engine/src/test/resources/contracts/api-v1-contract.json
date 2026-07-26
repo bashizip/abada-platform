@@ -36,6 +36,7 @@
   },
   "schemas": [
     "ApiError",
+    "InfoResponse",
     "DeploymentResponse",
     "ProcessDefinitionDto",
     "ProcessInstanceDTO",
@@ -54,6 +55,7 @@
   ],
   "schemaProperties": {
     "ApiError": ["timestamp", "status", "code", "message", "path", "traceId", "details"],
+    "InfoResponse": ["name", "service", "description", "version", "api", "engine", "health"],
     "DeploymentResponse": ["status", "processDefinitionId", "deploymentId", "version", "definitionFormatVersion", "compatibilityProfiles", "compatibilityReport"],
     "ProcessDefinitionDto": ["id", "name", "documentation", "bpmnXml", "deploymentId", "version", "createdAt"],
     "ProcessInstanceDTO": ["id", "processDefinitionId", "processDefinitionName", "currentActivityId", "status", "suspended", "startDate", "endDate", "startedBy", "variables"],
