@@ -14,11 +14,16 @@ public final class TraceLogContext implements AutoCloseable {
     private TraceLogContext(Span span) {
         previousTraceId = MDC.get("traceId");
         previousSpanId = MDC.get("spanId");
-        scope = span.makeCurrent();
-        var context = span.getSpanContext();
-        if (context.isValid()) {
+        Span effectiveSpan = span == null ? Span.getInvalid() : span;
+        var context = effectiveSpan.getSpanContext();
+        if (context != null && context.isValid()) {
+            scope = effectiveSpan.makeCurrent();
             MDC.put("traceId", context.getTraceId());
             MDC.put("spanId", context.getSpanId());
+        } else {
+            // Invalid/no-op spans must not replace existing log correlation
+            // values with OpenTelemetry's all-zero identifiers.
+            scope = () -> { };
         }
     }
 
@@ -28,9 +33,14 @@ public final class TraceLogContext implements AutoCloseable {
 
     @Override
     public void close() {
-        restore("traceId", previousTraceId);
-        restore("spanId", previousSpanId);
-        scope.close();
+        try {
+            scope.close();
+        } finally {
+            // Context listeners may update MDC while the scope closes, so restore
+            // the command's previous correlation values afterwards.
+            restore("traceId", previousTraceId);
+            restore("spanId", previousSpanId);
+        }
     }
 
     private static void restore(String key, String value) {

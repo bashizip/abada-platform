@@ -35,4 +35,19 @@ class TraceLogContextTest {
         assertThat(MDC.get("traceId")).isEqualTo("previous-trace");
         assertThat(MDC.get("spanId")).isEqualTo("previous-span");
     }
+
+    @Test
+    void acceptsMissingSpanAsSafeNoOpContext() {
+        MDC.put("traceId", "previous-trace");
+        MDC.put("spanId", "previous-span");
+
+        try (TraceLogContext ignored = TraceLogContext.open(null)) {
+            assertThat(Span.current().getSpanContext().isValid()).isFalse();
+            assertThat(MDC.get("traceId")).isEqualTo("previous-trace");
+            assertThat(MDC.get("spanId")).isEqualTo("previous-span");
+        }
+
+        assertThat(MDC.get("traceId")).isEqualTo("previous-trace");
+        assertThat(MDC.get("spanId")).isEqualTo("previous-span");
+    }
 }
