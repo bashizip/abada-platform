@@ -175,14 +175,14 @@ cd abada-engine
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
 chmod +x quickstart.sh
-./quickstart.sh 1.0.0-rc.1
+./quickstart.sh 1.0.0-rc.2
 ```
 
 Windows:
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 -OutFile quickstart.ps1
-.\quickstart.ps1 -Version 1.0.0-rc.1
+.\quickstart.ps1 -Version 1.0.0-rc.2
 ```
 
 ## Container platforms
@@ -249,7 +249,7 @@ session. Choose **Sign out and switch account**, then sign in as
 
 ---
 
-# Current Status (v1.0.0-rc.1)
+# Current Status (v1.0.0-rc.2)
 
 Abada 1.0 RC combines stable REST and external-worker contracts, direct OIDC
 JWT validation, backend RBAC and a Java worker SDK with the durable,
@@ -258,7 +258,7 @@ Two or more replicas can contend safely for timers, external tasks, messages,
 signals and user-task transitions. Public mutation retries can use
 `Idempotency-Key` for a deterministic response.
 
-`1.0.0-rc.1` is a published evaluation release candidate backed by the
+`1.0.0-rc.2` is a published evaluation release candidate backed by the
 validated Docker Compose distribution and PostgreSQL/Testcontainers evidence.
 Public-cloud production certification is not claimed; that infrastructure
 work is tracked in the

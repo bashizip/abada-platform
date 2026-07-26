@@ -356,7 +356,7 @@ publication evidence.
 - [x] **1.0 RC Compose distribution gate:** development and production
   Compose configurations, negative preflight cases, runtime frontend
   configuration and the self-contained release archive pass the executable
-  deployment contract. `1.0.0-rc.1` is a published evaluation release
+  deployment contract. `1.0.0-rc.2` is a published evaluation release
   candidate, not a public-cloud production certification; live certification
   moves to 1.1.
 - [x] Require release image manifests for `linux/amd64` and `linux/arm64`;

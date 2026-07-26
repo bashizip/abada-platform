@@ -99,7 +99,7 @@ fi
 
 cat > "$TMP_DIR/prod.env" <<'ENV'
 ABADA_REGISTRY=ghcr.io/bashizip
-ABADA_VERSION=1.0.0-rc.1-test
+ABADA_VERSION=1.0.0-rc.2-test
 POSTGRES_PASSWORD=test-only-production-password
 ABADA_API_HOST=api.abada.test
 ABADA_TASKS_HOST=tasks.abada.test
@@ -238,10 +238,10 @@ for entrypoint in "$ROOT_DIR/tenda/docker-entrypoint.sh" "$ROOT_DIR/orun/docker-
   grep -q 'https://api.abada.test' "$TMP_DIR/config.js"
 done
 
-"$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.1-test >/dev/null
-grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.1-test\.tar\.gz$' \
-  "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.1-test.tar.gz.sha256"
-tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.1-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
+"$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.2-test >/dev/null
+grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.2-test\.tar\.gz$' \
+  "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.2-test.tar.gz.sha256"
+tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.2-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
 test -f "$TMP_DIR/deployment/telemetry/config.alloy"
 test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"
 grep -q 'grafana/alloy:v1.18.0' "$TMP_DIR/compose.telemetry.yaml"
@@ -252,9 +252,9 @@ fi
 (
   cd "$ROOT_DIR/release/dist"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum --check abada-platform-1.0.0-rc.1-test.tar.gz.sha256
+    sha256sum --check abada-platform-1.0.0-rc.2-test.tar.gz.sha256
   else
-    shasum -a 256 --check abada-platform-1.0.0-rc.1-test.tar.gz.sha256
+    shasum -a 256 --check abada-platform-1.0.0-rc.2-test.tar.gz.sha256
   fi
 )
 if [[ "${ABADA_CONTRACT_SKIP_LIVE_PREFLIGHT:-false}" == "true" ]]; then

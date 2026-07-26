@@ -43,4 +43,4 @@ or after Abada commits. Workers must deduplicate business side effects using
 their own stable operation key.
 
 The Java implementation is under `sdk/java` and builds independently as
-`io.abada:abada-worker-client:1.0.0-rc.1`.
+`io.abada:abada-worker-client:1.0.0-rc.2`.

@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.abada</groupId>
   <artifactId>abada-worker-client</artifactId>
-  <version>1.0.0-rc.1</version>
+  <version>1.0.0-rc.2</version>
   <name>Abada Java Worker Client</name>
   <description>Java client for the Abada external-worker protocol v1</description>
 

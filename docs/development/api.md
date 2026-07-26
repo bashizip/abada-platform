@@ -15,7 +15,7 @@ OpenAPI document, Swagger UI and operational health probes.
   "name": "Abada Engine",
   "service": "abada-engine",
   "description": "Open-source, self-hosted BPMN 2.0 workflow orchestration engine",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "api": {
     "version": "v1",
     "openApi": "/api/v3/api-docs",
@@ -34,7 +34,7 @@ OpenAPI document, Swagger UI and operational health probes.
 ```
 
 The endpoint does not report health itself. Use the advertised liveness and
-readiness probes for operational decisions. The RC.1 response intentionally
+readiness probes for operational decisions. The RC.2 response intentionally
 replaces the earlier untyped payload: `status`, `profile`, host/JVM runtime
 details and DMN/CMMN roadmap claims are no longer returned.
 
