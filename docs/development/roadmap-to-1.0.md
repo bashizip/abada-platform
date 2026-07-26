@@ -314,12 +314,14 @@ publication evidence.
 - [ ] Certify PostgreSQL-backed development with bundled local Keycloak and
   direct OIDC validation; keep H2 outside the platform certification matrix.
   The executable workflow/restart check is
-  [`smoke-dev-platform.sh`](../../scripts/test/smoke-dev-platform.sh); a green
-  clean-volume CI run is still required.
+  [`smoke-dev-platform.sh`](../../scripts/test/smoke-dev-platform.sh). Live
+  cloud evidence is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
 - [ ] Certify PostgreSQL-backed production with external OIDC, required
   secrets/domains/origins, TLS ingress and no publicly exposed database. The
   configuration and negative preflight contract passes; reference-host live
-  evidence remains outstanding.
+  certification is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
 - [x] Make telemetry disabled by default with no exporters, collector
   dependency or telemetry-related readiness failure. Evidence:
   [`TelemetryModeConfigurationTest`](../../engine/src/test/java/com/abada/engine/observability/TelemetryModeConfigurationTest.java),
@@ -330,7 +332,8 @@ publication evidence.
   executable checks are
   [`smoke-telemetry-platform.sh`](../../scripts/test/smoke-telemetry-platform.sh)
   and [`smoke-external-otlp.sh`](../../scripts/test/smoke-external-otlp.sh);
-  their clean-volume CI result is still required.
+  live cloud certification is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
 - [x] Serve runtime API and OIDC configuration from immutable Tenda and Orun
   images and fail startup on incomplete configuration. Evidence: runtime
   `/config.js` entrypoints and deployment contract tests.
@@ -339,17 +342,22 @@ publication evidence.
   [`build-bundle.sh`](../../release/build-bundle.sh).
 - [x] Provide a Linux/macOS quickstart plus a production preflight that
   validates configuration before startup.
-- [ ] Execute the PowerShell quickstart and preflight in Windows CI.
+- [ ] Execute the PowerShell quickstart and preflight in Windows CI. Deferred
+  to the [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
 - [ ] Test development/production with telemetry off/on from clean Docker
   state, including authentication, BPMN deployment, task completion, engine
   restart and persisted progress. Development CI jobs are defined; production
-  reference-host automation and completed run evidence remain outstanding.
+  reference-host evidence is deferred to the
+  [1.1 RC infrastructure track](roadmap-to-1.1.0-rc.md).
 - [ ] Publish the user guide: choose a mode, quickstart, first workflow,
   development, production/OIDC, telemetry, scaling, backup/restore, upgrades
   and troubleshooting. The complete source passes Astro checks/build; Vercel
   publication waits for every documented live deployment command to pass.
-- [ ] **Platform deployment gate:** the documented commands pass from a clean
-  directory and every certified matrix entry has executable CI evidence.
+- [x] **1.0 RC Compose distribution gate:** development and production
+  Compose configurations, negative preflight cases, runtime frontend
+  configuration and the self-contained release archive pass the executable
+  deployment contract. `1.0.0-rc.1` is an evaluation prerelease, not a
+  public-cloud production certification; live certification moves to 1.1.
 
 ### Conformance and quality
 
@@ -404,6 +412,12 @@ worker SDKs, an embeddable Java engine/Maven artifact, public agent runtime, AI
 memory and policy-engine work. Future agentic features should consume the
 durable worker, event, variable, policy and telemetry contracts without
 bypassing the BPMN state machine.
+
+The next planned milestone is the
+[1.1.0 RC Google AI Lab candidature](roadmap-to-1.1.0-rc.md). Its agentic
+track may begin on the validated Compose baseline; public-cloud deployment,
+multi-host failover, rolling-upgrade and supply-chain certification remain a
+separately visible infrastructure-debt track.
 
 The bundled RC telemetry profile uses Grafana Alloy for log collection. It
 preserves the named-log-volume and trace-correlation contract without retaining

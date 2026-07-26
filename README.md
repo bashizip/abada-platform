@@ -223,14 +223,19 @@ Validate the deployment without starting it.
 
 ---
 
-# Current Status (v0.11.0-alpha)
+# Current Status (v1.0.0-rc.1)
 
-Abada 0.11 adds stable REST and external-worker contracts, direct OIDC JWT
-validation, backend RBAC and a Java worker SDK to the durable, cluster-safe
-PostgreSQL runtime.
+Abada 1.0 RC combines stable REST and external-worker contracts, direct OIDC
+JWT validation, backend RBAC and a Java worker SDK with the durable,
+cluster-safe PostgreSQL runtime.
 Two or more replicas can contend safely for timers, external tasks, messages,
 signals and user-task transitions. Public mutation retries can use
 `Idempotency-Key` for a deterministic response.
+
+`1.0.0-rc.1` is an evaluation prerelease backed by the validated Docker
+Compose distribution and PostgreSQL/Testcontainers evidence. Public-cloud
+production certification is not claimed; that infrastructure work is tracked
+in the [1.1 RC Google AI Lab roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 
 The curated architecture and developer documentation is built with Astro 7,
 Starlight 0.41, MDX and Mermaid under [`documentation/`](documentation/).

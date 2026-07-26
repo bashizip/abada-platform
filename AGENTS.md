@@ -11,8 +11,8 @@ is a dependable PostgreSQL-backed core with a documented and executable BPMN
 subset. Agentic workflows are future consumers of this core; do not bypass or
 weaken the BPMN state machine to add agent features.
 
-The current release line is 0.11.x. Its certified production topology is one
-or more engine instances backed by PostgreSQL. Database-authoritative
+The current release line is 1.0.0-rc.x. Its certified production topology is
+one or more engine instances backed by PostgreSQL. Database-authoritative
 execution, restart recovery, atomic mutation commands, versioned definitions,
 durable jobs/subscriptions, transactional outbox delivery, cluster-safe work
 acquisition, stable API/worker contracts and backend RBAC are in scope.
@@ -20,6 +20,8 @@ acquisition, stable API/worker contracts and backend RBAC are in scope.
 Use these documents as the authoritative product contract:
 
 - `docs/development/roadmap-to-1.0.md` — release checklist and acceptance gates.
+- `docs/development/roadmap-to-1.1.0-rc.md` — Google AI Lab candidature and
+  deferred cloud/CI certification debt.
 - `docs/development/1.0-rc-publication-gates.md` — mandatory per-candidate
   publication evidence and GO/NO-GO sign-off.
 - `docs/reference/bpmn-support.md` — supported and rejected BPMN constructs.

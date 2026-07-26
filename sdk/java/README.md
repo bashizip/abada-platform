@@ -1,6 +1,6 @@
 # Abada Java worker client
 
-`io.abada:abada-worker-client:0.11.0-alpha` implements Abada external-worker
+`io.abada:abada-worker-client:1.0.0-rc.1` implements Abada external-worker
 protocol version 1. It supports bounded fetch-and-lock, heartbeat and explicit
 lock extension, completion, BPMN error, technical failure/retry, idempotency
 keys, bearer authentication, and W3C trace-context propagation.

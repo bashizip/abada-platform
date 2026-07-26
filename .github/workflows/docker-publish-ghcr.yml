@@ -74,8 +74,14 @@ jobs:
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             prerelease=()
             [[ "$version" == *-* ]] && prerelease=(--prerelease)
-            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
-              --title "Abada $version" "${prerelease[@]}"
+            notes=("docs/release-notes/$version-release-notes.md")
+            if [[ -f "${notes[0]}" ]]; then
+              notes=(--notes-file "${notes[0]}")
+            else
+              notes=(--generate-notes)
+            fi
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --title "Abada $version" "${prerelease[@]}" "${notes[@]}"
           fi
           gh release upload "$GITHUB_REF_NAME" \
             "release/dist/abada-platform-$version.tar.gz" \

@@ -15,6 +15,13 @@ An entry becomes certified only when its roadmap evidence is checked. The
 table distinguishes an implemented/configuration-valid profile from a
 release-certified one so documentation never broadens the current guarantee.
 
+`1.0.0-rc.1` is published for evaluation with the executable Compose
+configuration, preflight, archive and PostgreSQL/Testcontainers evidence. It
+does not claim a completed public-cloud production certification. Public TLS,
+external-OIDC reference-host testing, multi-host failover, rolling upgrades
+and supply-chain certification are tracked by the
+[1.1 RC roadmap](../development/roadmap-to-1.1.0-rc.md).
+
 Production uses `ABADA_SECURITY_MODE=oidc` and requires
 `OIDC_ISSUER_URI` and `ABADA_ALLOWED_ORIGINS`. `proxy` mode trusts
 `X-Auth-Request-*` headers and is unsafe when clients can reach the engine

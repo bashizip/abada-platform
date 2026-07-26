@@ -3,6 +3,8 @@ data/
 
 # ignore logs
 /logs/
+engine/logs/
+.DS_Store
 
 HELP.md
 target/

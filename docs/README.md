@@ -48,6 +48,7 @@ Resources for developers building on or contributing to Abada Engine.
 - [Frontend Guide](development/frontend-guide.md) - Guide for frontend development.
 - [Orun App Specification](development/orun-app-spec.md) - Specifications for the Orun application.
 - [Roadmap to 1.0](development/roadmap-to-1.0.md) - Release gates and acceptance evidence.
+- [Roadmap to 1.1 RC](development/roadmap-to-1.1.0-rc.md) - Google AI Lab candidature and deferred infrastructure certification.
 - [1.0 RC Publication Gates](development/1.0-rc-publication-gates.md) - Candidate-specific GO/NO-GO checklist and evidence record.
 - [BPMN Support](reference/bpmn-support.md) - Guaranteed and rejected BPMN constructs.
 - [Deployment Support](reference/deployment-support.md) - Supported runtime and security modes.
