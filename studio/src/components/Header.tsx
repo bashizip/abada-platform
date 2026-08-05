@@ -10,7 +10,8 @@ import {
   Settings,
   Layers,
   FileCode,
-  RotateCcw
+  RotateCcw,
+  BookOpen
 } from 'lucide-react';
 import { WorkflowFile } from '@/types';
 
@@ -172,6 +173,17 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </>
         )}
+        
+        <a
+          href="http://docs.localhost"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-[#A89F91] hover:text-[#EAE3D9] bg-[#1A1614] hover:bg-[#2F2926] px-3 py-1.5 rounded-xl border border-[#3A322E] transition-all flex items-center gap-1.5 ml-2"
+          title="Open Abada Documentation"
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>Docs</span>
+        </a>
       </div>
     </header>
   );

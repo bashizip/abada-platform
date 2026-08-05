@@ -8,7 +8,7 @@ Compose distribution. The reader-oriented procedures are published in the
 
 | Files | Result |
 | --- | --- |
-| `compose.yaml` + `compose.dev.yaml` | PostgreSQL, Engine, Tenda, Orun, bundled Keycloak and local HTTP routing |
+| `compose.yaml` + `compose.dev.yaml` | PostgreSQL, Engine, Studio, Tenda, Orun, Docs, bundled Keycloak and local HTTP routing |
 | `compose.yaml` + `compose.prod.yaml` | PostgreSQL, versioned application images, external OIDC and Traefik TLS |
 | either profile + `compose.telemetry.yaml` | Optional bundled metrics, traces and logs |
 

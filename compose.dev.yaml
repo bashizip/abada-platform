@@ -66,6 +66,13 @@ services:
       traefik.http.routers.studio-dev.entrypoints: web
       traefik.http.services.studio-dev.loadbalancer.server.port: "5605"
 
+  abada-docs:
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.docs-dev.rule: Host(`docs.localhost`)
+      traefik.http.routers.docs-dev.entrypoints: web
+      traefik.http.services.docs-dev.loadbalancer.server.port: "5606"
+
   keycloak-db:
     image: postgres:15.13-alpine
     environment:

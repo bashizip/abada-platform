@@ -123,6 +123,24 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  abada-docs:
+    image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.2}
+    networks:
+      - edge
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:5606/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
 networks:
   edge:
     driver: bridge
