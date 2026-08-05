@@ -55,6 +55,17 @@ services:
       traefik.http.routers.orun-dev.entrypoints: web
       traefik.http.services.orun-dev.loadbalancer.server.port: "5603"
 
+  abada-studio:
+    environment:
+      ABADA_API_URL: http://api.localhost/api
+      ABADA_SEMAFLOW_URL: http://semaflow.localhost/semaflow/api/v1
+      ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.studio-dev.rule: Host(`studio.localhost`)
+      traefik.http.routers.studio-dev.entrypoints: web
+      traefik.http.services.studio-dev.loadbalancer.server.port: "5605"
+
   keycloak-db:
     image: postgres:15.13-alpine
     environment:
