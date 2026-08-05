@@ -10,7 +10,7 @@ services:
       OIDC_ISSUER_URI: http://keycloak.localhost/realms/abada-dev
       OIDC_AUDIENCE: abada-frontend
       OIDC_JWK_SET_URI: http://keycloak:8080/realms/abada-dev/protocol/openid-connect/certs
-      ABADA_ALLOWED_ORIGINS: http://tenda.localhost,http://orun.localhost
+      ABADA_ALLOWED_ORIGINS: http://tenda.localhost,http://orun.localhost,http://studio.localhost
       ABADA_TELEMETRY_ENABLED: ${ABADA_TELEMETRY_ENABLED:-false}
       ABADA_TELEMETRY_OTLP_ENDPOINT: ${ABADA_TELEMETRY_OTLP_ENDPOINT:-}
       OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
@@ -19,7 +19,7 @@ services:
         condition: service_healthy
     labels:
       traefik.enable: "true"
-      traefik.http.routers.engine-dev.rule: Host(`api.localhost`) || Host(`localhost`) || ((Host(`tenda.localhost`) || Host(`orun.localhost`)) && PathPrefix(`/api`))
+      traefik.http.routers.engine-dev.rule: Host(`api.localhost`) || Host(`localhost`) || ((Host(`tenda.localhost`) || Host(`orun.localhost`) || Host(`studio.localhost`)) && PathPrefix(`/api`))
       traefik.http.routers.engine-dev.entrypoints: web
       traefik.http.services.engine-dev.loadbalancer.server.port: "5601"
 
@@ -57,8 +57,10 @@ services:
 
   abada-studio:
     environment:
-      ABADA_API_URL: http://api.localhost/api
+      ABADA_API_URL: http://studio.localhost/api
       ABADA_SEMAFLOW_URL: http://semaflow.localhost/semaflow/api/v1
+      ABADA_OIDC_URL: http://keycloak.localhost
+      ABADA_OIDC_REALM: abada-dev
       ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
     labels:
       traefik.enable: "true"

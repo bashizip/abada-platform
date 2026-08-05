@@ -14,6 +14,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { WorkflowFile } from '@/types';
+import { keycloak } from '@/auth/keycloakClient';
 
 interface HeaderProps {
   currentWorkflow: WorkflowFile;
@@ -184,6 +185,24 @@ export const Header: React.FC<HeaderProps> = ({
           <BookOpen className="w-3.5 h-3.5" />
           <span>Docs</span>
         </a>
+
+        {/* Auth Button */}
+        <button
+          onClick={() => {
+            if (keycloak.authenticated) {
+              keycloak.logout({ redirectUri: window.location.origin });
+            } else {
+              keycloak.login({ redirectUri: window.location.origin });
+            }
+          }}
+          className={`text-xs px-4 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 ml-2 ${
+            keycloak.authenticated
+              ? 'bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9] border-[#3A322E]'
+              : 'bg-[#9D4EDD] hover:bg-[#b56ef2] text-white border-transparent'
+          }`}
+        >
+          {keycloak.authenticated ? 'Sign Out' : 'Sign In'}
+        </button>
       </div>
     </header>
   );

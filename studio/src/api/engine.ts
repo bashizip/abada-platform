@@ -19,9 +19,21 @@ export interface ProcessInstanceDTO {
 }
 
 import { config } from '@/config/runtime';
+import { keycloak } from '@/auth/keycloakClient';
 
 export class EngineAPI {
   private static readonly BASE_URL = `${config.apiUrl}/v1`;
+
+  private static getHeaders(isFormData = false): HeadersInit {
+    const headers: HeadersInit = {};
+    if (keycloak.token) {
+      headers['Authorization'] = `Bearer ${keycloak.token}`;
+    }
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
+    return headers;
+  }
 
   /**
    * Deploys a WorkflowFile to the Abada Engine.
@@ -43,6 +55,7 @@ export class EngineAPI {
     // 4. Send to engine
     const res = await fetch(`${this.BASE_URL}/processes/deploy`, {
       method: 'POST',
+      headers: this.getHeaders(true),
       body: formData,
     });
 
@@ -58,7 +71,9 @@ export class EngineAPI {
    * Gets a list of recent process instances
    */
   static async getInstances(): Promise<ProcessInstanceDTO[]> {
-    const res = await fetch(`${this.BASE_URL}/processes/instances?size=20`);
+    const res = await fetch(`${this.BASE_URL}/processes/instances?size=20`, {
+      headers: this.getHeaders(),
+    });
     if (!res.ok) {
       throw new Error(`Failed to fetch instances: ${res.statusText}`);
     }
@@ -71,9 +86,7 @@ export class EngineAPI {
   static async startProcess(processId: string, variables: Record<string, any> = {}): Promise<{ processInstanceId: string }> {
     const res = await fetch(`${this.BASE_URL}/processes/start?processId=${encodeURIComponent(processId)}&username=studio_user`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: this.getHeaders(),
       body: JSON.stringify(variables)
     });
     if (!res.ok) {
@@ -89,7 +102,7 @@ export class EngineAPI {
     const url = status && status !== 'all' 
       ? `${this.BASE_URL}/tasks?status=${encodeURIComponent(status)}`
       : `${this.BASE_URL}/tasks`;
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.statusText}`);
     return res.json();
   }
@@ -100,7 +113,7 @@ export class EngineAPI {
   static async completeTask(taskId: string, variables: Record<string, any> = {}): Promise<any> {
     const res = await fetch(`${this.BASE_URL}/tasks/${encodeURIComponent(taskId)}/complete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify(variables)
     });
     if (!res.ok) throw new Error(`Failed to complete task: ${res.statusText}`);
@@ -112,7 +125,8 @@ export class EngineAPI {
    */
   static async failInstance(instanceId: string): Promise<any> {
     const res = await fetch(`${this.BASE_URL}/processes/instance/${encodeURIComponent(instanceId)}/fail`, {
-      method: 'POST'
+      method: 'POST',
+      headers: this.getHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to fail instance: ${res.statusText}`);
     return res.json();

@@ -38,7 +38,10 @@ umask 022
 {
   printf 'window.__ABADA_STUDIO_CONFIG__ = Object.freeze({\n'
   printf '  apiUrl: "%s",\n' "$(escape_js "$ABADA_API_URL")"
-  printf '  semaflowUrl: "%s"\n' "$(escape_js "$ABADA_SEMAFLOW_URL")"
+  printf '  semaflowUrl: "%s",\n' "$(escape_js "$ABADA_SEMAFLOW_URL")"
+  printf '  oidcUrl: "%s",\n' "$(escape_js "${ABADA_OIDC_URL:-http://keycloak.localhost}")"
+  printf '  oidcRealm: "%s",\n' "$(escape_js "${ABADA_OIDC_REALM:-abada-dev}")"
+  printf '  oidcClientId: "%s"\n' "$(escape_js "${ABADA_OIDC_CLIENT_ID:-abada-frontend}")"
   printf '});\n'
 } > "$config_path"
 
