@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-charcoal: #1A1614;
+    --surface-mocha: #25201D;
+    --surface-mocha-hover: #2F2926;
+    --surface-mocha-border: #3A322E;
+    --saffron: #F4A261;
+    --amethyst: #9D4EDD;
+    --desert-rose: #E76F51;
+    --mineral-teal: #2A9D8F;
+    --sage-green: #90A955;
+    --warm-linen: #EAE3D9;
+    --sand: #A89F91;
+  }
+
+  body {
+    background-color: #1A1614;
+    color: #EAE3D9;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'Geist', 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+}
+
+/* Custom background grid & dot patterns for BPMN Canvas */
+.bg-bpmn-grid {
+  background-size: 28px 28px;
+  background-image: 
+    linear-gradient(to right, rgba(168, 159, 145, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(168, 159, 145, 0.06) 1px, transparent 1px);
+}
+
+.bg-bpmn-dots {
+  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(168, 159, 145, 0.12) 1.2px, transparent 1.2px);
+}
+
+/* Glow effects ONLY for active AI/Agent elements */
+.glow-amethyst {
+  box-shadow: 0 0 22px rgba(157, 78, 221, 0.4), 0 0 6px rgba(157, 78, 221, 0.6);
+}
+
+.glow-amethyst-subtle {
+  box-shadow: 0 0 12px rgba(157, 78, 221, 0.25);
+}
+
+/* Subtle warm panel shadows */
+.shadow-warm-lg {
+  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.55), 0 0 1px rgba(244, 162, 97, 0.12);
+}
+
+.shadow-warm-md {
+  box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.45);
+}
+
+/* Connection line pulse animation */
+@keyframes flowPulse {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-flow-dash {
+  stroke-dasharray: 6 6;
+  animation: flowPulse 1.2s linear infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #1A1614;
+}
+::-webkit-scrollbar-thumb {
+  background: #3A322E;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4A403A;
+}
+
+/* React Flow overrrides */
+.react-flow__pane {
+  background-color: transparent !important;
+}
+.react-flow__controls {
+  box-shadow: none !important;
+}
+.react-flow__controls-button {
+  background: #25201D !important;
+  border-bottom: 1px solid #3A322E !important;
+  color: #A89F91 !important;
+}
+.react-flow__controls-button:hover {
+  background: #1A1614 !important;
+  color: #EAE3D9 !important;
+}
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
