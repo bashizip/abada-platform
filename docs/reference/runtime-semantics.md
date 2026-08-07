@@ -68,6 +68,28 @@ should use external tasks and an idempotent worker operation.
   none match. The join waits only for branches selected by that fork.
 - Join-arrival and expected-token sets are durable and restored after restart.
 
+## Decision tables
+
+- A `bpmn:businessRuleTask` is supported only when it carries an inline
+  `abada:decisionTable` extension; it is rejected otherwise.
+- Inputs are resolved from process variables in declaration order, either by
+  name or through a `${...}` expression. Evaluation is deterministic and runs
+  inside the workflow transaction: the table is the law, the agent is the
+  advice.
+- Rules are evaluated in model order. `hitPolicy="FIRST"` (default) applies the
+  first matching rule, `UNIQUE` fails the command when more than one rule
+  matches, and `COLLECT` merges the outputs of every matching rule.
+- The single `otherwise="true"` rule applies when no rule matches. When no rule
+  matches and no `otherwise` rule exists, the command fails and the workflow
+  transaction rolls back; the instance, work, history and outbox writes are
+  undone together.
+- Outputs are merged into process variables under the declared output names.
+  A `COLLECT` evaluation merges outputs in rule order, later outputs
+  overwriting earlier ones on key collision.
+- Each applied evaluation appends `DECISION_TABLE_APPLIED` history and a
+  matching outbox event carrying the decision key, matched rule indexes and
+  input/output names — never the values themselves.
+
 ## Events and timers
 
 - A message catch creates one durable subscription identified by process

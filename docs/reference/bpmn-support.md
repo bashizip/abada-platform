@@ -17,12 +17,19 @@ unsupported flow nodes instead of silently treating them as pass-through nodes.
 | Signal catch event | Supported | Durable broadcast subscription by signal name | [`SignalEventTest`](../../engine/src/test/java/com/abada/engine/core/SignalEventTest.java) |
 | Duration timer catch event | Supported | Durable scheduled job for ISO-8601 durations | [`TimerEventTest`](../../engine/src/test/java/com/abada/engine/core/TimerEventTest.java) |
 | Event-based gateway | Limited | A single outgoing catch event only | [`MessageEventTest`](../../engine/src/test/java/com/abada/engine/core/MessageEventTest.java) |
+| Business rule task (`abada:decisionTable`) | Supported | Deterministic in-transaction decision table evaluation with `FIRST`/`UNIQUE`/`COLLECT` hit policies, `otherwise` fallback and history audit | [`DecisionTableRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/DecisionTableRuntimeTest.java) |
 
 Not supported in the 1.0 contract: subprocesses, call activities, boundary
 events, event subprocesses, compensation, transactions, multi-instance
 activities, complex gateways, conditional events, time-date/time-cycle timers,
-message/signal start events, throwing events, receive/send/manual/business-rule
-tasks, DMN and CMMN.
+message/signal start events, throwing events, receive/send/manual tasks,
+DMN 1.3 decision files and CMMN.
+
+A business rule task is supported only when it carries an
+`abada:decisionTable` extension; it is rejected otherwise. Decision tables are
+defined inline in the BPMN as the native Abada dialect (see
+[abada-native-extensions.md](../bpmn/abada-native-extensions.md)) rather than
+as external DMN XML documents.
 
 Embedded Java and script tasks can execute external side effects. Database state
 transitions are protected against duplicate engine advancement, but applications
