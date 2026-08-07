@@ -1,6 +1,13 @@
 import * as yaml from 'yaml';
 import dagre from 'dagre';
-import { APLDocument, APLNode } from './types';
+import {
+  APLDocument,
+  APLDecisionTableInput,
+  APLDecisionTableNode,
+  APLDecisionTableRule,
+  APLNode,
+  APLValue,
+} from './types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 
 /**
@@ -12,10 +19,58 @@ export function parseAPLYaml(yamlString: string): APLDocument {
 
 /**
  * Stringifies an APLDocument object into a YAML string.
+ *
+ * Decision-table blocks are emitted in the vision's canonical YAML shape:
+ * `inputs` as a map (`score: "${...}"`) and the fallback rule wrapped as
+ * `otherwise: { then: {...} }`, so AI-generated rule PRs use one stable form.
  */
 export function stringifyAPLYaml(doc: APLDocument): string {
-  return yaml.stringify(doc);
+  const visionDoc: APLDocument = {
+    ...doc,
+    flow: {
+      ...doc.flow,
+      nodes: doc.flow.nodes.map((node) => {
+        if (node.type !== 'decision-table') return node;
+        const table = node as APLDecisionTableNode;
+        const inputs = Array.isArray(table.inputs)
+          ? table.inputs
+          : Object.entries(table.inputs || {}).map(([name, expr]) => ({ name, expr }));
+        return {
+          ...node,
+          inputs: Object.fromEntries(inputs.map((i) => [i.name, i.expr || ''])),
+          rules: (table.rules || []).map((r) =>
+            r.otherwise ? { otherwise: { then: r.then } } : { when: r.when, then: r.then }
+          ),
+        } as APLNode;
+      }),
+    },
+  };
+  return yaml.stringify(visionDoc);
 }
+
+/** Normalizes the array or map form of decision-table inputs. */
+export const normalizeTableInputs = (
+  inputs?: APLDecisionTableInput[] | Record<string, string>
+): APLDecisionTableInput[] =>
+  Array.isArray(inputs)
+    ? inputs
+    : Object.entries(inputs || {}).map(([name, expr]) => ({ name, expr: String(expr) }));
+
+/** Resolves the flattened and vision-wrapper forms of an `otherwise` rule. */
+export const resolveRuleOutcome = (rule: APLDecisionTableRule): {
+  otherwise: boolean;
+  when?: string;
+  then: Record<string, APLValue>;
+} => {
+  const wrapped = rule.otherwise && typeof rule.otherwise === 'object'
+    ? rule.otherwise
+    : null;
+  return {
+    otherwise: wrapped ? true : !!rule.otherwise,
+    when: wrapped ? undefined : rule.when,
+    then: wrapped ? wrapped.then : (rule.then || {}),
+  };
+};
 
 /**
  * Applies Dagre auto-layout to nodes that don't have x,y coordinates
@@ -45,6 +100,18 @@ const applyAutoLayout = (nodes: WorkflowNode[], edges: WorkflowEdge[]) => {
     return node;
   });
 };
+
+/** Maps a native APL decision-table block into the studio's DMNConfig model. */
+const tableToDmnConfig = (table: APLDecisionTableNode) => ({
+  decisionKey: table.decisionKey || `DMN_${table.id.toUpperCase()}`,
+  hitPolicy: table.hitPolicy || 'FIRST',
+  inputs: normalizeTableInputs(table.inputs).map((i) => ({ name: i.name, expr: i.expr })),
+  outputs: [],
+  rules: (table.rules || []).map((r, i) => ({
+    id: `r${i}`,
+    ...resolveRuleOutcome(r),
+  })),
+});
 
 /**
  * Converts an APLDocument into the internal React Flow WorkflowFile model.
@@ -114,11 +181,27 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           outputs: [],
           rules: aplNode.rules.map((r, i) => ({
             id: `r${i}`,
-            condition: r.if || r.else || 'true',
-            outcome: `Next = ${r.then}`,
+            when: r.if,
+            otherwise: !!r.else,
+            then: { Next: r.then },
           })),
         };
         break;
+      case 'decision-table': {
+        const table = aplNode as APLDecisionTableNode;
+        wNode.type = 'dmn';
+        wNode.dmnConfig = tableToDmnConfig(table);
+        break;
+      }
+      default: {
+        // Legacy APL documents (pre-decision-table blocks) used type 'dmn'.
+        const legacy = aplNode as unknown as { type?: string };
+        if (legacy.type === 'dmn') {
+          wNode.type = 'dmn';
+          wNode.dmnConfig = tableToDmnConfig(aplNode as unknown as APLDecisionTableNode);
+        }
+        break;
+      }
     }
 
     nodes.push(wNode);
@@ -168,14 +251,22 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
  */
 export function workflowToAPL(wf: WorkflowFile): APLDocument {
   const aplNodes: APLNode[] = [];
-  
-  // Helper to find outgoing edge target for normal nodes
-  const getNextNode = (nodeId: string): string | undefined => {
-    const outEdges = wf.edges.filter(e => e.source === nodeId);
-    if (outEdges.length > 0 && wf.nodes.find(n => n.id === outEdges[0].target)?.type !== 'gateway') {
-      return outEdges[0].target;
-    }
+
+  // Real gateway conditions must be expressions the engine can evaluate
+  // (e.g. `${fraudScore > 75}`). Free-text edge labels are descriptions and
+  // must never be emitted as condition expressions.
+  const toCondition = (label?: string, condition?: string): string | undefined => {
+    const raw = label?.replace(/^if\s+/i, '').trim();
+    if (condition) return condition;
+    if (raw && /^\$\{.*\}$/.test(raw)) return raw;
     return undefined;
+  };
+
+  // Helper to find outgoing edge target for non-gateway nodes
+  const getNextNode = (nodeId: string, sourceType: WorkflowNode['type']): string | undefined => {
+    if (sourceType === 'gateway') return undefined; // gateways route via rules
+    const outEdges = wf.edges.filter(e => e.source === nodeId);
+    return outEdges.length > 0 ? outEdges[0].target : undefined;
   };
 
   wf.nodes.forEach(node => {
@@ -190,7 +281,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         aplNodes.push({
           ...baseNode,
           type: 'webhook',
-          next: getNextNode(node.id),
+          next: getNextNode(node.id, node.type),
         } as APLNode);
       } else {
         aplNodes.push({
@@ -206,7 +297,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         prompt: node.agentConfig?.systemPrompt,
         tools: node.agentConfig?.tools?.length ? node.agentConfig.tools : undefined,
         confidence_threshold: node.agentConfig?.confidenceThreshold,
-        next: getNextNode(node.id),
+        next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
       aplNodes.push({
@@ -215,32 +306,42 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         assignees: node.humanConfig?.assigneeRole.split(',').map(s => s.trim()) || [],
         mode: node.humanConfig?.requireDoubleSignOff ? 'parallel' : 'serial',
         sla_hours: node.humanConfig?.slaHours,
-        next: getNextNode(node.id),
+        next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'gateway') {
       const outEdges = wf.edges.filter(e => e.source === node.id);
       aplNodes.push({
         ...baseNode,
         type: 'condition',
-        rules: outEdges.map(e => {
-          const isElse = e.label?.toLowerCase().includes('else') || !e.label;
+        rules: outEdges.map((e, idx) => {
+          const cond = toCondition(e.label, e.condition);
+          const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
           return {
-            if: isElse ? undefined : e.label?.replace('if ', ''),
+            if: cond,
             else: isElse ? e.target : undefined,
             then: e.target,
           };
         })
       } as APLNode);
     } else if (node.type === 'dmn') {
-      // Treat DMN as a generic condition block in APL
-      const outEdges = wf.edges.filter(e => e.source === node.id);
+      // Native decision-table block: the deterministic "law" that constrains the
+      // probabilistic agents (vision: the engine executes it, not the LLM).
       aplNodes.push({
         ...baseNode,
-        type: 'condition',
-        rules: outEdges.map(e => ({
-          if: e.label || 'true',
-          then: e.target,
-        }))
+        type: 'decision-table',
+        decisionKey: node.dmnConfig?.decisionKey,
+        hitPolicy: node.dmnConfig?.hitPolicy,
+        inputs: node.dmnConfig?.inputs?.length
+          ? node.dmnConfig.inputs.map((i) => ({ name: i.name, expr: i.expr }))
+          : undefined,
+        rules: node.dmnConfig?.rules?.length
+          ? node.dmnConfig.rules.map((r) => ({
+              when: r.when,
+              otherwise: r.otherwise,
+              then: r.then,
+            }))
+          : undefined,
+        next: getNextNode(node.id, node.type),
       } as APLNode);
     }
   });

@@ -1,5 +1,19 @@
 import { XMLParser } from 'fast-xml-parser';
-import { APLDocument, APLNode } from '../apl/types';
+import { APLDocument, APLHitPolicy, APLNode, APLValue } from '../apl/types';
+import { normalizeTableInputs } from '../apl/parser';
+
+/** Coerces a string back to the typed value the engine stored. */
+const coerceValue = (raw: string): APLValue => {
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  if (/^-?\d+$/.test(raw)) return Number(raw);
+  if (/^-?\d+\.\d+$/.test(raw)) return Number(raw);
+  return raw;
+};
+
+/** Normalizes single-element fast-xml-parser output into an array. */
+const asArray = <T,>(value: T | T[] | undefined): T[] =>
+  value === undefined ? [] : Array.isArray(value) ? value : [value];
 
 /**
  * Parses legacy BPMN 2.0 XML and transpiles it into Abada Process Language (APL).
@@ -52,24 +66,90 @@ export function transpileBPMNToAPL(xmlString: string): APLDocument {
     });
   });
 
+  const getProperties = (el: any): Record<string, string> => {
+    const props: Record<string, string> = {};
+    const properties =
+      el?.['bpmn:extensionElements']?.['camunda:properties']?.['camunda:property'];
+    const list = Array.isArray(properties) ? properties : properties ? [properties] : [];
+    list.forEach((p: any) => {
+      if (p?.['@_name']) props[p['@_name']] = p['@_value'] ?? '';
+    });
+    return props;
+  };
+
+  // Native decision tables: bpmn:businessRuleTask carrying an
+  // abada:decisionTable extension (the engine executes it in-transaction).
+  const processBusinessRuleTasks = process['bpmn:businessRuleTask'] || [];
+  processBusinessRuleTasks.forEach((brt: any) => {
+    const table = brt?.['bpmn:extensionElements']?.['abada:decisionTable'];
+    if (!table) return; // a businessRuleTask without the extension is a deploy error anyway
+    const inputs = normalizeTableInputs(
+      asArray<any>(table['abada:input']).map((input) => ({
+        name: input['@_name'],
+        expr: input['@_expr'],
+      }))
+    );
+    const rules = asArray<any>(table['abada:rule']).map((rule) => {
+      const outputs = asArray<any>(rule['abada:output']).reduce<Record<string, APLValue>>(
+        (acc, output) => {
+          acc[output['@_name']] = coerceValue(String(output['@_value'] ?? ''));
+          return acc;
+        },
+        {}
+      );
+      if (rule['@_otherwise'] === 'true') return { otherwise: true, then: outputs };
+      return { when: rule['@_when'], then: outputs };
+    });
+    aplNodes.push({
+      id: brt['@_id'],
+      type: 'decision-table',
+      description: brt['@_name'] || '',
+      decisionKey: table['@_decisionKey'],
+      hitPolicy: (table['@_hitPolicy'] as APLHitPolicy) || 'FIRST',
+      inputs: inputs.map((i) => ({ name: i.name, expr: i.expr })),
+      rules,
+      next: getNext(brt['@_id']),
+    });
+  });
+
   const processServiceTasks = process['bpmn:serviceTask'] || [];
   processServiceTasks.forEach((st: any) => {
-    // Check if it's an AI Agent or standard engine task based on extensions or naming
-    const isAgent = st['@_name']?.toLowerCase().includes('agent') || st['@_name']?.toLowerCase().includes('ai');
-    if (isAgent) {
+    const topic = st['@_camunda:topic'] || st['@_abada:topic'];
+    const name = st['@_name'] || '';
+    const props = getProperties(st);
+    const isLegacyDmn = topic === 'abada:dmn';
+    const isAgent =
+      topic === 'abada:agent' ||
+      (!isLegacyDmn && (name.toLowerCase().includes('agent') || name.toLowerCase().includes('ai')));
+
+    if (isLegacyDmn) {
+      // Legacy pre-Phase-2 documents: abada:dmn as an external service task.
+      aplNodes.push({
+        id: st['@_id'],
+        type: 'decision-table',
+        description: name,
+        decisionKey: props.decisionKey,
+        hitPolicy: (props.hitPolicy as APLHitPolicy) || 'FIRST',
+        next: getNext(st['@_id']),
+      });
+    } else if (isAgent) {
       aplNodes.push({
         id: st['@_id'],
         type: 'agent',
-        description: st['@_name'],
-        model: 'gpt-4o', // Default assumption
+        description: name,
+        model: props.model || 'gemini-3.6-flash',
+        prompt: props.prompt || undefined,
+        confidence_threshold: props.confidence_threshold
+          ? Number(props.confidence_threshold)
+          : undefined,
         next: getNext(st['@_id']),
       });
     } else {
       aplNodes.push({
         id: st['@_id'],
         type: 'engine-task',
-        description: st['@_name'],
-        service: st['@_camunda:topic'] || st['@_abada:topic'] || 'legacy-service',
+        description: name,
+        service: topic || 'legacy-service',
         next: getNext(st['@_id']),
       });
     }

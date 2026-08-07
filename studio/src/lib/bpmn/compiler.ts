@@ -1,5 +1,12 @@
 import { XMLBuilder } from 'fast-xml-parser';
-import { APLDocument } from '../apl/types';
+import { APLDocument, APLDecisionTableNode, APLValue } from '../apl/types';
+import { normalizeTableInputs, resolveRuleOutcome } from '../apl/parser';
+
+/** Renders a typed output value as the string the engine coerces back. */
+const renderValue = (value: APLValue): string => {
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+};
 
 /**
  * Compiles APL YAML back down into strict executable BPMN 2.0 XML
@@ -47,7 +54,6 @@ export function compileAPLToBPMN(apl: APLDocument): string {
           'bpmn:serviceTask': {
             '@_id': node.id,
             '@_name': node.description || 'AI Agent',
-            '@_camunda:type': 'external',
             '@_camunda:topic': 'abada:agent',
             'bpmn:extensionElements': {
               'camunda:properties': {
@@ -65,10 +71,41 @@ export function compileAPLToBPMN(apl: APLDocument): string {
           'bpmn:serviceTask': {
             '@_id': node.id,
             '@_name': node.description || 'Engine Task',
-            '@_camunda:type': 'external',
             '@_camunda:topic': node.service
           }
         };
+      case 'decision-table': {
+        // Native deterministic decision table: the engine validates and executes
+        // abada:decisionTable inside the workflow transaction (the table is the
+        // law, agents are the advice).
+        const table = node as APLDecisionTableNode;
+        const inputs = normalizeTableInputs(table.inputs);
+        const rules = (table.rules || []).map(resolveRuleOutcome);
+        return {
+          'bpmn:businessRuleTask': {
+            '@_id': node.id,
+            '@_name': node.description || 'Decision Table',
+            'bpmn:extensionElements': {
+              'abada:decisionTable': {
+                '@_decisionKey': table.decisionKey || `DMN_${node.id.toUpperCase()}`,
+                '@_hitPolicy': table.hitPolicy || 'FIRST',
+                'abada:input': inputs.map((input) => ({
+                  '@_name': input.name,
+                  ...(input.expr ? { '@_expr': input.expr } : {})
+                })),
+                'abada:rule': rules.map((rule) => ({
+                  ...(rule.otherwise ? { '@_otherwise': 'true' } : {}),
+                  ...(rule.when ? { '@_when': rule.when } : {}),
+                  'abada:output': Object.entries(rule.then).map(([name, value]) => ({
+                    '@_name': name,
+                    '@_value': renderValue(value)
+                  }))
+                }))
+              }
+            }
+          }
+        };
+      }
       case 'approval-gate':
         return {
           'bpmn:userTask': {
@@ -77,10 +114,21 @@ export function compileAPLToBPMN(apl: APLDocument): string {
             '@_camunda:candidateGroups': node.assignees.join(',')
           }
         };
-      case 'condition':
+      case 'condition': {
+        // The engine requires exactly one reachable path per exclusive gateway:
+        // conditional flows evaluate first, the 'else' flow is the gateway default.
+        const flowIds: string[] = [];
+        const usedFlowIds = new Set<string>();
         node.rules.forEach((rule, idx) => {
+          // Guard against duplicate targets producing duplicate flow ids.
+          const base = `Flow_${node.id}_${rule.then}`;
+          let flowId = base;
+          let suffix = 1;
+          while (usedFlowIds.has(flowId)) flowId = `${base}_${suffix++}`;
+          usedFlowIds.add(flowId);
+          flowIds.push(flowId);
           sequenceFlows.push({
-            '@_id': `Flow_${node.id}_${rule.then}`,
+            '@_id': flowId,
             '@_sourceRef': node.id,
             '@_targetRef': rule.then,
             ...(rule.if ? {
@@ -91,12 +139,17 @@ export function compileAPLToBPMN(apl: APLDocument): string {
             } : {})
           });
         });
+        // Prefer an explicit 'else' rule, otherwise the last flow becomes default.
+        const elseRule = node.rules.find((rule) => rule.else) || node.rules[node.rules.length - 1];
+        const defaultFlowId = elseRule ? flowIds[node.rules.indexOf(elseRule)] : undefined;
         return {
           'bpmn:exclusiveGateway': {
             '@_id': node.id,
-            '@_name': node.description || 'Gateway'
+            '@_name': node.description || 'Gateway',
+            ...(defaultFlowId ? { '@_default': defaultFlowId } : {})
           }
         };
+      }
       default:
         return {};
     }
@@ -114,6 +167,7 @@ export function compileAPLToBPMN(apl: APLDocument): string {
     'bpmn:definitions': {
       '@_xmlns:bpmn': 'http://www.omg.org/spec/BPMN/20100524/MODEL',
       '@_xmlns:camunda': 'http://camunda.org/schema/1.0/bpmn',
+      '@_xmlns:abada': 'https://abada.io/schema/bpmn',
       '@_xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance',
       '@_id': 'Definitions_1',
       '@_targetNamespace': 'http://bpmn.io/schema/bpmn',
@@ -128,6 +182,9 @@ export function compileAPLToBPMN(apl: APLDocument): string {
   const builder = new XMLBuilder({
     ignoreAttributes: false,
     format: true,
+    // Render boolean attribute values explicitly (isExecutable="true");
+    // the default (bare `isExecutable`) is not well-formed XML.
+    suppressBooleanAttributes: false,
   });
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n${builder.build(root)}`;

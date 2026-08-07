@@ -9,10 +9,12 @@ import { SimulationPanel } from '@/components/SimulationPanel';
 import { NewWorkflowModal } from '@/components/NewWorkflowModal';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
+import { RunPanel } from '@/features/run/RunPanel';
 import { EngineAPI } from '@/api/engine';
 import { SemaflowAPI } from '@/api/semaflow';
 import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { aplToWorkflow } from '@/lib/apl/parser';
+import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig } from '@/types';
 
 type StudioView = 'designer' | 'inbox' | 'operations';
@@ -26,9 +28,12 @@ export default function App() {
   
   // Simulation & Audit logs state
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
-  const [activeSimulationNodeId, setActiveSimulationNodeId] = useState<string | null>(null);
   const [simulationLogs, setSimulationLogs] = useState<SimulationLog[]>([]);
   const [showLogPanel, setShowLogPanel] = useState<boolean>(true);
+
+  // Live engine run state
+  const [showRunPanel, setShowRunPanel] = useState<boolean>(false);
+  const [lastRunResult, setLastRunResult] = useState<RunResult | null>(null);
 
   // Workflow Generation state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -113,9 +118,12 @@ export default function App() {
       dmnConfig: type === 'dmn' ? {
         decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`,
         hitPolicy: 'FIRST',
-        inputs: [{ name: 'PayloadValue', type: 'NUMBER' }],
+        inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }],
         outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }],
-        rules: [{ id: 'r1', condition: 'PayloadValue > 100', outcome: 'AllowPass = TRUE' }],
+        rules: [
+          { id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } },
+          { id: 'r2', otherwise: true, then: { AllowPass: false } },
+        ],
       } : undefined,
       humanConfig: type === 'human' ? {
         assigneeRole: 'Operations Analyst',
@@ -185,114 +193,188 @@ export default function App() {
     setSelectedNodeId(newId);
   };
 
-  // Run Workflow Simulation
-  const handleRunSimulation = async () => {
-    if (isSimulating || currentWorkflow.nodes.length === 0) return;
-    setIsSimulating(true);
+  // Open the live Run panel
+  const handleOpenRunPanel = () => {
+    setShowRunPanel(true);
     setShowLogPanel(true);
-    setSimulationLogs([]);
+  };
 
-    const timestamp = () => new Date().toLocaleTimeString();
-
-    // Step 1: Start event log
-    const startNode = currentWorkflow.nodes.find((n) => n.subtype === 'start') || currentWorkflow.nodes[0];
-    setActiveSimulationNodeId(startNode.id);
-    setSimulationLogs((prev) => [
-      ...prev,
-      {
-        id: `log-${Date.now()}-1`,
-        timestamp: timestamp(),
-        nodeId: startNode.id,
-        nodeTitle: startNode.title,
-        nodeType: startNode.type,
-        status: 'info',
-        message: `Process initiated: Payload received at start trigger node [${startNode.title}]`,
-      },
-    ]);
-
-    await new Promise((r) => setTimeout(r, 1200));
-
-    // Step 2: Traverse remaining nodes
-    for (let i = 0; i < currentWorkflow.nodes.length; i++) {
-      const node = currentWorkflow.nodes[i];
-      if (node.id === startNode.id) continue;
-
-      setActiveSimulationNodeId(node.id);
-
-      if (node.type === 'agent') {
-        const conf = node.agentConfig?.confidenceThreshold || 91;
-        setSimulationLogs((prev) => [
-          ...prev,
-          {
-            id: `log-${Date.now()}-${i}`,
-            timestamp: timestamp(),
-            nodeId: node.id,
-            nodeTitle: node.title,
-            nodeType: node.type,
-            status: 'success',
-            confidence: Math.min(99, conf + Math.floor(Math.random() * 6)),
-            message: `AI Agent executed successfully. Evaluated system prompt against Gemini 3.6 Flash. Output generated safely.`,
-          },
-        ]);
-      } else if (node.type === 'dmn') {
-        setSimulationLogs((prev) => [
-          ...prev,
-          {
-            id: `log-${Date.now()}-${i}`,
-            timestamp: timestamp(),
-            nodeId: node.id,
-            nodeTitle: node.title,
-            nodeType: node.type,
-            status: 'success',
-            message: `DMN Policy evaluated. Applied rule matching FIRST hit policy for key [${node.dmnConfig?.decisionKey || 'DMN_KEY'}].`,
-          },
-        ]);
-      } else if (node.type === 'human') {
-        setSimulationLogs((prev) => [
-          ...prev,
-          {
-            id: `log-${Date.now()}-${i}`,
-            timestamp: timestamp(),
-            nodeId: node.id,
-            nodeTitle: node.title,
-            nodeType: node.type,
-            status: 'warning',
-            message: `Escalation Flagged: Human approval task dispatched to [${node.humanConfig?.assigneeRole || 'Reviewer'}]. SLA window set to ${node.humanConfig?.slaHours || 24}h.`,
-          },
-        ]);
-      } else {
-        setSimulationLogs((prev) => [
-          ...prev,
-          {
-            id: `log-${Date.now()}-${i}`,
-            timestamp: timestamp(),
-            nodeId: node.id,
-            nodeTitle: node.title,
-            nodeType: node.type,
-            status: 'info',
-            message: `Step [${node.title}] executed successfully. Flow routed to next connector.`,
-          },
-        ]);
-      }
-
-      await new Promise((r) => setTimeout(r, 1400));
+  // Live engine run: deploy-if-missing → start → poll → real decision outputs
+  const handleRunLive = async (payload: Record<string, any>): Promise<RunResult> => {
+    if (isSimulating) {
+      throw new Error('A run is already in progress.');
     }
 
-    // Wrap up simulation
-    setActiveSimulationNodeId(null);
-    setIsSimulating(false);
-    setSimulationLogs((prev) => [
-      ...prev,
-      {
-        id: `log-${Date.now()}-done`,
-        timestamp: timestamp(),
-        nodeId: 'end',
-        nodeTitle: 'Simulation Concluded',
-        nodeType: 'event',
-        status: 'success',
-        message: 'Full process workflow simulation concluded with 100% path coverage.',
-      },
-    ]);
+    const wf = currentWorkflow;
+    const startedAt = Date.now();
+    const timestamp = () => new Date().toLocaleTimeString();
+    const addLog = (log: Omit<SimulationLog, 'id' | 'timestamp'>) => {
+      setSimulationLogs((prev) => [
+        ...prev,
+        {
+          ...log,
+          id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          timestamp: timestamp(),
+        },
+      ]);
+    };
+
+    setIsSimulating(true);
+    setShowLogPanel(true);
+    setShowRunPanel(true);
+
+    const processKey = wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
+    let version = 0;
+
+    try {
+      // 1. Ensure the definition is deployed (idempotent reuse of the latest version)
+      addLog({
+        nodeId: 'system', nodeTitle: 'Deployment Compiler', nodeType: 'event', status: 'info',
+        message: `Compiling [${wf.name}] to BPMN 2.0 and checking the engine for definition [${processKey}]…`,
+      });
+      const existing = await EngineAPI.findProcessDefinition(processKey);
+      if (existing) {
+        version = existing.version;
+        addLog({
+          nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'info',
+          message: `Definition [${processKey}] already deployed (v${existing.version}) — reusing.`,
+        });
+      } else {
+        const deploy = await EngineAPI.deployWorkflow(wf);
+        version = deploy.version;
+        addLog({
+          nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'success',
+          message: `Deployed [${deploy.processDefinitionId}] v${deploy.version} · deployment ${deploy.deploymentId}.`,
+        });
+      }
+
+      // 2. Start an instance with the supplied payload
+      addLog({
+        nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'info',
+        message: `Starting instance with payload ${JSON.stringify(payload)}…`,
+      });
+      const { processInstanceId } = await EngineAPI.startProcess(processKey, payload);
+      addLog({
+        nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'success',
+        message: `Instance started: ${processInstanceId}.`,
+      });
+
+      // 3. Poll until terminal state, a human gate, or a 45s timeout
+      let instance = await EngineAPI.getInstance(processInstanceId);
+      let outputs = extractDecisionOutputs(wf, instance.variables || {});
+      let waitingTaskName: string | undefined;
+      let pollCount = 0;
+      const deadline = Date.now() + 45_000;
+
+      while (true) {
+        const terminal = instance.status.toUpperCase();
+        if (terminal === 'COMPLETED' || terminal === 'FAILED' || terminal === 'CANCELLED') break;
+
+        const outputsNow = extractDecisionOutputs(wf, instance.variables || {});
+        for (const out of outputsNow) {
+          if (outputs.some((o) => o.decisionKey === out.decisionKey)) continue;
+          addLog({
+            nodeId: out.nodeId, nodeTitle: out.nodeTitle, nodeType: 'dmn', status: 'success',
+            message: `Decision table [${out.decisionKey}] applied in-transaction — outputs written to instance variables.`,
+            outputs: Object.entries(out.outputs).map(([name, value]) => ({ name, value: String(value) })),
+          });
+        }
+        outputs = outputsNow;
+
+        // Waiting on a human task visible to the current user?
+        // (engine task name = BPMN userTask name = node description; tasks endpoint
+        // only returns tasks assigned to or claimable by the authenticated user)
+        if (pollCount % 3 === 0) {
+          try {
+            const tasks = await EngineAPI.getTasks('AVAILABLE');
+            const waiting = tasks.find((t: any) =>
+              wf.nodes.some((n) => n.type === 'human' && (n.description || n.title) === t.name)
+            );
+            if (waiting) {
+              waitingTaskName = waiting.name;
+              break;
+            }
+          } catch {
+            // task polling is best-effort
+          }
+        }
+        pollCount++;
+
+        if (Date.now() > deadline) break;
+        await sleep(1500);
+        instance = await EngineAPI.getInstance(processInstanceId);
+      }
+
+      // 4. Final snapshot
+      instance = await EngineAPI.getInstance(processInstanceId);
+      outputs = extractDecisionOutputs(wf, instance.variables || {});
+      const terminal = instance.status.toUpperCase();
+      const durationMs = Date.now() - startedAt;
+
+      // Reflect real engine state on the canvas (only if the same workflow is still active)
+      if (activeWorkflowId === wf.id) {
+        const statuses = applyInstanceState(wf, instance, waitingTaskName);
+        updateActiveWorkflow((w) => ({
+          ...w,
+          nodes: w.nodes.map((n) => ({ ...n, status: statuses[n.id] || 'idle' })),
+        }));
+      }
+
+      if (terminal === 'COMPLETED') {
+        addLog({
+          nodeId: 'end', nodeTitle: 'Run Concluded', nodeType: 'event', status: 'success',
+          message: `Instance COMPLETED in ${(durationMs / 1000).toFixed(1)}s with ${outputs.length} decision table(s) applied.`,
+        });
+      } else if (terminal === 'FAILED' || terminal === 'CANCELLED') {
+        addLog({
+          nodeId: 'end', nodeTitle: 'Run Failed', nodeType: 'event', status: 'error',
+          message: `Instance ended with status ${terminal}. Inspect engine logs or the Operations view.`,
+        });
+      } else if (waitingTaskName) {
+        addLog({
+          nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'human', status: 'warning',
+          message: `Instance ACTIVE — waiting on human task [${waitingTaskName}]. Complete it from the Task Inbox.`,
+        });
+      } else {
+        addLog({
+          nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'warning',
+          message: 'Instance ACTIVE — the flow has paused awaiting a human task or an external agent worker. Open the Task Inbox or Operations to monitor.',
+        });
+      }
+
+      const result: RunResult = {
+        instanceId: processInstanceId,
+        processDefinitionId: processKey,
+        version,
+        status: mapTerminalStatus(terminal),
+        waitingAt: waitingTaskName,
+        durationMs,
+        decisionOutputs: outputs,
+        variables: instance.variables || {},
+      };
+      setLastRunResult(result);
+      return result;
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err);
+      addLog({
+        nodeId: 'system', nodeTitle: 'Run Error', nodeType: 'event', status: 'error',
+        message: `Run failed: ${message}`,
+      });
+      const result: RunResult = {
+        instanceId: '',
+        processDefinitionId: processKey,
+        version,
+        status: 'FAILED',
+        durationMs: Date.now() - startedAt,
+        decisionOutputs: [],
+        variables: {},
+        error: message,
+      };
+      setLastRunResult(result);
+      return result;
+    } finally {
+      setIsSimulating(false);
+    }
   };
 
   // Deploy to Abada Engine
@@ -327,7 +409,7 @@ export default function App() {
           nodeTitle: 'Abada Engine',
           nodeType: 'event',
           status: 'success',
-          message: `Deployment successful! Process Key: [${response.processKey}], Version: ${response.version}, Deployment ID: ${response.deploymentId}`,
+          message: `Deployment successful! Process Definition: [${response.processDefinitionId}], Version: ${response.version}, Deployment ID: ${response.deploymentId}`,
         }
       ]);
     } catch (err: any) {
@@ -510,7 +592,7 @@ export default function App() {
       {/* Top Header */}
       <Header
         currentWorkflow={currentWorkflow}
-        onRunSimulation={handleRunSimulation}
+        onRunSimulation={handleOpenRunPanel}
         isSimulating={isSimulating}
         onNewWorkflow={() => setIsNewModalOpen(true)}
         onExportJSON={handleExportJSON}
@@ -550,8 +632,8 @@ export default function App() {
               onSelectNode={(id) => setSelectedNodeId(id)}
               onNodeMove={handleNodeMove}
               onConnectNodes={handleConnectNodes}
-              isSimulating={isSimulating}
-              activeSimulationNodeId={activeSimulationNodeId}
+              isSimulating={false}
+              activeSimulationNodeId={null}
             />
 
             <PropertiesInspector
@@ -565,6 +647,15 @@ export default function App() {
               onGenerateWorkflow={handleGenerateWorkflow}
               isGenerating={isGenerating}
               hasActiveWorkflow={workflows.length > 0}
+            />
+
+            <RunPanel
+              workflow={currentWorkflow}
+              isOpen={showRunPanel}
+              isRunning={isSimulating}
+              onClose={() => setShowRunPanel(false)}
+              onRun={handleRunLive}
+              lastResult={lastRunResult}
             />
 
             <SimulationPanel

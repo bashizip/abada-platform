@@ -132,6 +132,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onRunSimulation}
               disabled={isSimulating}
+              title="Run the workflow live on the Abada Engine"
               className={`text-xs font-semibold px-4 py-1.5 rounded-xl transition-all flex items-center gap-2 shadow-warm-md ${
                 isSimulating
                   ? 'bg-[#F4A261]/50 text-[#1A1614] cursor-not-allowed'
@@ -141,12 +142,12 @@ export const Header: React.FC<HeaderProps> = ({
               {isSimulating ? (
                 <>
                   <RotateCcw className="w-3.5 h-3.5 animate-spin text-[#1A1614]" />
-                  <span>Executing Flow...</span>
+                  <span>Running…</span>
                 </>
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-[#1A1614]" />
-                  <span>Simulate</span>
+                  <span>Run</span>
                 </>
               )}
             </button>

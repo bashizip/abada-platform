@@ -13,17 +13,31 @@ export interface AgentConfig {
   memoryContext?: string;
 }
 
+export type DMNValue = string | number | boolean;
+
+export interface DMNInput {
+  name: string;
+  type?: string;
+  /** Expression the engine evaluates to resolve this input, e.g. `${extract_data.credit_score}`. */
+  expr?: string;
+}
+
 export interface DMNRule {
   id: string;
-  condition: string;
-  outcome: string;
+  /** Deterministic condition evaluated against the decision-table inputs, e.g. `score >= 750 and income >= 60000`. */
+  when?: string;
+  /** Marks the fallback rule applied when no `when` rule matches. */
+  otherwise?: boolean;
+  /** Outputs produced by this rule, e.g. `{ risk_level: 'LOW', auto_approve: true }`. */
+  then: Record<string, DMNValue>;
   description?: string;
 }
 
 export interface DMNConfig {
   decisionKey: string;
-  hitPolicy: 'FIRST' | 'UNIQUE' | 'COLLECT' | 'PRIORITY';
-  inputs: { name: string; type: string }[];
+  /** Values the engine can execute: FIRST (default), UNIQUE, COLLECT. */
+  hitPolicy: 'FIRST' | 'UNIQUE' | 'COLLECT';
+  inputs: DMNInput[];
   outputs: { name: string; type: string }[];
   rules: DMNRule[];
 }
@@ -80,4 +94,6 @@ export interface SimulationLog {
   message: string;
   confidence?: number;
   durationMs?: number;
+  /** Decision-table outputs written by the engine in-transaction (name = value). */
+  outputs?: { name: string; value: string }[];
 }

@@ -57,13 +57,16 @@
       "redirectUris": [
         "http://localhost:5602/*",
         "http://localhost:5603/*",
+        "http://localhost:5605/*",
         "http://tenda.localhost/*",
-        "http://orun.localhost/*"
+        "http://orun.localhost/*",
+        "http://studio.localhost/*"
       ],
       "webOrigins": [
         "http://localhost",
         "http://tenda.localhost",
-        "http://orun.localhost"
+        "http://orun.localhost",
+        "http://studio.localhost"
       ],
       "protocol": "openid-connect",
       "protocolMappers": [

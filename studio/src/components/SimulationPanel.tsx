@@ -87,7 +87,7 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
           <div className="py-8 text-center text-[#A89F91] text-xs">
             <Clock className="w-6 h-6 mx-auto mb-2 opacity-40 text-[#F4A261]" />
             <p>No execution events logged.</p>
-            <p className="text-[10px] text-[#A89F91]">Click "Simulate Execution" in the top bar to run the process flow.</p>
+            <p className="text-[10px] text-[#A89F91]">Click "Run" in the top bar, then "Run Live" to execute on the engine.</p>
           </div>
         ) : (
           logs.map((log) => (
@@ -119,6 +119,19 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
                   {log.message}
                 </p>
               </div>
+
+              {log.outputs && log.outputs.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {log.outputs.map((output, i) => (
+                    <span
+                      key={`${output.name}-${i}`}
+                      className="text-[10px] font-mono bg-[#2A9D8F]/15 text-[#2A9D8F] border border-[#2A9D8F]/30 px-1.5 py-0.5 rounded"
+                    >
+                      {output.name} = {output.value}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))
         )}

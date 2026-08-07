@@ -38,6 +38,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   );
   const [testResult, setTestResult] = useState<any | null>(null);
   const [isTesting, setIsTesting] = useState<boolean>(false);
+  // Draft text for each rule's THEN outputs so in-progress typing is never
+  // clobbered by the parsed value (committed on blur).
+  const [thenDrafts, setThenDrafts] = useState<Record<string, string>>({});
 
   if (!selectedNode) {
     return (
@@ -138,8 +141,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     if (!selectedNode.dmnConfig) return;
     const newRule = {
       id: `r-${Date.now()}`,
-      condition: 'OrderAmountUSD > 5000',
-      outcome: 'TaxRate = 12%',
+      when: 'OrderAmountUSD > 5000',
+      then: { TaxRate: '12%' },
       description: 'New custom policy condition',
     };
     onUpdateNode({
@@ -397,11 +400,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
         )}
 
-        {/* DMN Decision Table Configuration */}
+        {/* DMN Decision Table Configuration (native decision-table block) */}
         {selectedNode.type === 'dmn' && selectedNode.dmnConfig && (
           <div className="space-y-4 pt-4 border-t border-[#3A322E]">
             <span className="text-[11px] font-semibold tracking-wider text-[#2A9D8F] uppercase block">
-              DMN Policy Matrix
+              Decision Table (Law / Guardrail)
             </span>
 
             <div className="space-y-1.5">
@@ -424,8 +427,61 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <option value="FIRST">FIRST (First matching rule applies)</option>
                 <option value="UNIQUE">UNIQUE (Only one rule can match)</option>
                 <option value="COLLECT">COLLECT (Accumulate all outcomes)</option>
-                <option value="PRIORITY">PRIORITY (Highest rule rank)</option>
               </select>
+            </div>
+
+            {/* Input Expressions Editor */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">Input Expressions</label>
+              <div className="space-y-1 bg-[#1A1614] p-2 rounded-xl border border-[#3A322E]">
+                {selectedNode.dmnConfig.inputs.map((input, idx) => (
+                  <div key={`${input.name}-${idx}`} className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={input.name}
+                      placeholder="score"
+                      onChange={(e) => {
+                        const inputs = [...selectedNode.dmnConfig!.inputs];
+                        inputs[idx] = { ...inputs[idx], name: e.target.value };
+                        handleDmnChange('inputs', inputs);
+                      }}
+                      className="w-24 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
+                    />
+                    <input
+                      type="text"
+                      value={input.expr || ''}
+                      placeholder="${extract_data.credit_score}"
+                      onChange={(e) => {
+                        const inputs = [...selectedNode.dmnConfig!.inputs];
+                        inputs[idx] = { ...inputs[idx], expr: e.target.value };
+                        handleDmnChange('inputs', inputs);
+                      }}
+                      className="flex-1 min-w-0 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#2A9D8F] focus:outline-none focus:border-[#2A9D8F]"
+                    />
+                    <button
+                      onClick={() => {
+                        const inputs = selectedNode.dmnConfig!.inputs.filter((_, i) => i !== idx);
+                        handleDmnChange('inputs', inputs);
+                      }}
+                      className="text-red-400 hover:text-red-300 shrink-0"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() =>
+                    handleDmnChange('inputs', [
+                      ...selectedNode.dmnConfig!.inputs,
+                      { name: `input_${selectedNode.dmnConfig!.inputs.length + 1}`, expr: '' },
+                    ])
+                  }
+                  className="text-xs text-[#2A9D8F] hover:text-[#38c2b1] flex items-center gap-1 font-medium"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Input</span>
+                </button>
+              </div>
             </div>
 
             {/* Rule Table Editor */}
@@ -446,35 +502,87 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <div key={rule.id} className="p-2.5 bg-[#1A1614] rounded-xl border border-[#3A322E] text-xs space-y-1.5 relative group">
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-[10px] text-[#2A9D8F]">Rule #{idx + 1}</span>
-                      <button
-                        onClick={() => handleRemoveDmnRule(rule.id)}
-                        className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-1 text-[10px] text-[#A89F91] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={rule.otherwise || false}
+                            onChange={(e) => {
+                              const updated = [...selectedNode.dmnConfig!.rules];
+                              // Only one fallback (else) rule per decision table.
+                              updated.forEach((r) => {
+                                r.otherwise = false;
+                              });
+                              updated[idx] = {
+                                ...updated[idx],
+                                otherwise: e.target.checked,
+                                when: e.target.checked ? undefined : updated[idx].when,
+                              };
+                              handleDmnChange('rules', updated);
+                            }}
+                            className="accent-[#2A9D8F] rounded"
+                          />
+                          otherwise
+                        </label>
+                        <button
+                          onClick={() => handleRemoveDmnRule(rule.id)}
+                          className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
+                    {rule.otherwise ? (
+                      <span className="text-[10px] text-[#F4A261] block font-semibold">
+                        ↳ Else branch — applied when no other rule matches
+                      </span>
+                    ) : (
+                      <div>
+                        <span className="text-[10px] text-[#A89F91] block">WHEN (deterministic condition)</span>
+                        <input
+                          type="text"
+                          value={rule.when || ''}
+                          placeholder="score >= 750 and income >= 60000"
+                          onChange={(e) => {
+                            const updated = [...selectedNode.dmnConfig!.rules];
+                            updated[idx] = { ...updated[idx], when: e.target.value };
+                            handleDmnChange('rules', updated);
+                          }}
+                          className="w-full bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
+                        />
+                      </div>
+                    )}
                     <div>
-                      <span className="text-[10px] text-[#A89F91] block">IF Condition</span>
-                      <input
-                        type="text"
-                        value={rule.condition}
-                        onChange={(e) => {
+                      <span className="text-[10px] text-[#A89F91] block">THEN outputs (one `key = value` per line)</span>
+                      <textarea
+                        rows={2}
+                        value={thenDrafts[rule.id] ??
+                          Object.entries(rule.then || {})
+                            .map(([k, v]) => `${k} = ${String(v)}`)
+                            .join('\n')}
+                        placeholder={'risk_level = LOW\nauto_approve = true'}
+                        onChange={(e) =>
+                          setThenDrafts((prev) => ({ ...prev, [rule.id]: e.target.value }))
+                        }
+                        onBlur={(e) => {
+                          const parsed: Record<string, string | number | boolean> = {};
+                          e.target.value.split(/\n|;/).forEach((line) => {
+                            const m = line.trim().match(/^([\w.]+)\s*[:=]\s*(.+)$/);
+                            if (!m) return;
+                            let value: string | number | boolean = m[2].trim();
+                            if (value === 'true') value = true;
+                            else if (value === 'false') value = false;
+                            else if (/^-?\d+(\.\d+)?$/.test(value)) value = Number(value);
+                            parsed[m[1].trim()] = value;
+                          });
                           const updated = [...selectedNode.dmnConfig!.rules];
-                          updated[idx].condition = e.target.value;
+                          updated[idx] = { ...updated[idx], then: parsed };
                           handleDmnChange('rules', updated);
-                        }}
-                        className="w-full bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-[#A89F91] block">THEN Outcome</span>
-                      <input
-                        type="text"
-                        value={rule.outcome}
-                        onChange={(e) => {
-                          const updated = [...selectedNode.dmnConfig!.rules];
-                          updated[idx].outcome = e.target.value;
-                          handleDmnChange('rules', updated);
+                          setThenDrafts((prev) => {
+                            const next = { ...prev };
+                            delete next[rule.id];
+                            return next;
+                          });
                         }}
                         className="w-full bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#2A9D8F] focus:outline-none focus:border-[#2A9D8F]"
                       />

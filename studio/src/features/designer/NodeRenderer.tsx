@@ -8,7 +8,10 @@ import {
   GitFork, 
   Circle,
   Plus,
-  Clock
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Loader2
 } from 'lucide-react';
 import { WorkflowNode, NodeType } from '@/types';
 
@@ -143,6 +146,36 @@ export const AbadaNode = memo(({ data, selected }: NodeProps<AbadaNodeType>) => 
           <div className="pt-1 flex items-center gap-1.5 text-[10px] text-[#9D4EDD] font-semibold animate-pulse">
             <Clock className="w-3 h-3 animate-spin" />
             <span>Executing AI Node Logic...</span>
+          </div>
+        )}
+
+        {/* Live run state — derived from real engine data, never guessed */}
+        {data.status && data.status !== 'idle' && (
+          <div className="pt-2 border-t border-[#3A322E] flex items-center gap-1.5 text-[10px] font-semibold">
+            {data.status === 'completed' && (
+              <>
+                <CheckCircle2 className="w-3 h-3 text-[#90A955]" />
+                <span className="text-[#90A955]">Completed</span>
+              </>
+            )}
+            {data.status === 'failed' && (
+              <>
+                <XCircle className="w-3 h-3 text-[#E76F51]" />
+                <span className="text-[#E76F51]">Failed</span>
+              </>
+            )}
+            {data.status === 'waiting' && (
+              <>
+                <Clock className="w-3 h-3 text-[#F4A261]" />
+                <span className="text-[#F4A261]">Waiting</span>
+              </>
+            )}
+            {data.status === 'running' && (
+              <>
+                <Loader2 className="w-3 h-3 text-[#9D4EDD] animate-spin" />
+                <span className="text-[#9D4EDD]">Running</span>
+              </>
+            )}
           </div>
         )}
       </div>

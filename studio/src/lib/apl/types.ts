@@ -11,7 +11,7 @@ export interface APLDocument {
   };
 }
 
-export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'end';
+export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'end';
 
 export interface APLBaseNode {
   id: string;
@@ -53,6 +53,32 @@ export interface APLConditionNode extends APLBaseNode {
   next?: never; 
 }
 
+export type APLHitPolicy = 'FIRST' | 'UNIQUE' | 'COLLECT';
+
+export type APLValue = string | number | boolean;
+
+export interface APLDecisionTableInput {
+  name: string;
+  expr?: string;
+}
+
+export interface APLDecisionTableRule {
+  when?: string;
+  /** Either a flattened flag (`otherwise: true` + sibling `then`) or the vision's
+   *  wrapper form (`otherwise: { then: {...} }`). Both are accepted on parse. */
+  otherwise?: boolean | { then: Record<string, APLValue> };
+  then?: Record<string, APLValue>;
+}
+
+export interface APLDecisionTableNode extends APLBaseNode {
+  type: 'decision-table';
+  decisionKey?: string;
+  hitPolicy?: APLHitPolicy;
+  /** Ordered array (studio AST) or the vision's map form (`score: "${...}"`). */
+  inputs?: APLDecisionTableInput[] | Record<string, string>;
+  rules?: APLDecisionTableRule[];
+}
+
 export interface APLApprovalGateNode extends APLBaseNode {
   type: 'approval-gate';
   assignees: string[];
@@ -69,5 +95,6 @@ export type APLNode =
   | APLAgentNode
   | APLEngineTaskNode
   | APLConditionNode
+  | APLDecisionTableNode
   | APLApprovalGateNode
   | APLEndNode;

@@ -4,9 +4,12 @@ import { WorkflowFile } from '@/types';
 
 export interface DeploymentResponse {
   status: string;
-  processKey: string;
+  processDefinitionId: string;
   deploymentId: string;
   version: number;
+  definitionFormatVersion?: string;
+  compatibilityProfiles?: string[];
+  compatibilityReport?: Record<string, unknown>;
 }
 
 export interface ProcessInstanceDTO {
@@ -20,6 +23,13 @@ export interface ProcessInstanceDTO {
 
 import { config } from '@/config/runtime';
 import { keycloak } from '@/auth/keycloakClient';
+import { getUserFromToken } from '@/auth/keycloakClient';
+
+export interface ProcessDefinitionDTO {
+  id: string;
+  name: string;
+  version: number;
+}
 
 export class EngineAPI {
   private static readonly BASE_URL = `${config.apiUrl}/v1`;
@@ -81,10 +91,11 @@ export class EngineAPI {
   }
 
   /**
-   * Starts a new process instance
+   * Starts a new process instance using the authenticated user's identity.
    */
   static async startProcess(processId: string, variables: Record<string, any> = {}): Promise<{ processInstanceId: string }> {
-    const res = await fetch(`${this.BASE_URL}/processes/start?processId=${encodeURIComponent(processId)}&username=studio_user`, {
+    const username = getUserFromToken(keycloak.tokenParsed)?.username || 'studio_user';
+    const res = await fetch(`${this.BASE_URL}/processes/start?processId=${encodeURIComponent(processId)}&username=${encodeURIComponent(username)}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
@@ -93,6 +104,33 @@ export class EngineAPI {
       throw new Error(`Failed to start process: ${res.statusText}`);
     }
     return res.json();
+  }
+
+  /**
+   * Retrieves a single process instance with its live status and variables.
+   */
+  static async getInstance(instanceId: string): Promise<ProcessInstanceDTO> {
+    const res = await fetch(`${this.BASE_URL}/processes/instances/${encodeURIComponent(instanceId)}`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch instance: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Finds an already-deployed process definition by its process key, or null.
+   */
+  static async findProcessDefinition(processKey: string): Promise<ProcessDefinitionDTO | null> {
+    const res = await fetch(`${this.BASE_URL}/processes?key=${encodeURIComponent(processKey)}`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch process definitions: ${res.statusText}`);
+    }
+    const definitions: ProcessDefinitionDTO[] = await res.json();
+    return definitions.find((d) => d.id === processKey) || null;
   }
 
   /**
