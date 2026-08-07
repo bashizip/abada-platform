@@ -42,7 +42,8 @@ public final class SupportedBpmnValidator {
     private static boolean isSupported(FlowNode node) {
         if (node instanceof StartEvent start) return start.getEventDefinitions().isEmpty();
         if (node instanceof EndEvent end) return end.getEventDefinitions().isEmpty();
-        if (node instanceof UserTask || node instanceof ServiceTask || node instanceof ScriptTask) return true;
+        if (node instanceof UserTask || node instanceof ServiceTask || node instanceof ScriptTask
+                || node instanceof BusinessRuleTask) return true;
         if (node instanceof ExclusiveGateway || node instanceof InclusiveGateway || node instanceof ParallelGateway) return true;
         if (node instanceof EventBasedGateway) return true;
         if (node instanceof IntermediateCatchEvent event) {

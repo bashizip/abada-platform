@@ -13,6 +13,7 @@ public class ParsedProcessDefinition implements Serializable {
     private final Map<String, TaskMeta> userTasks;
     private final Map<String, ServiceTaskMeta> serviceTasks;
     private final Map<String, ScriptTaskMeta> scriptTasks;
+    private final Map<String, DecisionTableMeta> decisionTables;
     private final List<SequenceFlow> sequenceFlows;
     private final Map<String, GatewayMeta> gateways;
     private final Map<String, EventMeta> events;
@@ -43,14 +44,30 @@ public class ParsedProcessDefinition implements Serializable {
             String rawXml,
             List<String> candidateStarterGroups,
             List<String> candidateStarterUsers) {
-        this(id, name, documentation, startEventId, userTasks, serviceTasks, Map.of(), sequenceFlows, gateways,
-                events, endEvents, rawXml, candidateStarterGroups, candidateStarterUsers);
+        this(id, name, documentation, startEventId, userTasks, serviceTasks, Map.of(), Map.of(), sequenceFlows,
+                gateways, events, endEvents, rawXml, candidateStarterGroups, candidateStarterUsers);
     }
 
     public ParsedProcessDefinition(String id, String name, String documentation, String startEventId,
             Map<String, TaskMeta> userTasks,
             Map<String, ServiceTaskMeta> serviceTasks,
             Map<String, ScriptTaskMeta> scriptTasks,
+            List<SequenceFlow> sequenceFlows,
+            Map<String, GatewayMeta> gateways,
+            Map<String, EventMeta> events,
+            Map<String, Object> endEvents,
+            String rawXml,
+            List<String> candidateStarterGroups,
+            List<String> candidateStarterUsers) {
+        this(id, name, documentation, startEventId, userTasks, serviceTasks, scriptTasks, Map.of(), sequenceFlows,
+                gateways, events, endEvents, rawXml, candidateStarterGroups, candidateStarterUsers);
+    }
+
+    public ParsedProcessDefinition(String id, String name, String documentation, String startEventId,
+            Map<String, TaskMeta> userTasks,
+            Map<String, ServiceTaskMeta> serviceTasks,
+            Map<String, ScriptTaskMeta> scriptTasks,
+            Map<String, DecisionTableMeta> decisionTables,
             List<SequenceFlow> sequenceFlows,
             Map<String, GatewayMeta> gateways,
             Map<String, EventMeta> events,
@@ -65,6 +82,7 @@ public class ParsedProcessDefinition implements Serializable {
         this.userTasks = Collections.unmodifiableMap(new HashMap<>(userTasks));
         this.serviceTasks = Collections.unmodifiableMap(new HashMap<>(serviceTasks));
         this.scriptTasks = Collections.unmodifiableMap(new HashMap<>(scriptTasks));
+        this.decisionTables = Collections.unmodifiableMap(new HashMap<>(decisionTables));
         this.sequenceFlows = Collections.unmodifiableList(new ArrayList<>(sequenceFlows));
         this.gateways = Collections.unmodifiableMap(new HashMap<>(gateways));
         this.events = Collections.unmodifiableMap(new HashMap<>(events));
@@ -169,6 +187,18 @@ public class ParsedProcessDefinition implements Serializable {
     public ScriptTaskMeta getScriptTask(String taskId) { return scriptTasks.get(taskId); }
     public boolean isScriptTask(String id) { return scriptTasks.containsKey(id); }
 
+    public Map<String, DecisionTableMeta> getDecisionTables() {
+        return decisionTables;
+    }
+
+    public DecisionTableMeta getDecisionTable(String taskId) {
+        return decisionTables.get(taskId);
+    }
+
+    public boolean isDecisionTable(String id) {
+        return decisionTables.containsKey(id);
+    }
+
     public List<String> getNextActivities(String fromId) {
         return flowGraph.getOrDefault(fromId, Collections.emptyList());
     }
@@ -193,6 +223,7 @@ public class ParsedProcessDefinition implements Serializable {
         ids.addAll(userTasks.keySet());
         ids.addAll(serviceTasks.keySet());
         ids.addAll(scriptTasks.keySet());
+        ids.addAll(decisionTables.keySet());
         ids.addAll(flowGraph.keySet());
         flowGraph.values().forEach(ids::addAll);
         return ids;
@@ -269,6 +300,7 @@ public class ParsedProcessDefinition implements Serializable {
             return serviceTasks.get(id).name();
         }
         if (scriptTasks.containsKey(id)) return scriptTasks.get(id).name();
+        if (decisionTables.containsKey(id)) return decisionTables.get(id).name();
         if (events.containsKey(id)) {
             return events.get(id).name();
         }

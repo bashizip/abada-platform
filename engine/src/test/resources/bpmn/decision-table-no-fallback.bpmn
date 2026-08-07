@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:abada="https://abada.io/schema/bpmn" id="Definitions_DecisionTableNoFallback" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="NoFallbackDecisionProcess" name="No Fallback Decision Process" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start">
+      <bpmn:outgoing>Flow_Start_Rules</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:businessRuleTask id="StrictRules" name="Strict Rules">
+      <bpmn:extensionElements>
+        <abada:decisionTable decisionKey="DMN_STRICT_V1" hitPolicy="FIRST">
+          <abada:input name="score" expr="${score}" />
+          <abada:rule when="score >= 900">
+            <abada:output name="approved" value="true" />
+          </abada:rule>
+        </abada:decisionTable>
+      </bpmn:extensionElements>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="EndEvent_1" name="End">
+      <bpmn:incoming>Flow_Rules_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Rules" sourceRef="StartEvent_1" targetRef="StrictRules" />
+    <bpmn:sequenceFlow id="Flow_Rules_End" sourceRef="StrictRules" targetRef="EndEvent_1" />
+  </bpmn:process>
+</bpmn:definitions>

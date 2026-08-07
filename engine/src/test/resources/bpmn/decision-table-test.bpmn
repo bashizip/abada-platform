@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:abada="https://abada.io/schema/bpmn" id="Definitions_DecisionTable" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="CreditDecisionProcess" name="Credit Decision Process" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start">
+      <bpmn:outgoing>Flow_Start_CreditRules</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:businessRuleTask id="CreditRules" name="Credit Risk Rules">
+      <bpmn:extensionElements>
+        <abada:decisionTable decisionKey="DMN_CREDIT_RISK_V1" hitPolicy="FIRST">
+          <abada:input name="score" expr="${applicant.creditScore}" />
+          <abada:input name="income" expr="${applicant.annualIncome}" />
+          <abada:rule when="score >= 750 and income >= 60000">
+            <abada:output name="riskLevel" value="LOW" />
+            <abada:output name="autoApprove" value="true" />
+          </abada:rule>
+          <abada:rule when="score >= 600">
+            <abada:output name="riskLevel" value="MEDIUM" />
+            <abada:output name="autoApprove" value="false" />
+          </abada:rule>
+          <abada:rule otherwise="true">
+            <abada:output name="riskLevel" value="HIGH" />
+            <abada:output name="autoApprove" value="false" />
+          </abada:rule>
+        </abada:decisionTable>
+      </bpmn:extensionElements>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="EndEvent_1" name="End">
+      <bpmn:incoming>Flow_CreditRules_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_CreditRules" sourceRef="StartEvent_1" targetRef="CreditRules" />
+    <bpmn:sequenceFlow id="Flow_CreditRules_End" sourceRef="CreditRules" targetRef="EndEvent_1" />
+  </bpmn:process>
+</bpmn:definitions>

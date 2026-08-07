@@ -8,6 +8,7 @@ import com.abada.engine.parser.assignment.AssignmentXml;
 import org.camunda.bpm.model.bpmn.Bpmn;
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
 import org.camunda.bpm.model.bpmn.instance.*;
+import org.camunda.bpm.model.bpmn.instance.BusinessRuleTask;
 import org.camunda.bpm.model.bpmn.instance.Process;
 
 import java.io.ByteArrayOutputStream;
@@ -128,6 +129,28 @@ public class BpmnParser {
                         scriptTask.getScriptFormat(), script));
             }
 
+            // Native deterministic decision tables (abada:decisionTable on
+            // businessRuleTask). A business rule task without the extension is
+            // rejected: the engine never guesses a decision.
+            Map<String, DecisionTableMeta> decisionTables = new HashMap<>();
+            if (!model.getModelElementsByType(BusinessRuleTask.class).isEmpty()) {
+                DecisionTableXml decisionTableXml = DecisionTableXml.parse(sourceXml);
+                for (BusinessRuleTask ruleTask : model.getModelElementsByType(BusinessRuleTask.class)) {
+                    Optional<DecisionTableMeta> table = decisionTableXml.tableFor(ruleTask.getId(),
+                            ruleTask.getName());
+                    if (table.isEmpty()) {
+                        throw BpmnValidationException.single(new BpmnValidationIssue(
+                                BpmnErrorCodes.UNSUPPORTED_EXTENSION, ValidationSeverity.ERROR,
+                                "businessRuleTask '" + ruleTask.getId()
+                                        + "' requires a native abada:decisionTable extension",
+                                null, ruleTask.getId(), BpmnCompatibilityDetector.ABADA_NAMESPACE, null,
+                                "Add <abada:decisionTable> under bpmn:extensionElements, or use a supported "
+                                        + "activity type."));
+                    }
+                    decisionTables.put(ruleTask.getId(), table.get());
+                }
+            }
+
             List<SequenceFlow> flows = new ArrayList<>();
             for (org.camunda.bpm.model.bpmn.instance.SequenceFlow flow : model
                     .getModelElementsByType(org.camunda.bpm.model.bpmn.instance.SequenceFlow.class)) {
@@ -201,8 +224,8 @@ public class BpmnParser {
             }
 
             ParsedProcessDefinition definition = new ParsedProcessDefinition(id, name, documentation, startEventId,
-                    userTasks, serviceTasks, scriptTasks, flows, gateways, events, endEvents, rawXml, candidateStarterGroups,
-                    candidateStarterUsers);
+                    userTasks, serviceTasks, scriptTasks, decisionTables, flows, gateways, events, endEvents, rawXml,
+                    candidateStarterGroups, candidateStarterUsers);
             return definition;
 
         } catch (RuntimeException e) {

@@ -18,7 +18,8 @@ public final class BpmnDirectiveValidator {
             "delegateExpression", "expression", "type", "resultVariable", "asyncBefore", "asyncAfter",
             "exclusive", "calledElementBinding", "calledElementVersion");
     private static final Set<String> ABADA_SUPPORTED_ELEMENTS = Set.of(
-            "metadata", "assignment", "assignee", "candidateUsers", "candidateGroups", "user", "group");
+            "metadata", "assignment", "assignee", "candidateUsers", "candidateGroups", "user", "group",
+            "decisionTable", "input", "rule", "output");
 
     public List<BpmnValidationIssue> validate(String xml, BpmnParseOptions options) {
         List<BpmnValidationIssue> issues = new ArrayList<>();

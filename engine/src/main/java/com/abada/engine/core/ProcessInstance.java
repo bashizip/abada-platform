@@ -5,6 +5,7 @@ import com.abada.engine.dto.UserTaskPayload;
 import com.abada.engine.core.assignment.AssignmentEvaluator;
 import com.abada.engine.spi.DelegateExecution;
 import com.abada.engine.spi.JavaDelegate;
+import com.abada.engine.util.DecisionTableEvaluator;
 import java.time.Instant;
 import java.util.*;
 
@@ -24,6 +25,8 @@ public class ProcessInstance {
     private final List<String> activeTokens = new ArrayList<>();
     private final Map<String, Integer> joinExpectedTokens = new HashMap<>();
     private final Map<String, Set<String>> joinArrivedTokens = new HashMap<>();
+
+    private final List<DecisionTableAudit> decisionAudits = new ArrayList<>();
 
     public ProcessInstance(ParsedProcessDefinition definition) {
         this.id = UUID.randomUUID().toString();
@@ -224,6 +227,18 @@ public class ProcessInstance {
                     previousPointer = pointer;
                     List<SequenceFlow> outgoing = definition.getOutgoing(pointer);
                     current = outgoing.isEmpty() ? null : outgoing.get(0).getTargetRef();
+                } else if (definition.isDecisionTable(pointer)) {
+                    // Deterministic decision-table evaluation inside the workflow
+                    // transaction: the table is the law, agents are the advice.
+                    DecisionTableMeta table = definition.getDecisionTable(pointer);
+                    DecisionTableEvaluator.Result result = DecisionTableEvaluator.evaluate(table, variables);
+                    variables.putAll(result.outputs());
+                    decisionAudits.add(new DecisionTableAudit(pointer, table.decisionKey(),
+                            result.matchedRuleIndexes(), List.copyOf(result.inputs().keySet()),
+                            List.copyOf(result.outputs().keySet())));
+                    previousPointer = pointer;
+                    List<SequenceFlow> outgoing = definition.getOutgoing(pointer);
+                    current = outgoing.isEmpty() ? null : outgoing.get(0).getTargetRef();
                 } else if (definition.isExclusiveGateway(pointer)) {
                     GatewaySelector selector = new GatewaySelector();
                     GatewayMeta gw = definition.getGateways().get(pointer);
@@ -291,6 +306,18 @@ public class ProcessInstance {
         }
 
         return newUserTasks;
+    }
+
+    /** Immutable view of decision tables applied during the last advance(). */
+    public List<DecisionTableAudit> getDecisionAudits() {
+        return List.copyOf(decisionAudits);
+    }
+
+    /** Returns and clears the decision-table audits produced by advance(). */
+    public List<DecisionTableAudit> takeDecisionAudits() {
+        List<DecisionTableAudit> snapshot = List.copyOf(decisionAudits);
+        decisionAudits.clear();
+        return snapshot;
     }
 
     private void executeScript(ScriptTaskMeta task) {

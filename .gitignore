@@ -76,3 +76,7 @@ engine/docker/
 
 # Local TLS certs for Traefik/mkcert
 docker/traefik/certs/
+
+# External nested repositories (own remotes)
+semaflow/
+semaflow-ui/

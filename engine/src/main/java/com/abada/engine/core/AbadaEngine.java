@@ -3,6 +3,7 @@ package com.abada.engine.core;
 import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.bpmn.compatibility.BpmnParseOptions;
 import com.abada.engine.bpmn.compatibility.BpmnParseResult;
+import com.abada.engine.core.model.DecisionTableAudit;
 import com.abada.engine.core.model.EventMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.ServiceTaskMeta;
@@ -201,6 +202,7 @@ public class AbadaEngine {
             persistRuntimeState(instance, entity);
 
             historyService.record("PROCESS_STARTED", instance, definition.getStartEventId(), Map.of());
+            recordDecisionTableAudits(instance);
 
             for (UserTaskPayload task : userTasks) {
                 createAndPersistTask(task, instance);
@@ -273,6 +275,7 @@ public class AbadaEngine {
         persistRuntimeState(instance);
 
         List<UserTaskPayload> nextTasks = instance.advance(currentTask.getTaskDefinitionKey());
+        recordDecisionTableAudits(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
             instance.setEndDate(Instant.now());
         }
@@ -395,6 +398,7 @@ public class AbadaEngine {
         }
 
         List<UserTaskPayload> nextTasks = instance.advance(eventId);
+        recordDecisionTableAudits(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
             instance.setEndDate(Instant.now());
         }
@@ -478,6 +482,17 @@ public class AbadaEngine {
                         new BpmnParseOptions(Arrays.stream(entity.getCompatibilityProfiles().split(","))
                                 .map(String::trim).filter(value -> !value.isEmpty()).toList(), false, false))
                         .definition());
+    }
+
+    /** Records decision-table applications (identifiers and names only) in history and the outbox. */
+    private void recordDecisionTableAudits(ProcessInstance instance) {
+        for (DecisionTableAudit audit : instance.takeDecisionAudits()) {
+            historyService.record("DECISION_TABLE_APPLIED", instance, audit.activityId(), Map.of(
+                    "decisionKey", audit.decisionKey(),
+                    "matchedRuleIndexes", audit.matchedRuleIndexes(),
+                    "inputNames", audit.inputNames(),
+                    "outputNames", audit.outputNames()));
+        }
     }
 
     private void createAndPersistTask(UserTaskPayload task, ProcessInstance instance) {
