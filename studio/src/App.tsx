@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { INITIAL_WORKFLOWS } from '@/data/sampleWorkflows';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
@@ -15,6 +15,7 @@ import { SemaflowAPI } from '@/api/semaflow';
 import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { aplToWorkflow } from '@/lib/apl/parser';
 import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
+import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig } from '@/types';
 
 type StudioView = 'designer' | 'inbox' | 'operations';
@@ -43,6 +44,21 @@ export default function App() {
   const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId) || workflows[0];
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
 
+  // Auto-layout is the default: the first time the canvas loads (initial
+  // mount and first activation of each workflow), positions are derived from
+  // the graph instead of any stored absolute coordinates. Manual drags and
+  // the Auto Layout button keep working afterwards.
+  const laidOutWorkflowIds = useRef(new Set<string>());
+  useLayoutEffect(() => {
+    if (laidOutWorkflowIds.current.has(activeWorkflowId)) return;
+    laidOutWorkflowIds.current.add(activeWorkflowId);
+    updateActiveWorkflow((wf) => ({
+      ...wf,
+      nodes: autoLayoutWorkflow(wf.nodes, wf.edges),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkflowId]);
+
   // Helper to update active workflow nodes/edges
   const updateActiveWorkflow = (updater: (wf: WorkflowFile) => WorkflowFile) => {
     setWorkflows((prev) =>
@@ -55,6 +71,14 @@ export default function App() {
     updateActiveWorkflow((wf) => ({
       ...wf,
       nodes: wf.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)),
+    }));
+  };
+
+  // Auto-layout the active workflow using the graph-ranked dagre layout.
+  const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
+    updateActiveWorkflow((wf) => ({
+      ...wf,
+      nodes: layoutedNodes,
     }));
   };
 
@@ -632,6 +656,7 @@ export default function App() {
               onSelectNode={(id) => setSelectedNodeId(id)}
               onNodeMove={handleNodeMove}
               onConnectNodes={handleConnectNodes}
+              onAutoLayout={handleAutoLayout}
               isSimulating={false}
               activeSimulationNodeId={null}
             />

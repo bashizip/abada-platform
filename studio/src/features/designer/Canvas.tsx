@@ -1,21 +1,21 @@
 import React, { useCallback, useMemo } from 'react';
-import { 
-  ReactFlow, 
-  Background, 
-  Controls, 
-  MiniMap,
-  useNodesState,
-  useEdgesState,
-  addEdge,
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  ControlButton,
+  useReactFlow,
   Connection,
   Edge,
   Node,
   BackgroundVariant
 } from '@xyflow/react';
+import { Workflow } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import { AbadaNode } from './NodeRenderer';
 import { AbadaEdge } from './EdgeRenderer';
-import { WorkflowNode, WorkflowEdge, NodeType } from '@/types';
+import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
+import { WorkflowNode, WorkflowEdge } from '@/types';
 
 interface CanvasProps {
   nodes: WorkflowNode[];
@@ -24,6 +24,7 @@ interface CanvasProps {
   onSelectNode: (id: string | null) => void;
   onNodeMove: (id: string, x: number, y: number) => void;
   onConnectNodes: (sourceId: string, targetId: string) => void;
+  onAutoLayout?: (nodes: WorkflowNode[]) => void;
   isSimulating: boolean;
   activeSimulationNodeId: string | null;
 }
@@ -35,6 +36,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onSelectNode,
   onNodeMove,
   onConnectNodes,
+  onAutoLayout,
   isSimulating,
   activeSimulationNodeId
 }) => {
@@ -128,8 +130,43 @@ export const Canvas: React.FC<CanvasProps> = ({
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />
-        <Controls showInteractive={false} />
+        <AutoLayoutControl
+          nodes={rawNodes}
+          edges={rawEdges}
+          onAutoLayout={onAutoLayout}
+        />
       </ReactFlow>
     </div>
+  );
+};
+
+/**
+ * Rendered inside <ReactFlow> so useReactFlow can read the store: lays the
+ * whole graph out deterministically (ranked left→right) and re-fits the
+ * viewport so the readable diagram is immediately visible.
+ */
+const AutoLayoutControl: React.FC<{
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  onAutoLayout?: (nodes: WorkflowNode[]) => void;
+}> = ({ nodes, edges, onAutoLayout }) => {
+  const { fitView } = useReactFlow();
+
+  const handleAutoLayout = useCallback(() => {
+    if (!onAutoLayout) return;
+    onAutoLayout(autoLayoutWorkflow(nodes, edges));
+    requestAnimationFrame(() => fitView({ padding: 0.2, duration: 400 }));
+  }, [nodes, edges, onAutoLayout, fitView]);
+
+  return (
+    <Controls showInteractive={false}>
+      <ControlButton
+        onClick={handleAutoLayout}
+        title="Auto Layout — re-layout the diagram as a readable left-to-right flow"
+        aria-label="Auto Layout"
+      >
+        <Workflow className="w-4 h-4" />
+      </ControlButton>
+    </Controls>
   );
 };
