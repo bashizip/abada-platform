@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: abada-engine
+  namespace: abada
+  labels:
+    app.kubernetes.io/name: abada-engine
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: abada-platform
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: abada-engine
+  ports:
+    - name: http
+      port: 5601
+      targetPort: http
+      protocol: TCP

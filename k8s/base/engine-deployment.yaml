@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: abada-engine
+  namespace: abada
+  labels:
+    app.kubernetes.io/name: abada-engine
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: abada-platform
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: abada-engine
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: abada-engine
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: abada-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: engine
+          image: ghcr.io/bashizip/abada-engine:1.0.0-rc.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5601
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: abada-config
+          env:
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: abada-secrets
+                  key: SPRING_DATASOURCE_URL
+                  optional: false
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: abada-secrets
+                  key: SPRING_DATASOURCE_PASSWORD
+                  optional: false
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: abada-secrets
+                  key: POSTGRES_PASSWORD
+                  optional: false
+            - name: OIDC_ISSUER_URI
+              valueFrom:
+                secretKeyRef:
+                  name: abada-secrets
+                  key: OIDC_ISSUER_URI
+                  optional: false
+            - name: OIDC_JWK_SET_URI
+              valueFrom:
+                secretKeyRef:
+                  name: abada-secrets
+                  key: OIDC_JWK_SET_URI
+                  optional: true
+            - name: ABADA_ALLOWED_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: abada-secrets
+                  key: ABADA_ALLOWED_ORIGINS
+                  optional: false
+            - name: ABADA_TELEMETRY_OTLP_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: abada-secrets
+                  key: ABADA_TELEMETRY_OTLP_ENDPOINT
+                  optional: true
+          resources:
+            limits:
+              cpu: "2.0"
+              memory: "2Gi"
+            requests:
+              cpu: "0.5"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/actuator/health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: data
+          emptyDir: {}

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: abada-config
+  namespace: abada
+  labels:
+    app.kubernetes.io/name: abada-config
+    app.kubernetes.io/component: platform
+    app.kubernetes.io/part-of: abada-platform
+data:
+  # Engine configuration
+  SERVER_PORT: "5601"
+  SPRING_PROFILES_ACTIVE: "prod"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  ABADA_SECURITY_MODE: "oidc"
+  ABADA_TELEMETRY_ENABLED: "false"
+  OTEL_SDK_DISABLED: "true"
+  ABADA_OUTBOX_DISPATCHER_ENABLED: "true"
+  ABADA_ENVIRONMENT: "production"
+
+  # OIDC / Security (non-sensitive; secrets go in the Secret)
+  OIDC_AUDIENCE: "abada-frontend"
+
+  # Frontend configuration
+  ABADA_CONFIG_PATH: "/usr/share/nginx/html/config.js"
