@@ -1,0 +1,111 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# KYC Onboarding — Abada Process Language (abada.io/v1)
+# Authoring: Abada Studio · Deployment: compiled to BPMN 2.0 (strict=false)
+#
+# Canonical example for docs/reference/apl-specification.md (§7).
+#
+# Observability note: APL declares no per-node telemetry fields today.
+# Tracing is engine-layer: the engine opens a span per command, propagates
+# `traceparent` onto external tasks, and audits decision applications as
+# DECISION_TABLE_APPLIED history records. The Studio passes its Keycloak
+# identity so audit trails record the real actor.
+# ═══════════════════════════════════════════════════════════════════════════
+version: abada.io/v1
+
+metadata:
+  name: kyc_onboarding_v1        # → process key "kyc_onboarding_v1"
+  owner: risk-team               # authoring metadata (not executed)
+  category: finance
+
+flow:
+  entry: onStart
+
+  nodes:
+    # ── 1. Trigger ────────────────────────────────────────────────────────
+    - id: onStart
+      type: webhook
+      description: Loan application received
+      next: extractAgent
+
+    # ── 2. Agent (probabilistic "advice") ─────────────────────────────────
+    # Compiled to serviceTask topic abada:agent; an external worker must
+    # complete it. Never advances BPMN state outside engine commands.
+    - id: extractAgent
+      type: agent
+      description: Extract structured application data
+      model: gemini-3.6-flash
+      prompt: |
+        Extract {income, creditScore, requestedAmount} from the application payload.
+        Return strict JSON only, keyed exactly as requested.
+      tools:
+        - Database Query
+      confidence_threshold: 85
+      next: creditRules
+
+    # ── 3. Deterministic "law" (ADR-002) ──────────────────────────────────
+    # Native decision table: executed by the engine IN-TRANSACTION. The
+    # outputs below become top-level instance variables, proven by the
+    # Studio Run panel (DECISION OUTPUTS · APPLIED IN-TRANSACTION).
+    - id: creditRules
+      type: decision-table
+      description: Credit risk classification
+      decisionKey: DMN_CREDIT_V1
+      hitPolicy: FIRST
+      inputs:                                   # map form → abada:input
+        score: "${applicant.creditScore}"
+        income: "${applicant.annualIncome}"
+      rules:
+        - when: "score >= 750 and income >= 60000"
+          then: { riskLevel: LOW, autoApprove: true }
+        - when: "score >= 600 and income >= 40000"
+          then: { riskLevel: MEDIUM, autoApprove: false }
+        - otherwise: true                       # mandatory fallback — no rule
+          then: { riskLevel: HIGH, autoApprove: false }   # matched → HIGH,
+      next: approvalGate                        # never a silent guess
+
+    # ── 4. Human approval gate ────────────────────────────────────────────
+    # Compiled to userTask with candidateGroups; task name = description.
+    - id: approvalGate
+      type: approval-gate
+      description: Senior credit officer sign-off
+      assignees: [risk-officers]
+      mode: serial
+      sla_hours: 24
+      next: routing
+
+    # ── 5. Exclusive gateway ──────────────────────────────────────────────
+    # `else` is a TARGET NODE ID (string), marking the default flow.
+    - id: routing
+      type: condition
+      description: Route by risk
+      rules:
+        - if: "${riskLevel == 'LOW'}"
+          then: notify
+        - else: fraudScreen
+          then: fraudScreen
+
+    # ── 6. Standard service tasks (deterministic workers) ─────────────────
+    - id: notify
+      type: engine-task
+      description: Notify decision webhook
+      service: notification.sink
+      next: done
+
+    - id: fraudScreen
+      type: agent
+      description: Deep fraud screening
+      model: gemini-3.6-flash
+      prompt: Screen the applicant for identity-fraud signals; return PASS or FAIL.
+      confidence_threshold: 90
+      next: persist
+
+    - id: persist
+      type: engine-task
+      description: Persist decision record
+      service: decision.record
+      next: done
+
+    # ── 7. Terminal ───────────────────────────────────────────────────────
+    - id: done
+      type: end
+      description: Onboarding concluded

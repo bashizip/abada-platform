@@ -1,7 +1,10 @@
 # Abada platform overview
 
-Abada combines a durable PostgreSQL-backed BPMN engine with Tenda for human
-tasks and Orun for operational inspection. The supported deployment family is
+Abada combines a durable PostgreSQL-backed BPMN engine with Studio for
+agentic workflow authoring and live runs, Tenda for human tasks and Orun for
+operational inspection. See the
+[Studio application specification](development/studio-app-spec.md) for the
+authoring pipeline (APL → BPMN → engine) and live Run panel. The supported deployment family is
 defined by `compose.yaml`, a development or production profile, and an
 optional telemetry overlay.
 
