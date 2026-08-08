@@ -54,6 +54,7 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
           )}
 
           <input
+            id="workflow-prompt"
             type="text"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -74,7 +75,7 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
             {isGenerating ? (
               <>
                 <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                <span>Generating BPMN...</span>
+                <span>Generating APL...</span>
               </>
             ) : (
               <>

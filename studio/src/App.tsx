@@ -1,5 +1,4 @@
 import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
-import { INITIAL_WORKFLOWS } from '@/data/sampleWorkflows';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
 import { Canvas } from '@/features/designer/Canvas';
@@ -20,12 +19,33 @@ import { SemaflowAPI } from '@/api/semaflow';
 import { Project, ProjectAPI } from '@/api/projects';
 import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { aplToWorkflow } from '@/lib/apl/parser';
+import { AplEditor } from '@/features/designer/AplEditor';
+import { createPromptWorkflow } from '@/lib/apl/promptScaffold';
 import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
 
 type StudioView = 'designer' | 'inbox' | 'operations';
+type DesignerMode = 'diagram' | 'apl';
+
+const createEmptyWorkflow = (
+  id: string,
+  name = 'Untitled Process',
+  processKey = 'untitled_process',
+  category: WorkflowFile['category'] = 'custom',
+): WorkflowFile => ({
+  id,
+  name,
+  processKey: /^[a-z]/.test(processKey) ? processKey : `process_${processKey}`,
+  category,
+  fileType: 'apl',
+  languageVersion: LANGUAGE_VERSION_ABADA_IO_V1,
+  version: '1.0.0',
+  updatedAt: 'Just now',
+  nodes: [],
+  edges: [],
+});
 
 const bumpPatchVersion = (version: string): string => {
   const parts = version.split('.');
@@ -35,9 +55,11 @@ const bumpPatchVersion = (version: string): string => {
 };
 
 export default function App() {
-  const [workflows, setWorkflows] = useState<WorkflowFile[]>(INITIAL_WORKFLOWS);
-  const [activeWorkflowId, setActiveWorkflowId] = useState<string>(INITIAL_WORKFLOWS[0].id);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>('agent-fraud');
+  const bootstrapWorkflow = useRef(createEmptyWorkflow('bootstrap-draft'));
+  const [workflows, setWorkflows] = useState<WorkflowFile[]>([bootstrapWorkflow.current]);
+  const [activeWorkflowId, setActiveWorkflowId] = useState<string>(bootstrapWorkflow.current.id);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [designerMode, setDesignerMode] = useState<DesignerMode>('diagram');
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<StudioView>('designer');
   
@@ -62,6 +84,7 @@ export default function App() {
   const [activeProject, setActiveProject] = useState<Project | undefined>();
   const [showProjects, setShowProjects] = useState(false);
   const persistedFingerprint = useRef(new Map<string, string>());
+  const creatingWorkflowIds = useRef(new Set<string>());
 
   // Get active workflow object
   const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId) || workflows[0];
@@ -83,12 +106,12 @@ export default function App() {
       setActiveWorkflowId(loaded[0].id);
       setSelectedNodeId(loaded[0].nodes[0]?.id || null);
     } else {
-      setWorkflows(INITIAL_WORKFLOWS.slice(0, 1).map((workflow) => ({
-        ...workflow, id: `draft-${project.id}`, name: 'Untitled Process', processKey: 'untitled_process',
-      })));
-      setActiveWorkflowId(`draft-${project.id}`);
-      setSelectedNodeId(INITIAL_WORKFLOWS[0].nodes[0]?.id || null);
+      const emptyWorkflow = createEmptyWorkflow(`draft-${project.id}`);
+      setWorkflows([emptyWorkflow]);
+      setActiveWorkflowId(emptyWorkflow.id);
+      setSelectedNodeId(null);
     }
+    setDesignerMode('diagram');
   };
 
   useEffect(() => {
@@ -104,19 +127,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!activeProject || !currentWorkflow.documentId) return;
+    if (!activeProject || currentWorkflow.nodes.length === 0) return;
     const fingerprint = workflowFingerprint(currentWorkflow);
     if (persistedFingerprint.current.get(currentWorkflow.id) === fingerprint) return;
     const timer = window.setTimeout(() => {
-      ProjectAPI.saveDocument(activeProject.id, currentWorkflow).then((saved) => {
-        persistedFingerprint.current.set(currentWorkflow.id, fingerprint);
+      if (!currentWorkflow.documentId && creatingWorkflowIds.current.has(currentWorkflow.id)) return;
+      if (!currentWorkflow.documentId) creatingWorkflowIds.current.add(currentWorkflow.id);
+      const save = currentWorkflow.documentId
+        ? ProjectAPI.saveDocument(activeProject.id, currentWorkflow)
+        : ProjectAPI.createDocument(activeProject.id, currentWorkflow, currentWorkflow.description || '');
+      save.then((saved) => {
+        const persistedId = saved.id;
+        persistedFingerprint.current.set(persistedId, fingerprint);
         setWorkflows((items) => items.map((item) => item.id === currentWorkflow.id
-          ? { ...item, revision: saved.revision, updatedAt: saved.updatedAt } : item));
+          ? { ...item, id: persistedId, documentId: persistedId, revision: saved.revision,
+              updatedAt: saved.updatedAt } : item));
+        if (!currentWorkflow.documentId) {
+          setActiveWorkflowId((id) => id === currentWorkflow.id ? persistedId : id);
+        }
       }).catch((reason) => setSimulationLogs((logs) => [...logs, {
-        id: `autosave-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
-        nodeTitle: 'Project Autosave', nodeType: 'event', status: 'error',
-        message: reason instanceof Error ? reason.message : String(reason),
-      }]));
+          id: `autosave-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
+          nodeTitle: 'Project Autosave', nodeType: 'event', status: 'error',
+          message: reason instanceof Error ? reason.message : String(reason),
+        }])).finally(() => creatingWorkflowIds.current.delete(currentWorkflow.id));
     }, 800);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,6 +188,12 @@ export default function App() {
   const handleSelectNode = useCallback((id: string | null) => {
     setSelectedNodeId((current) => current === id ? current : id);
   }, []);
+
+  const handleApplyApl = (workflow: WorkflowFile) => {
+    updateActiveWorkflow(() => workflow);
+    setSelectedNodeId(workflow.nodes[0]?.id || null);
+    setDesignerMode('diagram');
+  };
 
   // Auto-layout the active workflow using the graph-ranked dagre layout.
   const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
@@ -199,21 +238,24 @@ export default function App() {
 
   const handleAddNode = (type: NodeType) => {
     const id = `${type}-${Date.now()}`;
+    const isFirstEvent = type === 'event'
+      && !currentWorkflow.nodes.some((node) => node.type === 'event' && node.subtype === 'start');
     const defaultTitles: Record<NodeType, string> = {
       agent: 'AI Validation Agent',
       human: 'Executive Review Task',
       dmn: 'Risk Matrix Policy',
       gateway: 'Branching Gateway',
-      event: 'Trigger Event',
+      event: isFirstEvent ? 'Start Process' : 'End Process',
     };
 
     const newNode: WorkflowNode = {
       id,
       type,
+      subtype: type === 'event' ? (isFirstEvent ? 'start' : 'end') : undefined,
       title: defaultTitles[type],
       description: `Newly instantiated ${type} node`,
-      x: 380 + Math.random() * 80,
-      y: 200 + Math.random() * 60,
+      x: 120 + currentWorkflow.nodes.length * 260,
+      y: 220,
       agentConfig: type === 'agent' ? {
         model: 'gemini-3.6-flash',
         systemPrompt: 'Evaluate incoming data and perform risk verification.',
@@ -238,10 +280,16 @@ export default function App() {
       } : undefined,
     };
 
-    updateActiveWorkflow((wf) => ({
-      ...wf,
-      nodes: [...wf.nodes, newNode],
-    }));
+    updateActiveWorkflow((wf) => {
+      const sourceExists = selectedNodeId && wf.nodes.some((node) => node.id === selectedNodeId);
+      return {
+        ...wf,
+        nodes: [...wf.nodes, newNode],
+        edges: sourceExists
+          ? [...wf.edges, { id: `e-${Date.now()}`, source: selectedNodeId, target: id, label: 'Next' }]
+          : wf.edges,
+      };
+    });
     setSelectedNodeId(id);
   };
 
@@ -646,6 +694,28 @@ export default function App() {
       }
     ]);
 
+    const loadGeneratedWorkflow = (generated: WorkflowFile) => {
+      const replaceCurrent = mode === 'refine' || currentWorkflow.nodes.length === 0;
+      if (replaceCurrent) {
+        const replacement: WorkflowFile = {
+          ...generated,
+          id: currentWorkflow.id,
+          documentId: currentWorkflow.documentId,
+          revision: currentWorkflow.revision,
+          processKey: currentWorkflow.documentId ? currentWorkflow.processKey : generated.processKey,
+          version: currentWorkflow.version,
+          updatedAt: currentWorkflow.updatedAt,
+        };
+        setWorkflows((items) => items.map((item) => item.id === currentWorkflow.id ? replacement : item));
+        setActiveWorkflowId(replacement.id);
+      } else {
+        setWorkflows((items) => [...items, generated]);
+        setActiveWorkflowId(generated.id);
+      }
+      setSelectedNodeId(generated.nodes[0]?.id || null);
+      setDesignerMode('diagram');
+    };
+
     try {
       // 1. Call Semaflow AI
       const bpmnXml = await SemaflowAPI.generateBPMN(finalPrompt);
@@ -676,9 +746,7 @@ export default function App() {
       newWf.fileType = 'apl';
       newWf.importedFrom = 'BPMN';
 
-      setWorkflows(prev => [...prev, newWf]);
-      setActiveWorkflowId(newWf.id);
-      if (newWf.nodes.length > 0) setSelectedNodeId(newWf.nodes[0].id);
+      loadGeneratedWorkflow(newWf);
 
       setSimulationLogs(prev => [
         ...prev,
@@ -694,17 +762,15 @@ export default function App() {
       ]);
 
     } catch (err: any) {
-      console.error(err);
+      const fallback = createPromptWorkflow(promptText);
+      loadGeneratedWorkflow(fallback);
       setSimulationLogs(prev => [
         ...prev,
         {
-          id: `gen-${Date.now()}-err`,
+          id: `gen-${Date.now()}-fallback`,
           timestamp: timestamp(),
-          nodeId: 'system',
-          nodeTitle: 'Generation Error',
-          nodeType: 'event',
-          status: 'error',
-          message: `Failed to generate workflow: ${err.message}`,
+          nodeId: 'system', nodeTitle: 'APL Native Generator', nodeType: 'agent', status: 'warning',
+          message: `AI provider unavailable (${err.message}). Created a deterministic APL starter locally; refine it visually or in YAML.`,
         }
       ]);
     } finally {
@@ -737,66 +803,13 @@ export default function App() {
   };
 
   // Create Custom Workflow File
-  const handleCreateNewWorkflow = async (name: string, category: any) => {
+  const handleCreateNewWorkflow = (name: string, category: WorkflowFile['category']) => {
     const processKey = name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
-    const newWf: WorkflowFile = {
-      id: `wf-custom-${Date.now()}`,
-      name,
-      processKey,
-      category,
-      fileType: 'apl',
-      languageVersion: LANGUAGE_VERSION_ABADA_IO_V1,
-      version: '1.0.0',
-      updatedAt: 'Just now',
-      nodes: [
-        {
-          id: 'start-1',
-          type: 'event',
-          subtype: 'start',
-          title: 'Start Process',
-          description: 'Trigger payload received',
-          x: 100,
-          y: 200,
-        },
-        {
-          id: 'agent-1',
-          type: 'agent',
-          title: 'Initial AI Agent',
-          description: 'Primary AI decision step',
-          x: 340,
-          y: 180,
-          agentConfig: {
-            model: 'gemini-3.6-flash',
-            systemPrompt: 'Process payload and analyze risk.',
-            confidenceThreshold: 85,
-            temperature: 0.2,
-            tools: ['Database Query'],
-          },
-        },
-      ],
-      edges: [
-        { id: 'e1', source: 'start-1', target: 'agent-1', label: 'Payload' },
-      ],
-    };
-
-    let persisted = newWf;
-    if (activeProject) {
-      try {
-        const document = await ProjectAPI.createDocument(activeProject.id, newWf);
-        persisted = { ...newWf, id: document.id, documentId: document.id,
-          revision: document.revision, updatedAt: document.updatedAt };
-        persistedFingerprint.current.set(persisted.id, workflowFingerprint(persisted));
-      } catch (reason) {
-        setSimulationLogs((logs) => [...logs, { id: `create-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
-          nodeTitle: 'Project', nodeType: 'event', status: 'error',
-          message: reason instanceof Error ? reason.message : String(reason) }]);
-        return;
-      }
-    }
-    setWorkflows((prev) => [persisted, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
-    setActiveWorkflowId(persisted.id);
-    setSelectedNodeId('agent-1');
+    const draft = createEmptyWorkflow(`draft-${Date.now()}`, name, processKey, category);
+    setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
+    setActiveWorkflowId(draft.id);
+    setSelectedNodeId(null);
+    setDesignerMode('diagram');
   };
 
   return (
@@ -844,31 +857,51 @@ export default function App() {
         {/* View: Designer Canvas */}
         {currentView === 'designer' && (
           <>
-            <Canvas
-              key={currentWorkflow.id}
-              nodes={currentWorkflow.nodes}
-              edges={currentWorkflow.edges}
-              selectedNodeId={selectedNodeId}
-              onSelectNode={handleSelectNode}
-              onNodeMove={handleNodeMove}
-              onConnectNodes={handleConnectNodes}
-              onAutoLayout={handleAutoLayout}
-              isSimulating={false}
-              activeSimulationNodeId={null}
-            />
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 rounded-xl border border-[#3A322E] bg-[#25201D]/95 p-1 shadow-warm-md">
+              <button onClick={() => setDesignerMode('diagram')}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'diagram' ? 'bg-[#F4A261] text-[#1A1614]' : 'text-[#A89F91] hover:text-[#EAE3D9]'}`}>
+                Diagram
+              </button>
+              <button onClick={() => setDesignerMode('apl')}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'apl' ? 'bg-[#2A9D8F] text-[#101816]' : 'text-[#A89F91] hover:text-[#EAE3D9]'}`}>
+                APL YAML
+              </button>
+            </div>
 
-            <PropertiesInspector
-              selectedNode={selectedNode}
-              onUpdateNode={handleUpdateNode}
-              onRunAgentTest={handleRunAgentTest}
-              nodeCount={currentWorkflow.nodes.length}
-            />
+            {designerMode === 'diagram' ? (
+              <>
+                <Canvas
+                  key={currentWorkflow.id}
+                  nodes={currentWorkflow.nodes}
+                  edges={currentWorkflow.edges}
+                  selectedNodeId={selectedNodeId}
+                  onSelectNode={handleSelectNode}
+                  onNodeMove={handleNodeMove}
+                  onConnectNodes={handleConnectNodes}
+                  onAutoLayout={handleAutoLayout}
+                  onAddNode={handleAddNode}
+                  onOpenAplEditor={() => setDesignerMode('apl')}
+                  onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
+                  isSimulating={false}
+                  activeSimulationNodeId={null}
+                />
 
-            <NLInputBar
-              onGenerateWorkflow={handleGenerateWorkflow}
-              isGenerating={isGenerating}
-              hasActiveWorkflow={workflows.length > 0}
-            />
+                <PropertiesInspector
+                  selectedNode={selectedNode}
+                  onUpdateNode={handleUpdateNode}
+                  onRunAgentTest={handleRunAgentTest}
+                  nodeCount={currentWorkflow.nodes.length}
+                />
+
+                <NLInputBar
+                  onGenerateWorkflow={handleGenerateWorkflow}
+                  isGenerating={isGenerating}
+                  hasActiveWorkflow={workflows.length > 0}
+                />
+              </>
+            ) : (
+              <AplEditor key={currentWorkflow.id} workflow={currentWorkflow} onApply={handleApplyApl} />
+            )}
 
             <RunPanel
               workflow={currentWorkflow}

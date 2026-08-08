@@ -238,16 +238,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {activeTab === 'palette' && (
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           <div className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase mb-1">
-            Drag or Click to Add Node
+            Click to Add Node
           </div>
 
           {paletteItems.map((item) => {
             const IconComponent = item.icon;
             return (
-              <div
+              <button
+                type="button"
                 key={item.type}
                 onClick={() => onAddNode(item.type)}
-                className={`p-3 rounded-xl border ${item.borderColor} ${item.bgColor} hover:scale-[1.02] cursor-pointer transition-all ${item.glowClass || ''} group`}
+                className={`w-full text-left p-3 rounded-xl border ${item.borderColor} ${item.bgColor} hover:scale-[1.02] cursor-pointer transition-all ${item.glowClass || ''} group`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <div
@@ -263,7 +264,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <p className="text-[11px] text-[#A89F91] leading-relaxed">
                   {item.description}
                 </p>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -325,9 +326,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-[#3A322E] bg-[#1A1614]/80 text-[11px] text-[#A89F91] flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-[#90A955]" />
-          <span>Gemini AI Engine Online</span>
+          <span>APL Native Studio</span>
         </div>
-        <span className="font-mono text-[10px] text-[#9D4EDD]">v2.4</span>
+        <span className="font-mono text-[10px] text-[#2A9D8F]">abada.io/v1</span>
       </div>
     </aside>
   );
