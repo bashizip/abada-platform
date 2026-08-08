@@ -54,7 +54,7 @@ const HighlightedYaml: React.FC<{ source: string; scrollTop: number; scrollLeft:
 }) => (
   <pre
     aria-hidden="true"
-    className="absolute inset-0 m-0 overflow-hidden whitespace-pre font-mono text-[13px] leading-6 pointer-events-none"
+    className="absolute inset-0 m-0 overflow-visible whitespace-pre font-mono text-[13px] leading-6 pointer-events-none"
     style={{ transform: `translate(${-scrollLeft}px, ${-scrollTop}px)` }}
   >
     {source.split('\n').map((line, index) => {
