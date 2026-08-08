@@ -8,7 +8,7 @@ import {
   APLNode,
   APLValue,
 } from './types';
-import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
+import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype, DMNConfig } from '@/types';
 
 /**
  * Parses an APL YAML string into an APLDocument object.
@@ -69,6 +69,71 @@ export const resolveRuleOutcome = (rule: APLDecisionTableRule): {
     otherwise: wrapped ? true : !!rule.otherwise,
     when: wrapped ? undefined : rule.when,
     then: wrapped ? wrapped.then : (rule.then || {}),
+  };
+};
+
+/** Coerces a string raw value to its declared output type in canonical APL. */
+export const coerceAPLValue = (
+  type: 'string' | 'number' | 'boolean',
+  raw: APLValue
+): APLValue => {
+  if (type === 'boolean') {
+    if (raw === true || raw === 'true') return true;
+    if (raw === false || raw === 'false') return false;
+    return Boolean(raw);
+  }
+  if (type === 'number') {
+    if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
+    const parsed = Number(raw);
+    return Number.isNaN(parsed) ? raw : parsed;
+  }
+  return String(raw);
+};
+
+/** Coerces a canvas `then` map so values respect the declared output types. */
+export const coerceRuleOutputs = (
+  outputs: { name: string; type: string }[],
+  thenValue: Record<string, APLValue>
+): Record<string, APLValue> => {
+  const coerced: Record<string, APLValue> = {};
+  for (const [name, value] of Object.entries(thenValue)) {
+    const declared = outputs.find((o) => o.name === name);
+    if (declared && (declared.type === 'NUMBER' || declared.type === 'BOOLEAN')) {
+      coerced[name] = coerceAPLValue(declared.type.toLowerCase() as 'number' | 'boolean', value);
+    } else {
+      coerced[name] = value;
+    }
+  }
+  return coerced;
+};
+
+/** Converts a canvas DMNConfig into a canonical APL decision-table node. */
+export const dmnConfigToAPLNode = (config: DMNConfig, nodeId: string): APLDecisionTableNode => ({
+  id: nodeId,
+  type: 'decision-table',
+  decisionKey: config.decisionKey,
+  hitPolicy: config.hitPolicy,
+  inputs: config.inputs.map((i) => ({ name: i.name, expr: i.expr })),
+  rules: config.rules.map((rule) =>
+    rule.otherwise
+      ? { otherwise: { then: coerceRuleOutputs(config.outputs, rule.then) } }
+      : { when: rule.when, then: coerceRuleOutputs(config.outputs, rule.then) }
+  ),
+});
+
+/** Canonical YAML for a single decision-table node — the shape AI rule PRs use. */
+export const stringifyDecisionTableYaml = (config: DMNConfig, nodeId: string): string =>
+  yaml.stringify(dmnConfigToAPLNode(config, nodeId));
+
+/** Parses a canonical decision-table YAML block back into a DMNConfig. */
+export const parseDecisionTableYaml = (node: any): DMNConfig => {
+  const table = node as APLDecisionTableNode;
+  return {
+    decisionKey: table.decisionKey || `DMN_${(table.id || 'TABLE').toUpperCase()}`,
+    hitPolicy: table.hitPolicy || 'FIRST',
+    inputs: normalizeTableInputs(table.inputs).map((i) => ({ name: i.name, expr: i.expr })),
+    outputs: [],
+    rules: (table.rules || []).map((r, i) => ({ id: `r${i}`, ...resolveRuleOutcome(r) })),
   };
 };
 
@@ -238,8 +303,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
     id: `wf-${Date.now()}`,
     name: apl.metadata.name,
     category: (apl.metadata.category || 'custom') as any,
-    fileType: 'bpmn',
-    version: apl.version,
+    fileType: 'apl',
+    languageVersion: apl.version,
+    version: '1.0.0',
     updatedAt: new Date().toISOString(),
     nodes: layoutedNodes,
     edges,

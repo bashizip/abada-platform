@@ -21,7 +21,9 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!fileName.trim()) return;
-    const finalName = fileName.endsWith('.bpmn') ? fileName : `${fileName}.bpmn`;
+    const finalName = fileName.endsWith('.apl.yaml') || fileName.endsWith('.bpmn')
+      ? fileName
+      : `${fileName}.apl.yaml`;
     onCreateWorkflow(finalName, category);
     setFileName('');
     onClose();
@@ -47,7 +49,7 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
               type="text"
               value={fileName}
               onChange={(e) => setFileName(e.target.value)}
-              placeholder="e.g. international_trade_clearance.bpmn"
+              placeholder="e.g. international_trade_clearance.apl.yaml"
               className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
               required
             />

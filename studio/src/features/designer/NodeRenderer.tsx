@@ -14,10 +14,13 @@ import {
   Loader2
 } from 'lucide-react';
 import { WorkflowNode, NodeType } from '@/types';
+import type { DiffChangeKind } from '@/lib/aiDiff/types';
 
 export type AbadaNodeType = Node<WorkflowNode & Record<string, unknown> & {
   isSelected?: boolean;
   isActiveSim?: boolean;
+  diffKind?: DiffChangeKind | null;
+  diffAnnotation?: string;
   onConnectStart?: (nodeId: string) => void;
 }, 'abadaNode'>;
 
@@ -84,13 +87,30 @@ export const AbadaNode = memo(({ data, selected }: NodeProps<AbadaNodeType>) => 
   
   const isAgentGlow = data.type === 'agent' && (isSelected || isActiveSim);
 
+  const diffRing = data.diffKind === 'added'
+    ? 'ring-2 ring-[#90A955] ring-offset-2 ring-offset-[#1A1614]'
+    : data.diffKind === 'modified'
+      ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]'
+      : data.diffKind === 'removed'
+        ? 'ring-2 ring-[#E76F51] ring-offset-2 ring-offset-[#1A1614] opacity-60'
+        : '';
+
+  const diffBadge = data.diffKind === 'added'
+    ? { label: 'ADDED', cls: 'text-[#90A955] bg-[#90A955]/20 border-[#90A955]/40' }
+    : data.diffKind === 'modified'
+      ? { label: 'MODIFIED', cls: 'text-[#F4A261] bg-[#F4A261]/20 border-[#F4A261]/40' }
+      : data.diffKind === 'removed'
+        ? { label: 'REMOVED', cls: 'text-[#E76F51] bg-[#E76F51]/20 border-[#E76F51]/40' }
+        : null;
+
   return (
     <div
       className={`w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg transition-shadow z-10 group ${
         isSelected ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]' : ''
       } ${isAgentGlow ? 'glow-amethyst' : ''} ${
         isActiveSim ? 'scale-105 transition-transform' : ''
-      }`}
+      } ${data.diffKind ? diffRing : ''}`}
+      title={data.diffAnnotation || undefined}
     >
       <Handle type="target" position={Position.Left} className="opacity-0" />
       
@@ -107,6 +127,14 @@ export const AbadaNode = memo(({ data, selected }: NodeProps<AbadaNodeType>) => 
           {data.type}
         </span>
       </div>
+
+      {data.diffKind && diffBadge && (
+        <div className="px-3 pt-2 pb-0">
+          <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full border ${diffBadge.cls} inline-block`}>
+            {diffBadge.label}
+          </span>
+        </div>
+      )}
 
       <div className="p-3 text-xs space-y-2">
         <p className="text-[11px] text-[#A89F91] line-clamp-2 leading-relaxed">

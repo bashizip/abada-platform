@@ -7,6 +7,8 @@ import { PropertiesInspector } from '@/components/PropertiesInspector';
 import { NLInputBar } from '@/components/NLInputBar';
 import { SimulationPanel } from '@/components/SimulationPanel';
 import { NewWorkflowModal } from '@/components/NewWorkflowModal';
+import { ProcessDetailsModal } from '@/components/ProcessDetailsModal';
+import { AIDiffModal } from '@/features/designer/AIDiffModal';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
 import { RunPanel } from '@/features/run/RunPanel';
@@ -16,9 +18,18 @@ import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { aplToWorkflow } from '@/lib/apl/parser';
 import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
-import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig } from '@/types';
+import { buildDemoProposal } from '@/lib/aiDiff/demo';
+import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
+import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
 
 type StudioView = 'designer' | 'inbox' | 'operations';
+
+const bumpPatchVersion = (version: string): string => {
+  const parts = version.split('.');
+  if (parts.length !== 3) return version;
+  const [, , patch] = parts.map(Number);
+  return `${parts[0]}.${parts[1]}.${(patch || 0) + 1}`;
+};
 
 export default function App() {
   const [workflows, setWorkflows] = useState<WorkflowFile[]>(INITIAL_WORKFLOWS);
@@ -35,6 +46,10 @@ export default function App() {
   // Live engine run state
   const [showRunPanel, setShowRunPanel] = useState<boolean>(false);
   const [lastRunResult, setLastRunResult] = useState<RunResult | null>(null);
+
+  // AI Diff review state (Insight Engine proposal preview)
+  const [diffSnapshot, setDiffSnapshot] = useState<WorkflowDiffSnapshot | null>(null);
+  const [showProcessDetails, setShowProcessDetails] = useState<boolean>(false);
 
   // Workflow Generation state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -221,6 +236,58 @@ export default function App() {
   const handleOpenRunPanel = () => {
     setShowRunPanel(true);
     setShowLogPanel(true);
+  };
+
+  // AI Diff: open the optimization proposal review overlay (demo data until
+  // Phase 2 wires the Insight Engine / APL PR generator).
+  const handleOpenAiDiff = () => {
+    setDiffSnapshot(buildDemoProposal(currentWorkflow));
+  };
+
+  const handleExitAiDiff = () => {
+    setDiffSnapshot(null);
+  };
+
+  // Governance gate approval: adopt the proposed graph as the new definition
+  // (Studio-side preview; engine version commit lands with Phase 3).
+  const handleApplyAiDiff = () => {
+    if (!diffSnapshot) return;
+    updateActiveWorkflow((wf) => ({
+      ...wf,
+      nodes: diffSnapshot.proposedNodes,
+      edges: diffSnapshot.proposedEdges,
+      version: bumpPatchVersion(wf.version),
+    }));
+    setSimulationLogs((prev) => [
+      ...prev,
+      {
+        id: `diff-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        nodeId: 'system',
+        nodeTitle: 'Insight Engine',
+        nodeType: 'event',
+        status: 'success',
+        message: `Optimization [${diffSnapshot.proposal.id}] approved and applied to ${currentWorkflow.name} — re-compile and deploy to the engine.`,
+      },
+    ]);
+    setDiffSnapshot(null);
+  };
+
+  const handleRejectAiDiff = () => {
+    if (!diffSnapshot) return;
+    setSimulationLogs((prev) => [
+      ...prev,
+      {
+        id: `diff-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        nodeId: 'system',
+        nodeTitle: 'Insight Engine',
+        nodeType: 'event',
+        status: 'warning',
+        message: `Optimization [${diffSnapshot.proposal.id}] rejected by governance. Current definition unchanged.`,
+      },
+    ]);
+    setDiffSnapshot(null);
   };
 
   // Live engine run: deploy-if-missing → start → poll → real decision outputs
@@ -572,7 +639,8 @@ export default function App() {
       id: `wf-custom-${Date.now()}`,
       name,
       category,
-      fileType: 'bpmn',
+      fileType: 'apl',
+      languageVersion: LANGUAGE_VERSION_ABADA_IO_V1,
       version: '1.0.0',
       updatedAt: 'Just now',
       nodes: [
@@ -625,6 +693,9 @@ export default function App() {
         onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
         showLogPanel={showLogPanel}
         nodeCount={currentWorkflow.nodes.length}
+        onOpenAiDiff={handleOpenAiDiff}
+        isDiffActive={!!diffSnapshot}
+        onOpenProcessDetails={() => setShowProcessDetails(true)}
         currentView={currentView}
         onViewChange={setCurrentView}
       />
@@ -706,6 +777,24 @@ export default function App() {
         onClose={() => setIsNewModalOpen(false)}
         onCreateWorkflow={handleCreateNewWorkflow}
       />
+
+      {/* Process Details inspector modal — metadata payloads live here, not the header */}
+      <ProcessDetailsModal
+        workflow={currentWorkflow}
+        isOpen={showProcessDetails}
+        onClose={() => setShowProcessDetails(false)}
+      />
+
+      {/* AI Diff review — full-focus dialog; canvas stays clean until Approved */}
+      {diffSnapshot && (
+        <AIDiffModal
+          snapshot={diffSnapshot}
+          baseWorkflow={currentWorkflow}
+          onApply={handleApplyAiDiff}
+          onReject={handleRejectAiDiff}
+          onExit={handleExitAiDiff}
+        />
+      )}
     </div>
   );
 }

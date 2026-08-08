@@ -77,12 +77,33 @@ export interface WorkflowFile {
   id: string;
   name: string;
   category: 'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom';
-  fileType: 'bpmn' | 'dmn' | 'prompt' | 'json';
+  fileType: 'apl' | 'bpmn' | 'dmn' | 'prompt' | 'json';
   version: string;
   updatedAt: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  /** Active APL language spec version, e.g. `abada.io/v1`. */
+  languageVersion?: string;
 }
+
+export const LANGUAGE_VERSION_ABADA_IO_V1 = 'abada.io/v1';
+
+export const isAplNativeFormat = (fileType: WorkflowFile['fileType']): boolean =>
+  fileType === 'apl';
+
+export const getFileFormatLabel = (fileType: WorkflowFile['fileType']): string => {
+  switch (fileType) {
+    case 'apl':
+      return '.apl.yaml';
+    case 'bpmn':
+      return '.bpmn';
+    default:
+      return `.${fileType}`;
+  }
+};
+
+export const getRuntimeStatusTag = (fileType: WorkflowFile['fileType']): 'APL Native' | 'BPMN Imported' =>
+  isAplNativeFormat(fileType) ? 'APL Native' : 'BPMN Imported';
 
 export interface SimulationLog {
   id: string;

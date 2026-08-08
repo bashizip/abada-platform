@@ -38,7 +38,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onConnectNodes,
   onAutoLayout,
   isSimulating,
-  activeSimulationNodeId
+  activeSimulationNodeId,
 }) => {
   const nodeTypes = useMemo(() => ({
     abadaNode: AbadaNode as any,
@@ -48,28 +48,31 @@ export const Canvas: React.FC<CanvasProps> = ({
     abadaEdge: AbadaEdge,
   }), []);
 
-  const reactFlowNodes: Node[] = useMemo(() => rawNodes.map(node => ({
-    id: node.id,
-    type: 'abadaNode',
-    position: { x: node.x, y: node.y },
-    data: {
-      ...node,
-      isActiveSim: activeSimulationNodeId === node.id
-    },
-    selected: selectedNodeId === node.id
-  })), [rawNodes, activeSimulationNodeId, selectedNodeId]);
+  const reactFlowNodes: Node[] = useMemo(() =>
+    rawNodes.map(node => ({
+      id: node.id,
+      type: 'abadaNode',
+      position: { x: node.x, y: node.y },
+      data: {
+        ...node,
+        isActiveSim: activeSimulationNodeId === node.id,
+      },
+      selected: selectedNodeId === node.id
+    })),
+  [rawNodes, activeSimulationNodeId, selectedNodeId]);
 
-  const reactFlowEdges: Edge[] = useMemo(() => rawEdges.map(edge => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    type: 'abadaEdge',
-    data: {
-      label: edge.label,
-      isFlowing: isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target)
-    },
-    markerEnd: 'url(#arrowhead-saffron)'
-  })), [rawEdges, isSimulating, activeSimulationNodeId]);
+  const reactFlowEdges: Edge[] = useMemo(() =>
+    rawEdges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: 'abadaEdge',
+      data: {
+        label: edge.label,
+        isFlowing: isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target),
+      },
+      markerEnd: 'url(#arrowhead-saffron)'
+    })), [rawEdges, isSimulating, activeSimulationNodeId]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (connection.source && connection.target) {
@@ -127,6 +130,9 @@ export const Canvas: React.FC<CanvasProps> = ({
         fitView
         minZoom={0.2}
         maxZoom={2}
+        nodesDraggable
+        nodesConnectable
+        elementsSelectable
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />

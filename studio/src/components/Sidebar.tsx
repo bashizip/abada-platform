@@ -18,7 +18,7 @@ import {
   Activity,
   RotateCcw
 } from 'lucide-react';
-import { WorkflowFile, NodeType } from '@/types';
+import { WorkflowFile, NodeType, getFileFormatLabel, getRuntimeStatusTag } from '@/types';
 import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
 
 interface SidebarProps {
@@ -189,7 +189,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-1 text-[10px] text-[#A89F91]">
-                      <span className="capitalize">{wf.category}</span>
+                      <span className="capitalize flex items-center gap-1.5">
+                        <span className="capitalize">{wf.category}</span>
+                        <span
+                          className={`font-mono px-1 py-px rounded border ${
+                            getRuntimeStatusTag(wf.fileType) === 'APL Native'
+                              ? 'text-[#2A9D8F] border-[#2A9D8F]/30 bg-[#2A9D8F]/10'
+                              : 'text-[#F4A261] border-[#F4A261]/30 bg-[#F4A261]/10'
+                          }`}
+                          title={getRuntimeStatusTag(wf.fileType)}
+                        >
+                          {getFileFormatLabel(wf.fileType)}
+                        </span>
+                      </span>
                       <span>v{wf.version}</span>
                     </div>
                   </div>

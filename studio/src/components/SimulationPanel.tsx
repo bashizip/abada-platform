@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { SimulationLog, NodeType } from '@/types';
 import { 
   X, 
@@ -12,7 +12,7 @@ import {
   GitFork,
   Circle,
   Clock,
-  RotateCcw
+  GripVertical
 } from 'lucide-react';
 
 interface SimulationPanelProps {
@@ -30,6 +30,39 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
   onClearLogs,
   isSimulating,
 }) => {
+  const [pos, setPos] = useState<{ x: number; y: number }>(() => ({
+    x: typeof window !== 'undefined' ? Math.max(window.innerWidth - 496, 0) : 0,
+    y: typeof window !== 'undefined' ? Math.max(window.innerHeight - 440, 64) : 0,
+  }));
+  const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const container = panelRef.current?.offsetParent as HTMLElement | null;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    dragOffset.current = { dx: e.clientX - rect.left - pos.x, dy: e.clientY - rect.top - pos.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragOffset.current) return;
+    const container = panelRef.current?.offsetParent as HTMLElement | null;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const w = panelRef.current?.offsetWidth ?? 480;
+    const h = panelRef.current?.offsetHeight ?? 360;
+    setPos({
+      x: Math.min(Math.max(e.clientX - rect.left - dragOffset.current.dx, 8), Math.max(rect.width - w - 8, 8)),
+      y: Math.min(Math.max(e.clientY - rect.top - dragOffset.current.dy, 8), Math.max(rect.height - h - 8, 8)),
+    });
+  };
+
+  const onPointerUp = () => {
+    dragOffset.current = null;
+  };
+
   if (!isOpen) return null;
 
   const getNodeIcon = (type: NodeType) => {
@@ -49,10 +82,21 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
   };
 
   return (
-    <div className="absolute bottom-20 right-4 z-30 w-[480px] max-h-[360px] bg-[#25201D] border border-[#3A322E] rounded-2xl shadow-warm-lg flex flex-col overflow-hidden animate-in slide-in-from-bottom-5">
-      {/* Drawer Header */}
-      <div className="p-3 bg-[#1A1614] border-b border-[#3A322E] flex items-center justify-between">
+    <div
+      ref={panelRef}
+      className="absolute z-30 w-[480px] max-h-[360px] bg-[#25201D] border border-[#3A322E] rounded-2xl shadow-warm-lg flex flex-col overflow-hidden animate-in slide-in-from-bottom-5"
+      style={{ left: 0, top: 0, transform: `translate(${pos.x}px, ${pos.y}px)` }}
+    >
+      {/* Drawer Header — drag handle */}
+      <div
+        className="p-3 bg-[#1A1614] border-b border-[#3A322E] flex items-center justify-between cursor-grab active:cursor-grabbing select-none touch-none"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
         <div className="flex items-center space-x-2">
+          <GripVertical className="w-3.5 h-3.5 text-[#A89F91] shrink-0" />
           <Terminal className="w-4 h-4 text-[#9D4EDD]" />
           <span className="font-bold text-xs text-[#EAE3D9] tracking-wide">
             Real-Time Audit Stream & Simulation Logs
