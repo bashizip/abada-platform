@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════════════
 # KYC Onboarding — Abada Process Language (abada.io/v1)
-# Authoring: Abada Studio · Deployment: compiled to BPMN 2.0 (strict=false)
+# Authoring: Abada Studio · Deployment: native APL YAML (strict validation)
 #
 # Canonical example for docs/reference/apl-specification.md (§7).
 #

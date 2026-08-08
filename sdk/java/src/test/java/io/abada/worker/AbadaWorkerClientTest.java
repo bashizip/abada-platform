@@ -81,4 +81,24 @@ class AbadaWorkerClientTest {
         assertEquals(409, error.status());
         assertEquals("WORKER_LOCK_EXPIRED", error.code());
     }
+
+    @Test
+    void decodesOptionalAgentWorkDescriptorWithoutChangingProtocolVersion() {
+        server.removeContext("/api/v1/external-tasks");
+        server.createContext("/api/v1/external-tasks", request -> {
+            byte[] response = ("[{\"id\":\"task-1\",\"topicName\":\"abada:agent\",\"variables\":{},"
+                    + "\"protocolVersion\":\"1\",\"agentWork\":{\"profileVersion\":\"abada.agent/v1\","
+                    + "\"model\":\"model-a\",\"prompt\":\"work\",\"inputs\":{},"
+                    + "\"resultVariable\":\"result\",\"outputSchema\":{},\"tools\":[],"
+                    + "\"maxAttempts\":3}}]").getBytes(StandardCharsets.UTF_8);
+            request.getResponseHeaders().add("X-Abada-Worker-Protocol-Version", "1");
+            request.sendResponseHeaders(200, response.length);
+            request.getResponseBody().write(response);
+            request.close();
+        });
+        LockedExternalTask task = client.fetchAndLock("worker", List.of("abada:agent"),
+                Duration.ofSeconds(30), 1, RequestOptions.defaults()).getFirst();
+        assertEquals("abada.agent/v1", task.agentWork().profileVersion());
+        assertEquals("result", task.agentWork().resultVariable());
+    }
 }

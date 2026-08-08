@@ -39,6 +39,10 @@ services:
       ABADA_ENVIRONMENT: ${ABADA_ENVIRONMENT:-development}
       OTEL_SDK_DISABLED: "true"
       ABADA_OUTBOX_DISPATCHER_ENABLED: "true"
+      ABADA_INSIGHT_ENABLED: ${ABADA_INSIGHT_ENABLED:-false}
+      ABADA_LLM_BASE_URL: ${ABADA_LLM_BASE_URL:-}
+      ABADA_LLM_API_KEY: ${ABADA_LLM_API_KEY:-}
+      ABADA_LLM_MODEL: ${ABADA_LLM_MODEL:-deepseek/deepseek-v4-flash-free}
     volumes:
       - engine_logs:/app/logs
     networks:
@@ -123,6 +127,33 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  abada-agent-worker:
+    profiles: ["agent"]
+    image: ${ABADA_AGENT_WORKER_IMAGE:-ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.2}
+    environment:
+      ABADA_ENGINE_URL: http://abada-engine:5601/api
+      ABADA_ENGINE_TOKEN: ${ABADA_AGENT_ENGINE_TOKEN:-}
+      ABADA_AGENT_OIDC_TOKEN_URL: ${ABADA_AGENT_OIDC_TOKEN_URL:-}
+      ABADA_AGENT_OIDC_CLIENT_ID: ${ABADA_AGENT_OIDC_CLIENT_ID:-}
+      ABADA_AGENT_OIDC_CLIENT_SECRET: ${ABADA_AGENT_OIDC_CLIENT_SECRET:-}
+      ABADA_AGENT_LLM_BASE_URL: ${ABADA_AGENT_LLM_BASE_URL:-}
+      ABADA_AGENT_LLM_API_KEY: ${ABADA_AGENT_LLM_API_KEY:-}
+      ABADA_AGENT_LLM_MODEL: ${ABADA_AGENT_LLM_MODEL:-gpt-5-mini}
+      ABADA_AGENT_ALLOWED_TOOLS: ${ABADA_AGENT_ALLOWED_TOOLS:-}
+      ABADA_AGENT_MAX_TASKS: ${ABADA_AGENT_MAX_TASKS:-4}
+      ABADA_AGENT_LOCK_DURATION_MS: ${ABADA_AGENT_LOCK_DURATION_MS:-120000}
+    networks:
+      - edge
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    depends_on:
+      abada-engine:
+        condition: service_healthy
 
   abada-docs:
     image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.2}
