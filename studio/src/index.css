@@ -105,3 +105,25 @@
 .react-flow__controls-button svg {
   fill: currentColor !important;
 }
+
+/*
+ * Studio nodes use the normal arrow cursor: the canvas remains draggable, but
+ * does not suggest a grab/hand interaction. Keep node transforms on their own
+ * compositor layer and simplify the large decorative shadow only while a node
+ * is moving; the full visual treatment returns immediately on drop.
+ */
+.react-flow__node-abadaNode,
+.react-flow__node-abadaNode.selectable,
+.react-flow__node-abadaNode.draggable,
+.react-flow__node-abadaNode.draggable.dragging {
+  cursor: default !important;
+}
+
+.react-flow__node-abadaNode {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.react-flow__node-abadaNode.dragging .abada-node-card {
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.42);
+}

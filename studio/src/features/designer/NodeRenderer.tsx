@@ -7,7 +7,6 @@ import {
   Table, 
   GitFork, 
   Circle,
-  Plus,
   Clock,
   CheckCircle2,
   XCircle,
@@ -86,7 +85,9 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
   const isSelected = selected;
   const isActiveSim = data.isActiveSim;
   
-  const isAgentGlow = data.type === 'agent' && (isSelected || isActiveSim);
+  // Selection already has a clear ring. Reserving the expensive blurred glow
+  // for live execution avoids repainting it on every frame while dragging.
+  const isAgentGlow = data.type === 'agent' && isActiveSim;
 
   const diffRing = data.diffKind === 'added'
     ? 'ring-2 ring-[#90A955] ring-offset-2 ring-offset-[#1A1614]'
@@ -107,7 +108,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
   return (
     <div
       onClick={() => data.onSelectNode?.(id)}
-      className={`w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg transition-shadow z-10 group ${
+      className={`abada-node-card w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg z-10 group ${
         isSelected ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]' : ''
       } ${isAgentGlow ? 'glow-amethyst' : ''} ${
         isActiveSim ? 'scale-105 transition-transform' : ''
