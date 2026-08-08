@@ -120,6 +120,11 @@ class SecurityAuthorizationContractTest {
     void readinessIsPublicButDoesNotExposeProtectedApis() throws Exception {
         mvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
         mvc.perform(get("/v1/tasks")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/authoring/generate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"prompt\":\"Create an approval flow\",\"mode\":\"CREATE\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     @Test

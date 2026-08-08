@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_project:create", AbadaRoles.PROJECT_CREATOR, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/documents/*/deploy")
                         .hasAnyAuthority("SCOPE_process:deploy", AbadaRoles.DEPLOYER, AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.POST, "/v1/projects/*/authoring/generate").authenticated()
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/processes/*/start")
                         .hasAnyAuthority("SCOPE_process:control", AbadaRoles.PROCESS_CONTROLLER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/events/**")

@@ -58,3 +58,17 @@ Messages are for people and may become more precise without a version change.
 
 The generated document is served at `/api/v3/api-docs`, and Swagger UI at
 `/api/swagger-ui.html`.
+
+## Project-scoped APL authoring
+
+`POST /api/v1/projects/{projectId}/authoring/generate` accepts `prompt`, a
+`CREATE` or `REFINE` mode, and `baseAplSource` for refinement. It requires an
+explicit active-project `OWNER` or `MAINTAINER` membership; global platform
+administration does not bypass this product-authoring boundary.
+
+The response contains a review-only `aplSource`, `provider` (`LLM` or
+`LOCAL_FALLBACK`), optional `model`, `attempts`, and non-sensitive `warnings`.
+The Engine validates every result with `AplParser`, retries an invalid model
+candidate at most twice, and returns a deterministic valid starter if the
+OpenAI-compatible provider is absent or unavailable. This endpoint never
+persists or deploys its candidate; Studio requires an explicit Apply action.

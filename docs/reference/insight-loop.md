@@ -66,9 +66,12 @@ groups in any order; sequential policies enforce their declared order.
 ## Configuration
 
 The principal settings are `ABADA_INSIGHT_ENABLED`, `ABADA_LLM_BASE_URL`,
-`ABADA_LLM_API_KEY`, and `ABADA_LLM_MODEL`. Thresholds and scheduling are
-available under `abada.insight.*`. Secrets are accepted as input only; the
-configuration API exposes whether a key is present, never its value.
+`ABADA_LLM_API_KEY`, and `ABADA_LLM_MODEL`. The LLM connection is shared with
+project-scoped APL authoring, but `ABADA_INSIGHT_ENABLED` controls only the
+scheduled Insight worker: Studio authoring remains available while that worker
+is disabled. Thresholds and scheduling are available under `abada.insight.*`.
+Secrets are accepted as input only; the configuration API exposes whether a
+key is present, never its value.
 
 OpenTelemetry remains optional diagnostic output and is not an authoritative
 input to this v1 loop. See ADR-003.

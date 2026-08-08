@@ -2,11 +2,8 @@ package com.abada.engine.insight;
 
 import com.abada.engine.bpmn.compatibility.BpmnValidationException;
 import com.abada.engine.insight.InsightAnalyzer.Finding;
+import com.abada.engine.llm.OpenAiCompatibleLlmClient;
 import com.abada.engine.parser.AplParser;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,22 +23,18 @@ public class InsightProposalGenerator {
 
     private static final Logger log = LoggerFactory.getLogger(InsightProposalGenerator.class);
 
-    private final InsightProperties properties;
     private final AplParser aplParser;
-    private final HttpClient httpClient;
+    private final OpenAiCompatibleLlmClient llm;
 
-    public InsightProposalGenerator(InsightProperties properties, AplParser aplParser) {
-        this.properties = properties;
+    public InsightProposalGenerator(OpenAiCompatibleLlmClient llm, AplParser aplParser) {
+        this.llm = llm;
         this.aplParser = aplParser;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(properties.getLlmTimeout())
-                .build();
     }
 
     public record Proposal(String proposedSource, String rationale, String provider) {}
 
     public Proposal generate(String definitionKey, String targetSource, List<Finding> findings) {
-        if (properties.isLlmConfigured()) {
+        if (llm.isConfigured()) {
             try {
                 String suggested = requestLlm(definitionKey, targetSource, findings);
                 if (isValidSuggestion(definitionKey, suggested)) {
@@ -80,19 +73,7 @@ public class InsightProposalGenerator {
     }
 
     public static String extractLlmBlock(String completion) {
-        if (completion == null || completion.isBlank()) {
-            return null;
-        }
-        String content = completion;
-        int fence = content.indexOf("```");
-        if (fence >= 0) {
-            int start = content.indexOf('\n', fence);
-            int end = content.indexOf("```", start + 1);
-            if (end > start) {
-                content = content.substring(start + 1, end);
-            }
-        }
-        return content.strip();
+        return OpenAiCompatibleLlmClient.extractDocument(completion);
     }
 
     private boolean isValidSuggestion(String definitionKey, String suggested) {
@@ -124,38 +105,8 @@ public class InsightProposalGenerator {
                 Definition to optimize:
                 %s""".formatted(fullBlock(findings), definitionKey, targetSource);
 
-        String body = ("{\"model\":\"%s\",\"temperature\":0.2,\"messages\":["
-                + "{\"role\":\"system\",\"content\":\"You are the Abada Insight Engine, an APL "
-                + "optimization specialist. You emit only valid abada.io/v1 YAML.\"},"
-                + "{\"role\":\"user\",\"content\":\"%s\"}]}")
-                .formatted(properties.getLlmModel(), jsonString(prompt));
-
-        URI uri = URI.create(stripTrailingSlash(properties.getLlmBaseUrl()) + "/chat/completions");
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri)
-                .timeout(properties.getLlmTimeout())
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + properties.getLlmApiKey());
-
-        // Inject OpenRouter identification headers when enabled
-        if (properties.isOpenRouterEnabled()) {
-            requestBuilder.header("HTTP-Referer", properties.getOpenRouterReferer());
-            requestBuilder.header("X-Title", properties.getOpenRouterTitle());
-        }
-
-        HttpRequest request = requestBuilder
-                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request,
-                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (response.statusCode() / 100 != 2) {
-            throw new IllegalStateException("LLM endpoint returned HTTP " + response.statusCode());
-        }
-        String block = extractLlmBlock(extractContent(response.body()));
-        if (block == null) {
-            throw new IllegalStateException("LLM response contained no usable text");
-        }
-        return block;
+        return llm.complete("You are the Abada Insight Engine, an APL optimization specialist. "
+                + "You emit only valid abada.io/v1 YAML.", prompt);
     }
 
     private String fullBlock(List<Finding> findings) {
@@ -166,57 +117,4 @@ public class InsightProposalGenerator {
                 .collect(Collectors.joining("\n"));
     }
 
-    private static String jsonString(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "");
-    }
-
-    /** Minimal OpenAI-compatible "content" extraction without a JSON library. */
-    private static String extractContent(String body) {
-        int idx = body.indexOf("\"content\"");
-        if (idx < 0) {
-            return "";
-        }
-        idx = body.indexOf(':', idx);
-        if (idx < 0) {
-            return "";
-        }
-        int start = body.indexOf('"', idx);
-        if (start < 0) {
-            return "";
-        }
-        start++;
-        StringBuilder out = new StringBuilder();
-        boolean escaped = false;
-        for (int i = start; i < body.length(); i++) {
-            char c = body.charAt(i);
-            if (c == '"' && !escaped) {
-                break;
-            }
-            if (c == '\\' && !escaped) {
-                escaped = true;
-                continue;
-            }
-            if (escaped) {
-                if (c == 'n') {
-                    out.append('\n');
-                } else if (c == 't') {
-                    out.append('\t');
-                } else {
-                    out.append(c);
-                }
-                escaped = false;
-                continue;
-            }
-            out.append(c);
-        }
-        return out.toString();
-    }
-
-    private static String stripTrailingSlash(String url) {
-        while (url.endsWith("/")) {
-            url = url.substring(0, url.length() - 1);
-        }
-        return url;
-    }
 }

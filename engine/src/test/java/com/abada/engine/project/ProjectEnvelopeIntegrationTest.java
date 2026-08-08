@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.abada.engine.AbadaEngineApplication;
 import com.abada.engine.api.ApiException;
+import com.abada.engine.api.ProjectAuthoringController;
 import com.abada.engine.core.AbadaEngine;
 import com.abada.engine.persistence.entity.PrincipalEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
@@ -32,6 +33,7 @@ class ProjectEnvelopeIntegrationTest {
     @Autowired PrincipalRepository principals;
     @Autowired DatabaseTestHelper database;
     @Autowired AbadaEngine engine;
+    @Autowired ProjectAuthoringController authoring;
 
     private PrincipalEntity owner;
 
@@ -110,6 +112,26 @@ class ProjectEnvelopeIntegrationTest {
         assertThat(projects.accessibleProjects()).isEmpty();
         assertThatThrownBy(() -> documents.list(project.getId(), PageRequest.of(0, 10)))
                 .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void restrictsAplAuthoringToOwnersAndMaintainers() {
+        var project = projects.create("authoring", "Authoring", "Native APL generation");
+        var ownerResponse = authoring.generate(project.getId(),
+                new ProjectAuthoringController.GenerateAplRequest(
+                        "Review invoice risk", "CREATE", null));
+        assertThat(ownerResponse.getBody()).isNotNull();
+        assertThat(ownerResponse.getBody().provider()).isEqualTo("LOCAL_FALLBACK");
+
+        PrincipalEntity viewer = principal("viewer", "viewer-subject");
+        projects.putMember(project.getId(), viewer.getId(), null, Set.of(Role.VIEWER), Set.of());
+        IdentityContext.set(new Identity(viewer.getId(), viewer.getUsername(), List.of()));
+
+        assertThatThrownBy(() -> authoring.generate(project.getId(),
+                new ProjectAuthoringController.GenerateAplRequest(
+                        "Review invoice risk", "CREATE", null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
     }
 
     private PrincipalEntity principal(String username, String subject) {

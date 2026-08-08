@@ -469,34 +469,32 @@ consistent.
 
 ## 6. Validation, Compilation & Error Codes
 
-APL validation is enforced in two layers: the **Studio compile step** (shape
-and well-formedness) and the **engine deployment step** (the authoritative
-gate). There is no engine-side APL schema validator today because the engine
-consumes compiled BPMN (§1.2); deployment therefore remains the single
-enforcement point, and its error codes are the contract.
+APL validation is enforced in two layers: the **Studio edit step** provides
+immediate syntax and graph feedback, while the Engine's native `AplParser` is
+the authoritative semantic gate. Both AI-authored candidates and deployment
+sources are parsed directly as APL; neither path requires an XML round-trip.
 
 ### 6.1 Studio compile-time checks
 
 | Check | Behavior |
 | --- | --- |
 | YAML syntax | `parseAPLYaml` fails on malformed YAML |
-| `metadata.name` present | compile requires a non-empty name for the process key |
+| `metadata.key` and `metadata.name` present | authoring requires a stable process key and a human-readable name |
 | `id` uniqueness / flow wiring | `next`/`rules.then` targets must exist for a valid graph; the compiler emits sequence flows only for declared links |
 | Gateway condition discipline | only explicit `${...}` labels become conditions; free text stays a description (never a condition) |
-| XML well-formedness | boolean attributes rendered explicitly (`isExecutable="true"`); `abada` namespace declared on root |
 | Decision-table normalization | `normalizeTableInputs` / `resolveRuleOutcome` collapse map/array and flattened/wrapper forms before emission |
 
-The Studio performs no exhaustive APL schema validation yet; unsupported
-constructs surface as engine deployment errors (§6.2) with actionable
-messages — matching the platform rule that ambiguous models are rejected at
-deployment, not accepted silently.
+Studio performs fast client-side checks, then the Engine rejects unknown node
+types, invalid fields, broken targets and ambiguous graph shapes through
+`AplParser`. The authoring endpoint runs that same parser before returning a
+candidate and may ask the configured LLM to repair invalid output twice.
 
 ### 6.2 Engine deployment-time validation
 
-Deploying the compiled BPMN (`POST /v1/processes/deploy`, `strict=false` from
-Studio) runs: size limit → compatibility detection → directive validation →
-profile check → structural parse (`SupportedBpmnValidator`) → decision-table
-extraction. Failures abort the deployment transaction.
+Deploying native YAML (`POST /v1/processes/deploy`) runs source detection then
+strict `AplParser` validation before the executable graph is persisted.
+Backward-compatible BPMN input follows the XML compatibility and structural
+validation path. Failures abort the deployment transaction.
 
 | Error code | Meaning | Triggered by |
 | --- | --- | --- |
