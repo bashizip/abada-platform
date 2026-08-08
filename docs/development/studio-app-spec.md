@@ -108,8 +108,43 @@ from the deployed table, not re-derived from a model call.
   instance ID, definition version, **DECISION OUTPUTS · APPLIED
   IN-TRANSACTION** cards, and raw instance variables.
 - Node statuses on the canvas are derived **only from engine-visible facts**
-  (`applyInstanceState`): terminal status, decision outputs present in
-  instance variables, and the human task the instance is waiting on.
+  (`applyInstanceState` used in `App.tsx`): terminal status, decision outputs
+  present in instance variables, and the human task the instance is waiting
+  on.
+
+### Phase 4 — Studio: post-transpilation authoring surfaces
+
+Part 1 of the 1.1 execution plan (`docs/conductor/abada-execution-plan.md`):
+
+- **Format badges & file metadata.** Every file carries a `.apl.yaml` vs
+  `.bpmn` format pill and a runtime status tag (`[APL Native]` vs
+  `[BPMN Imported]`) in the process list (`Sidebar.tsx`). The header shows
+  only the clean process name (format, status tag, semantic version and the
+  `abada.io/v1` language spec live in the Process Details modal,
+  `components/ProcessDetailsModal.tsx`, opened from the filename). New
+  canvases and APL parses default to the native APL format.
+- **Native DMN rule inspector.** The Inspector's DMN section now uses a
+  dedicated matrix editor (`features/dmn/DmnRuleInspector.tsx`): input
+  variable mappings (name + `${...}` expression), ordered `when`/`then`
+  rows with typed output cells (`STRING | NUMBER | BOOLEAN`), a hit-policy
+  selector restricted to `FIRST | UNIQUE | COLLECT`, and an explicit
+  `otherwise` fallback toggle. The widget mirrors the canonical APL
+  decision-table node shape bidirectionally through
+  `stringifyDecisionTableYaml` / `parseDecisionTableYaml` in
+  `lib/apl/parser.ts`, so an imported YAML PR normalizes into the same rules
+  the engine sees.
+- **AI optimization review modal ("AI Diff").** A dedicated full-focus
+  dialog (`features/designer/AIDiffModal.tsx`) replaces the old canvas
+  overlay: the canvas stays untouched while a proposal is open. The modal
+  offers a read-only graph diff (added nodes/edges in green, modified paths
+  in amber, removed paths in red dashed, per-node annotations as `#
+  OPTIMIZATION` YAML comments) plus a side-by-side base/proposed APL YAML
+  diff, and an Insight Diagnostics panel with the proposal rationale and
+  change ledger. Single-word `Reject`/`Approve` CTAs in the header; Esc or
+  backdrop dismissal returns to the clean canvas. Approve adopts the
+  proposed graph and bumps the semantic version; the demo proposal generator
+  (`lib/aiDiff/*`) feeds the interactive showcase until the engine Phase 2
+  wiring lands.
 - Human-in-the-loop detection polls `GET /tasks?status=AVAILABLE` and matches
   the engine task name (the BPMN `userTask` name = the node **description**)
   against human nodes.
@@ -283,7 +318,9 @@ src/
 ├── data/
 │   └── sampleWorkflows.ts # starter workflows (no hardcoded run statuses)
 ├── features/
-│   ├── designer/        # Canvas, NodeRenderer (status badges)
+│   ├── designer/        # Canvas, NodeRenderer (status badges + diff badges),
+│   │                    #   EdgeRenderer, AIDiffModal (full-focus PR review)
+│   ├── dmn/             # DmnRuleInspector (matrix editor + APL YAML mirror)
 │   ├── run/RunPanel.tsx # live run panel
 │   ├── inbox/TaskInbox.tsx
 │   ├── operations/ProcessOperations.tsx
@@ -291,12 +328,16 @@ src/
 ├── lib/
 │   ├── apl/             # APL types, parser (workflowToAPL, aplToWorkflow,
 │   │                    #   parseAPLYaml, stringifyAPLYaml, normalizeTableInputs,
-│   │                    #   resolveRuleOutcome)
+│   │                    #   resolveRuleOutcome, stringifyDecisionTableYaml,
+│   │                    #   parseDecisionTableYaml, dmnConfigToAPLNode)
+│   ├── aiDiff/          # AI optimization proposal types + demo generator
 │   ├── bpmn/            # compiler.ts (APL → BPMN), transpiler.ts (BPMN → APL)
 │   └── run/liveRun.ts   # deriveDefaultPayload, extractDecisionOutputs,
 │                        #   applyInstanceState, mapTerminalStatus, sleep
-├── components/          # Header, Sidebar, PropertiesInspector, SimulationPanel,
-│                        #   NLInputBar, NewWorkflowModal
+├── components/          # Header (icon-only secondary actions, clean name +
+│                        #   tooltips), Sidebar, PropertiesInspector,
+│                        #   SimulationPanel, NLInputBar (prompt dock, NL-only),
+│                        #   NewWorkflowModal, ProcessDetailsModal, ui (IconButton)
 ├── App.tsx              # state hub: handleRunLive, handleDeploy, handleGenerateWorkflow
 └── types.ts             # WorkflowFile, WorkflowNode, SimulationLog, ...
 ```
@@ -386,6 +427,12 @@ npm run build
 - Per-run diff of instance variables (before/after each decision table).
 - Decision-table outcome preview before deploy (client-side evaluation of the
   compiled table against the current payload).
+- Enrich the AI Diff overlay with true engine telemetry (OTel spans and API
+  failure signals) instead of the demo proposal generator
+  (`lib/aiDiff/demo.ts`), per Phase 2 of the 1.1 execution plan.
+- Wire the Governance Engine approval gates (Phase 3) so Approve commits the
+  versioned definition to PostgreSQL instead of only updating the local
+  canvas.
 - Mirror this specification into the Starlight user/developer guide.
 
 ---

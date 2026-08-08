@@ -25,6 +25,7 @@ High-level design and architectural decisions.
 
 - [ADR-001: BPMN Dialects and Vendor Compatibility](adr/ADR-001-bpmn-dialects-and-vendor-compatibility.md) - Profile-based handling of Camunda/standard/Abada-native dialects.
 - [ADR-002: Native Decision Tables as the Deterministic Wall](adr/ADR-002-native-decision-tables-deterministic-wall.md) - Deterministic in-transaction decision tables as the counterweight to probabilistic agents.
+- [ADR-003: The Autonomous Workflow Loop](adr/ADR-003-insight-loop-engine-otel-apl.md) - Self-optimizing AI agent loop built on OpenTelemetry telemetry and APL governance.
 
 ### 🚀 Features
 
