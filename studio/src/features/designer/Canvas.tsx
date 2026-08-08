@@ -56,10 +56,11 @@ export const Canvas: React.FC<CanvasProps> = ({
       data: {
         ...node,
         isActiveSim: activeSimulationNodeId === node.id,
+        onSelectNode,
       },
       selected: selectedNodeId === node.id
     })),
-  [rawNodes, activeSimulationNodeId, selectedNodeId]);
+  [rawNodes, activeSimulationNodeId, selectedNodeId, onSelectNode]);
 
   const reactFlowEdges: Edge[] = useMemo(() =>
     rawEdges.map(edge => ({
@@ -84,12 +85,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     onNodeMove(node.id, node.position.x, node.position.y);
   }, [onNodeMove]);
 
-  const onSelectionChange = useCallback((params: { nodes: Node[] }) => {
-    if (params.nodes.length > 0) {
-      onSelectNode(params.nodes[0].id);
-    } else {
-      onSelectNode(null);
-    }
+  const onPaneClick = useCallback(() => {
+    onSelectNode(null);
   }, [onSelectNode]);
 
   return (
@@ -126,7 +123,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         edgeTypes={edgeTypes}
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
-        onSelectionChange={onSelectionChange}
+        onPaneClick={onPaneClick}
         fitView
         minZoom={0.2}
         maxZoom={2}

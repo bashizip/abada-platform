@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import { INITIAL_WORKFLOWS } from '@/data/sampleWorkflows';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
@@ -151,6 +151,10 @@ export default function App() {
       nodes: wf.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)),
     }));
   };
+
+  const handleSelectNode = useCallback((id: string | null) => {
+    setSelectedNodeId((current) => current === id ? current : id);
+  }, []);
 
   // Auto-layout the active workflow using the graph-ranked dagre layout.
   const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
@@ -841,10 +845,11 @@ export default function App() {
         {currentView === 'designer' && (
           <>
             <Canvas
+              key={currentWorkflow.id}
               nodes={currentWorkflow.nodes}
               edges={currentWorkflow.edges}
               selectedNodeId={selectedNodeId}
-              onSelectNode={(id) => setSelectedNodeId(id)}
+              onSelectNode={handleSelectNode}
               onNodeMove={handleNodeMove}
               onConnectNodes={handleConnectNodes}
               onAutoLayout={handleAutoLayout}
