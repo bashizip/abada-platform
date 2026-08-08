@@ -30,10 +30,19 @@ export interface APLWebhookNode extends APLBaseNode {
 
 export interface APLAgentNode extends APLBaseNode {
   type: 'agent';
+  profile?: 'abada.agent/v1';
   model?: string;
   prompt?: string;
+  inputs?: Record<string, string>;
+  result_variable?: string;
+  output_schema?: Record<string, unknown>;
   tools?: string[];
   confidence_threshold?: number;
+  temperature?: number;
+  max_tokens?: number;
+  timeout_ms?: number;
+  max_attempts?: number;
+  retry_backoff_ms?: number;
 }
 
 export interface APLEngineTaskNode extends APLBaseNode {

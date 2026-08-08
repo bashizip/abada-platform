@@ -10,6 +10,7 @@ import {
   BookOpen,
   GitCompare,
   FileText,
+  Settings,
 } from 'lucide-react';
 import { WorkflowFile } from '@/types';
 import { keycloak } from '@/auth/keycloakClient';
@@ -28,6 +29,7 @@ interface HeaderProps {
   onOpenAiDiff?: () => void;
   isDiffActive?: boolean;
   onOpenProcessDetails?: () => void;
+  onOpenSettings?: () => void;
   nodeCount: number;
   currentView?: 'designer' | 'inbox' | 'operations';
   onViewChange?: (view: 'designer' | 'inbox' | 'operations') => void;
@@ -50,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAiDiff,
   isDiffActive,
   onOpenProcessDetails,
+  onOpenSettings,
   nodeCount,
   currentView = 'designer',
   onViewChange,
@@ -188,6 +191,13 @@ export const Header: React.FC<HeaderProps> = ({
             label="Documentation"
             tooltip="Documentation — open the Abada docs site"
             onClick={() => window.open('http://docs.localhost', '_blank', 'noopener,noreferrer')}
+          />
+
+          <IconButton
+            icon={<Settings className="w-4 h-4" />}
+            label="Settings"
+            tooltip="Settings — Insight Engine and LLM provider configuration"
+            onClick={onOpenSettings}
           />
 
           <button

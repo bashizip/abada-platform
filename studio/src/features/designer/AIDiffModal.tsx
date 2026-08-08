@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -17,8 +17,8 @@ import { AbadaEdge } from './EdgeRenderer';
 interface AIDiffModalProps {
   snapshot: WorkflowDiffSnapshot;
   baseWorkflow: WorkflowFile;
-  onApply: () => void;
-  onReject: () => void;
+  onApply: (comment: string) => Promise<void> | void;
+  onReject: (comment: string) => Promise<void> | void;
   onExit: () => void;
 }
 
@@ -46,6 +46,18 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
 }) => {
   const { proposal, baseNodes, baseEdges, proposedNodes, proposedEdges } = snapshot;
   const [tab, setTab] = useState<DiffTab>('graph');
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (decision: 'approve' | 'reject') => {
+    if (decision === 'reject' && !comment.trim()) return;
+    setSubmitting(true);
+    try {
+      await (decision === 'approve' ? onApply(comment.trim()) : onReject(comment.trim()));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -145,7 +157,8 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
           <div className="flex items-center gap-2 ml-auto shrink-0">
             <button
               type="button"
-              onClick={onReject}
+              onClick={() => void submit('reject')}
+              disabled={submitting || !comment.trim()}
               className="h-9 px-4 rounded-lg border border-[#E76F51]/40 bg-[#1A1614] text-xs font-semibold text-[#E76F51] hover:bg-[#2F2926] transition-all flex items-center gap-1.5"
             >
               <XCircle className="w-3.5 h-3.5" />
@@ -153,7 +166,8 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={onApply}
+              onClick={() => void submit('approve')}
+              disabled={submitting}
               className="h-9 px-4 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] text-xs font-semibold transition-all flex items-center gap-1.5"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -307,6 +321,12 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
             </div>
 
             <div className="px-4 py-3 border-t border-[#3A322E] shrink-0">
+              <textarea
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                placeholder="Review comment (required to reject)"
+                className="w-full mb-2 min-h-16 resize-y rounded-lg border border-[#3A322E] bg-[#14100D] p-2 text-[10px] text-[#EAE3D9] outline-none focus:border-[#2A9D8F]"
+              />
               <p className="text-[10px] text-[#A89F91] leading-relaxed">
                 Approving adopts the proposed definition and bumps the semantic version. The canvas is unchanged until you approve.
               </p>

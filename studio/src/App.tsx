@@ -8,17 +8,18 @@ import { NLInputBar } from '@/components/NLInputBar';
 import { SimulationPanel } from '@/components/SimulationPanel';
 import { NewWorkflowModal } from '@/components/NewWorkflowModal';
 import { ProcessDetailsModal } from '@/components/ProcessDetailsModal';
+import { SettingsPanel } from '@/components/SettingsPanel';
 import { AIDiffModal } from '@/features/designer/AIDiffModal';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
 import { RunPanel } from '@/features/run/RunPanel';
 import { EngineAPI } from '@/api/engine';
+import { InsightAPI } from '@/api/insight';
 import { SemaflowAPI } from '@/api/semaflow';
 import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { aplToWorkflow } from '@/lib/apl/parser';
 import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
-import { buildDemoProposal } from '@/lib/aiDiff/demo';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
 
@@ -50,6 +51,7 @@ export default function App() {
   // AI Diff review state (Insight Engine proposal preview)
   const [diffSnapshot, setDiffSnapshot] = useState<WorkflowDiffSnapshot | null>(null);
   const [showProcessDetails, setShowProcessDetails] = useState<boolean>(false);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   // Workflow Generation state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -238,10 +240,21 @@ export default function App() {
     setShowLogPanel(true);
   };
 
-  // AI Diff: open the optimization proposal review overlay (demo data until
-  // Phase 2 wires the Insight Engine / APL PR generator).
-  const handleOpenAiDiff = () => {
-    setDiffSnapshot(buildDemoProposal(currentWorkflow));
+  const handleOpenAiDiff = async () => {
+    const definitionKey = currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    try {
+      const page = await InsightAPI.listProposals(definitionKey);
+      const summary = page.items.find((item) => item.status === 'DRAFT' || item.status === 'IN_REVIEW');
+      if (!summary) throw new Error(`No pending Insight proposal for ${definitionKey}`);
+      setDiffSnapshot(InsightAPI.toDiffSnapshot(await InsightAPI.getProposal(summary.id)));
+    } catch (error) {
+      setSimulationLogs((prev) => [...prev, {
+        id: `diff-error-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
+        nodeTitle: 'Insight Engine', nodeType: 'event', status: 'warning',
+        message: error instanceof Error ? error.message : String(error),
+      }]);
+      setShowLogPanel(true);
+    }
   };
 
   const handleExitAiDiff = () => {
@@ -250,14 +263,14 @@ export default function App() {
 
   // Governance gate approval: adopt the proposed graph as the new definition
   // (Studio-side preview; engine version commit lands with Phase 3).
-  const handleApplyAiDiff = () => {
-    if (!diffSnapshot) return;
-    updateActiveWorkflow((wf) => ({
-      ...wf,
-      nodes: diffSnapshot.proposedNodes,
-      edges: diffSnapshot.proposedEdges,
-      version: bumpPatchVersion(wf.version),
-    }));
+  const handleApplyAiDiff = async (comment: string) => {
+    if (!diffSnapshot?.backend) return;
+    const reviewed = await InsightAPI.reviewProposal(diffSnapshot.backend.id, 'APPROVE', comment,
+      diffSnapshot.backend.updatedAt);
+    if (reviewed.status === 'ADOPTED') {
+      updateActiveWorkflow((wf) => ({ ...wf, nodes: diffSnapshot.proposedNodes,
+        edges: diffSnapshot.proposedEdges, version: String(reviewed.adoptedVersion || wf.version), fileType: 'apl' }));
+    }
     setSimulationLogs((prev) => [
       ...prev,
       {
@@ -267,14 +280,16 @@ export default function App() {
         nodeTitle: 'Insight Engine',
         nodeType: 'event',
         status: 'success',
-        message: `Optimization [${diffSnapshot.proposal.id}] approved and applied to ${currentWorkflow.name} — re-compile and deploy to the engine.`,
+        message: `Optimization [${diffSnapshot.proposal.id}] reviewed — status ${reviewed.status}.`,
       },
     ]);
     setDiffSnapshot(null);
   };
 
-  const handleRejectAiDiff = () => {
-    if (!diffSnapshot) return;
+  const handleRejectAiDiff = async (comment: string) => {
+    if (!diffSnapshot?.backend) return;
+    const reviewed = await InsightAPI.reviewProposal(diffSnapshot.backend.id, 'REJECT', comment,
+      diffSnapshot.backend.updatedAt);
     setSimulationLogs((prev) => [
       ...prev,
       {
@@ -284,7 +299,7 @@ export default function App() {
         nodeTitle: 'Insight Engine',
         nodeType: 'event',
         status: 'warning',
-        message: `Optimization [${diffSnapshot.proposal.id}] rejected by governance. Current definition unchanged.`,
+        message: `Optimization [${diffSnapshot.proposal.id}] ${reviewed.status.toLowerCase()} by governance. Current definition unchanged.`,
       },
     ]);
     setDiffSnapshot(null);
@@ -318,26 +333,18 @@ export default function App() {
     let version = 0;
 
     try {
-      // 1. Ensure the definition is deployed (idempotent reuse of the latest version)
+      // 1. Deploy canonical APL. The engine reuses an identical checksum and
+      // creates a new immutable version when the source changed.
       addLog({
         nodeId: 'system', nodeTitle: 'Deployment Compiler', nodeType: 'event', status: 'info',
-        message: `Compiling [${wf.name}] to BPMN 2.0 and checking the engine for definition [${processKey}]…`,
+        message: `Validating and deploying native APL [${wf.name}] as definition [${processKey}]…`,
       });
-      const existing = await EngineAPI.findProcessDefinition(processKey);
-      if (existing) {
-        version = existing.version;
-        addLog({
-          nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'info',
-          message: `Definition [${processKey}] already deployed (v${existing.version}) — reusing.`,
-        });
-      } else {
-        const deploy = await EngineAPI.deployWorkflow(wf);
-        version = deploy.version;
-        addLog({
-          nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'success',
-          message: `Deployed [${deploy.processDefinitionId}] v${deploy.version} · deployment ${deploy.deploymentId}.`,
-        });
-      }
+      const deploy = await EngineAPI.deployWorkflow(wf);
+      version = deploy.version;
+      addLog({
+        nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'success',
+        message: `Deployed native APL [${deploy.processDefinitionId}] v${deploy.version} · deployment ${deploy.deploymentId}.`,
+      });
 
       // 2. Start an instance with the supplied payload
       addLog({
@@ -484,7 +491,7 @@ export default function App() {
         nodeTitle: 'Deployment Compiler',
         nodeType: 'event',
         status: 'info',
-        message: 'Compiling APL YAML to BPMN 2.0 XML for deployment...',
+        message: 'Validating and deploying native abada.io/v1 APL...',
       }
     ]);
 
@@ -571,7 +578,8 @@ export default function App() {
       const newWf: WorkflowFile = aplToWorkflow(aplDoc);
       newWf.id = `wf-gen-${Date.now()}`;
       newWf.category = 'custom';
-      newWf.fileType = 'bpmn';
+      newWf.fileType = 'apl';
+      newWf.importedFrom = 'BPMN';
 
       setWorkflows(prev => [...prev, newWf]);
       setActiveWorkflowId(newWf.id);
@@ -696,6 +704,7 @@ export default function App() {
         onOpenAiDiff={handleOpenAiDiff}
         isDiffActive={!!diffSnapshot}
         onOpenProcessDetails={() => setShowProcessDetails(true)}
+        onOpenSettings={() => setShowSettings(true)}
         currentView={currentView}
         onViewChange={setCurrentView}
       />
@@ -783,6 +792,13 @@ export default function App() {
         workflow={currentWorkflow}
         isOpen={showProcessDetails}
         onClose={() => setShowProcessDetails(false)}
+      />
+
+      {/* Settings panel — Insight Engine and LLM provider configuration */}
+      <SettingsPanel
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        definitionKey={currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}
       />
 
       {/* AI Diff review — full-focus dialog; canvas stays clean until Approved */}

@@ -8,7 +8,7 @@ import {
   APLNode,
   APLValue,
 } from './types';
-import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype, DMNConfig } from '@/types';
+import { WorkflowFile, WorkflowNode, WorkflowEdge, DMNConfig } from '@/types';
 
 /**
  * Parses an APL YAML string into an APLDocument object.
@@ -186,9 +186,6 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
   const edges: WorkflowEdge[] = [];
 
   apl.flow.nodes.forEach((aplNode) => {
-    let type: NodeType = 'agent';
-    let subtype: EventSubtype | GatewaySubtype | undefined = undefined;
-    
     const wNode: WorkflowNode = {
       id: aplNode.id,
       type: 'agent',
@@ -210,11 +207,19 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
       case 'agent':
         wNode.type = 'agent';
         wNode.agentConfig = {
+          profileVersion: aplNode.profile || 'abada.agent/v1',
           model: aplNode.model || 'gemini-3.6-flash',
           systemPrompt: aplNode.prompt || '',
           confidenceThreshold: aplNode.confidence_threshold || 85,
-          temperature: 0.2,
+          temperature: aplNode.temperature ?? 0.2,
           tools: aplNode.tools || [],
+          inputs: aplNode.inputs,
+          resultVariable: aplNode.result_variable,
+          outputSchema: aplNode.output_schema,
+          maxTokens: aplNode.max_tokens,
+          timeoutMs: aplNode.timeout_ms,
+          maxAttempts: aplNode.max_attempts,
+          retryBackoffMs: aplNode.retry_backoff_ms,
         };
         break;
       case 'engine-task':
@@ -273,7 +278,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
 
     // Build edges
     if (aplNode.type === 'condition') {
-      aplNode.rules.forEach((r, i) => {
+      aplNode.rules.forEach((r) => {
         edges.push({
           id: `e_${aplNode.id}_${r.then}`,
           source: aplNode.id,
@@ -359,10 +364,19 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
       aplNodes.push({
         ...baseNode,
         type: 'agent',
+        profile: node.agentConfig?.profileVersion || 'abada.agent/v1',
         model: node.agentConfig?.model,
         prompt: node.agentConfig?.systemPrompt,
+        inputs: node.agentConfig?.inputs,
+        result_variable: node.agentConfig?.resultVariable,
+        output_schema: node.agentConfig?.outputSchema,
         tools: node.agentConfig?.tools?.length ? node.agentConfig.tools : undefined,
         confidence_threshold: node.agentConfig?.confidenceThreshold,
+        temperature: node.agentConfig?.temperature,
+        max_tokens: node.agentConfig?.maxTokens,
+        timeout_ms: node.agentConfig?.timeoutMs,
+        max_attempts: node.agentConfig?.maxAttempts,
+        retry_backoff_ms: node.agentConfig?.retryBackoffMs,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {

@@ -4,6 +4,7 @@ export type EventSubtype = 'start' | 'end' | 'timer' | 'message';
 export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive';
 
 export interface AgentConfig {
+  profileVersion?: 'abada.agent/v1';
   model: string;
   systemPrompt: string;
   confidenceThreshold: number; // 0-100
@@ -11,6 +12,13 @@ export interface AgentConfig {
   tools: string[];
   fallbackAction?: 'Escalate to Human' | 'Reroute to Secondary Agent' | 'Reject Payload';
   memoryContext?: string;
+  inputs?: Record<string, string>;
+  resultVariable?: string;
+  outputSchema?: Record<string, unknown>;
+  maxTokens?: number;
+  timeoutMs?: number;
+  maxAttempts?: number;
+  retryBackoffMs?: number;
 }
 
 export type DMNValue = string | number | boolean;
@@ -84,6 +92,8 @@ export interface WorkflowFile {
   edges: WorkflowEdge[];
   /** Active APL language spec version, e.g. `abada.io/v1`. */
   languageVersion?: string;
+  /** Original format when this APL document was converted on import. */
+  importedFrom?: 'BPMN';
 }
 
 export const LANGUAGE_VERSION_ABADA_IO_V1 = 'abada.io/v1';

@@ -18,7 +18,7 @@ export interface DiffProposal {
   id: string;
   title: string;
   rationale: string;
-  source: 'Insight Engine (OTel Analysis)';
+  source: 'Insight Engine (PostgreSQL Facts)' | 'Insight Engine (Demo)';
   targetDefinition: string;
   createdAt: string;
   nodeChanges: DiffNodeChange[];
@@ -37,6 +37,12 @@ export interface WorkflowDiffSnapshot {
   baseEdges: WorkflowEdge[];
   proposedNodes: WorkflowNode[];
   proposedEdges: WorkflowEdge[];
+  backend?: {
+    id: number;
+    status: string;
+    updatedAt: string;
+    proposedSource: string;
+  };
 }
 
 export const getChangeKindForNode = (

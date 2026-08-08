@@ -99,7 +99,7 @@ export const buildDemoProposal = (wf: WorkflowFile): WorkflowDiffSnapshot => {
         'extractAgent fails JSON extraction on long documents 18% of the time. ' +
         'Inserting a lightweight pre-formatting node and switching to a stricter ' +
         'schema prompt reduce the estimated failure rate to <1%.',
-      source: 'Insight Engine (OTel Analysis)',
+      source: 'Insight Engine (Demo)',
       targetDefinition: wf.name.replace(/\.apl\.yaml$/, '') + '_v1',
       createdAt: new Date().toISOString(),
       nodeChanges,
@@ -120,7 +120,7 @@ export const buildDemoProposal = (wf: WorkflowFile): WorkflowDiffSnapshot => {
       id: 'opt-pr-104',
       title: 'PENDING OPTIMIZATION PR #104',
       rationale: 'No optimizable agent path detected in this workflow.',
-      source: 'Insight Engine (OTel Analysis)',
+      source: 'Insight Engine (Demo)',
       targetDefinition: wf.name.replace(/\.apl\.yaml$/, ''),
       createdAt: new Date().toISOString(),
       nodeChanges,

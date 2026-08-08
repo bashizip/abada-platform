@@ -1,5 +1,4 @@
-import { compileAPLToBPMN } from '@/lib/bpmn/compiler';
-import { workflowToAPL } from '@/lib/apl/parser';
+import { stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
 
 export interface DeploymentResponse {
@@ -8,6 +7,7 @@ export interface DeploymentResponse {
   deploymentId: string;
   version: number;
   definitionFormatVersion?: string;
+  schemaType?: 'APL_NATIVE' | 'BPMN_XML';
   compatibilityProfiles?: string[];
   compatibilityReport?: Record<string, unknown>;
 }
@@ -29,6 +29,7 @@ export interface ProcessDefinitionDTO {
   id: string;
   name: string;
   version: number;
+  schemaType: 'APL_NATIVE' | 'BPMN_XML';
 }
 
 export class EngineAPI {
@@ -47,22 +48,18 @@ export class EngineAPI {
 
   /**
    * Deploys a WorkflowFile to the Abada Engine.
-   * Compiles the React Flow model to APL YAML, then down to BPMN XML.
+   * Deploys the canonical abada.io/v1 APL YAML directly. Studio never uses an
+   * XML round-trip for authored or imported-and-converted workflows.
    */
   static async deployWorkflow(workflow: WorkflowFile): Promise<DeploymentResponse> {
-    // 1. Convert Studio JSON Model to APL YAML AST
     const apl = workflowToAPL(workflow);
-    
-    // 2. Compile APL YAML AST down to strict BPMN 2.0 XML
-    const bpmnXml = compileAPLToBPMN(apl);
+    const aplYaml = stringifyAPLYaml(apl);
 
-    // 3. Create Multipart form data
     const formData = new FormData();
-    const blob = new Blob([bpmnXml], { type: 'text/xml' });
-    formData.append('file', blob, `${workflow.name || 'process'}.bpmn`);
-    formData.append('strict', 'false');
+    const blob = new Blob([aplYaml], { type: 'application/yaml' });
+    formData.append('file', blob, `${workflow.name || 'process'}.apl.yaml`);
+    formData.append('strict', 'true');
 
-    // 4. Send to engine
     const res = await fetch(`${this.BASE_URL}/processes/deploy`, {
       method: 'POST',
       headers: this.getHeaders(true),
