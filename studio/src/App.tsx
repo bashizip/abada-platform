@@ -15,12 +15,10 @@ import { ProcessOperations } from '@/features/operations/ProcessOperations';
 import { RunPanel } from '@/features/run/RunPanel';
 import { EngineAPI } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
-import { SemaflowAPI } from '@/api/semaflow';
+import { AplGenerationCandidate, AuthoringAPI } from '@/api/authoring';
 import { Project, ProjectAPI } from '@/api/projects';
-import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
-import { aplToWorkflow } from '@/lib/apl/parser';
+import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { AplEditor } from '@/features/designer/AplEditor';
-import { createPromptWorkflow } from '@/lib/apl/promptScaffold';
 import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
@@ -28,6 +26,10 @@ import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, Agen
 
 type StudioView = 'designer' | 'inbox' | 'operations';
 type DesignerMode = 'diagram' | 'apl';
+interface AuthoringCandidate extends AplGenerationCandidate {
+  workflow: WorkflowFile;
+  replaceWorkflowId?: string;
+}
 
 const createEmptyWorkflow = (
   id: string,
@@ -60,6 +62,7 @@ export default function App() {
   const [activeWorkflowId, setActiveWorkflowId] = useState<string>(bootstrapWorkflow.current.id);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [designerMode, setDesignerMode] = useState<DesignerMode>('diagram');
+  const [authoringCandidate, setAuthoringCandidate] = useState<AuthoringCandidate | null>(null);
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<StudioView>('designer');
   
@@ -96,6 +99,7 @@ export default function App() {
   });
 
   const openProject = async (project: Project) => {
+    setAuthoringCandidate(null);
     setActiveProject(project);
     localStorage.setItem('abada.studio.projectId', project.id);
     const documents = await ProjectAPI.documents(project.id);
@@ -190,8 +194,15 @@ export default function App() {
   }, []);
 
   const handleApplyApl = (workflow: WorkflowFile) => {
-    updateActiveWorkflow(() => workflow);
+    if (authoringCandidate && !authoringCandidate.replaceWorkflowId) {
+      setWorkflows((items) => [workflow, ...items]);
+    } else {
+      const targetId = authoringCandidate?.replaceWorkflowId || activeWorkflowId;
+      setWorkflows((items) => items.map((item) => item.id === targetId ? workflow : item));
+    }
+    setActiveWorkflowId(workflow.id);
     setSelectedNodeId(workflow.nodes[0]?.id || null);
+    setAuthoringCandidate(null);
     setDesignerMode('diagram');
   };
 
@@ -673,13 +684,14 @@ export default function App() {
 
   // Generate Workflow from NL Prompt
   const handleGenerateWorkflow = async (promptText: string, mode: 'new' | 'refine' = 'new') => {
+    if (!activeProject) {
+      setSimulationLogs((logs) => [...logs, { id: `gen-${Date.now()}-project`,
+        timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'APL Authoring',
+        nodeType: 'event', status: 'error', message: 'Open a project before generating APL.' }]);
+      return;
+    }
     setIsGenerating(true);
     const timestamp = () => new Date().toLocaleTimeString();
-
-    let finalPrompt = promptText;
-    if (mode === 'refine' && currentWorkflow) {
-      finalPrompt = `Refine this process by following the request: "${promptText}". Base process name: ${currentWorkflow.name}. (Ensure the generated process includes the requested changes).`;
-    }
 
     setSimulationLogs(prev => [
       ...prev,
@@ -687,66 +699,26 @@ export default function App() {
         id: `gen-${Date.now()}-1`,
         timestamp: timestamp(),
         nodeId: 'system',
-        nodeTitle: 'Semaflow Agent',
+        nodeTitle: 'APL Authoring',
         nodeType: 'agent',
         status: 'info',
-        message: `Analyzing prompt: "${finalPrompt}"`,
+        message: `${mode === 'new' ? 'Creating' : 'Refining'} a native APL candidate for human review.`,
       }
     ]);
 
-    const loadGeneratedWorkflow = (generated: WorkflowFile) => {
-      const replaceCurrent = mode === 'refine' || currentWorkflow.nodes.length === 0;
-      if (replaceCurrent) {
-        const replacement: WorkflowFile = {
-          ...generated,
-          id: currentWorkflow.id,
-          documentId: currentWorkflow.documentId,
-          revision: currentWorkflow.revision,
-          processKey: currentWorkflow.documentId ? currentWorkflow.processKey : generated.processKey,
-          version: currentWorkflow.version,
-          updatedAt: currentWorkflow.updatedAt,
-        };
-        setWorkflows((items) => items.map((item) => item.id === currentWorkflow.id ? replacement : item));
-        setActiveWorkflowId(replacement.id);
-      } else {
-        setWorkflows((items) => [...items, generated]);
-        setActiveWorkflowId(generated.id);
-      }
-      setSelectedNodeId(generated.nodes[0]?.id || null);
-      setDesignerMode('diagram');
-    };
-
     try {
-      // 1. Call Semaflow AI
-      const bpmnXml = await SemaflowAPI.generateBPMN(finalPrompt);
-
-      setSimulationLogs(prev => [
-        ...prev,
-        {
-          id: `gen-${Date.now()}-2`,
-          timestamp: timestamp(),
-          nodeId: 'system',
-          nodeTitle: 'Semaflow Agent',
-          nodeType: 'agent',
-          status: 'info',
-          message: 'Received BPMN XML from VertexAI. Transpiling to APL...',
-        }
-      ]);
-
-      // 2. Transpile generated BPMN into modern APL YAML
-      const aplDoc = transpileBPMNToAPL(bpmnXml);
-      
-      // Ensure it has a unique name
-      aplDoc.metadata.name = `ai_generated_${Date.now()}`;
-      
-      // 3. Convert APL YAML into React Flow visual graph
-      const newWf: WorkflowFile = aplToWorkflow(aplDoc);
-      newWf.id = `wf-gen-${Date.now()}`;
-      newWf.category = 'custom';
-      newWf.fileType = 'apl';
-      newWf.importedFrom = 'BPMN';
-
-      loadGeneratedWorkflow(newWf);
+      const candidate = await AuthoringAPI.generate(activeProject.id, promptText, mode,
+        mode === 'refine' ? stringifyAPLYaml(workflowToAPL(currentWorkflow)) : undefined);
+      const parsed = aplToWorkflow(parseAPLYaml(candidate.aplSource));
+      const replaceCurrent = mode === 'refine' || (!currentWorkflow.documentId && currentWorkflow.nodes.length === 0);
+      const candidateWorkflow: WorkflowFile = replaceCurrent ? {
+        ...parsed, id: currentWorkflow.id,
+        documentId: currentWorkflow.documentId, revision: currentWorkflow.revision,
+        version: currentWorkflow.version, updatedAt: currentWorkflow.updatedAt,
+      } : { ...parsed, id: `draft-generated-${Date.now()}` };
+      setAuthoringCandidate({ ...candidate, workflow: candidateWorkflow,
+        replaceWorkflowId: replaceCurrent ? currentWorkflow.id : undefined });
+      setDesignerMode('apl');
 
       setSimulationLogs(prev => [
         ...prev,
@@ -757,20 +729,18 @@ export default function App() {
           nodeTitle: 'Studio Compiler',
           nodeType: 'event',
           status: 'success',
-          message: 'Successfully generated and loaded visual canvas.',
+          message: `${candidate.provider === 'LLM' ? 'LLM' : 'Local fallback'} produced validated APL in ${candidate.attempts} attempt(s). Review before applying.`,
         }
       ]);
 
     } catch (err: any) {
-      const fallback = createPromptWorkflow(promptText);
-      loadGeneratedWorkflow(fallback);
       setSimulationLogs(prev => [
         ...prev,
         {
-          id: `gen-${Date.now()}-fallback`,
+          id: `gen-${Date.now()}-error`,
           timestamp: timestamp(),
-          nodeId: 'system', nodeTitle: 'APL Native Generator', nodeType: 'agent', status: 'warning',
-          message: `AI provider unavailable (${err.message}). Created a deterministic APL starter locally; refine it visually or in YAML.`,
+          nodeId: 'system', nodeTitle: 'APL Native Generator', nodeType: 'agent', status: 'error',
+          message: `APL generation failed: ${err.message}`,
         }
       ]);
     } finally {
@@ -807,6 +777,7 @@ export default function App() {
     const processKey = name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
     const draft = createEmptyWorkflow(`draft-${Date.now()}`, name, processKey, category);
     setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
+    setAuthoringCandidate(null);
     setActiveWorkflowId(draft.id);
     setSelectedNodeId(null);
     setDesignerMode('diagram');
@@ -844,6 +815,7 @@ export default function App() {
             workflows={workflows}
             activeWorkflowId={activeWorkflowId}
             onSelectWorkflow={(id) => {
+              setAuthoringCandidate(null);
               setActiveWorkflowId(id);
               const wf = workflows.find((w) => w.id === id);
               if (wf && wf.nodes.length > 0) setSelectedNodeId(wf.nodes[0].id);
@@ -900,7 +872,22 @@ export default function App() {
                 />
               </>
             ) : (
-              <AplEditor key={currentWorkflow.id} workflow={currentWorkflow} onApply={handleApplyApl} />
+              <AplEditor
+                key={`${currentWorkflow.id}-${authoringCandidate ? 'candidate' : 'source'}`}
+                workflow={authoringCandidate?.workflow || currentWorkflow}
+                initialSource={authoringCandidate?.aplSource}
+                candidate={authoringCandidate ? {
+                  provider: authoringCandidate.provider,
+                  model: authoringCandidate.model,
+                  attempts: authoringCandidate.attempts,
+                  warnings: authoringCandidate.warnings,
+                } : undefined}
+                onApply={handleApplyApl}
+                onDiscard={authoringCandidate ? () => {
+                  setAuthoringCandidate(null);
+                  setDesignerMode('diagram');
+                } : undefined}
+              />
             )}
 
             <RunPanel

@@ -1,11 +1,19 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Code2, RotateCcw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Code2, RotateCcw, X } from 'lucide-react';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
 
 interface AplEditorProps {
   workflow: WorkflowFile;
+  initialSource?: string;
+  candidate?: {
+    provider: 'LLM' | 'LOCAL_FALLBACK';
+    model?: string;
+    attempts: number;
+    warnings: string[];
+  };
   onApply: (workflow: WorkflowFile) => void;
+  onDiscard?: () => void;
 }
 
 const validateSource = (source: string): WorkflowFile => {
@@ -68,8 +76,9 @@ const HighlightedYaml: React.FC<{ source: string; scrollTop: number; scrollLeft:
   </pre>
 );
 
-export const AplEditor: React.FC<AplEditorProps> = ({ workflow, onApply }) => {
-  const canonicalSource = useMemo(() => stringifyAPLYaml(workflowToAPL(workflow)), [workflow]);
+export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, candidate, onApply, onDiscard }) => {
+  const canonicalSource = useMemo(() => initialSource || stringifyAPLYaml(workflowToAPL(workflow)),
+    [initialSource, workflow]);
   const [source, setSource] = useState(canonicalSource);
   const [error, setError] = useState<string | null>(null);
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
@@ -101,9 +110,22 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, onApply }) => {
           <Code2 className="w-4 h-4 text-[#F4A261]" />
           <span className="text-xs font-semibold">{workflow.name}</span>
           <span className="text-[10px] font-mono text-[#2A9D8F] bg-[#2A9D8F]/10 border border-[#2A9D8F]/30 px-1.5 py-0.5 rounded">abada.io/v1</span>
+          {candidate && (
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${candidate.provider === 'LLM'
+              ? 'text-[#9D4EDD] border-[#9D4EDD]/30 bg-[#9D4EDD]/10'
+              : 'text-[#F4A261] border-[#F4A261]/30 bg-[#F4A261]/10'}`}>
+              {candidate.provider === 'LLM' ? `${candidate.model || 'LLM'} · ${candidate.attempts} attempt(s)` : 'Local fallback'}
+            </span>
+          )}
           {dirty && <span className="text-[10px] text-[#F4A261]">Modified</span>}
         </div>
         <div className="flex items-center gap-2">
+          {onDiscard && (
+            <button onClick={onDiscard}
+              className="px-2.5 py-1.5 rounded-lg border border-[#3A322E] text-[11px] text-[#A89F91] hover:text-[#E76F51] flex items-center gap-1.5">
+              <X className="w-3 h-3" /> Discard
+            </button>
+          )}
           <button onClick={() => { setSource(canonicalSource); setError(null); }}
             className="px-2.5 py-1.5 rounded-lg border border-[#3A322E] text-[11px] text-[#A89F91] hover:text-[#EAE3D9] flex items-center gap-1.5">
             <RotateCcw className="w-3 h-3" /> Reset
@@ -151,6 +173,7 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, onApply }) => {
 
       <div className="h-10 px-4 border-t border-[#3A322E] flex items-center text-[11px]">
         {error ? <span className="text-[#E76F51] flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{error}</span>
+          : candidate?.warnings.length ? <span className="text-[#F4A261]">{candidate.warnings.join(' · ')}</span>
           : <span className="text-[#737D69]">Paste or edit canonical APL YAML. Press Ctrl/⌘+S to validate and apply.</span>}
       </div>
     </section>
