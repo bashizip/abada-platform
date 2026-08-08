@@ -42,7 +42,8 @@ public final class AgentWorkerMain {
         LOG.log(System.Logger.Level.INFO,
                 "agent_worker_started worker_id={0} topic=abada:agent", config.workerId());
         while (!Thread.currentThread().isInterrupted()) {
-            List<LockedExternalTask> tasks = engine.fetchAndLock(config.workerId(), List.of("abada:agent"),
+            List<LockedExternalTask> tasks = engine.fetchAndLock(config.projectId(), config.workerId(),
+                    List.of("abada:agent"),
                     config.lockDuration(), config.maxTasks(), RequestOptions.defaults());
             for (LockedExternalTask task : tasks) process(engine, gateway, config, task);
             if (tasks.isEmpty()) Thread.sleep(config.pollInterval().toMillis());
@@ -94,8 +95,18 @@ public final class AgentWorkerMain {
 
     record Config(URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
             String oidcClientSecret, URI llmBaseUrl, String llmApiKey,
-            String defaultModel, String workerId, Duration pollInterval, Duration lockDuration,
+            String defaultModel, String workerId, String projectId,
+            Duration pollInterval, Duration lockDuration,
             int maxTasks, Set<String> allowedTools) {
+        Config(URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
+                String oidcClientSecret, URI llmBaseUrl, String llmApiKey,
+                String defaultModel, String workerId, Duration pollInterval,
+                Duration lockDuration, int maxTasks, Set<String> allowedTools) {
+            this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
+                    llmBaseUrl, llmApiKey, defaultModel, workerId, "", pollInterval,
+                    lockDuration, maxTasks, allowedTools);
+        }
+
         static Config fromEnvironment() {
             Map<String, String> env = System.getenv();
             String baseUrl = required(env, "ABADA_ENGINE_URL");
@@ -114,6 +125,7 @@ public final class AgentWorkerMain {
                     tokenUrl.isBlank() ? null : URI.create(tokenUrl), clientId, clientSecret,
                     URI.create(llmUrl), apiKey, env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gpt-5-mini"),
                     env.getOrDefault("ABADA_AGENT_WORKER_ID", "abada-agent-worker"),
+                    env.getOrDefault("ABADA_AGENT_PROJECT_ID", ""),
                     Duration.ofMillis(longValue(env, "ABADA_AGENT_POLL_INTERVAL_MS", 1_000, 100, 60_000)),
                     Duration.ofMillis(longValue(env, "ABADA_AGENT_LOCK_DURATION_MS", 120_000, 1_000, 3_600_000)),
                     (int) longValue(env, "ABADA_AGENT_MAX_TASKS", 4, 1, 50), tools);

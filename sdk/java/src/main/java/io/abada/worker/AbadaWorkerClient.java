@@ -38,9 +38,19 @@ public final class AbadaWorkerClient {
 
     public List<LockedExternalTask> fetchAndLock(String workerId, List<String> topics, Duration lockDuration,
             int maxTasks, RequestOptions options) {
+        return fetchAndLock(null, workerId, topics, lockDuration, maxTasks, options);
+    }
+
+    public List<LockedExternalTask> fetchAndLock(String projectId, String workerId, List<String> topics,
+            Duration lockDuration, int maxTasks, RequestOptions options) {
+        java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
+        if (projectId != null && !projectId.isBlank()) body.put("projectId", projectId);
+        body.put("workerId", workerId);
+        body.put("topics", topics);
+        body.put("lockDuration", lockDuration.toMillis());
+        body.put("maxTasks", maxTasks);
         HttpResponse<String> response = send("/fetch-and-lock",
-                Map.of("workerId", workerId, "topics", topics, "lockDuration", lockDuration.toMillis(),
-                        "maxTasks", maxTasks), options);
+                body, options);
         String protocol = response.headers().firstValue("X-Abada-Worker-Protocol-Version").orElse(null);
         if (!PROTOCOL_VERSION.equals(protocol)) {
             throw new WorkerProtocolException(response.statusCode(), "UNSUPPORTED_PROTOCOL_VERSION",
