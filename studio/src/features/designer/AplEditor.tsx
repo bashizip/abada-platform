@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Code2, RotateCcw, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Code2, Minus, Plus, RotateCcw, Type, X } from 'lucide-react';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
 
@@ -49,15 +49,30 @@ const valueToken = (value: string) => {
   return 'text-[#EAE3D9]';
 };
 
-const HighlightedYaml: React.FC<{ source: string; scrollTop: number; scrollLeft: number }> = ({
-  source, scrollTop, scrollLeft,
+const MIN_FONT_SIZE = 10;
+const MAX_FONT_SIZE = 18;
+const DEFAULT_FONT_SIZE = 12;
+
+const HighlightedYaml: React.FC<{
+  lines: string[];
+  fontSize: number;
+  preRef: React.RefObject<HTMLPreElement | null>;
+  scrollTop: number;
+  scrollLeft: number;
+}> = ({
+  lines, fontSize, preRef, scrollTop, scrollLeft,
 }) => (
   <pre
+    ref={preRef}
     aria-hidden="true"
-    className="absolute inset-0 m-0 overflow-visible whitespace-pre font-mono text-[13px] leading-6 pointer-events-none"
-    style={{ transform: `translate(${-scrollLeft}px, ${-scrollTop}px)` }}
+    className="absolute inset-0 m-0 overflow-visible whitespace-pre font-mono pointer-events-none"
+    style={{
+      fontSize,
+      lineHeight: `${fontSize + 8}px`,
+      transform: `translate(${-scrollLeft}px, ${-scrollTop}px)`,
+    }}
   >
-    {source.split('\n').map((line, index) => {
+    {lines.map((line, index) => {
       const comment = line.match(/^(\s*)(#.*)$/);
       const keyed = line.match(/^(\s*)([- ]*)([\w.-]+)(\s*:)(.*)$/);
       return (
@@ -81,9 +96,27 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
     [initialSource, workflow]);
   const [source, setSource] = useState(canonicalSource);
   const [error, setError] = useState<string | null>(null);
-  const [scroll, setScroll] = useState({ top: 0, left: 0 });
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLPreElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef({ top: 0, left: 0 });
+  const lines = useMemo(() => source.split('\n'), [source]);
   const dirty = source !== canonicalSource;
+
+  const adjustFontSize = (delta: number) => {
+    setFontSize((current) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, current + delta)));
+  };
+
+  const syncScroll = (target: HTMLTextAreaElement) => {
+    scrollRef.current = { top: target.scrollTop, left: target.scrollLeft };
+    if (highlightRef.current) {
+      highlightRef.current.style.transform = `translate(${-target.scrollLeft}px, ${-target.scrollTop}px)`;
+    }
+    if (gutterRef.current) {
+      gutterRef.current.style.transform = `translateY(${-target.scrollTop}px)`;
+    }
+  };
 
   const apply = () => {
     try {
@@ -120,6 +153,34 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
           {dirty && <span className="text-[10px] text-[#F4A261]">Modified</span>}
         </div>
         <div className="flex items-center gap-2">
+          <div
+            className="flex items-center rounded-lg border border-[#3A322E] bg-[#1A1614]"
+            role="group"
+            aria-label="Editor font size"
+          >
+            <span className="pl-2 text-[#737D69]" aria-hidden="true"><Type className="w-3.5 h-3.5" /></span>
+            <button
+              type="button"
+              onClick={() => adjustFontSize(-1)}
+              disabled={fontSize === MIN_FONT_SIZE}
+              aria-label="Decrease editor font size"
+              className="p-1.5 text-[#A89F91] hover:text-[#EAE3D9] disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <output className="w-10 text-center font-mono text-[10px] text-[#EAE3D9]" aria-live="polite">
+              {fontSize}px
+            </output>
+            <button
+              type="button"
+              onClick={() => adjustFontSize(1)}
+              disabled={fontSize === MAX_FONT_SIZE}
+              aria-label="Increase editor font size"
+              className="p-1.5 text-[#A89F91] hover:text-[#EAE3D9] disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
           {onDiscard && (
             <button onClick={onDiscard}
               className="px-2.5 py-1.5 rounded-lg border border-[#3A322E] text-[11px] text-[#A89F91] hover:text-[#E76F51] flex items-center gap-1.5">
@@ -138,18 +199,28 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
       </div>
 
       <div className="relative flex-1 min-h-0 m-4 rounded-xl border border-[#3A322E] bg-[#151210] overflow-hidden shadow-inner">
-        <div className="absolute left-0 top-0 bottom-0 w-12 bg-[#1C1816] border-r border-[#3A322E] text-right pr-3 pt-4 font-mono text-[11px] leading-6 text-[#655D55] select-none overflow-hidden">
-          <div style={{ transform: `translateY(${-scroll.top}px)` }}>
-            {source.split('\n').map((_, index) => <div key={index}>{index + 1}</div>)}
+        <div className="absolute left-0 top-0 bottom-0 w-12 bg-[#1C1816] border-r border-[#3A322E] text-right pr-3 pt-4 font-mono text-[#655D55] select-none overflow-hidden">
+          <div ref={gutterRef} style={{
+            fontSize: Math.max(9, fontSize - 2),
+            lineHeight: `${fontSize + 8}px`,
+            transform: `translateY(${-scrollRef.current.top}px)`,
+          }}>
+            {lines.map((_, index) => <div key={index}>{index + 1}</div>)}
           </div>
         </div>
         <div className="absolute left-16 right-4 top-4 bottom-4 overflow-hidden">
-          <HighlightedYaml source={source} scrollTop={scroll.top} scrollLeft={scroll.left} />
+          <HighlightedYaml
+            lines={lines}
+            fontSize={fontSize}
+            preRef={highlightRef}
+            scrollTop={scrollRef.current.top}
+            scrollLeft={scrollRef.current.left}
+          />
           <textarea
             ref={editorRef}
             value={source}
             onChange={(event) => { setSource(event.target.value); setError(null); }}
-            onScroll={(event) => setScroll({ top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft })}
+            onScroll={(event) => syncScroll(event.currentTarget)}
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
                 event.preventDefault(); apply();
@@ -165,8 +236,8 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
             }}
             spellCheck={false}
             aria-label="APL YAML source"
-            className="absolute inset-0 w-full h-full resize-none overflow-auto whitespace-pre bg-transparent font-mono text-[13px] leading-6 outline-none text-transparent caret-[#F4A261] selection:bg-[#9D4EDD]/40"
-            style={{ WebkitTextFillColor: 'transparent' }}
+            className="absolute inset-0 w-full h-full resize-none overflow-auto whitespace-pre bg-transparent font-mono outline-none text-transparent caret-[#F4A261] selection:bg-[#9D4EDD]/40"
+            style={{ WebkitTextFillColor: 'transparent', fontSize, lineHeight: `${fontSize + 8}px` }}
           />
         </div>
       </div>
