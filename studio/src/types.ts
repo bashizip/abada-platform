@@ -94,6 +94,12 @@ export interface WorkflowFile {
   languageVersion?: string;
   /** Original format when this APL document was converted on import. */
   importedFrom?: 'BPMN';
+  /** Stable project-local process identity (`metadata.key`). */
+  processKey?: string;
+  /** PostgreSQL-backed Studio document identity and optimistic revision. */
+  documentId?: string;
+  revision?: number;
+  description?: string;
 }
 
 export const LANGUAGE_VERSION_ABADA_IO_V1 = 'abada.io/v1';

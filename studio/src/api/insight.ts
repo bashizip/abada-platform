@@ -80,43 +80,51 @@ export class InsightAPI {
     return res.json();
   }
 
-  static async listProposals(definitionKey?: string): Promise<InsightProposalPage> {
+  static async listProposals(definitionKey?: string, projectId?: string): Promise<InsightProposalPage> {
     const query = new URLSearchParams({ page: '0', size: '20' });
     if (definitionKey) query.set('definitionKey', definitionKey);
-    const res = await fetch(`${this.BASE_URL}/insight/proposals?${query}`, { headers: this.getHeaders() });
+    const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
+    const res = await fetch(`${this.BASE_URL}${scope}/proposals?${query}`, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch Insight proposals: ${res.statusText}`);
     return res.json();
   }
 
-  static async getProposal(id: number): Promise<InsightProposalDetail> {
-    const res = await fetch(`${this.BASE_URL}/insight/proposals/${id}`, { headers: this.getHeaders() });
+  static async getProposal(id: number, projectId?: string): Promise<InsightProposalDetail> {
+    const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
+    const res = await fetch(`${this.BASE_URL}${scope}/proposals/${id}`, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch Insight proposal: ${res.statusText}`);
     return res.json();
   }
 
-  static async getPolicy(definitionKey: string): Promise<InsightApprovalPolicy> {
-    const res = await fetch(`${this.BASE_URL}/insight/policies/${encodeURIComponent(definitionKey)}`,
+  static async getPolicy(definitionKey: string, projectId?: string): Promise<InsightApprovalPolicy> {
+    const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
+    const res = await fetch(`${this.BASE_URL}${scope}/policies/${encodeURIComponent(definitionKey)}`,
       { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch approval policy: ${res.statusText}`);
     return res.json();
   }
 
-  static async updatePolicy(policy: InsightApprovalPolicy): Promise<InsightApprovalPolicy> {
-    const res = await fetch(`${this.BASE_URL}/insight/policies/${encodeURIComponent(policy.definitionKey)}`, {
-      method: 'PUT', headers: this.getHeaders(), body: JSON.stringify({
-        expectedVersion: policy.policyVersion,
-        requiredApprovals: policy.requiredApprovals,
-        requiredGroups: policy.requiredGroups,
-        approvalMode: policy.approvalMode,
-      }),
+  static async updatePolicy(policy: InsightApprovalPolicy, projectId?: string): Promise<InsightApprovalPolicy> {
+    const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
+    const body = projectId ? {
+      expectedVersion: policy.policyVersion, requiredApprovals: policy.requiredApprovals,
+      requiredLanes: policy.requiredGroups.split(',').map((value) => value.replace(/^lane:/i, '').trim()),
+      approvalMode: policy.approvalMode,
+    } : {
+      expectedVersion: policy.policyVersion, requiredApprovals: policy.requiredApprovals,
+      requiredGroups: policy.requiredGroups, approvalMode: policy.approvalMode,
+    };
+    const res = await fetch(`${this.BASE_URL}${scope}/policies/${encodeURIComponent(policy.definitionKey)}`, {
+      method: 'PUT', headers: this.getHeaders(), body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`Failed to update approval policy: ${res.statusText} - ${await res.text()}`);
     return res.json();
   }
 
   static async reviewProposal(id: number, decision: 'APPROVE' | 'REJECT',
-    comment: string, expectedUpdatedAt: string): Promise<InsightProposalDetail> {
-    const res = await fetch(`${this.BASE_URL}/insight/proposals/${id}/reviews`, {
+    comment: string, expectedUpdatedAt: string, projectId?: string): Promise<InsightProposalDetail> {
+    const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
+    const res = await fetch(`${this.BASE_URL}${scope}/proposals/${id}/reviews`, {
       method: 'POST', headers: this.getHeaders(),
       body: JSON.stringify({ decision, comment, expectedUpdatedAt }),
     });

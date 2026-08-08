@@ -27,6 +27,7 @@ interface SidebarProps {
   onSelectWorkflow: (id: string) => void;
   onAddNode: (type: NodeType) => void;
   onNewWorkflowModal: () => void;
+  projectId?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -35,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectWorkflow,
   onAddNode,
   onNewWorkflowModal,
+  projectId,
 }) => {
   const [activeTab, setActiveTab] = useState<'files' | 'palette' | 'instances'>('files');
   const [expandedFolder, setExpandedFolder] = useState<string>('all');
@@ -45,12 +47,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   React.useEffect(() => {
     if (activeTab === 'instances') {
       setIsLoadingInstances(true);
-      EngineAPI.getInstances()
+      EngineAPI.getInstances(projectId)
         .then(data => setInstances(data))
         .catch(err => console.error('Failed to fetch instances', err))
         .finally(() => setIsLoadingInstances(false));
     }
-  }, [activeTab]);
+  }, [activeTab, projectId]);
 
   const paletteItems: {
     type: NodeType;

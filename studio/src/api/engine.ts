@@ -13,6 +13,7 @@ export interface DeploymentResponse {
 }
 
 export interface ProcessInstanceDTO {
+  projectId?: string;
   id: string;
   processDefinitionId: string;
   startDate: string;
@@ -26,6 +27,7 @@ import { keycloak } from '@/auth/keycloakClient';
 import { getUserFromToken } from '@/auth/keycloakClient';
 
 export interface ProcessDefinitionDTO {
+  projectId?: string;
   id: string;
   name: string;
   version: number;
@@ -77,8 +79,9 @@ export class EngineAPI {
   /**
    * Gets a list of recent process instances
    */
-  static async getInstances(): Promise<ProcessInstanceDTO[]> {
-    const res = await fetch(`${this.BASE_URL}/processes/instances?size=20`, {
+  static async getInstances(projectId?: string): Promise<ProcessInstanceDTO[]> {
+    const path = projectId ? `/projects/${projectId}/instances?size=20` : '/processes/instances?size=20';
+    const res = await fetch(`${this.BASE_URL}${path}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -90,9 +93,12 @@ export class EngineAPI {
   /**
    * Starts a new process instance using the authenticated user's identity.
    */
-  static async startProcess(processId: string, variables: Record<string, any> = {}): Promise<{ processInstanceId: string }> {
+  static async startProcess(processId: string, variables: Record<string, any> = {}, projectId?: string): Promise<{ processInstanceId: string }> {
     const username = getUserFromToken(keycloak.tokenParsed)?.username || 'studio_user';
-    const res = await fetch(`${this.BASE_URL}/processes/start?processId=${encodeURIComponent(processId)}&username=${encodeURIComponent(username)}`, {
+    const path = projectId
+      ? `/projects/${projectId}/processes/${encodeURIComponent(processId)}/start`
+      : `/processes/start?processId=${encodeURIComponent(processId)}&username=${encodeURIComponent(username)}`;
+    const res = await fetch(`${this.BASE_URL}${path}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
@@ -106,8 +112,11 @@ export class EngineAPI {
   /**
    * Retrieves a single process instance with its live status and variables.
    */
-  static async getInstance(instanceId: string): Promise<ProcessInstanceDTO> {
-    const res = await fetch(`${this.BASE_URL}/processes/instances/${encodeURIComponent(instanceId)}`, {
+  static async getInstance(instanceId: string, projectId?: string): Promise<ProcessInstanceDTO> {
+    const path = projectId
+      ? `/projects/${projectId}/instances/${encodeURIComponent(instanceId)}`
+      : `/processes/instances/${encodeURIComponent(instanceId)}`;
+    const res = await fetch(`${this.BASE_URL}${path}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -119,8 +128,10 @@ export class EngineAPI {
   /**
    * Finds an already-deployed process definition by its process key, or null.
    */
-  static async findProcessDefinition(processKey: string): Promise<ProcessDefinitionDTO | null> {
-    const res = await fetch(`${this.BASE_URL}/processes?key=${encodeURIComponent(processKey)}`, {
+  static async findProcessDefinition(processKey: string, projectId?: string): Promise<ProcessDefinitionDTO | null> {
+    const path = projectId ? `/projects/${projectId}/processes?key=${encodeURIComponent(processKey)}`
+      : `/processes?key=${encodeURIComponent(processKey)}`;
+    const res = await fetch(`${this.BASE_URL}${path}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -133,10 +144,9 @@ export class EngineAPI {
   /**
    * Retrieves tasks, optionally filtered by status
    */
-  static async getTasks(status?: string): Promise<any[]> {
-    const url = status && status !== 'all' 
-      ? `${this.BASE_URL}/tasks?status=${encodeURIComponent(status)}`
-      : `${this.BASE_URL}/tasks`;
+  static async getTasks(status?: string, projectId?: string): Promise<any[]> {
+    const base = projectId ? `${this.BASE_URL}/projects/${projectId}/tasks` : `${this.BASE_URL}/tasks`;
+    const url = status && status !== 'all' ? `${base}?status=${encodeURIComponent(status)}` : base;
     const res = await fetch(url, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.statusText}`);
     return res.json();
@@ -145,8 +155,10 @@ export class EngineAPI {
   /**
    * Completes a task
    */
-  static async completeTask(taskId: string, variables: Record<string, any> = {}): Promise<any> {
-    const res = await fetch(`${this.BASE_URL}/tasks/${encodeURIComponent(taskId)}/complete`, {
+  static async completeTask(taskId: string, variables: Record<string, any> = {}, projectId?: string): Promise<any> {
+    const path = projectId ? `/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/complete`
+      : `/tasks/complete?taskId=${encodeURIComponent(taskId)}`;
+    const res = await fetch(`${this.BASE_URL}${path}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
@@ -158,8 +170,10 @@ export class EngineAPI {
   /**
    * Fails a process instance
    */
-  static async failInstance(instanceId: string): Promise<any> {
-    const res = await fetch(`${this.BASE_URL}/processes/instance/${encodeURIComponent(instanceId)}/fail`, {
+  static async failInstance(instanceId: string, projectId?: string): Promise<any> {
+    const path = projectId ? `/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/fail`
+      : `/processes/instance/${encodeURIComponent(instanceId)}/fail`;
+    const res = await fetch(`${this.BASE_URL}${path}`, {
       method: 'POST',
       headers: this.getHeaders(),
     });

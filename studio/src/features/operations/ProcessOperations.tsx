@@ -2,14 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
 import { Activity, XCircle, RefreshCcw } from 'lucide-react';
 
-export const ProcessOperations: React.FC = () => {
+export const ProcessOperations: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const [instances, setInstances] = useState<ProcessInstanceDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchInstances = async () => {
     setLoading(true);
     try {
-      const data = await EngineAPI.getInstances();
+      const data = await EngineAPI.getInstances(projectId);
       setInstances(data);
     } catch (err) {
       console.error(err);
@@ -20,11 +20,11 @@ export const ProcessOperations: React.FC = () => {
 
   useEffect(() => {
     fetchInstances();
-  }, []);
+  }, [projectId]);
 
   const handleFail = async (id: string) => {
     try {
-      await EngineAPI.failInstance(id);
+      await EngineAPI.failInstance(id, projectId);
       fetchInstances();
     } catch (err) {
       console.error('Failed to fail instance', err);

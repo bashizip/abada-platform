@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { EngineAPI } from '@/api/engine';
 import { CheckCircle, Clock, User, FileText } from 'lucide-react';
 
-export const TaskInbox: React.FC = () => {
+export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
@@ -10,7 +10,7 @@ export const TaskInbox: React.FC = () => {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const data = await EngineAPI.getTasks();
+      const data = await EngineAPI.getTasks(undefined, projectId);
       setTasks(data);
     } catch (err) {
       console.error(err);
@@ -21,7 +21,7 @@ export const TaskInbox: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
-  }, []);
+  }, [projectId]);
 
   const handleComplete = async () => {
     if (!selectedTask) return;
@@ -29,7 +29,7 @@ export const TaskInbox: React.FC = () => {
       await EngineAPI.completeTask(selectedTask.id, {
         decision: 'APPROVED',
         notes: 'Approved via Studio Task Inbox'
-      });
+      }, projectId);
       setSelectedTask(null);
       fetchTasks();
     } catch (err) {

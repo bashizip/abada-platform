@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { INITIAL_WORKFLOWS } from '@/data/sampleWorkflows';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
@@ -9,6 +9,7 @@ import { SimulationPanel } from '@/components/SimulationPanel';
 import { NewWorkflowModal } from '@/components/NewWorkflowModal';
 import { ProcessDetailsModal } from '@/components/ProcessDetailsModal';
 import { SettingsPanel } from '@/components/SettingsPanel';
+import { ProjectDialog } from '@/components/ProjectDialog';
 import { AIDiffModal } from '@/features/designer/AIDiffModal';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
@@ -16,6 +17,7 @@ import { RunPanel } from '@/features/run/RunPanel';
 import { EngineAPI } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
 import { SemaflowAPI } from '@/api/semaflow';
+import { Project, ProjectAPI } from '@/api/projects';
 import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { aplToWorkflow } from '@/lib/apl/parser';
 import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
@@ -56,10 +58,69 @@ export default function App() {
   // Workflow Generation state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isNewModalOpen, setIsNewModalOpen] = useState<boolean>(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<Project | undefined>();
+  const [showProjects, setShowProjects] = useState(false);
+  const persistedFingerprint = useRef(new Map<string, string>());
 
   // Get active workflow object
   const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId) || workflows[0];
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
+
+  const workflowFingerprint = (workflow: WorkflowFile) => JSON.stringify({
+    processKey: workflow.processKey, name: workflow.name, description: workflow.description,
+    category: workflow.category, nodes: workflow.nodes, edges: workflow.edges,
+  });
+
+  const openProject = async (project: Project) => {
+    setActiveProject(project);
+    localStorage.setItem('abada.studio.projectId', project.id);
+    const documents = await ProjectAPI.documents(project.id);
+    if (documents.length) {
+      const loaded = documents.map(ProjectAPI.workflow);
+      loaded.forEach((workflow) => persistedFingerprint.current.set(workflow.id, workflowFingerprint(workflow)));
+      setWorkflows(loaded);
+      setActiveWorkflowId(loaded[0].id);
+      setSelectedNodeId(loaded[0].nodes[0]?.id || null);
+    } else {
+      setWorkflows(INITIAL_WORKFLOWS.slice(0, 1).map((workflow) => ({
+        ...workflow, id: `draft-${project.id}`, name: 'Untitled Process', processKey: 'untitled_process',
+      })));
+      setActiveWorkflowId(`draft-${project.id}`);
+      setSelectedNodeId(INITIAL_WORKFLOWS[0].nodes[0]?.id || null);
+    }
+  };
+
+  useEffect(() => {
+    ProjectAPI.list().then((available) => {
+      setProjects(available);
+      const remembered = localStorage.getItem('abada.studio.projectId');
+      const selected = available.find((project) => project.id === remembered) || available[0];
+      if (selected) void openProject(selected);
+      else setShowProjects(true);
+    }).catch(() => setShowProjects(true));
+    // Project discovery happens once per authenticated Studio session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!activeProject || !currentWorkflow.documentId) return;
+    const fingerprint = workflowFingerprint(currentWorkflow);
+    if (persistedFingerprint.current.get(currentWorkflow.id) === fingerprint) return;
+    const timer = window.setTimeout(() => {
+      ProjectAPI.saveDocument(activeProject.id, currentWorkflow).then((saved) => {
+        persistedFingerprint.current.set(currentWorkflow.id, fingerprint);
+        setWorkflows((items) => items.map((item) => item.id === currentWorkflow.id
+          ? { ...item, revision: saved.revision, updatedAt: saved.updatedAt } : item));
+      }).catch((reason) => setSimulationLogs((logs) => [...logs, {
+        id: `autosave-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
+        nodeTitle: 'Project Autosave', nodeType: 'event', status: 'error',
+        message: reason instanceof Error ? reason.message : String(reason),
+      }]));
+    }, 800);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.id, currentWorkflow]);
 
   // Auto-layout is the default: the first time the canvas loads (initial
   // mount and first activation of each workflow), positions are derived from
@@ -241,12 +302,13 @@ export default function App() {
   };
 
   const handleOpenAiDiff = async () => {
-    const definitionKey = currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    const definitionKey = currentWorkflow.processKey
+      || currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     try {
-      const page = await InsightAPI.listProposals(definitionKey);
+      const page = await InsightAPI.listProposals(definitionKey, activeProject?.id);
       const summary = page.items.find((item) => item.status === 'DRAFT' || item.status === 'IN_REVIEW');
       if (!summary) throw new Error(`No pending Insight proposal for ${definitionKey}`);
-      setDiffSnapshot(InsightAPI.toDiffSnapshot(await InsightAPI.getProposal(summary.id)));
+      setDiffSnapshot(InsightAPI.toDiffSnapshot(await InsightAPI.getProposal(summary.id, activeProject?.id)));
     } catch (error) {
       setSimulationLogs((prev) => [...prev, {
         id: `diff-error-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
@@ -266,7 +328,7 @@ export default function App() {
   const handleApplyAiDiff = async (comment: string) => {
     if (!diffSnapshot?.backend) return;
     const reviewed = await InsightAPI.reviewProposal(diffSnapshot.backend.id, 'APPROVE', comment,
-      diffSnapshot.backend.updatedAt);
+      diffSnapshot.backend.updatedAt, activeProject?.id);
     if (reviewed.status === 'ADOPTED') {
       updateActiveWorkflow((wf) => ({ ...wf, nodes: diffSnapshot.proposedNodes,
         edges: diffSnapshot.proposedEdges, version: String(reviewed.adoptedVersion || wf.version), fileType: 'apl' }));
@@ -289,7 +351,7 @@ export default function App() {
   const handleRejectAiDiff = async (comment: string) => {
     if (!diffSnapshot?.backend) return;
     const reviewed = await InsightAPI.reviewProposal(diffSnapshot.backend.id, 'REJECT', comment,
-      diffSnapshot.backend.updatedAt);
+      diffSnapshot.backend.updatedAt, activeProject?.id);
     setSimulationLogs((prev) => [
       ...prev,
       {
@@ -329,7 +391,8 @@ export default function App() {
     setShowLogPanel(true);
     setShowRunPanel(true);
 
-    const processKey = wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
+    const processKey = wf.processKey
+      || wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
     let version = 0;
 
     try {
@@ -339,7 +402,19 @@ export default function App() {
         nodeId: 'system', nodeTitle: 'Deployment Compiler', nodeType: 'event', status: 'info',
         message: `Validating and deploying native APL [${wf.name}] as definition [${processKey}]…`,
       });
-      const deploy = await EngineAPI.deployWorkflow(wf);
+      let deployWorkflow = wf;
+      if (activeProject) {
+        const wasDraft = !wf.documentId;
+        const saved = wf.documentId ? await ProjectAPI.saveDocument(activeProject.id, wf)
+          : await ProjectAPI.createDocument(activeProject.id, wf, wf.description || '');
+        deployWorkflow = { ...wf, id: saved.id, documentId: saved.id, revision: saved.revision };
+        persistedFingerprint.current.set(deployWorkflow.id, workflowFingerprint(deployWorkflow));
+        setWorkflows((items) => items.map((item) => item.id === wf.id ? deployWorkflow : item));
+        if (wasDraft) setActiveWorkflowId(saved.id);
+      }
+      const deploy = activeProject
+        ? await ProjectAPI.deployDocument(activeProject.id, deployWorkflow)
+        : await EngineAPI.deployWorkflow(wf);
       version = deploy.version;
       addLog({
         nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'success',
@@ -351,14 +426,14 @@ export default function App() {
         nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'info',
         message: `Starting instance with payload ${JSON.stringify(payload)}…`,
       });
-      const { processInstanceId } = await EngineAPI.startProcess(processKey, payload);
+      const { processInstanceId } = await EngineAPI.startProcess(processKey, payload, activeProject?.id);
       addLog({
         nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'success',
         message: `Instance started: ${processInstanceId}.`,
       });
 
       // 3. Poll until terminal state, a human gate, or a 45s timeout
-      let instance = await EngineAPI.getInstance(processInstanceId);
+      let instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
       let outputs = extractDecisionOutputs(wf, instance.variables || {});
       let waitingTaskName: string | undefined;
       let pollCount = 0;
@@ -400,11 +475,11 @@ export default function App() {
 
         if (Date.now() > deadline) break;
         await sleep(1500);
-        instance = await EngineAPI.getInstance(processInstanceId);
+        instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
       }
 
       // 4. Final snapshot
-      instance = await EngineAPI.getInstance(processInstanceId);
+      instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
       outputs = extractDecisionOutputs(wf, instance.variables || {});
       const terminal = instance.status.toUpperCase();
       const durationMs = Date.now() - startedAt;
@@ -496,7 +571,23 @@ export default function App() {
     ]);
 
     try {
-      const response = await EngineAPI.deployWorkflow(currentWorkflow);
+      let deployWorkflow = currentWorkflow;
+      if (activeProject) {
+        const wasDraft = !currentWorkflow.documentId;
+        const saved = currentWorkflow.documentId
+          ? await ProjectAPI.saveDocument(activeProject.id, currentWorkflow)
+          : await ProjectAPI.createDocument(activeProject.id, currentWorkflow,
+              currentWorkflow.description || '');
+        deployWorkflow = { ...currentWorkflow, id: saved.id, documentId: saved.id,
+          revision: saved.revision, updatedAt: saved.updatedAt };
+        persistedFingerprint.current.set(deployWorkflow.id, workflowFingerprint(deployWorkflow));
+        setWorkflows((items) => items.map((item) => item.id === currentWorkflow.id
+          ? deployWorkflow : item));
+        if (wasDraft) setActiveWorkflowId(saved.id);
+      }
+      const response = activeProject
+        ? await ProjectAPI.deployDocument(activeProject.id, deployWorkflow)
+        : await EngineAPI.deployWorkflow(currentWorkflow);
       
       setSimulationLogs(prev => [
         ...prev,
@@ -642,10 +733,12 @@ export default function App() {
   };
 
   // Create Custom Workflow File
-  const handleCreateNewWorkflow = (name: string, category: any) => {
+  const handleCreateNewWorkflow = async (name: string, category: any) => {
+    const processKey = name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
     const newWf: WorkflowFile = {
       id: `wf-custom-${Date.now()}`,
       name,
+      processKey,
       category,
       fileType: 'apl',
       languageVersion: LANGUAGE_VERSION_ABADA_IO_V1,
@@ -682,8 +775,23 @@ export default function App() {
       ],
     };
 
-    setWorkflows((prev) => [newWf, ...prev]);
-    setActiveWorkflowId(newWf.id);
+    let persisted = newWf;
+    if (activeProject) {
+      try {
+        const document = await ProjectAPI.createDocument(activeProject.id, newWf);
+        persisted = { ...newWf, id: document.id, documentId: document.id,
+          revision: document.revision, updatedAt: document.updatedAt };
+        persistedFingerprint.current.set(persisted.id, workflowFingerprint(persisted));
+      } catch (reason) {
+        setSimulationLogs((logs) => [...logs, { id: `create-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
+          nodeTitle: 'Project', nodeType: 'event', status: 'error',
+          message: reason instanceof Error ? reason.message : String(reason) }]);
+        return;
+      }
+    }
+    setWorkflows((prev) => [persisted, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
+    setActiveWorkflowId(persisted.id);
     setSelectedNodeId('agent-1');
   };
 
@@ -707,6 +815,8 @@ export default function App() {
         onOpenSettings={() => setShowSettings(true)}
         currentView={currentView}
         onViewChange={setCurrentView}
+        activeProject={activeProject}
+        onOpenProjects={() => setShowProjects(true)}
       />
 
       {/* Main Studio Area */}
@@ -723,6 +833,7 @@ export default function App() {
             }}
             onAddNode={handleAddNode}
             onNewWorkflowModal={() => setIsNewModalOpen(true)}
+            projectId={activeProject?.id}
           />
         )}
 
@@ -774,10 +885,10 @@ export default function App() {
         )}
 
         {/* View: Task Inbox (Human-in-the-Loop) */}
-        {currentView === 'inbox' && <TaskInbox />}
+        {currentView === 'inbox' && <TaskInbox projectId={activeProject?.id} />}
 
         {/* View: Process Operations */}
-        {currentView === 'operations' && <ProcessOperations />}
+        {currentView === 'operations' && <ProcessOperations projectId={activeProject?.id} />}
       </div>
 
       {/* New Process Canvas Modal */}
@@ -786,6 +897,10 @@ export default function App() {
         onClose={() => setIsNewModalOpen(false)}
         onCreateWorkflow={handleCreateNewWorkflow}
       />
+
+      <ProjectDialog isOpen={showProjects} projects={projects} activeProject={activeProject}
+        onClose={() => setShowProjects(false)} onOpen={(project) => void openProject(project)}
+        onCreated={(project) => { setProjects((items) => [project, ...items]); void openProject(project); }} />
 
       {/* Process Details inspector modal — metadata payloads live here, not the header */}
       <ProcessDetailsModal
@@ -798,7 +913,9 @@ export default function App() {
       <SettingsPanel
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
-        definitionKey={currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}
+        definitionKey={currentWorkflow.processKey
+          || currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}
+        projectId={activeProject?.id}
       />
 
       {/* AI Diff review — full-focus dialog; canvas stays clean until Approved */}

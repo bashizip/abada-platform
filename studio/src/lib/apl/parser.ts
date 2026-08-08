@@ -307,6 +307,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
   return {
     id: `wf-${Date.now()}`,
     name: apl.metadata.name,
+    processKey: apl.metadata.key || apl.metadata.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
     category: (apl.metadata.category || 'custom') as any,
     fileType: 'apl',
     languageVersion: apl.version,
@@ -431,6 +432,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
   return {
     version: 'abada.io/v1',
     metadata: {
+      key: wf.processKey || wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
       name: wf.name,
       owner: 'studio-user',
       category: wf.category,

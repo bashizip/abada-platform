@@ -11,7 +11,9 @@ import {
   GitCompare,
   FileText,
   Settings,
+  FolderKanban,
 } from 'lucide-react';
+import { Project } from '@/api/projects';
 import { WorkflowFile } from '@/types';
 import { keycloak } from '@/auth/keycloakClient';
 import { IconButton, TooltipProvider } from '@/components/ui';
@@ -33,6 +35,8 @@ interface HeaderProps {
   nodeCount: number;
   currentView?: 'designer' | 'inbox' | 'operations';
   onViewChange?: (view: 'designer' | 'inbox' | 'operations') => void;
+  activeProject?: Project;
+  onOpenProjects?: () => void;
 }
 
 /** Clean file identifier: process name only, no format/version pill noise. */
@@ -56,6 +60,8 @@ export const Header: React.FC<HeaderProps> = ({
   nodeCount,
   currentView = 'designer',
   onViewChange,
+  activeProject,
+  onOpenProjects,
 }) => {
   return (
     <TooltipProvider delayDuration={0}>
@@ -70,6 +76,15 @@ export const Header: React.FC<HeaderProps> = ({
               ABADA
             </span>
           </div>
+
+          <div className="h-4 w-px bg-[#3A322E]" />
+
+          <button type="button" onClick={onOpenProjects}
+            className="flex items-center gap-1.5 text-xs text-[#A89F91] hover:text-[#F4A261] max-w-[180px]"
+            title="New project / Open project">
+            <FolderKanban className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{activeProject?.name || 'Open project'}</span>
+          </button>
 
           <div className="h-4 w-px bg-[#3A322E]" />
 

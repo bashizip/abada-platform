@@ -1,6 +1,7 @@
 export interface APLDocument {
   version: string;
   metadata: {
+    key?: string;
     name: string;
     owner?: string;
     category?: string;

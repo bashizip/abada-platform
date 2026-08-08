@@ -6,6 +6,7 @@ interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   definitionKey: string;
+  projectId?: string;
 }
 
 /**
@@ -14,7 +15,7 @@ interface SettingsPanelProps {
  * Settings are read-only in the UI; actual configuration is via environment
  * variables (ABADA_LLM_*) and Spring properties.
  */
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, definitionKey }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, definitionKey, projectId }) => {
   const [config, setConfig] = useState<InsightLlmConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
       setError(null);
       try {
         const [data, approvalPolicy] = await Promise.all([
-          InsightAPI.getLlmConfig(), InsightAPI.getPolicy(definitionKey),
+          InsightAPI.getLlmConfig(), InsightAPI.getPolicy(definitionKey, projectId),
         ]);
         setConfig(data);
         setPolicy(approvalPolicy);
@@ -47,14 +48,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose, definitionKey]);
+  }, [isOpen, onClose, definitionKey, projectId]);
 
   const savePolicy = async () => {
     if (!policy) return;
     setIsSavingPolicy(true);
     setError(null);
     try {
-      setPolicy(await InsightAPI.updatePolicy(policy));
+      setPolicy(await InsightAPI.updatePolicy(policy, projectId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save approval policy');
     } finally {
