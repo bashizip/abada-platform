@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class BpmnParser {
-    static final int MAX_DEPLOYMENT_BYTES = 10 * 1024 * 1024;
+    public static final int MAX_DEPLOYMENT_BYTES = 10 * 1024 * 1024;
     private final AssignmentParserRegistry assignmentParsers = new AssignmentParserRegistry();
 
     public ParsedProcessDefinition parse(InputStream bpmnXml) {

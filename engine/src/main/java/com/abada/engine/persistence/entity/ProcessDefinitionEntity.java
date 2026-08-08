@@ -43,6 +43,9 @@ public class ProcessDefinitionEntity {
     @Column(name = "definition_format_version", nullable = false)
     private String definitionFormatVersion = "legacy-1";
 
+    @Column(name = "schema_type", nullable = false)
+    private String schemaType = "BPMN_XML";
+
     @Column(name = "compatibility_profiles", nullable = false, columnDefinition = "TEXT")
     private String compatibilityProfiles = "standard-bpmn-2.0,abada-native-1,camunda-7";
 
@@ -150,6 +153,8 @@ public class ProcessDefinitionEntity {
 
     public String getDefinitionFormatVersion() { return definitionFormatVersion; }
     public void setDefinitionFormatVersion(String value) { this.definitionFormatVersion = value; }
+    public String getSchemaType() { return schemaType; }
+    public void setSchemaType(String value) { this.schemaType = value; }
     public String getCompatibilityProfiles() { return compatibilityProfiles; }
     public void setCompatibilityProfiles(String value) { this.compatibilityProfiles = value; }
     public String getDetectedNamespaces() { return detectedNamespaces; }

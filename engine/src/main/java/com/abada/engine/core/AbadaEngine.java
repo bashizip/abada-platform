@@ -4,6 +4,7 @@ import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.bpmn.compatibility.BpmnParseOptions;
 import com.abada.engine.bpmn.compatibility.BpmnParseResult;
 import com.abada.engine.core.model.DecisionTableAudit;
+import com.abada.engine.core.model.DefinitionSchema;
 import com.abada.engine.core.model.EventMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.ServiceTaskMeta;
@@ -12,6 +13,7 @@ import com.abada.engine.core.model.ProcessStatus;
 import com.abada.engine.dto.UserTaskPayload;
 import com.abada.engine.observability.EngineMetrics;
 import com.abada.engine.observability.TraceLogContext;
+import com.abada.engine.parser.AplParser;
 import com.abada.engine.parser.BpmnParser;
 import com.abada.engine.persistence.PersistenceService;
 import com.abada.engine.persistence.entity.ExternalTaskEntity;
@@ -56,6 +58,7 @@ public class AbadaEngine {
 
     private final PersistenceService persistenceService;
     private final BpmnParser parser;
+    private final AplParser aplParser = new AplParser();
     private final TaskManager taskManager;
     private final EventManager eventManager;
     private final JobScheduler jobScheduler;
@@ -99,9 +102,31 @@ public class AbadaEngine {
         Timer.Sample deploymentSample = engineMetrics.startBpmnDeploymentTimer();
         boolean succeeded = false;
         try (var scope = TraceLogContext.open(span)) {
-            BpmnParseResult parseResult = parser.parseDetailed(bpmnXml, options);
+            // Polymorphic definition load: the source stream is either
+            // canonical BPMN 2.0 XML or a native abada.io/v1 APL YAML
+            // document — the schema marker selects the compiler. Both paths
+            // compile into the same ParsedProcessDefinition graph.
+            byte[] source;
+            try {
+                source = bpmnXml.readNBytes(BpmnParser.MAX_DEPLOYMENT_BYTES + 1);
+            } catch (java.io.IOException exception) {
+                throw new ProcessEngineException("Failed to read definition source", exception);
+            }
+            if (source.length > BpmnParser.MAX_DEPLOYMENT_BYTES) {
+                throw new ProcessEngineException(
+                        "Definition deployment exceeds the 10 MiB input limit");
+            }
+            DefinitionSchema schema = AplParser.isAplSource(source)
+                    ? DefinitionSchema.APL_NATIVE
+                    : DefinitionSchema.BPMN_XML;
+            BpmnParseResult parseResult;
+            if (schema == DefinitionSchema.APL_NATIVE) {
+                parseResult = aplParser.parseDetailed(source);
+            } else {
+                parseResult = parser.parseDetailed(new java.io.ByteArrayInputStream(source), options);
+            }
             ParsedProcessDefinition definition = parseResult.definition();
-            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult);
+            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema);
             historyService.record("PROCESS_DEFINITION_DEPLOYED", null, definition.getId(), null,
                     Map.of("deploymentId", persisted.getDeploymentId(), "version", persisted.getVersion()));
             registerDefinitionAfterCommit(definition, persisted);
@@ -109,8 +134,9 @@ public class AbadaEngine {
             span.setAttribute("process.definition.id", definition.getId());
             span.setAttribute("process.definition.name", definition.getName());
             span.setAttribute("process.definition.version", "1.0");
+            span.setAttribute("process.definition.schema", schema.name());
 
-            log.info("Deployed process definition: {}", definition.getId());
+            log.info("Deployed process definition: {} (schema: {})", definition.getId(), schema);
             succeeded = true;
             return persisted;
         } catch (Exception e) {
@@ -476,12 +502,16 @@ public class AbadaEngine {
     }
 
     private ParsedProcessDefinition cacheDefinition(ProcessDefinitionEntity entity) {
-        return definitionsByDeploymentId.computeIfAbsent(entity.getDeploymentId(), ignored ->
-                parser.parseDetailed(new java.io.ByteArrayInputStream(
-                                entity.getBpmnXml().getBytes(StandardCharsets.UTF_8)),
-                        new BpmnParseOptions(Arrays.stream(entity.getCompatibilityProfiles().split(","))
-                                .map(String::trim).filter(value -> !value.isEmpty()).toList(), false, false))
-                        .definition());
+        byte[] source = entity.getBpmnXml().getBytes(StandardCharsets.UTF_8);
+        return definitionsByDeploymentId.computeIfAbsent(entity.getDeploymentId(), ignored -> {
+            if (DefinitionSchema.from(entity.getSchemaType()) == DefinitionSchema.APL_NATIVE) {
+                return aplParser.parse(source);
+            }
+            return parser.parseDetailed(new java.io.ByteArrayInputStream(source),
+                            new BpmnParseOptions(Arrays.stream(entity.getCompatibilityProfiles().split(","))
+                                    .map(String::trim).filter(value -> !value.isEmpty()).toList(), false, false))
+                    .definition();
+        });
     }
 
     /** Records decision-table applications (identifiers and names only) in history and the outbox. */
@@ -701,6 +731,10 @@ public class AbadaEngine {
     }
 
     private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult) {
+        return saveProcessDefinition(parseResult, DefinitionSchema.BPMN_XML);
+    }
+
+    private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema) {
         ParsedProcessDefinition definition = parseResult.definition();
         String checksum = sha256(definition.getRawXml());
         ProcessDefinitionEntity latest = persistenceService.findProcessDefinitionById(definition.getId());
@@ -714,10 +748,11 @@ public class AbadaEngine {
         entity.setName(definition.getName());
         entity.setDocumentation(definition.getDocumentation());
         entity.setBpmnXml(definition.getRawXml());
-        entity.setDefinitionFormatVersion("canonical-1");
+        entity.setSchemaType(schema.name());
+        entity.setDefinitionFormatVersion(schema == DefinitionSchema.APL_NATIVE ? "apl-native-1" : "canonical-1");
         entity.setCompatibilityProfiles(String.join(",", parseResult.activeProfiles()));
         entity.setDetectedNamespaces(String.join(",", new TreeSet<>(parseResult.detectedNamespaces())));
-        entity.setCompilerVersion("1");
+        entity.setCompilerVersion(schema == DefinitionSchema.APL_NATIVE ? "apl-1" : "1");
         try {
             entity.setCompatibilityReport(om.writeValueAsString(parseResult.report()));
         } catch (JsonProcessingException exception) {

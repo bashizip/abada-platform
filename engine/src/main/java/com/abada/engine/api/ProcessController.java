@@ -88,7 +88,7 @@ public class ProcessController {
             Map<String, Object> compatibilityReport = objectMapper.readValue(deployed.getCompatibilityReport(),
                     new TypeReference<>() {});
             return new DeploymentResponse("Deployed", deployed.getProcessKey(), deployed.getDeploymentId(),
-                    deployed.getVersion(), deployed.getDefinitionFormatVersion(),
+                    deployed.getVersion(), deployed.getDefinitionFormatVersion(), deployed.getSchemaType(),
                     List.of(deployed.getCompatibilityProfiles().split(",")), compatibilityReport);
         } catch (IOException exception) {
             throw new IllegalStateException("Stored compatibility report is invalid", exception);

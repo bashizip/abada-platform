@@ -9,6 +9,7 @@ public record DeploymentResponse(
         String deploymentId,
         int version,
         String definitionFormatVersion,
+        String schemaType,
         List<String> compatibilityProfiles,
         Map<String, Object> compatibilityReport) {
 }
