@@ -1,0 +1,32 @@
+version: abada.io/v1
+metadata:
+  name: Rating Router
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: route
+    - id: route
+      type: condition
+      rules:
+        - if: rating == "gold"
+          then: goldDesk
+        - if: rating == "silver"
+          then: silverDesk
+        - else: true
+          then: basicDesk
+    - id: goldDesk
+      type: engine-task
+      service: abada:gold-tier
+      next: end
+    - id: silverDesk
+      type: engine-task
+      service: abada:silver-tier
+      next: end
+    - id: basicDesk
+      type: engine-task
+      service: abada:basic-tier
+      next: end
+    - id: end
+      type: end

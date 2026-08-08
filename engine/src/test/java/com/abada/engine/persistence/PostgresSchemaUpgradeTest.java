@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("9");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("10");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -66,6 +66,12 @@ class PostgresSchemaUpgradeTest {
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
              var columns = connection.getMetaData().getColumns(null, schema, "external_tasks", "trace_parent")) {
+            assertThat(columns.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var columns = connection.getMetaData().getColumns(null, schema, "process_definitions",
+                     "schema_type")) {
             assertThat(columns.next()).isTrue();
         }
     }

@@ -1,0 +1,34 @@
+version: abada.io/v1
+metadata:
+  name: Candidate Review
+flow:
+  entry: apply
+  nodes:
+    - id: apply
+      type: webhook
+      next: score
+    - id: score
+      type: decision-table
+      decisionKey: CANDIDATE_SCORING
+      hitPolicy: FIRST
+      inputs:
+        - name: score
+      rules:
+        - when: score >= 75
+          then:
+            rating: "pass"
+        - otherwise: true
+          then:
+            rating: "fail"
+      next: gate
+    - id: gate
+      type: approval-gate
+      description: Approve the candidate
+      assignees:
+        - recruiters
+      next: notify
+    - id: notify
+      type: agent
+      next: end
+    - id: end
+      type: end
