@@ -1,5 +1,5 @@
-import { keycloak } from '@/auth/keycloakClient';
 import { config } from '@/config/runtime';
+import { apiError, authenticatedFetch } from '@/api/authenticatedFetch';
 
 export interface AplGenerationCandidate {
   aplSource: string;
@@ -12,11 +12,10 @@ export interface AplGenerationCandidate {
 export class AuthoringAPI {
   static async generate(projectId: string, prompt: string, mode: 'new' | 'refine',
     baseAplSource?: string): Promise<AplGenerationCandidate> {
-    const response = await fetch(`${config.apiUrl}/v1/projects/${projectId}/authoring/generate`, {
+    const response = await authenticatedFetch(`${config.apiUrl}/v1/projects/${projectId}/authoring/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(keycloak.token ? { Authorization: `Bearer ${keycloak.token}` } : {}),
       },
       body: JSON.stringify({
         prompt,
@@ -24,7 +23,7 @@ export class AuthoringAPI {
         baseAplSource: mode === 'refine' ? baseAplSource : undefined,
       }),
     });
-    if (!response.ok) throw new Error(`${response.statusText} — ${await response.text()}`);
+    if (!response.ok) throw await apiError(response);
     return response.json();
   }
 }

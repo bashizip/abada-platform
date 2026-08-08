@@ -1,5 +1,5 @@
 import { config } from '@/config/runtime';
-import { keycloak } from '@/auth/keycloakClient';
+import { authenticatedFetch } from '@/api/authenticatedFetch';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { WorkflowDiffSnapshot, DiffNodeChange, DiffEdgeChange } from '@/lib/aiDiff/types';
 
@@ -59,9 +59,6 @@ export class InsightAPI {
 
   private static getHeaders(): HeadersInit {
     const headers: HeadersInit = {};
-    if (keycloak.token) {
-      headers['Authorization'] = `Bearer ${keycloak.token}`;
-    }
     headers['Content-Type'] = 'application/json';
     return headers;
   }
@@ -71,7 +68,7 @@ export class InsightAPI {
    * The API key is never returned; its presence is indicated by `configured`.
    */
   static async getLlmConfig(): Promise<InsightLlmConfig> {
-    const res = await fetch(`${this.BASE_URL}/insight/config/llm`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}/insight/config/llm`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -84,21 +81,21 @@ export class InsightAPI {
     const query = new URLSearchParams({ page: '0', size: '20' });
     if (definitionKey) query.set('definitionKey', definitionKey);
     const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
-    const res = await fetch(`${this.BASE_URL}${scope}/proposals?${query}`, { headers: this.getHeaders() });
+    const res = await authenticatedFetch(`${this.BASE_URL}${scope}/proposals?${query}`, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch Insight proposals: ${res.statusText}`);
     return res.json();
   }
 
   static async getProposal(id: number, projectId?: string): Promise<InsightProposalDetail> {
     const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
-    const res = await fetch(`${this.BASE_URL}${scope}/proposals/${id}`, { headers: this.getHeaders() });
+    const res = await authenticatedFetch(`${this.BASE_URL}${scope}/proposals/${id}`, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch Insight proposal: ${res.statusText}`);
     return res.json();
   }
 
   static async getPolicy(definitionKey: string, projectId?: string): Promise<InsightApprovalPolicy> {
     const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
-    const res = await fetch(`${this.BASE_URL}${scope}/policies/${encodeURIComponent(definitionKey)}`,
+    const res = await authenticatedFetch(`${this.BASE_URL}${scope}/policies/${encodeURIComponent(definitionKey)}`,
       { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch approval policy: ${res.statusText}`);
     return res.json();
@@ -114,7 +111,7 @@ export class InsightAPI {
       expectedVersion: policy.policyVersion, requiredApprovals: policy.requiredApprovals,
       requiredGroups: policy.requiredGroups, approvalMode: policy.approvalMode,
     };
-    const res = await fetch(`${this.BASE_URL}${scope}/policies/${encodeURIComponent(policy.definitionKey)}`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${scope}/policies/${encodeURIComponent(policy.definitionKey)}`, {
       method: 'PUT', headers: this.getHeaders(), body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`Failed to update approval policy: ${res.statusText} - ${await res.text()}`);
@@ -124,7 +121,7 @@ export class InsightAPI {
   static async reviewProposal(id: number, decision: 'APPROVE' | 'REJECT',
     comment: string, expectedUpdatedAt: string, projectId?: string): Promise<InsightProposalDetail> {
     const scope = projectId ? `/projects/${projectId}/insight` : '/insight';
-    const res = await fetch(`${this.BASE_URL}${scope}/proposals/${id}/reviews`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${scope}/proposals/${id}/reviews`, {
       method: 'POST', headers: this.getHeaders(),
       body: JSON.stringify({ decision, comment, expectedUpdatedAt }),
     });

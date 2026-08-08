@@ -25,6 +25,7 @@ export interface ProcessInstanceDTO {
 import { config } from '@/config/runtime';
 import { keycloak } from '@/auth/keycloakClient';
 import { getUserFromToken } from '@/auth/keycloakClient';
+import { authenticatedFetch } from '@/api/authenticatedFetch';
 
 export interface ProcessDefinitionDTO {
   projectId?: string;
@@ -39,9 +40,6 @@ export class EngineAPI {
 
   private static getHeaders(isFormData = false): HeadersInit {
     const headers: HeadersInit = {};
-    if (keycloak.token) {
-      headers['Authorization'] = `Bearer ${keycloak.token}`;
-    }
     if (!isFormData) {
       headers['Content-Type'] = 'application/json';
     }
@@ -62,7 +60,7 @@ export class EngineAPI {
     formData.append('file', blob, `${workflow.name || 'process'}.apl.yaml`);
     formData.append('strict', 'true');
 
-    const res = await fetch(`${this.BASE_URL}/processes/deploy`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}/processes/deploy`, {
       method: 'POST',
       headers: this.getHeaders(true),
       body: formData,
@@ -81,7 +79,7 @@ export class EngineAPI {
    */
   static async getInstances(projectId?: string): Promise<ProcessInstanceDTO[]> {
     const path = projectId ? `/projects/${projectId}/instances?size=20` : '/processes/instances?size=20';
-    const res = await fetch(`${this.BASE_URL}${path}`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -98,7 +96,7 @@ export class EngineAPI {
     const path = projectId
       ? `/projects/${projectId}/processes/${encodeURIComponent(processId)}/start`
       : `/processes/start?processId=${encodeURIComponent(processId)}&username=${encodeURIComponent(username)}`;
-    const res = await fetch(`${this.BASE_URL}${path}`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
@@ -116,7 +114,7 @@ export class EngineAPI {
     const path = projectId
       ? `/projects/${projectId}/instances/${encodeURIComponent(instanceId)}`
       : `/processes/instances/${encodeURIComponent(instanceId)}`;
-    const res = await fetch(`${this.BASE_URL}${path}`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -131,7 +129,7 @@ export class EngineAPI {
   static async findProcessDefinition(processKey: string, projectId?: string): Promise<ProcessDefinitionDTO | null> {
     const path = projectId ? `/projects/${projectId}/processes?key=${encodeURIComponent(processKey)}`
       : `/processes?key=${encodeURIComponent(processKey)}`;
-    const res = await fetch(`${this.BASE_URL}${path}`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -147,7 +145,7 @@ export class EngineAPI {
   static async getTasks(status?: string, projectId?: string): Promise<any[]> {
     const base = projectId ? `${this.BASE_URL}/projects/${projectId}/tasks` : `${this.BASE_URL}/tasks`;
     const url = status && status !== 'all' ? `${base}?status=${encodeURIComponent(status)}` : base;
-    const res = await fetch(url, { headers: this.getHeaders() });
+    const res = await authenticatedFetch(url, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.statusText}`);
     return res.json();
   }
@@ -158,7 +156,7 @@ export class EngineAPI {
   static async completeTask(taskId: string, variables: Record<string, any> = {}, projectId?: string): Promise<any> {
     const path = projectId ? `/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/complete`
       : `/tasks/complete?taskId=${encodeURIComponent(taskId)}`;
-    const res = await fetch(`${this.BASE_URL}${path}`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
@@ -173,7 +171,7 @@ export class EngineAPI {
   static async failInstance(instanceId: string, projectId?: string): Promise<any> {
     const path = projectId ? `/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/fail`
       : `/processes/instance/${encodeURIComponent(instanceId)}/fail`;
-    const res = await fetch(`${this.BASE_URL}${path}`, {
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
       method: 'POST',
       headers: this.getHeaders(),
     });

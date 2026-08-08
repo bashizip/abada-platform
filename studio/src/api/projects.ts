@@ -1,5 +1,5 @@
 import { config } from '@/config/runtime';
-import { keycloak } from '@/auth/keycloakClient';
+import { apiError, authenticatedFetch } from '@/api/authenticatedFetch';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
 
@@ -43,11 +43,10 @@ export interface ProjectDocument {
 
 const headers = (json = true): HeadersInit => ({
   ...(json ? { 'Content-Type': 'application/json' } : {}),
-  ...(keycloak.token ? { Authorization: `Bearer ${keycloak.token}` } : {}),
 });
 
 const checked = async <T>(response: Response): Promise<T> => {
-  if (!response.ok) throw new Error(`${response.statusText} — ${await response.text()}`);
+  if (!response.ok) throw await apiError(response);
   return response.json();
 };
 
@@ -55,23 +54,23 @@ export class ProjectAPI {
   private static readonly BASE = `${config.apiUrl}/v1/projects`;
 
   static list(): Promise<Project[]> {
-    return fetch(this.BASE, { headers: headers() }).then(checked<Project[]>);
+    return authenticatedFetch(this.BASE, { headers: headers() }).then(checked<Project[]>);
   }
 
   static create(slug: string, name: string, description: string): Promise<Project> {
-    return fetch(this.BASE, { method: 'POST', headers: headers(),
+    return authenticatedFetch(this.BASE, { method: 'POST', headers: headers(),
       body: JSON.stringify({ slug, name, description }) }).then(checked<Project>);
   }
 
   static documents(projectId: string): Promise<ProjectDocument[]> {
-    return fetch(`${this.BASE}/${projectId}/documents?size=100`, { headers: headers() })
+    return authenticatedFetch(`${this.BASE}/${projectId}/documents?size=100`, { headers: headers() })
       .then(checked<ProjectDocument[]>);
   }
 
   static createDocument(projectId: string, workflow: WorkflowFile,
     description = ''): Promise<ProjectDocument> {
     const aplSource = stringifyAPLYaml(workflowToAPL(workflow));
-    return fetch(`${this.BASE}/${projectId}/documents`, { method: 'POST', headers: headers(),
+    return authenticatedFetch(`${this.BASE}/${projectId}/documents`, { method: 'POST', headers: headers(),
       body: JSON.stringify({ processKey: workflow.processKey, description, aplSource }) })
       .then(checked<ProjectDocument>);
   }
@@ -80,7 +79,7 @@ export class ProjectAPI {
     if (!workflow.documentId || workflow.revision === undefined) {
       throw new Error('The process document has not been created in this project');
     }
-    return fetch(`${this.BASE}/${projectId}/documents/${workflow.documentId}`, {
+    return authenticatedFetch(`${this.BASE}/${projectId}/documents/${workflow.documentId}`, {
       method: 'PUT', headers: { ...headers(), 'If-Match': String(workflow.revision) },
       body: JSON.stringify({ description: workflow.description || '',
         aplSource: stringifyAPLYaml(workflowToAPL(workflow)) }),
@@ -91,24 +90,24 @@ export class ProjectAPI {
     if (!workflow.documentId || workflow.revision === undefined) {
       throw new Error('Save the process in the project before deploying');
     }
-    return fetch(`${this.BASE}/${projectId}/documents/${workflow.documentId}/deploy`, {
+    return authenticatedFetch(`${this.BASE}/${projectId}/documents/${workflow.documentId}/deploy`, {
       method: 'POST', headers: { ...headers(), 'If-Match': String(workflow.revision) },
     }).then(checked<any>);
   }
 
   static members(projectId: string): Promise<ProjectMember[]> {
-    return fetch(`${this.BASE}/${projectId}/members`, { headers: headers() })
+    return authenticatedFetch(`${this.BASE}/${projectId}/members`, { headers: headers() })
       .then(checked<ProjectMember[]>);
   }
 
   static principals(projectId: string, query = ''): Promise<Principal[]> {
-    return fetch(`${this.BASE}/${projectId}/principals?query=${encodeURIComponent(query)}`,
+    return authenticatedFetch(`${this.BASE}/${projectId}/principals?query=${encodeURIComponent(query)}`,
       { headers: headers() }).then(checked<Principal[]>);
   }
 
   static putMember(projectId: string, principalId: string, roles: ProjectRole[],
     reviewLanes: string[], expectedVersion?: number): Promise<ProjectMember> {
-    return fetch(`${this.BASE}/${projectId}/members/${principalId}`, { method: 'PUT', headers: headers(),
+    return authenticatedFetch(`${this.BASE}/${projectId}/members/${principalId}`, { method: 'PUT', headers: headers(),
       body: JSON.stringify({ expectedVersion: expectedVersion ?? null, roles, reviewLanes }) })
       .then(checked<ProjectMember>);
   }
