@@ -72,6 +72,31 @@ development baseline until the infrastructure track is complete.
 - [ ] Add production performance evidence for fact write overhead and analyzer
   windows at the published scale target.
 
+### Project envelope and Studio workspace
+
+- [x] Make PostgreSQL projects the authoritative container for multiple
+  project-local process keys, definitions and instances; migrate legacy data
+  to the deterministic Default project.
+- [x] Add observed OIDC principals, fixed Owner/Maintainer/Operator/Reviewer/
+  Viewer memberships, last-owner protection and global `project:create`.
+- [x] Keep approval lanes independent from capability roles; do not grant
+  Reviewer to creators and do not let global administration satisfy a lane.
+- [x] Persist Studio APL documents with stable `metadata.key`, optimistic
+  autosave revisions, immutable-version deployment and reversible archive.
+- [x] Scope project definitions, starts, instance operations/history,
+  job/incident reads and retries, user-task lists/statistics, event correlation
+  and Insight facts/findings/proposals/policies.
+- [x] Require secured service workers to provide a project and hold both the
+  global worker authority and an explicit project/topic binding.
+- [x] Add Studio **New project**, **Open project**, project switching, multiple
+  process documents and Owner-managed roles/review lanes.
+- [ ] Add PostgreSQL multi-project contention and negative-authorization
+  evidence for every job/incident query, plus a project model for any future
+  outbox administration surface, before declaring full operator-console
+  isolation.
+- [ ] Add realtime co-editing, Git synchronization and project bundle
+  import/export only as separately designed follow-up capabilities.
+
 ## Track B — Infrastructure certification debt
 
 These items are intentionally deferred from the `1.0.0-rc.2` release

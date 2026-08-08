@@ -31,6 +31,11 @@ Abada 1.0 must satisfy all of these invariants:
  7. **Only immutable definitions may be cached.** Parsed definitions (BPMN XML
     or native `abada.io/v1` APL) are cached by immutable deployment/version
     identifier. Cache loss changes performance, not behavior.
+8. **Project is the tenant boundary.** Definitions and instances carry an
+   authoritative `project_id`; task, event and external-work acquisition is
+   constrained through that instance boundary before a row is returned or
+   locked. Insight facts and governance records carry the project directly.
+   See [Project Envelope Architecture](project-envelope.md).
 
 These invariants allow any request or acquired job to run on any engine
 replica. Restarting or terminating a replica discards no authoritative
@@ -96,6 +101,13 @@ External-task fetch-and-lock uses the same contention principle and returns
 disjoint work to concurrent replicas. V8 indexes cover available/expired timer
 and external-task acquisition. Message and signal subscriptions use
 pessimistic locks; signal rows are locked in stable ID order.
+
+Secured external workers additionally submit `projectId`. PostgreSQL joins the
+candidate external task to its authoritative process instance during
+`SKIP LOCKED` acquisition, and the authenticated service principal must have a
+matching project/topic binding. Project-scoped message and signal correlation
+uses the same instance ownership predicate, preventing a same-named event in
+another project from being consumed.
 
 Idempotency keys are reserved with PostgreSQL `INSERT ... ON CONFLICT`. A
 concurrent insert waits for the winning transaction and then replays its stored

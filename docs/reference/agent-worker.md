@@ -62,7 +62,10 @@ Required: `ABADA_ENGINE_URL`, `ABADA_AGENT_LLM_BASE_URL`, and
 `ABADA_ENGINE_TOKEN` or the preferred OIDC client-credentials settings:
 `ABADA_AGENT_OIDC_TOKEN_URL`, `ABADA_AGENT_OIDC_CLIENT_ID`, and
 `ABADA_AGENT_OIDC_CLIENT_SECRET`. The token is cached only until shortly
-before expiry.
+before expiry. A secured worker also sets `ABADA_AGENT_PROJECT_ID`; its OIDC
+service principal must have the global worker authority and an Owner-created
+binding for that project and every topic it polls. The engine rejects an
+unscoped secured fetch or a topic outside the binding.
 
 The Compose service is opt-in through the `agent` profile. Build locally by
 installing `sdk/java` and packaging `agent-worker` with the Java 21 Maven
