@@ -1,8 +1,8 @@
 # Studio — AI Orchestration Authoring Application
 
 **Studio** is the authoring surface of the Abada platform: it lets workflow
-designers compose agentic workflows visually, embed deterministic decision
-tables, compile them into executable BPMN 2.0, deploy them to the Abada
+designers compose agentic workflows visually or as native APL YAML, embed deterministic decision
+tables, deploy them to the Abada
 Engine, and **run them live** — observing real decision outcomes instead of a
 simulation.
 
@@ -32,19 +32,21 @@ probabilistic work bounded by those rules.
 
 ## Key capabilities
 
-1. **Visual designer** — canvas with agent, human, decision-table, gateway and
-   event nodes; drag, connect, configure and delete.
-2. **APL pipeline** — canvas model ⇄ APL (Abada Process Language) ⇄ BPMN 2.0
-   XML with lossless round-trip fidelity.
-3. **Deployment to engine** — compile and deploy with idempotent reuse of the
+1. **Visual designer** — a new project starts with an empty canvas; authors add,
+   connect and configure agent, human, decision-table, gateway and event nodes.
+2. **APL-native editor** — paste or edit `abada.io/v1` YAML with syntax
+   highlighting, structural validation and bidirectional diagram synchronization.
+3. **APL pipeline** — the canvas and YAML editor share one APL document model;
+   BPMN is an explicit compatibility/import boundary rather than the authoring source.
+4. **Deployment to engine** — compile and deploy with idempotent reuse of the
    latest definition version.
-4. **Live run** — start an instance with a payload, poll the engine, and prove
+5. **Live run** — start an instance with a payload, poll the engine, and prove
    decision outputs applied in-transaction.
-5. **Audit log panel** — streaming event log of deploy/run activity.
-6. **Task inbox** — human-in-the-loop tasks from the engine.
-7. **Operations view** — engine instances and state inspection.
-8. **Natural-language generation** — NL prompt → BPMN via Semaflow/Vertex AI,
-   transpiled back into the visual model.
+6. **Audit log panel** — streaming event log of deploy/run activity.
+7. **Task inbox** — human-in-the-loop tasks from the engine.
+8. **Operations view** — engine instances and state inspection.
+9. **Natural-language generation** — NL prompt generation through the configured
+   provider, with a deterministic local APL scaffold when that provider is unavailable.
 
 ---
 
@@ -299,6 +301,21 @@ and inspection, complementing Orun inside the Studio context.
 XML from Vertex AI → `transpileBPMNToAPL` → `aplToWorkflow` → new canvas tab.
 Generated models flow through the same deterministic pipeline as hand-authored
 ones (decision tables survive the round trip via the native transpiler path).
+If the configured provider cannot answer, Studio creates a deterministic,
+editable APL-native starter graph instead of leaving the authoring path broken.
+
+### 9. Empty-project and APL authoring contract
+
+- A project with no process documents opens one local, empty process draft. It
+  must never clone a demo or a process from another project.
+- An empty draft is not persisted until it contains at least one node. Once it
+  does, project autosave creates the PostgreSQL-backed document and subsequent
+  edits use optimistic revisions.
+- `Diagram` and `APL YAML` are two projections of the same process. Applying
+  validated YAML replaces the active diagram while retaining its project
+  document identity and revision.
+- The empty canvas exposes visual, YAML and prompt entry points directly; the
+  node palette remains available for incremental visual authoring.
 
 ---
 
@@ -318,7 +335,7 @@ src/
 ├── data/
 │   └── sampleWorkflows.ts # starter workflows (no hardcoded run statuses)
 ├── features/
-│   ├── designer/        # Canvas, NodeRenderer (status badges + diff badges),
+│   ├── designer/        # Canvas, AplEditor, NodeRenderer (status + diff badges),
 │   │                    #   EdgeRenderer, AIDiffModal (full-focus PR review)
 │   ├── dmn/             # DmnRuleInspector (matrix editor + APL YAML mirror)
 │   ├── run/RunPanel.tsx # live run panel
@@ -326,7 +343,7 @@ src/
 │   ├── operations/ProcessOperations.tsx
 │   └── ai/ ...          # NL generation plumbing
 ├── lib/
-│   ├── apl/             # APL types, parser (workflowToAPL, aplToWorkflow,
+│   ├── apl/             # APL types, parser and deterministic prompt scaffold
 │   │                    #   parseAPLYaml, stringifyAPLYaml, normalizeTableInputs,
 │   │                    #   resolveRuleOutcome, stringifyDecisionTableYaml,
 │   │                    #   parseDecisionTableYaml, dmnConfigToAPLNode)
