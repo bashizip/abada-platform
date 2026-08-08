@@ -58,7 +58,6 @@ services:
   abada-studio:
     environment:
       ABADA_API_URL: http://studio.localhost/api
-      ABADA_SEMAFLOW_URL: http://semaflow.localhost/semaflow/api/v1
       ABADA_OIDC_URL: http://keycloak.localhost
       ABADA_OIDC_REALM: abada-dev
       ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js

@@ -69,6 +69,9 @@ development baseline until the infrastructure track is complete.
   sequential/parallel one-group-per-approval policies with no auto-apply.
 - [x] Connect Studio visual diff, approve/reject actions, and policy settings
   to the backend API.
+- [x] Replace the independent BPMN-generation service with project-scoped,
+  OpenAI-compatible native APL authoring, authoritative `AplParser`
+  validation/repair, deterministic fallback and explicit Apply/Discard review.
 - [ ] Add production performance evidence for fact write overhead and analyzer
   windows at the published scale target.
 

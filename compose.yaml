@@ -112,7 +112,6 @@ services:
     image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.2}
     environment:
       ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
-      ABADA_SEMAFLOW_URL: ${ABADA_SEMAFLOW_URL:-http://semaflow:5604/semaflow/api/v1}
     networks:
       - edge
     restart: unless-stopped

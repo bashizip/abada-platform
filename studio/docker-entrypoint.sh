@@ -28,9 +28,7 @@ require_http_url() {
 }
 
 require_value ABADA_API_URL "${ABADA_API_URL:-}"
-require_value ABADA_SEMAFLOW_URL "${ABADA_SEMAFLOW_URL:-}"
 require_http_url ABADA_API_URL "$ABADA_API_URL"
-require_http_url ABADA_SEMAFLOW_URL "$ABADA_SEMAFLOW_URL"
 
 config_path="${ABADA_CONFIG_PATH:-/usr/share/nginx/html/config.js}"
 mkdir -p "$(dirname "$config_path")"
@@ -38,7 +36,6 @@ umask 022
 {
   printf 'window.__ABADA_STUDIO_CONFIG__ = Object.freeze({\n'
   printf '  apiUrl: "%s",\n' "$(escape_js "$ABADA_API_URL")"
-  printf '  semaflowUrl: "%s",\n' "$(escape_js "$ABADA_SEMAFLOW_URL")"
   printf '  oidcUrl: "%s",\n' "$(escape_js "${ABADA_OIDC_URL:-http://keycloak.localhost}")"
   printf '  oidcRealm: "%s",\n' "$(escape_js "${ABADA_OIDC_REALM:-abada-dev}")"
   printf '  oidcClientId: "%s"\n' "$(escape_js "${ABADA_OIDC_CLIENT_ID:-abada-frontend}")"

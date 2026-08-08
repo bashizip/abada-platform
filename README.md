@@ -140,8 +140,8 @@ Abada is a modular monorepo.
 | **engine/** | Durable BPMN execution engine |
 | **tenda/** | Human task application |
 | **orun/** | Operations & observability dashboard |
+| **studio/** | APL-native visual and YAML authoring environment |
 | **admin/** | Administration UI (external repository) |
-| **semaflow/** | Natural Language → BPMN tooling (external repository) |
 
 ```
                 Users / Systems / Events

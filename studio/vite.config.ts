@@ -19,10 +19,6 @@ export default defineConfig({
         target: 'http://localhost:5601',
         changeOrigin: true,
       },
-      '/semaflow/api': {
-        target: 'http://localhost:5604',
-        changeOrigin: true,
-      },
     },
   },
 });

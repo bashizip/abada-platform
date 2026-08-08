@@ -204,7 +204,7 @@ APLDocument (Abada Process Language, version abada.io/v1)
    │  compileAPLToBPMN (lib/bpmn/compiler.ts)
    ▼
 BPMN 2.0 XML  ──►  engine deploy (strict=false)
-   │  transpileBPMNToAPL (lib/bpmn/transpiler.ts)   [imports & NL generation]
+   │  transpileBPMNToAPL (lib/bpmn/transpiler.ts)   [BPMN import compatibility only]
    ▼
 APLDocument  ──►  aplToWorkflow  ──►  WorkflowFile
 ```
@@ -297,12 +297,11 @@ and inspection, complementing Orun inside the Studio context.
 
 ### 8. Natural-language generation
 
-**Trigger:** `NLInputBar` prompt → Semaflow (`api/semaflow.ts`) → BPMN
-XML from Vertex AI → `transpileBPMNToAPL` → `aplToWorkflow` → new canvas tab.
-Generated models flow through the same deterministic pipeline as hand-authored
-ones (decision tables survive the round trip via the native transpiler path).
-If the configured provider cannot answer, Studio creates a deterministic,
-editable APL-native starter graph instead of leaving the authoring path broken.
+**Trigger:** `NLInputBar` → project-scoped Engine authoring API → shared
+OpenAI-compatible gateway → `AplParser` validation/repair → review-first APL
+editor. The candidate never changes the active process before explicit user
+approval. If the configured provider cannot answer, the Engine returns a
+validated deterministic local starter with a visible fallback label.
 
 ### 9. Empty-project and APL authoring contract
 
@@ -327,7 +326,7 @@ editable APL-native starter graph instead of leaving the authoring path broken.
 src/
 ├── api/
 │   ├── engine.ts        # EngineAPI client (deploy, start, instance, tasks, definitions)
-│   └── semaflow.ts      # NL → BPMN generation client
+│   └── authoring.ts     # Project-scoped NL → validated APL candidate
 ├── auth/
 │   └── keycloakClient.ts# OIDC (Keycloak) init, token, getUserFromToken
 ├── config/
@@ -343,7 +342,7 @@ src/
 │   ├── operations/ProcessOperations.tsx
 │   └── ai/ ...          # NL generation plumbing
 ├── lib/
-│   ├── apl/             # APL types, parser and deterministic prompt scaffold
+│   ├── apl/             # APL types and parser
 │   │                    #   parseAPLYaml, stringifyAPLYaml, normalizeTableInputs,
 │   │                    #   resolveRuleOutcome, stringifyDecisionTableYaml,
 │   │                    #   parseDecisionTableYaml, dmnConfigToAPLNode)
