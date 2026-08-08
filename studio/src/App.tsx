@@ -87,6 +87,8 @@ export default function App() {
   const [activeProject, setActiveProject] = useState<Project | undefined>();
   const [showProjects, setShowProjects] = useState(false);
   const persistedFingerprint = useRef(new Map<string, string>());
+  const failedAutosaveFingerprint = useRef(new Map<string, string>());
+  const persistedProcessKeys = useRef(new Map<string, string>());
   const creatingWorkflowIds = useRef(new Set<string>());
 
   // Get active workflow object
@@ -105,7 +107,12 @@ export default function App() {
     const documents = await ProjectAPI.documents(project.id);
     if (documents.length) {
       const loaded = documents.map(ProjectAPI.workflow);
-      loaded.forEach((workflow) => persistedFingerprint.current.set(workflow.id, workflowFingerprint(workflow)));
+      loaded.forEach((workflow) => {
+        persistedFingerprint.current.set(workflow.id, workflowFingerprint(workflow));
+        if (workflow.documentId && workflow.processKey) {
+          persistedProcessKeys.current.set(workflow.documentId, workflow.processKey);
+        }
+      });
       setWorkflows(loaded);
       setActiveWorkflowId(loaded[0].id);
       setSelectedNodeId(loaded[0].nodes[0]?.id || null);
@@ -132,28 +139,40 @@ export default function App() {
 
   useEffect(() => {
     if (!activeProject || currentWorkflow.nodes.length === 0) return;
-    const fingerprint = workflowFingerprint(currentWorkflow);
+    const persistedProcessKey = currentWorkflow.documentId
+      ? persistedProcessKeys.current.get(currentWorkflow.documentId)
+      : undefined;
+    const workflowToSave = persistedProcessKey && currentWorkflow.processKey !== persistedProcessKey
+      ? { ...currentWorkflow, processKey: persistedProcessKey }
+      : currentWorkflow;
+    const fingerprint = workflowFingerprint(workflowToSave);
     if (persistedFingerprint.current.get(currentWorkflow.id) === fingerprint) return;
+    if (failedAutosaveFingerprint.current.get(currentWorkflow.id) === fingerprint) return;
     const timer = window.setTimeout(() => {
       if (!currentWorkflow.documentId && creatingWorkflowIds.current.has(currentWorkflow.id)) return;
       if (!currentWorkflow.documentId) creatingWorkflowIds.current.add(currentWorkflow.id);
       const save = currentWorkflow.documentId
-        ? ProjectAPI.saveDocument(activeProject.id, currentWorkflow)
-        : ProjectAPI.createDocument(activeProject.id, currentWorkflow, currentWorkflow.description || '');
+        ? ProjectAPI.saveDocument(activeProject.id, workflowToSave)
+        : ProjectAPI.createDocument(activeProject.id, workflowToSave, workflowToSave.description || '');
       save.then((saved) => {
         const persistedId = saved.id;
         persistedFingerprint.current.set(persistedId, fingerprint);
+        failedAutosaveFingerprint.current.delete(currentWorkflow.id);
+        persistedProcessKeys.current.set(persistedId, saved.processKey);
         setWorkflows((items) => items.map((item) => item.id === currentWorkflow.id
           ? { ...item, id: persistedId, documentId: persistedId, revision: saved.revision,
-              updatedAt: saved.updatedAt } : item));
+              processKey: saved.processKey, updatedAt: saved.updatedAt } : item));
         if (!currentWorkflow.documentId) {
           setActiveWorkflowId((id) => id === currentWorkflow.id ? persistedId : id);
         }
-      }).catch((reason) => setSimulationLogs((logs) => [...logs, {
-          id: `autosave-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
-          nodeTitle: 'Project Autosave', nodeType: 'event', status: 'error',
-          message: reason instanceof Error ? reason.message : String(reason),
-        }])).finally(() => creatingWorkflowIds.current.delete(currentWorkflow.id));
+      }).catch((reason) => {
+        failedAutosaveFingerprint.current.set(currentWorkflow.id, fingerprint);
+        setSimulationLogs((logs) => [...logs, {
+            id: `autosave-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
+            nodeTitle: 'Project Autosave', nodeType: 'event', status: 'error',
+            message: reason instanceof Error ? reason.message : String(reason),
+          }]);
+      }).finally(() => creatingWorkflowIds.current.delete(currentWorkflow.id));
     }, 800);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,14 +213,28 @@ export default function App() {
   }, []);
 
   const handleApplyApl = (workflow: WorkflowFile) => {
+    const targetId = authoringCandidate?.replaceWorkflowId || activeWorkflowId;
+    const persistedTarget = workflows.find((item) => item.id === targetId && item.documentId);
+    const immutableProcessKey = persistedTarget?.documentId
+      ? persistedProcessKeys.current.get(persistedTarget.documentId) || persistedTarget.processKey
+      : undefined;
+    const appliedWorkflow = persistedTarget ? {
+      ...workflow,
+      id: persistedTarget.id,
+      documentId: persistedTarget.documentId,
+      revision: persistedTarget.revision,
+      processKey: immutableProcessKey,
+      version: persistedTarget.version,
+      updatedAt: persistedTarget.updatedAt,
+      description: persistedTarget.description,
+    } : workflow;
     if (authoringCandidate && !authoringCandidate.replaceWorkflowId) {
-      setWorkflows((items) => [workflow, ...items]);
+      setWorkflows((items) => [appliedWorkflow, ...items]);
     } else {
-      const targetId = authoringCandidate?.replaceWorkflowId || activeWorkflowId;
-      setWorkflows((items) => items.map((item) => item.id === targetId ? workflow : item));
+      setWorkflows((items) => items.map((item) => item.id === targetId ? appliedWorkflow : item));
     }
-    setActiveWorkflowId(workflow.id);
-    setSelectedNodeId(workflow.nodes[0]?.id || null);
+    setActiveWorkflowId(appliedWorkflow.id);
+    setSelectedNodeId(appliedWorkflow.nodes[0]?.id || null);
     setAuthoringCandidate(null);
     setDesignerMode('diagram');
   };
