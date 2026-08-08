@@ -1,11 +1,11 @@
 # Abada 1.1.0 RC Roadmap — Agentic Workflows and Infrastructure Certification
 
 This roadmap follows the `1.0.0-rc.2` reliable OSS core. Its primary product
-goal is to demonstrate agentic workflows as durable consumers of Abada's BPMN
-runtime. It does not weaken the BPMN state machine or move agent execution
+goal is to demonstrate agentic workflows as durable consumers of Abada's
+shared APL/BPMN runtime state machine. It does not weaken that state machine or move agent execution
 into transient, process-local memory.
 
-Last reviewed: 2026-07-26.
+Last reviewed: 2026-08-08.
 
 ## Release scope
 
@@ -25,20 +25,21 @@ development baseline until the infrastructure track is complete.
 
 ### Runtime integration
 
-- [ ] Define the versioned agent-work contract as an external-worker profile;
+- [x] Define the versioned `abada.agent/v1` contract as an external-worker profile;
   agents must not advance BPMN state outside engine commands.
 - [ ] Persist agent request, attempt, result, failure and cancellation
   metadata through the existing durable external-task and history contracts.
-- [ ] Define deterministic idempotency and retry behavior for model calls,
+- [x] Define deterministic idempotency and retry behavior for model calls,
   tool calls and worker completion.
-- [ ] Preserve trace context across BPMN commands, agent execution and tool
-  calls.
-- [ ] Bound model/tool timeouts, retries, payload sizes and concurrency.
+- [x] Preserve trace context across engine commands and agent execution;
+  tool-call spans remain pending until executable adapters ship.
+- [x] Bound model timeouts, retries and worker concurrency; tool payload and
+  executable-adapter limits remain pending.
 
 ### Human control and policy
 
 - [ ] Model human approval and escalation with supported BPMN user tasks.
-- [ ] Define tool allowlists, credential boundaries and per-workflow policy
+- [x] Define tool allowlists, credential boundaries and per-workflow policy
   inputs.
 - [ ] Record model, prompt/template version, tool decisions, actor and trace
   identifiers without logging secrets or complete sensitive payloads.
@@ -56,6 +57,20 @@ development baseline until the infrastructure track is complete.
   tool selection and failure behavior.
 - [ ] Document architecture, setup, security limits, cost controls and
   reproducible demo steps.
+
+### Autonomous Insight Loop and Studio governance
+
+- [x] Write terminal facts transactionally to PostgreSQL and analyze durable,
+  non-overlapping windows without a mandatory streaming/OLAP stack.
+- [x] Generate and parse-check APL proposals outside database transactions.
+- [x] Snapshot target checksum and approval policy; prevent duplicate open
+  proposals and mark stale targets `SUPERSEDED`.
+- [x] Support one-review-per-actor, mandatory rejection comments, and
+  sequential/parallel one-group-per-approval policies with no auto-apply.
+- [x] Connect Studio visual diff, approve/reject actions, and policy settings
+  to the backend API.
+- [ ] Add production performance evidence for fact write overhead and analyzer
+  windows at the published scale target.
 
 ## Track B — Infrastructure certification debt
 

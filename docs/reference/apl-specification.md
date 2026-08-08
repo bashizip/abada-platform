@@ -1,8 +1,8 @@
 # Abada Process Language (APL) — Technical Specification
 
-- Status: **Implemented** (Studio-side, compiled to BPMN 2.0 for engine
-  deployment); **target architecture** (engine-native YAML persistence) is
-  roadmap — see §1.2 and `docs/development/roadmap-to-1.1.0-rc.md`.
+- Status: **Implemented** — Studio deploys native YAML and `AplParser`
+  compiles it directly to the executable graph. BPMN remains an import and
+  backward-compatibility format.
 - Version documented: `abada.io/v1`
 - Applies to: Abada Studio authoring pipeline and the Abada Engine deployment
   contract. Relates to [ADR-002](../adr/ADR-002-native-decision-tables-deterministic-wall.md),
@@ -15,11 +15,10 @@
 ## 1. Overview & Design Philosophy
 
 APL (Abada Process Language) is Abada's YAML-based process definition
-language. It is the canonical, human-readable representation of an agentic
-workflow in the **Abada Studio**: the designer canvas is serialized to APL,
-APL is compiled to executable BPMN 2.0 XML for deployment, and deployed BPMN
-is transpiled back to APL for import, natural-language generation and
-round-trip fidelity.
+language. It is the canonical, human-readable representation of a workflow in
+**Abada Studio**: the canvas is serialized to APL and deployed as YAML. The
+engine parses it natively and stores the immutable source in PostgreSQL. BPMN
+can be imported and converted to APL; legacy BPMN deployments remain runnable.
 
 ### 1.1 Why YAML
 
@@ -34,27 +33,25 @@ round-trip fidelity.
   it a stable target for generated edits: an LLM can propose a change to one
   rule of a decision table as a small, reviewable diff.
 
-### 1.2 Current architecture vs. target architecture
+### 1.2 Runtime architecture
 
-| Concern | Today (implemented) | Target (roadmap, 1.1 Track A) |
-| --- | --- | --- |
-| Authoring format | APL YAML in Studio (`lib/apl/`) | same |
-| Deployment artifact | APL **compiled to BPMN 2.0 XML**, deployed over the engine REST API | APL persisted directly in PostgreSQL and executed natively |
-| Engine input | BPMN XML only (multipart `file`, `strict=false`) | native YAML process definitions |
-| Definition store | engine persists the **compiled BPMN XML** (immutable, versioned, checksummed) | engine persists the **APL document** as the source of truth |
+| Concern | Implemented contract |
+| --- | --- |
+| Authoring format | APL YAML in Studio (`lib/apl/`) |
+| Deployment artifact | `.apl.yaml`, `application/yaml`, strict validation |
+| Engine input | native APL or backward-compatible BPMN XML through one schema dispatcher |
+| Definition store | immutable, versioned, checksummed original source plus `APL_NATIVE` / `BPMN_XML` schema type |
 
-This specification describes the **current, implemented** APL contract. The
-engine-native persistence target is deliberately not claimed as shipped; it is
-the direction the language is designed for, which is why the YAML shape is
-kept canonical and lossless through the compile/transpile round trip.
+There is no XML compilation step on the native path. Existing BPMN is converted
+at the Studio import boundary, not round-tripped during deployment.
 
 ### 1.3 Alignment with the platform doctrine
 
 APL expresses the doctrine recorded in ADR-002 — *the table is the law,
 agents are the advice*:
 
-- **Agent nodes** (`agent`) represent probabilistic work (LLM calls) and are
-  compiled to external service tasks (`abada:agent` topic) that never advance
+- **Agent nodes** (`agent`) represent probabilistic work (LLM calls) and become
+  durable external tasks (`abada:agent` topic) that never advance
   BPMN state outside engine commands.
 - **Decision tables** (`decision-table`) represent deterministic rules
   executed by the engine **inside the workflow transaction** — reproducible,
@@ -89,10 +86,8 @@ flow:                     # required — the executable graph
   (e.g. `KYC Onboarding V1` → `kyc_onboarding_v1`). The engine keys
   definitions and versions by this id.
 - `flow.entry` identifies the start node. Studio derives it from the
-  `webhook` node when serializing. Today this is a convention, not an
-  enforced schema rule (enforcement arrives with engine-native parsing, §1.2).
-- Unknown top-level keys are tolerated by the YAML parser today (engine-native
-  validation is roadmap); the compiler only reads the keys above.
+  `webhook` node when serializing. `AplParser` enforces that it references the
+  document's single webhook start.
 
 ### 2.2 Node base shape
 
@@ -152,7 +147,7 @@ webhook | agent | engine-task | condition | approval-gate | decision-table | end
 
 ### 3.1 `webhook` — trigger node
 
-Compiles to `bpmn:startEvent`. One document should have exactly one webhook.
+Compiles to the runtime start-event primitive. One document has exactly one webhook.
 
 ```yaml
 - id: onStart
@@ -172,41 +167,62 @@ event; the initial payload is the top-level instance variable map.
 
 ### 3.2 `agent` — LLM execution node
 
-Compiles to `bpmn:serviceTask` with topic `abada:agent` and
-`camunda:properties` (`model`, `prompt`, `confidence_threshold`). The engine
-creates an **external task** on topic `abada:agent`; a worker completes it
-through the external-worker protocol. Agents are probabilistic and are the
+Compiles directly to a service-task node that creates an **external task** on
+topic `abada:agent`. Its optional `agentWork` payload follows the versioned
+`abada.agent/v1` external-worker profile. Agents are probabilistic and are the
 "advice" in the ADR-002 doctrine.
 
 ```yaml
 - id: extractAgent
   type: agent
+  profile: abada.agent/v1
   description: Extract structured application data
   model: gemini-3.6-flash
   prompt: |
     Extract {income, creditScore, requestedAmount} from the payload.
     Return strict JSON only.
   tools:
-    - Database Query
+    - database.read
+  inputs:
+    payload: ${payload}
+  result_variable: extracted
+  output_schema: { type: object }
   confidence_threshold: 85
+  temperature: 0.2
+  max_tokens: 2048
+  timeout_ms: 60000
+  max_attempts: 3
+  retry_backoff_ms: 2000
   next: creditRules
 ```
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `model` | string | no | default `gemini-3.6-flash` in Studio |
+| `profile` | string | no | default and only supported value: `abada.agent/v1` |
+| `model` | string | no | worker/provider model; worker default when omitted |
 | `prompt` | string | no | multi-line YAML block scalars supported |
-| `tools` | string[] | no | tool allowlist hint for the worker |
-| `confidence_threshold` | number | no | default `85`; emitted for the worker contract |
+| `inputs` | map | no | named process-variable bindings |
+| `result_variable` | string | no | completion variable; default `<nodeId>_result` |
+| `output_schema` | map | no | requires a JSON-object response |
+| `tools` | string[] | no | requested identifiers, enforced against the worker allowlist |
+| `confidence_threshold` | number | no | 0–100 |
+| `temperature` | number | no | 0–2 |
+| `max_tokens` | integer | no | positive provider response bound |
+| `timeout_ms` | integer | no | 1–3,600,000 |
+| `max_attempts` | integer | no | 1–20 durable attempts |
+| `retry_backoff_ms` | integer | no | 0–3,600,000 |
 | `next` | nodeId | yes | linear successor |
 
 Boundary: with no worker deployed, a run pauses in `ACTIVE` at the agent —
 this is intentional (agents must not advance BPMN state outside engine
 commands).
 
+The reference sidecar, retry/idempotency behavior, OIDC configuration, and
+at-least-once boundary are defined in [Agent worker](agent-worker.md).
+
 ### 3.3 `engine-task` — standard service task
 
-Compiles to `bpmn:serviceTask` with `camunda:topic = service`. This is the
+Compiles to the runtime external service-task primitive on `service`. This is the
 "standard service task" primitive: any durable worker topic (system service,
 integration, webhook sink). It is the deterministic sibling of `agent`.
 
@@ -226,7 +242,7 @@ integration, webhook sink). It is the deterministic sibling of `agent`.
 
 ### 3.4 `condition` — exclusive branching
 
-Compiles to `bpmn:exclusiveGateway`. Routes through `rules`; the last rule or
+Compiles to the runtime exclusive gateway. Routes through `rules`; the last rule or
 the rule with `else` becomes the gateway **default** flow. `next` must not be
 set.
 
@@ -254,7 +270,7 @@ conditions — only explicit `${...}` expressions are treated as conditions
 
 ### 3.5 `approval-gate` — human validation node
 
-Compiles to `bpmn:userTask` with `camunda:candidateGroups = assignees.join(',')`.
+Compiles to the runtime user task with candidate groups from `assignees`.
 The engine creates an `AVAILABLE` human task claimable by the listed groups.
 
 ```yaml
@@ -281,8 +297,7 @@ instance in-transaction.
 
 ### 3.6 `decision-table` — native deterministic decision table
 
-Compiles to `bpmn:businessRuleTask` carrying the native
-`abada:decisionTable` extension. Full contract in §4.
+Compiles to the native deterministic decision-table primitive. Full contract in §4.
 
 ```yaml
 - id: creditRules
@@ -311,7 +326,7 @@ Compiles to `bpmn:businessRuleTask` carrying the native
 
 ### 3.7 `end` — terminal node
 
-Compiles to `bpmn:endEvent`. Completes the instance when the last token
+Compiles to the runtime end-event primitive. Completes the instance when the last token
 arrives.
 
 ```yaml
@@ -519,8 +534,8 @@ still rejecting execution-relevant directives.
 ## 7. Complete Production Example
 
 The canonical example is stored at `examples/apl/kyc-onboarding.apl.yaml` and
-is verified to compile and round-trip through the real Studio toolchain
-(`parseAPLYaml → compileAPLToBPMN → transpileBPMNToAPL`).
+is verified through the native Studio and engine parsers
+(`parseAPLYaml → workflow graph → AplParser`).
 
 It demonstrates: a webhook trigger, an LLM extraction agent (advice), a native
 credit decision table (law), a human approval gate, a risk-based condition
@@ -530,7 +545,7 @@ gateway, two standard service tasks, and the honest observability story
 ```yaml
 # ═══════════════════════════════════════════════════════════════════════════
 # KYC Onboarding — Abada Process Language (abada.io/v1)
-# Authoring: Abada Studio · Deployment: compiled to BPMN 2.0 (strict=false)
+# Authoring: Abada Studio · Deployment: native APL YAML (strict validation)
 #
 # Observability note: APL declares no per-node telemetry fields today.
 # Tracing is engine-layer: the engine opens a span per command, propagates
@@ -556,7 +571,7 @@ flow:
       next: extractAgent
 
     # ── 2. Agent (probabilistic "advice") ─────────────────────────────────
-    # Compiled to serviceTask topic abada:agent; an external worker must
+    # Durable external task on abada:agent; an external worker must
     # complete it. Never advances BPMN state outside engine commands.
     - id: extractAgent
       type: agent

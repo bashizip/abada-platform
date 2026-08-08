@@ -26,6 +26,12 @@ variables, retries, lock expiry, stored W3C `traceParent`, and protocol version.
 Requests may carry `traceparent` and `tracestate`; HTTP instrumentation joins
 the incoming trace. The Java SDK exposes these headers through `RequestOptions`.
 
+The additive optional `agentWork` object carries the versioned
+`abada.agent/v1` descriptor for native APL `agent` nodes. It is `null` for
+ordinary service tasks. Protocol-v1 workers that ignore unknown JSON fields
+remain compatible; agent workers must reject a missing or unknown
+`profileVersion`. See [Agent worker](agent-worker.md).
+
 ## BPMN error boundary
 
 Boundary error events are outside the current supported BPMN subset. Therefore

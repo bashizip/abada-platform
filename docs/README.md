@@ -25,7 +25,7 @@ High-level design and architectural decisions.
 
 - [ADR-001: BPMN Dialects and Vendor Compatibility](adr/ADR-001-bpmn-dialects-and-vendor-compatibility.md) - Profile-based handling of Camunda/standard/Abada-native dialects.
 - [ADR-002: Native Decision Tables as the Deterministic Wall](adr/ADR-002-native-decision-tables-deterministic-wall.md) - Deterministic in-transaction decision tables as the counterweight to probabilistic agents.
-- [ADR-003: The Autonomous Workflow Loop](adr/ADR-003-insight-loop-engine-otel-apl.md) - Self-optimizing AI agent loop built on OpenTelemetry telemetry and APL governance.
+- [ADR-003: The Autonomous Workflow Loop](adr/ADR-003-insight-loop-engine-otel-apl.md) - PostgreSQL-authoritative Insight facts, governed APL proposals, and optional OTel diagnostics.
 
 ### 🚀 Features
 
@@ -35,6 +35,9 @@ Detailed guides on specific engine features.
 - [Service Tasks](features/service-tasks.md) - Implementing and using service tasks.
 - [Exclusive Gateway](features/exclusive-gateway.md) - Logic and usage of exclusive gateways.
 - [Persistence](features/persistence.md) - How data is stored and managed.
+- [APL specification](reference/apl-specification.md) - Native YAML language and executable graph contract.
+- [Insight Loop](reference/insight-loop.md) - Facts, analysis windows, proposals, policies and review lifecycle.
+- [Agent worker](reference/agent-worker.md) - `abada.agent/v1` and the Java sidecar safety contract.
 - [Kitchen Sink Process](features/kitchen-sink-process.md) - A comprehensive example process demonstrating various features.
 
 ### 🛠️ Operations

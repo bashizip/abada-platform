@@ -1,8 +1,9 @@
 # Abada 1.1 Product & Architecture Execution Plan
 
-- Status: Approved for phased execution — Part 1 (studio surfaces) and
-  Phase 1 (native APL persistence + polymorphic loader) delivered on
-  2026-08-08; Phases 2–4 pending.
+- Status: Active implementation — native APL, PostgreSQL Insight facts,
+  governed proposals, Studio review, and the Java agent sidecar are delivered
+  in the working tree. Remaining unchecked items are evidence or later product
+  depth, not architectural ambiguity.
 - Date: 2026-08-07
 - Target: Post-BPMN transpilation engineering & Studio UI roadmap
 - Related: `adr/ADR-002-native-decision-tables-deterministic-wall.md`,
@@ -12,11 +13,10 @@
 
 ## Context
 
-Abada is transitioning from BPMN-compiled execution to a fully native,
-self-optimizing APL (Abada Process Language) runtime with enterprise
-governance. This plan covers the product and architecture execution for that
-transition: studio UI/UX surfaces first, then the post-transpilation engine
-core.
+Abada now authors and deploys native APL while retaining the proven BPMN state
+machine and legacy BPMN loader. This plan tracks the remaining product and
+evidence work around the PostgreSQL-authoritative optimization loop,
+enterprise governance, and focused Studio experience.
 
 Execution proceeds phase by phase. Each phase must preserve the BPMN runtime
 contracts and verification expectations recorded in `AGENTS.md` and the 1.1
@@ -28,10 +28,6 @@ roadmap before the next phase starts.
 
 ### Task 1.1: Format badge & file metadata indicator
 
-- [ ] Add visual format pills in the header and process list (`.apl.yaml` vs
-  `.bpmn`). *Partial: process list shows format pills (Sidebar via
-  `getFileFormatLabel`); the main header intentionally keeps a clean file
-  identifier without pill noise.*
 - [x] Display runtime status tags on open files (`[APL Native]` vs
   `[BPMN Imported]`) — Sidebar list pills and Process Details modal tag.
 - [x] Expose the active language spec version (`abada.io/v1`) in the Process
@@ -85,18 +81,24 @@ roadmap before the next phase starts.
 
 ### Phase 2: Continuous optimization engine (the Insight Loop)
 
-- [ ] **OpenTelemetry trace analyzer:** build an asynchronous worker to
-  process engine OTel spans, flagging agent nodes with high failure rates,
-  token latency, or fallback loops.
-- [ ] **Automated APL PR generator:** implement an LLM worker that drafts
-  optimized APL YAML patches, embedding explanatory `#` comments directly
-  above updated nodes or DMN rules.
+- [x] **PostgreSQL-authoritative facts:** write one fact per terminal node visit
+  in the runtime command transaction; keep variables and PII out.
+- [x] **Cluster-safe analyzer:** durable lease, recoverable windows, pre-window
+  latency baseline, failure and fallback signals.
+- [x] **Automated APL proposal generator:** optional OpenAI-compatible draft,
+  parser validation, rule-based fallback, and no remote call inside a DB
+  transaction.
+- [x] **Immutable targeting:** snapshot deployment/version/checksum, allow one
+  open proposal per deployment, and supersede stale proposals.
+- [ ] **Scale evidence:** publish write-overhead and analyzer-window benchmarks.
 
 ### Phase 3: Governance & multi-human approval workflows
 
-- [ ] **Governance engine:** implement serial and parallel multi-stakeholder
+- [x] **Governance engine:** implement serial and parallel multi-stakeholder
   approval gates (e.g., Tech Lead + Compliance Officer sign-offs) before an
   AI-proposed APL patch goes live.
+- [x] **Studio integration:** use real paginated proposals, visual APL diff,
+  mandatory rejection comments, review actions, and per-definition policy UI.
 - [ ] **Versioning & rollback:** implement an atomic, one-click rollback
   mechanism to prior APL definition revisions in PostgreSQL.
 
@@ -114,9 +116,26 @@ roadmap before the next phase starts.
 
 1. Part 1 Studio surfaces (format badges, DMN inspector, AI diff).
 2. Phase 1 native APL persistence and loader.
-3. Phase 2 Insight Loop with the ADR-003 telemetry pipeline.
+3. Phase 2 PostgreSQL Insight Loop from ADR-003.
 4. Phase 3 governance gates and rollback.
 5. Phase 4 live simulation and token visualizer.
+
+## MOAT acceptance checklist
+
+- [x] Studio deploys `.apl.yaml`; BPMN import converts at the boundary and the
+  engine retains legacy BPMN compatibility.
+- [x] Native definitions compile with `AplParser` and persist immutably with a
+  schema discriminator and checksum.
+- [x] Standard Insight operation needs PostgreSQL only; OTel is optional
+  diagnostics, not the authoritative cursor.
+- [x] No model output can deploy without explicit policy-compliant human review.
+- [x] `abada.agent/v1` is transported on the durable worker protocol and the
+  first-party Java 21 sidecar runs model calls out of transaction.
+- [x] Studio separates editing from full-focus governance review.
+- [ ] One-click rollback to a prior immutable APL version.
+- [ ] Live token animation and variable-state inspection.
+- [ ] Production scale, restart, retry, and security evidence recorded for the
+  full agent sidecar demonstration.
 
 Each completed phase requires the related contract documentation updates and
 tests described in `AGENTS.md` verification expectations.

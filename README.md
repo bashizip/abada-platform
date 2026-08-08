@@ -1,18 +1,23 @@
 # Abada Platform
 
-**The observable BPMN orchestration core for next-generation organic and agentic workflows.**
+**APL-native workflow authoring on a durable PostgreSQL orchestration core.**
 
-Abada is a modular, cloud-native workflow platform built with **Java 21** and **Spring Boot 3**. It provides a lightweight BPMN execution engine for coordinating humans, services, business rules, events, and emerging AI-agent workloads within durable, auditable processes.
+Abada is a modular, self-hosted workflow platform built with **Java 21** and
+**Spring Boot 3**. Native `abada.io/v1` YAML and backward-compatible BPMN
+definitions compile into the same durable runtime state machine for humans,
+services, deterministic decisions, events, and AI-agent work.
 
 Abada is designed around a simple principle: autonomous agents may reason and act dynamically, but production workflows still require deterministic control over state, sequencing, permissions, timeouts, approvals, recovery, and observability.
 
-The open-source platform currently includes the BPMN execution core, task
-management, operational monitoring, a release-candidate container deployment,
-and optional workflow-aware telemetry.
+The open-source platform includes the PostgreSQL execution core, task and
+operations applications, Abada Studio, a Java worker SDK and agent sidecar,
+release-candidate container deployment, and optional telemetry.
 
-> **🚧 Agentic development status**
+> **🚧 1.1 agentic development status**
 >
-> The next-generation **agentic orchestration capabilities** currently under active development are **not yet open sourced**. They are being built on top of the public Abada BPMN core and will be released progressively as the architecture, APIs, and SDKs mature.
+> Native APL, the governed Insight Loop, and the first-party agent worker are
+> present in this repository but are not yet a production-certified 1.1
+> release. The 1.0 release line remains the certified BPMN/PostgreSQL core.
 
 📚 **Documentation**
 
@@ -40,10 +45,10 @@ Production systems, however, still require:
 
 Abada provides that execution layer.
 
-Rather than replacing BPMN with AI agents, Abada combines both:
+Rather than letting model calls own process state, Abada combines:
 
 - **Agents reason**
-- **BPMN orchestrates a documented, tested subset**
+- **APL authors; the durable engine orchestrates**
 - **Humans supervise**
 - **Telemetry explains everything**
 
@@ -72,7 +77,8 @@ Examples include:
 - Policy blocks → Human intervention
 - Agent fails → Compensation path executes
 
-The BPMN engine remains the authoritative execution model while AI agents become intelligent participants within the workflow.
+PostgreSQL and the engine state machine remain authoritative while AI agents
+participate through leased, retryable external work.
 
 ---
 
@@ -300,6 +306,10 @@ The BPMN execution core is operational, while APIs and platform capabilities con
 - ✅ Stable API v1 and worker protocol v1
 - ✅ Java external-worker SDK
 - ✅ OIDC JWT validation and backend RBAC
+- ✅ Native APL parser and immutable APL definitions
+- ✅ Native deterministic decision tables
+- ✅ PostgreSQL-authoritative Insight Loop with governed Studio review
+- ✅ Versioned `abada.agent/v1` profile and Java agent sidecar
 
 The exact guaranteed semantics are published in the
 [BPMN support matrix](docs/reference/bpmn-support.md). Unsupported constructs
@@ -309,12 +319,10 @@ are rejected at deployment instead of being silently ignored.
 
 - ⏳ Additional BPMN compatibility profiles
 - ⏳ TypeScript and Python SDKs
-- ⏳ DMN
 - ⏳ ❌ CMMN (superseded by agentic adaptive subprocesses)
-- ⏳ Public Agentic Runtime
-- ⏳ AI Worker SDK
+- ⏳ Production certification for the 1.1 agentic runtime
 - ⏳ Agent Memory Integrations
-- ⏳ Policy Engine
+- ⏳ Executable tool adapters and policy enforcement
 
 ---
 
@@ -387,13 +395,13 @@ Swagger:
 
 # Roadmap
 
-The public roadmap covers the progression from the current BPMN execution engine toward a fully featured cloud-native orchestration platform.
-
-The **agentic orchestration layer** is currently under active private development and **is intentionally not yet open sourced**. It builds on top of the public BPMN core and will be released progressively as its APIs, runtime model, and SDKs stabilize.
+The public roadmaps separate the certified 1.0 core from the 1.1 agentic and
+infrastructure evidence still required.
 
 See the complete roadmap:
 
 - [Roadmap to 1.0](docs/development/roadmap-to-1.0.md)
+- [Roadmap to 1.1 RC](docs/development/roadmap-to-1.1.0-rc.md)
 
 ---
 
