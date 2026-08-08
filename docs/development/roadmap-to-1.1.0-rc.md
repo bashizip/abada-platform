@@ -97,6 +97,45 @@ development baseline until the infrastructure track is complete.
 - [ ] Add realtime co-editing, Git synchronization and project bundle
   import/export only as separately designed follow-up capabilities.
 
+### Identity administration and root bootstrap
+
+- [ ] Add a dedicated Studio **Administration → Users & roles** workspace,
+  visible only to platform administrators, for creating, inviting, disabling
+  and reactivating human users and for inspecting service principals.
+- [ ] Introduce an identity-provider administration adapter. Bundled Keycloak
+  is the first supported writable provider; externally managed OIDC providers
+  must explicitly advertise whether user creation and role assignment are
+  supported. Abada must not become a second password database.
+- [ ] Separate global platform roles from project memberships. Operational
+  administrators may grant platform capabilities such as project creation,
+  deployment and operations, then assign project Owner/Maintainer/Operator/
+  Reviewer/Viewer roles through the existing project boundary.
+- [ ] Preserve governance separation: neither `ADMIN_ROOT` nor an operational
+  administrator may manufacture an Insight approval, satisfy a review lane or
+  silently grant themselves a business-review vote.
+- [ ] Add a one-time `ADMIN_ROOT` bootstrap identity, provisioned only through
+  an installation secret or local bootstrap command. Its sole normal-purpose
+  workflow is to create or promote the first operational platform
+  administrator.
+- [ ] Automatically close the bootstrap path after the first operational
+  administrator is active. Re-enabling `ADMIN_ROOT` must require an explicit
+  local break-glass procedure, short expiry and credential rotation; it must
+  never be exposed as a routine Studio login.
+- [ ] Require step-up authentication for administrator creation, global-role
+  changes, user disablement and root recovery. Record immutable audit events
+  containing actor, target, before/after roles, reason, timestamp and trace ID,
+  without storing credentials or tokens.
+- [ ] Enforce last-operational-admin protection, optimistic concurrency,
+  idempotent invitations and atomic user/role mutations. A failed identity-
+  provider operation must not leave PostgreSQL governance state claiming a
+  role that the provider did not grant.
+- [ ] Add negative tests for root reuse after bootstrap, forged administrator
+  claims, self-escalation, last-admin removal, cross-project escalation,
+  unauthorized user discovery and rollback when the identity provider fails.
+- [ ] Document installation bootstrap, first-admin handoff, administrator
+  rotation, account recovery, external-OIDC limitations and emergency root
+  revocation before declaring the administration interface production-ready.
+
 ## Track B — Infrastructure certification debt
 
 These items are intentionally deferred from the `1.0.0-rc.2` release
