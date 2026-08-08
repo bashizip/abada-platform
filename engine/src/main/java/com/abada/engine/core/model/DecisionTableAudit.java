@@ -9,6 +9,7 @@ import java.util.List;
  * input/output values never enter history or logs.
  */
 public record DecisionTableAudit(
+        String visitId,
         String activityId,
         String decisionKey,
         List<Integer> matchedRuleIndexes,

@@ -10,5 +10,10 @@ import java.io.Serializable;
  * @param className The fully qualified class name of the JavaDelegate (for embedded tasks).
  * @param topicName The topic name for external tasks.
  */
-public record ServiceTaskMeta(String id, String name, String className, String topicName) implements Serializable {
+public record ServiceTaskMeta(String id, String name, String className, String topicName,
+        AgentWorkDescriptor agentWork) implements Serializable {
+
+    public ServiceTaskMeta(String id, String name, String className, String topicName) {
+        this(id, name, className, topicName, null);
+    }
 }

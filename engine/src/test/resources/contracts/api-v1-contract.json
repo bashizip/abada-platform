@@ -32,7 +32,12 @@
     "/v1/external-tasks/{id}/failure": ["post"],
     "/v1/external-tasks/{id}/extend-lock": ["post"],
     "/v1/external-tasks/{id}/heartbeat": ["post"],
-    "/v1/external-tasks/{id}/bpmn-error": ["post"]
+    "/v1/external-tasks/{id}/bpmn-error": ["post"],
+    "/v1/insight/config/llm": ["get"],
+    "/v1/insight/proposals": ["get"],
+    "/v1/insight/proposals/{proposalId}": ["get"],
+    "/v1/insight/proposals/{proposalId}/reviews": ["post"],
+    "/v1/insight/policies/{definitionKey}": ["get", "put"]
   },
   "schemas": [
     "ApiError",
@@ -51,7 +56,11 @@
     "ExternalTaskBpmnErrorRequest",
     "ExtendLockRequest",
     "ActivityHistoryDto",
-    "FailedJobDTO"
+    "FailedJobDTO",
+    "AgentWorkDescriptor",
+    "InsightProposalDetailDTO",
+    "InsightReviewRequest",
+    "InsightApprovalPolicyDTO"
   ],
   "schemaProperties": {
     "ApiError": ["timestamp", "status", "code", "message", "path", "traceId", "details"],
@@ -64,7 +73,8 @@
     "TaskDetailsDto": ["id", "taskDefinitionKey", "name", "assignee", "status", "startDate", "endDate", "candidateUsers", "candidateGroups", "processInstanceId", "processDefinitionId", "processDefinitionName", "processStatus", "processSuspended", "processStartDate", "processEndDate", "currentActivityId", "variables"],
     "TaskActionResponse": ["status", "taskId"],
     "FetchAndLockRequest": ["workerId", "topics", "lockDuration", "maxTasks"],
-    "LockedExternalTask": ["id", "topicName", "variables", "processInstanceId", "activityId", "retries", "lockExpirationTime", "traceParent", "protocolVersion"],
+    "LockedExternalTask": ["id", "topicName", "variables", "processInstanceId", "activityId", "retries", "lockExpirationTime", "traceParent", "protocolVersion", "agentWork"],
+    "AgentWorkDescriptor": ["profileVersion", "model", "prompt", "inputs", "resultVariable", "outputSchema", "tools", "confidenceThreshold", "temperature", "maxTokens", "timeoutMs", "maxAttempts", "retryBackoffMs"],
     "CompleteExternalTaskRequest": ["workerId", "variables"],
     "ExternalTaskFailureDto": ["workerId", "errorMessage", "errorDetails", "retries", "retryTimeout"],
     "ExternalTaskBpmnErrorRequest": ["workerId", "errorCode", "errorMessage", "variables"],

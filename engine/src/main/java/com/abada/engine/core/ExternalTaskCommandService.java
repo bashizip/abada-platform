@@ -14,18 +14,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
 import com.abada.engine.dto.ExternalTaskBpmnErrorRequest;
+import com.abada.engine.insight.InsightFactWriter;
 
 @Service
 public class ExternalTaskCommandService {
     private final ExternalTaskRepository repository;
     private final AbadaEngine engine;
     private final ActivityHistoryService history;
+    private final InsightFactWriter insightFactWriter;
 
     public ExternalTaskCommandService(ExternalTaskRepository repository, AbadaEngine engine,
-            ActivityHistoryService history) {
+            ActivityHistoryService history, InsightFactWriter insightFactWriter) {
         this.repository = repository;
         this.engine = engine;
         this.history = history;
+        this.insightFactWriter = insightFactWriter;
     }
 
     @AtomicRuntimeCommand
@@ -46,11 +49,13 @@ public class ExternalTaskCommandService {
                 repository.save(task);
 
                 ProcessInstance instance = requireInstance(task);
+                var serviceTask = instance.getDefinition().getServiceTask(task.getActivityId());
                 history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(),
                         Map.of("externalTaskId", task.getId(), "workerId", request.workerId(), "topic", topic));
                 locked.add(new LockedExternalTask(task.getId(), task.getTopicName(), instance.getVariables(),
                         task.getProcessInstanceId(), task.getActivityId(), task.getRetries(),
-                        task.getLockExpirationTime(), task.getTraceParent(), "1"));
+                        task.getLockExpirationTime(), task.getTraceParent(), "1",
+                        serviceTask == null ? null : serviceTask.agentWork()));
                 acquired = true;
                 if (locked.size() >= request.effectiveMaxTasks()) break;
             }
@@ -76,6 +81,7 @@ public class ExternalTaskCommandService {
         engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), variables);
         history.record("EXTERNAL_TASK_COMPLETED", requireInstance(task), task.getActivityId(),
                 Map.of("externalTaskId", id, "workerId", valueOrEmpty(task.getWorkerId())));
+        recordExternalTaskFact(task, true);
     }
 
     @AtomicRuntimeCommand
@@ -98,6 +104,9 @@ public class ExternalTaskCommandService {
         repository.save(task);
         history.record("EXTERNAL_TASK_FAILED", requireInstance(task), task.getActivityId(),
                 Map.of("externalTaskId", id, "retries", failure.retries() == null ? -1 : failure.retries()));
+        if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
+            recordExternalTaskFact(task, false);
+        }
     }
 
     @AtomicRuntimeCommand
@@ -146,6 +155,30 @@ public class ExternalTaskCommandService {
         history.record("EXTERNAL_TASK_BPMN_ERROR", requireInstance(task), task.getActivityId(),
                 Map.of("externalTaskId", id, "errorCode", request.errorCode(),
                         "errorMessage", request.errorMessage() == null ? "" : request.errorMessage()));
+        recordExternalTaskFact(task, false);
+    }
+
+    /** Terminal fact for the analyzed signal; skips legacy rows without a known start. */
+    private void recordExternalTaskFact(ExternalTaskEntity task, boolean succeeded) {
+        if (task.getCreatedAt() == null) {
+            return;
+        }
+        ProcessInstance instance = engine.getProcessInstanceById(task.getProcessInstanceId());
+        if (instance == null) {
+            return;
+        }
+        String definitionKey = instance.getDefinition().getId();
+        String deploymentId = instance.getProcessDefinitionDeploymentId();
+        Instant endedAt = Instant.now();
+        if (succeeded) {
+            insightFactWriter.recordExternalTaskSuccess(task.getId(), definitionKey, deploymentId,
+                    task.getProcessInstanceId(), task.getActivityId(), task.getTopicName(),
+                    task.getCreatedAt(), endedAt);
+        } else {
+            insightFactWriter.recordExternalTaskFailure(task.getId(), definitionKey, deploymentId,
+                    task.getProcessInstanceId(), task.getActivityId(), task.getTopicName(),
+                    task.getCreatedAt(), endedAt);
+        }
     }
 
     private ExternalTaskEntity loadForUpdate(String id) {

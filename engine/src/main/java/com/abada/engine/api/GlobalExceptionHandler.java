@@ -2,6 +2,8 @@ package com.abada.engine.api;
 
 import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.bpmn.compatibility.BpmnValidationException;
+import com.abada.engine.insight.InsightProposalService.InsightConflictException;
+import com.abada.engine.insight.InsightProposalService.InsightNotFoundException;
 import com.abada.engine.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Locale;
@@ -80,6 +82,20 @@ public class GlobalExceptionHandler {
                 "Runtime state changed concurrently; reload it before retrying",
                 request);
         return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(InsightNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleInsightNotFound(
+            InsightNotFoundException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiErrors.response(HttpStatus.NOT_FOUND,
+                ApiErrorCode.RESOURCE_NOT_FOUND, ex.getMessage(), request));
+    }
+
+    @ExceptionHandler(InsightConflictException.class)
+    public ResponseEntity<ErrorResponse> handleInsightConflict(
+            InsightConflictException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiErrors.response(HttpStatus.CONFLICT,
+                ApiErrorCode.CONCURRENT_MODIFICATION, ex.getMessage(), request));
     }
 
     @ExceptionHandler({ MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class,

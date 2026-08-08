@@ -46,6 +46,9 @@
     },
     {
       "name": "abada-worker"
+    },
+    {
+      "name": "abada-insight-reviewer"
     }
   ],
   "clients": [
@@ -109,7 +112,7 @@
           "temporary": false
         }
       ],
-      "groups": ["customers", "abada-task-user", "abada-process-controller", "abada-deployer"]
+      "groups": ["customers", "abada-task-user", "abada-process-controller", "abada-deployer", "abada-insight-reviewer"]
     },
     {
       "username": "bob",

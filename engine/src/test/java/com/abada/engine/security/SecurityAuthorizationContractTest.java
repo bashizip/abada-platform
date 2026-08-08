@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +57,9 @@ class SecurityAuthorizationContractTest {
             case "tasks" -> "task:read task:write process:read";
             case "operator" -> "operations:read operations:write process:read";
             case "worker" -> "worker:execute";
+            case "insight-reader" -> "insight:read";
+            case "insight-reviewer" -> "insight:read insight:review";
+            case "insight-admin" -> "insight:read insight:review insight:configure";
             default -> "";
         };
         return Jwt.withTokenValue(token).header("alg", "RS256").subject("user-1")
@@ -95,6 +99,14 @@ class SecurityAuthorizationContractTest {
         assertForbidden(get("/v1/process-instances/missing/history"), "tasks");
         assertForbidden(post("/v1/external-tasks/fetch-and-lock").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"workerId\":\"w\",\"topics\":[\"topic\"],\"lockDuration\":1000}"), "operator");
+        assertForbidden(get("/v1/insight/proposals"), "tasks");
+        assertForbidden(post("/v1/insight/proposals/999/reviews")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"APPROVE\"}"), "insight-reader");
+        assertForbidden(put("/v1/insight/policies/order_flow")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requiredApprovals\":1,\"requiredGroups\":\"reviewers\","
+                        + "\"approvalMode\":\"PARALLEL\"}"), "insight-reviewer");
     }
 
     @Test
@@ -108,6 +120,15 @@ class SecurityAuthorizationContractTest {
                         .header("Authorization", "Bearer worker"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Abada-Worker-Protocol-Version", "1"));
+        mvc.perform(get("/v1/insight/policies/order_flow")
+                        .header("Authorization", "Bearer insight-reader"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requiredApprovals").value(1));
+        mvc.perform(post("/v1/insight/proposals/999/reviews")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"APPROVE\"}")
+                        .header("Authorization", "Bearer insight-reviewer"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

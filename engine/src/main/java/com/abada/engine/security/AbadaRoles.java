@@ -9,6 +9,7 @@ public final class AbadaRoles {
     public static final String TASK_USER = "ROLE_ABADA_TASK_USER";
     public static final String OPERATOR = "ROLE_ABADA_OPERATOR";
     public static final String WORKER = "ROLE_ABADA_WORKER";
+    public static final String INSIGHT_REVIEWER = "ROLE_ABADA_INSIGHT_REVIEWER";
 
     private AbadaRoles() {}
 
@@ -22,6 +23,7 @@ public final class AbadaRoles {
             case "ABADA_TASK_USER" -> TASK_USER;
             case "ABADA_OPERATOR" -> OPERATOR;
             case "ABADA_WORKER" -> WORKER;
+            case "ABADA_INSIGHT_REVIEWER" -> INSIGHT_REVIEWER;
             default -> null;
         };
     }

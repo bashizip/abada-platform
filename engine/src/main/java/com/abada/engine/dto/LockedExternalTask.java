@@ -2,6 +2,7 @@ package com.abada.engine.dto;
 
 import java.util.Map;
 import java.time.Instant;
+import com.abada.engine.core.model.AgentWorkDescriptor;
 
 /**
  * Represents an external task that has been locked for a worker.
@@ -20,9 +21,10 @@ public record LockedExternalTask(
         Integer retries,
         Instant lockExpirationTime,
         String traceParent,
-        String protocolVersion) {
+        String protocolVersion,
+        AgentWorkDescriptor agentWork) {
 
     public LockedExternalTask(String id, String topicName, Map<String, Object> variables) {
-        this(id, topicName, variables, null, null, null, null, null, "1");
+        this(id, topicName, variables, null, null, null, null, null, "1", null);
     }
 }

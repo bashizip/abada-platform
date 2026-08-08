@@ -59,6 +59,14 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_operations:write", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
                 .requestMatchers("/v1/external-tasks/**")
                         .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER, AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.GET, "/v1/insight/config/**", "/v1/insight/proposals/**",
+                        "/v1/insight/policies/**")
+                        .hasAnyAuthority("SCOPE_insight:read", AbadaRoles.INSIGHT_REVIEWER,
+                                AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.POST, "/v1/insight/proposals/*/reviews")
+                        .hasAnyAuthority("SCOPE_insight:review", AbadaRoles.INSIGHT_REVIEWER, AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.PUT, "/v1/insight/policies/**")
+                        .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .anyRequest().denyAll());
     }
 

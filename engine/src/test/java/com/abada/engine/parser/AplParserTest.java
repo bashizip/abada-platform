@@ -38,6 +38,12 @@ class AplParserTest {
         assertThat(definition.getServiceTasks()).containsOnlyKeys("notify");
         assertThat(definition.getServiceTasks().get("notify").topicName())
                 .isEqualTo(AplParser.AGENT_EXTERNAL_TOPIC);
+        assertThat(definition.getServiceTasks().get("notify").agentWork()).satisfies(work -> {
+            assertThat(work.profileVersion()).isEqualTo("abada.agent/v1");
+            assertThat(work.resultVariable()).isEqualTo("notify_result");
+            assertThat(work.maxAttempts()).isEqualTo(3);
+            assertThat(work.timeoutMs()).isEqualTo(60_000L);
+        });
         assertThat(definition.getDecisionTables()).containsOnlyKeys("score");
         assertThat(definition.getDecisionTables().get("score").hitPolicy()).isEqualTo("FIRST");
         assertThat(definition.getDecisionTables().get("score").rules()).hasSize(2);
@@ -136,6 +142,46 @@ class AplParserTest {
                 "    - id: secret\n      type: ai-dreamer\n      next: end\n").getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(BpmnValidationException.class)
                 .hasMessageContaining("unsupported node type");
+    }
+
+    @Test
+    void compilesVersionedAgentExecutionContract() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: summarize\n"
+                        + "      type: agent\n"
+                        + "      profile: abada.agent/v1\n"
+                        + "      model: model-a\n"
+                        + "      prompt: Summarize ${case}\n"
+                        + "      inputs:\n        case: ${case}\n"
+                        + "      result_variable: summary\n"
+                        + "      output_schema:\n        type: object\n"
+                        + "      tools: [crm.read]\n"
+                        + "      confidence_threshold: 80\n"
+                        + "      temperature: 0.1\n"
+                        + "      max_tokens: 512\n"
+                        + "      timeout_ms: 30000\n"
+                        + "      max_attempts: 2\n"
+                        + "      retry_backoff_ms: 1000\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+
+        var work = definition.getServiceTask("summarize").agentWork();
+        assertThat(work.model()).isEqualTo("model-a");
+        assertThat(work.inputs()).containsEntry("case", "${case}");
+        assertThat(work.resultVariable()).isEqualTo("summary");
+        assertThat(work.tools()).containsExactly("crm.read");
+        assertThat(work.maxTokens()).isEqualTo(512);
+    }
+
+    @Test
+    void rejectsUnsupportedAgentProfileAndUnsafeLimits() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: agent\n      type: agent\n      profile: abada.agent/v2\n      next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("unsupported profile");
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: agent\n      type: agent\n      timeout_ms: 0\n      next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("invalid execution limits");
     }
 
     @Test

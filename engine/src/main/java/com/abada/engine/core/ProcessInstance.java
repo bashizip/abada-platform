@@ -233,7 +233,7 @@ public class ProcessInstance {
                     DecisionTableMeta table = definition.getDecisionTable(pointer);
                     DecisionTableEvaluator.Result result = DecisionTableEvaluator.evaluate(table, variables);
                     variables.putAll(result.outputs());
-                    decisionAudits.add(new DecisionTableAudit(pointer, table.decisionKey(),
+                    decisionAudits.add(new DecisionTableAudit(java.util.UUID.randomUUID().toString(), pointer, table.decisionKey(),
                             result.matchedRuleIndexes(), List.copyOf(result.inputs().keySet()),
                             List.copyOf(result.outputs().keySet())));
                     previousPointer = pointer;

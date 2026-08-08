@@ -11,6 +11,7 @@ import com.abada.engine.core.model.ServiceTaskMeta;
 import com.abada.engine.core.model.TaskInstance;
 import com.abada.engine.core.model.ProcessStatus;
 import com.abada.engine.dto.UserTaskPayload;
+import com.abada.engine.insight.InsightFactWriter;
 import com.abada.engine.observability.EngineMetrics;
 import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.parser.AplParser;
@@ -67,12 +68,14 @@ public class AbadaEngine {
     private final EngineMetrics engineMetrics;
     private final Tracer tracer;
     private final ActivityHistoryService historyService;
+    private final InsightFactWriter insightFactWriter;
     private final Map<String, ParsedProcessDefinition> definitionsByDeploymentId = new ConcurrentHashMap<>();
 
     @Autowired
     public AbadaEngine(PersistenceService persistenceService, TaskManager taskManager, @Lazy EventManager eventManager,
             @Lazy JobScheduler jobScheduler, ExternalTaskRepository externalTaskRepository, ObjectMapper om,
-            EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService) {
+            EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
+            InsightFactWriter insightFactWriter) {
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
         this.taskManager = taskManager;
@@ -83,6 +86,7 @@ public class AbadaEngine {
         this.engineMetrics = engineMetrics;
         this.tracer = tracer;
         this.historyService = historyService;
+        this.insightFactWriter = insightFactWriter;
     }
 
     @PostConstruct
@@ -298,6 +302,7 @@ public class AbadaEngine {
         taskManager.completeTask(currentTask);
         persistTask(currentTask);
         historyService.record("TASK_COMPLETED", instance, currentTask.getTaskDefinitionKey(), Map.of());
+        recordUserTaskFact(instance, currentTask);
         persistRuntimeState(instance);
 
         List<UserTaskPayload> nextTasks = instance.advance(currentTask.getTaskDefinitionKey());
@@ -522,7 +527,44 @@ public class AbadaEngine {
                     "matchedRuleIndexes", audit.matchedRuleIndexes(),
                     "inputNames", audit.inputNames(),
                     "outputNames", audit.outputNames()));
+            recordDecisionFact(instance, audit);
         }
+    }
+
+    /** One terminal DECISION fact per application inside the same transaction. */
+    private void recordDecisionFact(ProcessInstance instance, DecisionTableAudit audit) {
+        var table = instance.getDefinition().getDecisionTables().get(audit.activityId());
+        if (table == null) {
+            return;
+        }
+        boolean fallbackUsed = audit.matchedRuleIndexes().stream()
+                .anyMatch(index -> index != null && index >= 0 && index < table.rules().size()
+                        && table.rules().get(index).otherwise());
+        insightFactWriter.recordDecisionApplied(
+                audit.visitId(),
+                instance.getDefinition().getId(),
+                instance.getProcessDefinitionDeploymentId(),
+                instance.getId(),
+                audit.activityId(),
+                audit.decisionKey(),
+                audit.matchedRuleIndexes(),
+                fallbackUsed,
+                Instant.now());
+    }
+
+    /** One terminal USER_TASK fact per completion inside the same transaction. */
+    private void recordUserTaskFact(ProcessInstance instance, TaskInstance task) {
+        if (task.getStartDate() == null) {
+            return;
+        }
+        insightFactWriter.recordUserTaskCompleted(
+                task.getId(),
+                instance.getDefinition().getId(),
+                instance.getProcessDefinitionDeploymentId(),
+                instance.getId(),
+                task.getTaskDefinitionKey(),
+                task.getStartDate(),
+                Instant.now());
     }
 
     private void createAndPersistTask(UserTaskPayload task, ProcessInstance instance) {
@@ -575,6 +617,7 @@ public class AbadaEngine {
                     ExternalTaskEntity externalTask = new ExternalTaskEntity(instance.getId(),
                             serviceTaskMeta.topicName());
                     externalTask.setActivityId(tokenId);
+                    externalTask.setCreatedAt(Instant.now());
                     var spanContext = io.opentelemetry.api.trace.Span.current().getSpanContext();
                     if (spanContext.isValid()) {
                         externalTask.setTraceParent("00-" + spanContext.getTraceId() + "-" + spanContext.getSpanId()

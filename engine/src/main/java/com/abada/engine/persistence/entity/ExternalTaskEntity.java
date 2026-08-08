@@ -45,6 +45,9 @@ public class ExternalTaskEntity {
     @Column(name = "trace_parent", length = 128)
     private String traceParent;
 
+    @Column(name = "created_at")
+    private Instant createdAt;
+
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
@@ -156,6 +159,9 @@ public class ExternalTaskEntity {
     public void setBpmnErrorMessage(String value) { bpmnErrorMessage = value; }
     public String getTraceParent() { return traceParent; }
     public void setTraceParent(String value) { traceParent = value; }
+
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant value) { createdAt = value; }
 
     public long getEntityVersion() { return entityVersion; }
 }

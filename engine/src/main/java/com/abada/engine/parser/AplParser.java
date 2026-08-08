@@ -8,6 +8,7 @@ import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.bpmn.compatibility.CompatibilityReport;
 import com.abada.engine.bpmn.compatibility.ValidationSeverity;
 import com.abada.engine.core.model.DecisionTableMeta;
+import com.abada.engine.core.model.AgentWorkDescriptor;
 import com.abada.engine.core.model.GatewayMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.SequenceFlow;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import org.springframework.stereotype.Component;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -52,6 +54,7 @@ import java.util.Set;
  * <p>Unsupported or ambiguous constructs are rejected at deployment: the
  * engine never guesses a graph from a partial APL document.
  */
+@Component
 public final class AplParser {
 
     /** The only supported APL language version. */
@@ -181,7 +184,8 @@ public final class AplParser {
                     endEvents.put(nodeId, nodeId);
                 }
                 case "agent" -> serviceTasks.put(nodeId,
-                        new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC));
+                        new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
+                                parseAgentWork(node, nodeId)));
                 case "engine-task" -> {
                     String topic = node.path("service").asText(null);
                     if (topic == null || topic.isBlank()) {
@@ -295,6 +299,50 @@ public final class AplParser {
                         List.of()),
                 List.of(CompatibilityProfiles.ABADA_NATIVE),
                 Set.of("abada.io/v1"));
+    }
+
+    private AgentWorkDescriptor parseAgentWork(JsonNode node, String nodeId) {
+        String profile = node.path("profile").asText("abada.agent/v1");
+        if (!"abada.agent/v1".equals(profile)) {
+            throw validation("agent node '" + nodeId + "' declares unsupported profile '" + profile + "'");
+        }
+        double confidence = node.path("confidence_threshold").asDouble(0.0);
+        if (confidence < 0 || confidence > 100) {
+            throw validation("agent node '" + nodeId + "' confidence_threshold must be between 0 and 100");
+        }
+        double temperature = node.path("temperature").asDouble(0.2);
+        if (temperature < 0 || temperature > 2) {
+            throw validation("agent node '" + nodeId + "' temperature must be between 0 and 2");
+        }
+        int maxTokens = node.path("max_tokens").asInt(2048);
+        long timeoutMs = node.path("timeout_ms").asLong(60_000L);
+        int maxAttempts = node.path("max_attempts").asInt(3);
+        long retryBackoffMs = node.path("retry_backoff_ms").asLong(2_000L);
+        if (maxTokens < 1 || maxTokens > 1_000_000 || timeoutMs < 1 || timeoutMs > 3_600_000
+                || maxAttempts < 1 || maxAttempts > 20 || retryBackoffMs < 0 || retryBackoffMs > 3_600_000) {
+            throw validation("agent node '" + nodeId + "' declares invalid execution limits");
+        }
+        Map<String, String> inputs = new LinkedHashMap<>();
+        JsonNode rawInputs = node.path("inputs");
+        if (rawInputs.isObject()) {
+            rawInputs.fields().forEachRemaining(entry -> inputs.put(entry.getKey(), entry.getValue().asText()));
+        } else if (!rawInputs.isMissingNode() && !rawInputs.isNull()) {
+            throw validation("agent node '" + nodeId + "' inputs must be a mapping");
+        }
+        Map<String, Object> outputSchema = Map.of();
+        if (node.path("output_schema").isObject()) {
+            outputSchema = yamlMapper.convertValue(node.path("output_schema"), Map.class);
+        }
+        List<String> tools = new ArrayList<>();
+        JsonNode rawTools = node.path("tools");
+        if (rawTools.isArray()) rawTools.forEach(tool -> tools.add(tool.asText()));
+        else if (!rawTools.isMissingNode() && !rawTools.isNull()) {
+            throw validation("agent node '" + nodeId + "' tools must be a list");
+        }
+        return new AgentWorkDescriptor(profile, node.path("model").asText(null),
+                node.path("prompt").asText(""), inputs,
+                node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
+                confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs);
     }
 
     private static List<DecisionTableMeta.DecisionTableInput> parseInputs(JsonNode node, String nodeId) {

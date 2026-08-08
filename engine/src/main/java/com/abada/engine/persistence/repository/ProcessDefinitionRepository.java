@@ -15,4 +15,5 @@ public interface ProcessDefinitionRepository extends JpaRepository<ProcessDefini
     List<ProcessDefinitionEntity> findAllByOrderByProcessKeyAscVersionDesc();
     Page<ProcessDefinitionEntity> findAllBy(Pageable pageable);
     Page<ProcessDefinitionEntity> findByProcessKey(String processKey, Pageable pageable);
+    Optional<ProcessDefinitionEntity> findFirstByDeploymentId(String deploymentId);
 }
