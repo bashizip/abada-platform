@@ -28,9 +28,9 @@ Abada 1.0 must satisfy all of these invariants:
 6. **External publication follows commit.** Lifecycle events and webhooks are
    written to a transactional outbox. No external observer is told about state
    that later rolls back.
-7. **Only immutable definitions may be cached.** Parsed BPMN definitions are
-   cached by immutable deployment/version identifier. Cache loss changes
-   performance, not behavior.
+ 7. **Only immutable definitions may be cached.** Parsed definitions (BPMN XML
+    or native `abada.io/v1` APL) are cached by immutable deployment/version
+    identifier. Cache loss changes performance, not behavior.
 
 These invariants allow any request or acquired job to run on any engine
 replica. Restarting or terminating a replica discards no authoritative

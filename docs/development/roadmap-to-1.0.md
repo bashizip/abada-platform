@@ -232,6 +232,17 @@ is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
   documented `user:<id>` and `group:<id>` subset.
 - [x] Parse both compact and nested `abada:assignment` forms under the stable
   `https://abada.io/schema/bpmn` namespace.
+- [x] Native APL definitions (`abada.io/v1` YAML) deploy through the same
+  endpoint: a schema marker on the source routes the stream to the APL
+  compiler or the canonical BPMN compiler, and `process_definitions.schema_type`
+  records the compiler used per immutable definition version.
+- [x] Compile APL `webhook`, `end`, `approval-gate`, `engine-task`, `agent`,
+  `decision-table` and `condition` nodes 1:1 into the canonical executable
+  graph; the last condition rule becomes the default flow when no `else` rule
+  is declared.
+- [x] Reject unsupported APL constructs at deployment (unknown node types,
+  cycles, duplicate `else` rules, missing `metadata.name`/`flow.entry`,
+  undeclared routing targets, more than one webhook entry).
 
 ### Validation, execution and persistence
 

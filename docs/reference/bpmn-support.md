@@ -36,5 +36,47 @@ transitions are protected against duplicate engine advancement, but applications
 must make those side effects idempotent. External tasks are the recommended
 boundary for remote or retryable work.
 
+## Native APL documents (`abada.io/v1`)
+
+Definitions can also be deployed as native APL YAML. The engine sniffs the
+source: a document whose first meaningful line is `version: abada.io/v1` is
+compiled by the native parser; anything starting with `<` is validated and
+compiled as canonical BPMN 2.0 XML. Both schemas compile into the same
+executable graph model and share the runtime, persistence, versioning and
+outbox machinery. The stored schema is recorded per definition version in
+`process_definitions.schema_type` (`BPMN_XML` or `APL_NATIVE`) and surfaced in
+the deployment/list DTOs as `schemaType` and `definitionFormatVersion`
+(`canonical-1` / `apl-native-1`).
+
+The supported APL construct set maps 1:1 onto the BPMN elements above:
+
+| APL node | Runtime element | Semantic notes |
+|---|---|---|
+| `webhook` | Start event | Exactly one per document; routed via `next` |
+| `end` | End event | Terminal; must not declare `next` |
+| `approval-gate` | User task | `assignees` list becomes candidate groups |
+| `engine-task` | External service task | `service` declares the durable topic |
+| `agent` | External service task | Fixed durable topic `abada:agent` |
+| `decision-table` | Business rule task | Inline `inputs`/`rules`, `FIRST`/`UNIQUE`/`COLLECT`, `otherwise` fallback; applies `abada:decisionTable` semantics |
+| `condition` | Exclusive gateway | `if` rules become conditional flows; the `else` rule (or the last rule otherwise) becomes the default flow |
+
+APL semantics that close or tighten holes:
+
+- Documents are **strictly acyclic**; any loop over `next` or condition targets
+  is rejected at deployment.
+- A `condition` must route via `rules`, never `next`; a second `else` rule, a
+  missing `metadata.name`, an undeclared routing target, a second `webhook`
+  node or an unrecognized node type fails deployment with an index-friendly
+  validation error and rolls back.
+- `approval-gate` requires a non-empty `assignees` list; `engine`/`agent` are
+  executed by external workers through fetch/lock/complete, exactly like
+  `camunda:topic` service tasks.
+
+Executable evidence: [`AplParserTest`](../../engine/src/test/java/com/abada/engine/parser/AplParserTest.java)
+(compilation and rejection matrix), [`AplRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/AplRuntimeTest.java)
+(end-to-end execution, restart recovery and schema coexistence),
+[`PostgresSchemaUpgradeTest`](../../engine/src/test/java/com/abada/engine/persistence/PostgresSchemaUpgradeTest.java)
+(V10 `schema_type` migration from every published schema version).
+
 Command, variable, retry, cancellation, suspension and correlation details are
 defined by the [runtime semantics contract](runtime-semantics.md).
