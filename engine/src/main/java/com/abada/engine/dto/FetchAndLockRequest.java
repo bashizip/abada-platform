@@ -9,9 +9,14 @@ import java.util.List;
  * @param topics A list of topics the worker is subscribed to.
  * @param lockDuration The duration in milliseconds for which the worker wants to lock the tasks.
  */
-public record FetchAndLockRequest(String workerId, List<String> topics, long lockDuration, Integer maxTasks) {
+public record FetchAndLockRequest(String workerId, List<String> topics, long lockDuration,
+        Integer maxTasks, String projectId) {
     public FetchAndLockRequest(String workerId, List<String> topics, long lockDuration) {
-        this(workerId, topics, lockDuration, 1);
+        this(workerId, topics, lockDuration, 1, null);
+    }
+
+    public FetchAndLockRequest(String workerId, List<String> topics, long lockDuration, Integer maxTasks) {
+        this(workerId, topics, lockDuration, maxTasks, null);
     }
 
     public int effectiveMaxTasks() {

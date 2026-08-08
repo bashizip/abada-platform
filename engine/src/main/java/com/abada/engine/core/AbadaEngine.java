@@ -51,6 +51,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.abada.engine.project.ProjectConstants;
 
 @Component
 public class AbadaEngine {
@@ -97,11 +98,21 @@ public class AbadaEngine {
 
     @AtomicRuntimeCommand
     public ProcessDefinitionEntity deploy(InputStream bpmnXml) {
-        return deploy(bpmnXml, BpmnParseOptions.defaults());
+        return deploy(ProjectConstants.DEFAULT_PROJECT_ID, bpmnXml, BpmnParseOptions.defaults());
     }
 
     @AtomicRuntimeCommand
     public ProcessDefinitionEntity deploy(InputStream bpmnXml, BpmnParseOptions options) {
+        return deploy(ProjectConstants.DEFAULT_PROJECT_ID, bpmnXml, options);
+    }
+
+    @AtomicRuntimeCommand
+    public ProcessDefinitionEntity deploy(String projectId, InputStream source) {
+        return deploy(projectId, source, BpmnParseOptions.defaults());
+    }
+
+    @AtomicRuntimeCommand
+    public ProcessDefinitionEntity deploy(String projectId, InputStream bpmnXml, BpmnParseOptions options) {
         Span span = tracer.spanBuilder("abada.process.deploy").startSpan();
         Timer.Sample deploymentSample = engineMetrics.startBpmnDeploymentTimer();
         boolean succeeded = false;
@@ -130,9 +141,10 @@ public class AbadaEngine {
                 parseResult = parser.parseDetailed(new java.io.ByteArrayInputStream(source), options);
             }
             ParsedProcessDefinition definition = parseResult.definition();
-            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema);
+            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId);
             historyService.record("PROCESS_DEFINITION_DEPLOYED", null, definition.getId(), null,
-                    Map.of("deploymentId", persisted.getDeploymentId(), "version", persisted.getVersion()));
+                    Map.of("deploymentId", persisted.getDeploymentId(), "version", persisted.getVersion(),
+                            "projectId", projectId));
             registerDefinitionAfterCommit(definition, persisted);
 
             span.setAttribute("process.definition.id", definition.getId());
@@ -162,6 +174,10 @@ public class AbadaEngine {
 
     public Optional<ProcessDefinitionEntity> getProcessDefinitionById(String id) {
         return Optional.ofNullable(persistenceService.findProcessDefinitionById(id));
+    }
+
+    public Optional<ProcessDefinitionEntity> getProcessDefinitionById(String projectId, String id) {
+        return Optional.ofNullable(persistenceService.findProcessDefinitionByProjectAndId(projectId, id));
     }
 
     public ParsedProcessDefinition getParsedProcessDefinition(String processDefinitionId) {
@@ -194,11 +210,19 @@ public class AbadaEngine {
     @AtomicRuntimeCommand
     public ProcessInstance startProcess(@SpanTag("process.definition.id") String processDefinitionId, String username,
             Map<String, Object> initialVariables) {
+        return startProcess(ProjectConstants.DEFAULT_PROJECT_ID, processDefinitionId, username, initialVariables);
+    }
+
+    @AtomicRuntimeCommand
+    public ProcessInstance startProcess(String projectId,
+            @SpanTag("process.definition.id") String processDefinitionId, String username,
+            Map<String, Object> initialVariables) {
         Timer.Sample sample = engineMetrics.startProcessTimer();
         Span span = tracer.spanBuilder("abada.process.start").startSpan();
 
         try (var scope = TraceLogContext.open(span)) {
-            ProcessDefinitionEntity deployment = persistenceService.findProcessDefinitionById(processDefinitionId);
+            ProcessDefinitionEntity deployment = persistenceService
+                    .findProcessDefinitionByProjectAndId(projectId, processDefinitionId);
             if (deployment == null) {
                 throw new ProcessEngineException("Unknown process ID: " + processDefinitionId);
             }
@@ -206,6 +230,7 @@ public class AbadaEngine {
 
             ProcessInstance instance = new ProcessInstance(definition);
             instance.setProcessDefinitionDeploymentId(deployment.getDeploymentId());
+            instance.setProjectId(projectId);
             instance.putAllVariables(initialVariables);
             instance.setStartedBy(username != null && !username.isBlank() ? username : "system");
 
@@ -477,6 +502,7 @@ public class AbadaEngine {
         instance.setStatus(entity.getStatus());
         instance.setSuspended(entity.isSuspended());
         instance.setProcessDefinitionDeploymentId(entity.getProcessDefinitionDeploymentId());
+        instance.setProjectId(entity.getProjectId());
         instance.setEntityVersion(entity.getEntityVersion());
         instance.setStartedBy(entity.getStartedBy());
         instance.putAllVariables(readMap(entity.getVariablesJson()));
@@ -541,6 +567,7 @@ public class AbadaEngine {
                 .anyMatch(index -> index != null && index >= 0 && index < table.rules().size()
                         && table.rules().get(index).otherwise());
         insightFactWriter.recordDecisionApplied(
+                instance.getProjectId(),
                 audit.visitId(),
                 instance.getDefinition().getId(),
                 instance.getProcessDefinitionDeploymentId(),
@@ -558,6 +585,7 @@ public class AbadaEngine {
             return;
         }
         insightFactWriter.recordUserTaskCompleted(
+                instance.getProjectId(),
                 task.getId(),
                 instance.getDefinition().getId(),
                 instance.getProcessDefinitionDeploymentId(),
@@ -636,6 +664,7 @@ public class AbadaEngine {
         entity.setId(instance.getId());
         entity.setProcessDefinitionId(instance.getDefinition().getId());
         entity.setProcessDefinitionDeploymentId(instance.getProcessDefinitionDeploymentId());
+        entity.setProjectId(instance.getProjectId());
 
         if (instance.getActiveTokens() != null && !instance.getActiveTokens().isEmpty()) {
             entity.setCurrentActivityId(instance.getActiveTokens().get(0));
@@ -746,6 +775,14 @@ public class AbadaEngine {
     }
 
     @Transactional(readOnly = true)
+    public Page<ProcessInstance> getProcessInstances(String projectId,
+            com.abada.engine.core.model.ProcessStatus status,
+            String processDefinitionId, Pageable pageable) {
+        return persistenceService.findProcessInstances(projectId, status, processDefinitionId, pageable)
+                .map(this::materializeProcessInstance);
+    }
+
+    @Transactional(readOnly = true)
     public Page<ProcessDefinitionEntity> getDeployedProcesses(Pageable pageable) {
         return persistenceService.findProcessDefinitions(pageable);
     }
@@ -753,6 +790,12 @@ public class AbadaEngine {
     @Transactional(readOnly = true)
     public Page<ProcessDefinitionEntity> getDeployedProcesses(String processKey, Pageable pageable) {
         return persistenceService.findProcessDefinitions(processKey, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProcessDefinitionEntity> getDeployedProcesses(String projectId, String processKey,
+            Pageable pageable) {
+        return persistenceService.findProcessDefinitions(projectId, processKey, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -778,13 +821,20 @@ public class AbadaEngine {
     }
 
     private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema) {
+        return saveProcessDefinition(parseResult, schema, ProjectConstants.DEFAULT_PROJECT_ID);
+    }
+
+    private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema,
+            String projectId) {
         ParsedProcessDefinition definition = parseResult.definition();
         String checksum = sha256(definition.getRawXml());
-        ProcessDefinitionEntity latest = persistenceService.findProcessDefinitionById(definition.getId());
+        ProcessDefinitionEntity latest = persistenceService
+                .findProcessDefinitionByProjectAndId(projectId, definition.getId());
         if (latest != null && checksum.equals(latest.getChecksum())) {
             return latest;
         }
         ProcessDefinitionEntity entity = new ProcessDefinitionEntity();
+        entity.setProjectId(projectId);
         entity.setId(definition.getId());
         entity.setVersion(latest == null ? 1 : latest.getVersion() + 1);
         entity.setChecksum(checksum);

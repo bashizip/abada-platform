@@ -10,6 +10,7 @@ public final class AbadaRoles {
     public static final String OPERATOR = "ROLE_ABADA_OPERATOR";
     public static final String WORKER = "ROLE_ABADA_WORKER";
     public static final String INSIGHT_REVIEWER = "ROLE_ABADA_INSIGHT_REVIEWER";
+    public static final String PROJECT_CREATOR = "ROLE_ABADA_PROJECT_CREATOR";
 
     private AbadaRoles() {}
 
@@ -24,6 +25,7 @@ public final class AbadaRoles {
             case "ABADA_OPERATOR" -> OPERATOR;
             case "ABADA_WORKER" -> WORKER;
             case "ABADA_INSIGHT_REVIEWER" -> INSIGHT_REVIEWER;
+            case "ABADA_PROJECT_CREATOR" -> PROJECT_CREATOR;
             default -> null;
         };
     }

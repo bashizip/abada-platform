@@ -10,6 +10,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import com.abada.engine.project.ProjectConstants;
 
 @Service
 public class UserStatsService {
@@ -29,18 +30,24 @@ public class UserStatsService {
     }
 
     public UserStatsDto getUserStats(String username, List<String> userGroups) {
+        return getUserStats(ProjectConstants.DEFAULT_PROJECT_ID, username, userGroups);
+    }
+
+    public UserStatsDto getUserStats(String projectId, String username, List<String> userGroups) {
         // Get all tasks for the user (both assigned and available)
-        List<TaskEntity> userTasks = taskRepository.findTasksForUser(username);
+        List<TaskEntity> userTasks = taskRepository.findTasksForUser(username).stream()
+                .filter(task -> belongsToProject(task, projectId)).toList();
 
         // Quick stats
         UserStatsDto.QuickStats quickStats = calculateQuickStats(
             username,
             userGroups,
-            userTasks
+            userTasks,
+            projectId
         );
 
         // Recent tasks (last 10)
-        List<UserStatsDto.RecentTask> recentTasks = getRecentTasks(username);
+        List<UserStatsDto.RecentTask> recentTasks = getRecentTasks(projectId, username);
 
         // Tasks by status
         Map<TaskStatus, Integer> tasksByStatus = calculateTasksByStatus(
@@ -48,7 +55,7 @@ public class UserStatsService {
         );
 
         // Overdue tasks (CLAIMED for more than 7 days)
-        List<UserStatsDto.OverdueTask> overdueTasks = getOverdueTasks(username);
+        List<UserStatsDto.OverdueTask> overdueTasks = getOverdueTasks(projectId, username);
 
         // Process activity
         UserStatsDto.ProcessActivity processActivity = calculateProcessActivity(
@@ -68,7 +75,8 @@ public class UserStatsService {
     private UserStatsDto.QuickStats calculateQuickStats(
         String username,
         List<String> userGroups,
-        List<TaskEntity> userTasks
+        List<TaskEntity> userTasks,
+        String projectId
     ) {
         // Active tasks (CLAIMED by user)
         long activeTasks = userTasks
@@ -105,7 +113,7 @@ public class UserStatsService {
 
         // Available tasks (tasks user can claim)
         List<TaskEntity> availableTasks = taskManager
-            .getVisibleTasksForUser(username, userGroups, TaskStatus.AVAILABLE)
+            .getVisibleTasksForUser(projectId, username, userGroups, TaskStatus.AVAILABLE)
             .stream()
             .map(this::convertToTaskEntity)
             .collect(Collectors.toList());
@@ -118,10 +126,11 @@ public class UserStatsService {
         );
     }
 
-    private List<UserStatsDto.RecentTask> getRecentTasks(String username) {
+    private List<UserStatsDto.RecentTask> getRecentTasks(String projectId, String username) {
         return taskRepository
             .findRecentTasksByAssignee(username)
             .stream()
+            .filter(task -> belongsToProject(task, projectId))
             .limit(10)
             .map(this::convertToRecentTask)
             .collect(Collectors.toList());
@@ -143,7 +152,7 @@ public class UserStatsService {
             );
     }
 
-    private List<UserStatsDto.OverdueTask> getOverdueTasks(String username) {
+    private List<UserStatsDto.OverdueTask> getOverdueTasks(String projectId, String username) {
         Instant sevenDaysAgo = Instant.now().minus(7, ChronoUnit.DAYS);
 
         return taskRepository
@@ -153,6 +162,7 @@ public class UserStatsService {
                 sevenDaysAgo
             )
             .stream()
+            .filter(task -> belongsToProject(task, projectId))
             .map(task -> {
                 long daysOverdue = ChronoUnit.DAYS.between(
                     task.getStartDate(),
@@ -283,5 +293,10 @@ public class UserStatsService {
             processDefinitionName,
             task.getAssignee()
         );
+    }
+
+    private boolean belongsToProject(TaskEntity task, String projectId) {
+        ProcessInstance instance = abadaEngine.getProcessInstanceById(task.getProcessInstanceId());
+        return instance != null && projectId.equals(instance.getProjectId());
     }
 }

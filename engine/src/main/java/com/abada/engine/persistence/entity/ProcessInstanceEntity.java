@@ -14,6 +14,9 @@ public class ProcessInstanceEntity {
 
     private String processDefinitionId;
 
+    @Column(name = "project_id", nullable = false)
+    private String projectId = com.abada.engine.project.ProjectConstants.DEFAULT_PROJECT_ID;
+
     @Column(name = "process_definition_deployment_id", nullable = false)
     private String processDefinitionDeploymentId;
 
@@ -82,6 +85,9 @@ public class ProcessInstanceEntity {
     public String getProcessDefinitionId() {
         return processDefinitionId;
     }
+
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String value) { projectId = value; }
 
     public void setProcessDefinitionId(String processDefinitionId) {
         this.processDefinitionId = processDefinitionId;

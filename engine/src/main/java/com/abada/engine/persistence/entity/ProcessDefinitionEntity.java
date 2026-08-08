@@ -16,6 +16,9 @@ public class ProcessDefinitionEntity {
     @Column(name = "process_key", nullable = false)
     private String processKey;
 
+    @Column(name = "project_id", nullable = false)
+    private String projectId = com.abada.engine.project.ProjectConstants.DEFAULT_PROJECT_ID;
+
     @Column(nullable = false)
     private int version;
 
@@ -82,6 +85,9 @@ public class ProcessDefinitionEntity {
     public String getProcessKey() {
         return processKey;
     }
+
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String value) { projectId = value; }
 
     public void setProcessKey(String processKey) {
         this.processKey = processKey;

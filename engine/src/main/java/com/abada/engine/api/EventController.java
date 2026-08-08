@@ -4,6 +4,7 @@ import com.abada.engine.core.EventManager;
 import com.abada.engine.core.IdempotencyService;
 import com.abada.engine.dto.MessageEventRequest;
 import com.abada.engine.dto.SignalEventRequest;
+import com.abada.engine.project.ProjectConstants;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,7 +32,8 @@ public class EventController {
     public ResponseEntity<Void> correlateMessage(@RequestBody MessageEventRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         idempotency.execute(idempotencyKey, "event.message", request, () -> {
-            eventManager.correlateMessage(request.messageName(), request.correlationKey(), request.variables());
+            eventManager.correlateMessage(ProjectConstants.DEFAULT_PROJECT_ID,
+                    request.messageName(), request.correlationKey(), request.variables());
             return Map.of("status", "Accepted");
         });
         return ResponseEntity.accepted().build();
@@ -44,7 +46,8 @@ public class EventController {
     public ResponseEntity<Void> broadcastSignal(@RequestBody SignalEventRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         idempotency.execute(idempotencyKey, "event.signal", request, () -> {
-            eventManager.broadcastSignal(request.signalName(), request.variables());
+            eventManager.broadcastSignal(ProjectConstants.DEFAULT_PROJECT_ID,
+                    request.signalName(), request.variables());
             return Map.of("status", "Accepted");
         });
         return ResponseEntity.accepted().build();

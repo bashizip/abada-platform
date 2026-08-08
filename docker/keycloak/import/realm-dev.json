@@ -49,6 +49,9 @@
     },
     {
       "name": "abada-insight-reviewer"
+    },
+    {
+      "name": "abada-project-creator"
     }
   ],
   "clients": [
@@ -112,7 +115,7 @@
           "temporary": false
         }
       ],
-      "groups": ["customers", "abada-task-user", "abada-process-controller", "abada-deployer", "abada-insight-reviewer"]
+      "groups": ["customers", "abada-task-user", "abada-process-controller", "abada-deployer", "abada-insight-reviewer", "abada-project-creator"]
     },
     {
       "username": "bob",

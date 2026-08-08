@@ -14,6 +14,14 @@ import jakarta.persistence.LockModeType;
 public interface InsightProposalRepository extends JpaRepository<InsightProposalEntity, Long> {
 
     Page<InsightProposalEntity> findByStatus(InsightProposalEntity.Status status, Pageable pageable);
+    Page<InsightProposalEntity> findByProjectId(String projectId, Pageable pageable);
+    Page<InsightProposalEntity> findByProjectIdAndStatus(
+            String projectId, InsightProposalEntity.Status status, Pageable pageable);
+    Page<InsightProposalEntity> findByProjectIdAndDefinitionKey(
+            String projectId, String definitionKey, Pageable pageable);
+    Page<InsightProposalEntity> findByProjectIdAndStatusAndDefinitionKey(
+            String projectId, InsightProposalEntity.Status status, String definitionKey, Pageable pageable);
+    Optional<InsightProposalEntity> findByIdAndProjectId(long id, String projectId);
 
     @Query("SELECT p FROM InsightProposalEntity p "
             + "WHERE p.definitionDeploymentId = :deploymentId AND p.status IN ('DRAFT', 'IN_REVIEW') "

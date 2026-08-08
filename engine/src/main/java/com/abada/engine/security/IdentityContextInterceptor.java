@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.servlet.HandlerInterceptor;
+import com.abada.engine.persistence.entity.PrincipalEntity;
+import com.abada.engine.project.PrincipalService;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,9 +25,12 @@ import java.util.Optional;
 public class IdentityContextInterceptor implements HandlerInterceptor {
 
     private final String securityMode;
+    private final PrincipalService principals;
 
-    public IdentityContextInterceptor(@Value("${abada.security.mode:disabled}") String securityMode) {
+    public IdentityContextInterceptor(@Value("${abada.security.mode:disabled}") String securityMode,
+            PrincipalService principals) {
         this.securityMode = securityMode;
+        this.principals = principals;
     }
 
     // OAuth2 Proxy headers (from oauth2-proxy ForwardAuth)
@@ -41,6 +46,9 @@ public class IdentityContextInterceptor implements HandlerInterceptor {
     public boolean preHandle(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
             @NonNull Object handler) {
         String username;
+        String issuer;
+        String subject;
+        PrincipalEntity.Type principalType = PrincipalEntity.Type.HUMAN;
         List<String> groups;
         if ("oidc".equalsIgnoreCase(securityMode)) {
             var authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -48,23 +56,36 @@ public class IdentityContextInterceptor implements HandlerInterceptor {
                 String preferredUsername = jwt.getToken().getClaimAsString("preferred_username");
                 username = preferredUsername == null || preferredUsername.isBlank()
                         ? authentication.getName() : preferredUsername;
+                issuer = jwt.getToken().getIssuer() == null ? "oidc" : jwt.getToken().getIssuer().toString();
+                subject = jwt.getToken().getSubject();
+                if (subject == null || subject.isBlank()) subject = authentication.getName();
+                if (username.startsWith("service-account-") || jwt.getToken().hasClaim("client_id")) {
+                    principalType = PrincipalEntity.Type.SERVICE;
+                }
                 List<String> claimedGroups = jwt.getToken().getClaimAsStringList("groups");
                 groups = claimedGroups == null ? List.of() : List.copyOf(claimedGroups);
             } else {
                 username = "anonymous";
+                issuer = "oidc";
+                subject = "anonymous";
                 groups = List.of();
             }
         } else if ("proxy".equalsIgnoreCase(securityMode)) {
             username = Optional.ofNullable(request.getHeader(OAUTH2_USER_HEADER))
                     .or(() -> Optional.ofNullable(request.getHeader(OAUTH2_EMAIL_HEADER)))
                     .orElse("anonymous");
+            issuer = "trusted-proxy";
+            subject = username.toLowerCase(java.util.Locale.ROOT);
             groups = splitHeader(request.getHeader(OAUTH2_GROUPS_HEADER));
         } else {
             username = Optional.ofNullable(request.getHeader(USER_HEADER)).orElse("anonymous");
+            issuer = "local-disabled";
+            subject = username.toLowerCase(java.util.Locale.ROOT);
             groups = splitHeader(request.getHeader(GROUPS_HEADER));
         }
 
-        IdentityContext.set(new Identity(username, groups));
+        PrincipalEntity principal = principals.observe(issuer, subject, username, principalType);
+        IdentityContext.set(new Identity(principal.getId(), username, groups));
         return true;
     }
 

@@ -3,7 +3,9 @@ package com.abada.engine.insight;
 import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.persistence.entity.InsightApprovalPolicyEntity;
 import com.abada.engine.persistence.entity.InsightProposalEntity;
+import com.abada.engine.persistence.entity.InsightApprovalPolicyId;
 import com.abada.engine.persistence.repository.InsightApprovalPolicyRepository;
+import com.abada.engine.project.ProjectConstants;
 import java.time.Instant;
 import java.util.Arrays;
 import org.springframework.stereotype.Service;
@@ -18,11 +20,23 @@ public class InsightPolicyService {
     }
 
     public InsightApprovalPolicyEntity get(String definitionKey) {
-        return policies.findById(definitionKey).orElseGet(() -> defaults(definitionKey));
+        return get(ProjectConstants.DEFAULT_PROJECT_ID, definitionKey);
+    }
+
+    public InsightApprovalPolicyEntity get(String projectId, String definitionKey) {
+        return policies.findById(new InsightApprovalPolicyId(projectId, definitionKey))
+                .orElseGet(() -> defaults(projectId, definitionKey));
     }
 
     @Transactional
     public InsightApprovalPolicyEntity update(String definitionKey, long expectedVersion,
+            int requiredApprovals, String requiredGroups, String approvalMode, String actor) {
+        return update(ProjectConstants.DEFAULT_PROJECT_ID, definitionKey, expectedVersion,
+                requiredApprovals, requiredGroups, approvalMode, actor);
+    }
+
+    @Transactional
+    public InsightApprovalPolicyEntity update(String projectId, String definitionKey, long expectedVersion,
             int requiredApprovals, String requiredGroups, String approvalMode, String actor) {
         if (requiredApprovals < 1 || requiredApprovals > 20) {
             throw new ProcessEngineException("requiredApprovals must be between 1 and 20");
@@ -45,13 +59,14 @@ public class InsightPolicyService {
         } catch (Exception exception) {
             throw new ProcessEngineException("approvalMode must be PARALLEL or SEQUENTIAL");
         }
-        InsightApprovalPolicyEntity entity = policies.findById(definitionKey).orElse(null);
+        InsightApprovalPolicyEntity entity = policies
+                .findById(new InsightApprovalPolicyId(projectId, definitionKey)).orElse(null);
         if (entity == null) {
             if (expectedVersion != 0) {
                 throw new InsightProposalService.InsightConflictException(
                         "Approval policy changed concurrently; reload before saving");
             }
-            entity = defaults(definitionKey);
+            entity = defaults(projectId, definitionKey);
         } else if (entity.getPolicyVersion() != expectedVersion) {
             throw new InsightProposalService.InsightConflictException(
                     "Approval policy changed concurrently; reload before saving");
@@ -64,11 +79,13 @@ public class InsightPolicyService {
         return policies.save(entity);
     }
 
-    private InsightApprovalPolicyEntity defaults(String definitionKey) {
+    private InsightApprovalPolicyEntity defaults(String projectId, String definitionKey) {
         InsightApprovalPolicyEntity entity = new InsightApprovalPolicyEntity();
+        entity.setProjectId(projectId);
         entity.setDefinitionKey(definitionKey);
         entity.setRequiredApprovals(1);
-        entity.setRequiredGroups("abada-insight-reviewer");
+        entity.setRequiredGroups(ProjectConstants.DEFAULT_PROJECT_ID.equals(projectId)
+                ? "abada-insight-reviewer" : "lane:TECHNICAL");
         entity.setApprovalMode(InsightProposalEntity.ApprovalMode.PARALLEL);
         entity.setUpdatedAt(Instant.EPOCH);
         entity.setUpdatedBy("system-default");

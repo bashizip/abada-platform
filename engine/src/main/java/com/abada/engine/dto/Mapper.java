@@ -10,6 +10,7 @@ public class Mapper {
                     ? pi.getActiveTokens().get(0)
                     : null;
             return new ProcessInstanceDTO(
+                    pi.getProjectId(),
                     pi.getId(),
                     pi.getDefinition().getId(),
                     pi.getDefinition().getName(),

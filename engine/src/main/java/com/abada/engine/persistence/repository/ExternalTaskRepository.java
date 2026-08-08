@@ -36,6 +36,19 @@ public interface ExternalTaskRepository extends JpaRepository<ExternalTaskEntity
         return findAvailableForUpdate(topic, now).stream().findFirst();
     }
 
+    @Query(value = "select task.* from external_tasks task "
+            + "join process_instances instance on instance.id = task.process_instance_id "
+            + "where instance.project_id = :projectId and task.topic_name = :topic "
+            + "and (task.status = 'OPEN' or (task.status = 'LOCKED' and task.lock_expiration_time <= :now)) "
+            + "order by task.id limit 1 for update of task skip locked", nativeQuery = true)
+    List<ExternalTaskEntity> findAvailableForProjectForUpdate(@Param("projectId") String projectId,
+            @Param("topic") String topic, @Param("now") Instant now);
+
+    default Optional<ExternalTaskEntity> findFirstAvailableForProjectForUpdate(
+            String projectId, String topic, Instant now) {
+        return findAvailableForProjectForUpdate(projectId, topic, now).stream().findFirst();
+    }
+
     boolean existsByProcessInstanceIdAndActivityIdAndStatusIn(
             String processInstanceId, String activityId, List<ExternalTaskEntity.Status> statuses);
 
@@ -50,4 +63,21 @@ public interface ExternalTaskRepository extends JpaRepository<ExternalTaskEntity
             + "and (:active = false or (task.retries is not null and task.retries >= 0))")
     Page<ExternalTaskEntity> findIncidents(@Param("withException") boolean withException,
             @Param("active") boolean active, Pageable pageable);
+
+    @Query("select task from ExternalTaskEntity task where "
+            + "exists (select instance.id from ProcessInstanceEntity instance "
+            + "where instance.id = task.processInstanceId and instance.projectId = :projectId) "
+            + "and (task.status = com.abada.engine.persistence.entity.ExternalTaskEntity.Status.FAILED "
+            + "or (task.retries is not null and task.retries <= 0)) "
+            + "and (:withException = false or task.exceptionMessage is not null) "
+            + "and (:active = false or (task.retries is not null and task.retries >= 0))")
+    Page<ExternalTaskEntity> findIncidentsByProject(@Param("projectId") String projectId,
+            @Param("withException") boolean withException, @Param("active") boolean active,
+            Pageable pageable);
+
+    @Query("select task from ExternalTaskEntity task where task.id = :id and "
+            + "exists (select instance.id from ProcessInstanceEntity instance "
+            + "where instance.id = task.processInstanceId and instance.projectId = :projectId)")
+    Optional<ExternalTaskEntity> findByIdAndProjectId(@Param("id") String id,
+            @Param("projectId") String projectId);
 }

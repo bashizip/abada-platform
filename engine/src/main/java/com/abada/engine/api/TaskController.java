@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.abada.engine.project.ProjectConstants;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -72,7 +73,8 @@ public class TaskController {
                 Sort.by("startDate").ascending().and(Sort.by("id").ascending()));
         Page<TaskInstance> visible = engine
             .getTaskManager()
-            .getVisibleTasksForUser(user, groups, status, pageable);
+            .getVisibleTasksForUser(ProjectConstants.DEFAULT_PROJECT_ID,
+                    user, groups, status, pageable);
 
         Set<String> processInstanceIds = visible.stream()
                 .map(TaskInstance::getProcessInstanceId)
@@ -129,6 +131,7 @@ public class TaskController {
         @RequestParam String taskId,
         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
+        requireDefaultProject(taskId);
         return ResponseEntity.ok(idempotencyService.execute(idempotencyKey, "task.claim",
                 Map.of("taskId", taskId, "user", context.getUsername()),
                 new TypeReference<TaskActionResponse>() {}, () -> {
@@ -140,6 +143,7 @@ public class TaskController {
     @PostMapping("/unclaim")
     public ResponseEntity<TaskActionResponse> unclaim(@RequestParam String taskId,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        requireDefaultProject(taskId);
         return ResponseEntity.ok(idempotencyService.execute(idempotencyKey, "task.unclaim",
                 Map.of("taskId", taskId, "user", context.getUsername()),
                 new TypeReference<TaskActionResponse>() {}, () -> {
@@ -162,6 +166,7 @@ public class TaskController {
         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
         @RequestBody(required = false) Map<String, Object> variables
     ) {
+        requireDefaultProject(taskId);
         Map<String, Object> body = variables == null ? Map.of() : variables;
         TaskActionResponse response = idempotencyService.execute(idempotencyKey, "task.complete",
                 Map.of("taskId", taskId, "user", context.getUsername(), "variables", body),
@@ -220,6 +225,7 @@ public class TaskController {
     }
 
     private TaskInstance requireVisible(TaskInstance task) {
+        requireDefaultProject(task.getId());
         String user = context.getUsername();
         List<String> groups = context.getGroups();
         boolean assigned = user.equals(task.getAssignee());
@@ -230,5 +236,15 @@ public class TaskController {
                     "User is not authorized to access task " + task.getId());
         }
         return task;
+    }
+
+    private void requireDefaultProject(String taskId) {
+        TaskInstance task = engine.getTaskById(taskId).orElseThrow(() -> new ApiException(
+                HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND, "Task not found: " + taskId));
+        ProcessInstance instance = engine.getProcessInstanceById(task.getProcessInstanceId());
+        if (instance == null || !ProjectConstants.DEFAULT_PROJECT_ID.equals(instance.getProjectId())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
+                    "Task not found: " + taskId);
+        }
     }
 }

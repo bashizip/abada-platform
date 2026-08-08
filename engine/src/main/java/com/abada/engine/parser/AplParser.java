@@ -121,9 +121,16 @@ public final class AplParser {
         if (name == null || name.isBlank()) {
             throw validation("metadata.name is required");
         }
-        String processId = name.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase(Locale.ROOT);
+        String declaredKey = root.path("metadata").path("key").asText(null);
+        String processId = declaredKey == null || declaredKey.isBlank()
+                ? name.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase(Locale.ROOT)
+                : declaredKey;
         if (processId.isBlank()) {
             throw validation("metadata.name must contain at least one alphanumeric character");
+        }
+        if (declaredKey != null && !declaredKey.isBlank()
+                && !processId.matches("[a-z][a-z0-9_-]{0,127}")) {
+            throw validation("metadata.key must match [a-z][a-z0-9_-]{0,127}");
         }
 
         JsonNode flow = root.path("flow");

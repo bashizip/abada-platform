@@ -5,13 +5,19 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 
 @Entity
 @Table(name = "insight_approval_policies")
+@IdClass(InsightApprovalPolicyId.class)
 public class InsightApprovalPolicyEntity {
+    @Id
+    @Column(name = "project_id")
+    private String projectId;
+
     @Id
     @Column(name = "definition_key")
     private String definitionKey;
@@ -36,6 +42,8 @@ public class InsightApprovalPolicyEntity {
     @Column(name = "updated_by")
     private String updatedBy;
 
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String value) { projectId = value; }
     public String getDefinitionKey() { return definitionKey; }
     public void setDefinitionKey(String value) { definitionKey = value; }
     public long getPolicyVersion() { return policyVersion; }

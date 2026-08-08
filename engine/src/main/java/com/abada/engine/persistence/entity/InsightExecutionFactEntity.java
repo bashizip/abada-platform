@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import com.abada.engine.project.ProjectConstants;
 
 /**
  * Durable terminal-execution snapshot written inside the workflow
@@ -35,6 +36,9 @@ public class InsightExecutionFactEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
+
+    @Column(name = "project_id")
+    private String projectId = ProjectConstants.DEFAULT_PROJECT_ID;
 
     @Column(name = "visit_id")
     private String visitId;
@@ -83,6 +87,9 @@ public class InsightExecutionFactEntity {
     public long getId() {
         return id;
     }
+
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String projectId) { this.projectId = projectId; }
 
     public String getVisitId() {
         return visitId;

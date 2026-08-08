@@ -11,9 +11,14 @@ import org.springframework.data.domain.Pageable;
 
 public interface ProcessDefinitionRepository extends JpaRepository<ProcessDefinitionEntity, String> {
     Optional<ProcessDefinitionEntity> findFirstByProcessKeyOrderByVersionDesc(String processKey);
+    Optional<ProcessDefinitionEntity> findFirstByProjectIdAndProcessKeyOrderByVersionDesc(
+            String projectId, String processKey);
     List<ProcessDefinitionEntity> findByProcessKeyOrderByVersionDesc(String processKey);
     List<ProcessDefinitionEntity> findAllByOrderByProcessKeyAscVersionDesc();
     Page<ProcessDefinitionEntity> findAllBy(Pageable pageable);
     Page<ProcessDefinitionEntity> findByProcessKey(String processKey, Pageable pageable);
+    Page<ProcessDefinitionEntity> findByProjectId(String projectId, Pageable pageable);
+    Page<ProcessDefinitionEntity> findByProjectIdAndProcessKey(
+            String projectId, String processKey, Pageable pageable);
     Optional<ProcessDefinitionEntity> findFirstByDeploymentId(String deploymentId);
 }

@@ -96,6 +96,32 @@ public interface TaskRepository extends JpaRepository<TaskEntity, String> {
             @Param("activeStatuses") Collection<TaskStatus> activeStatuses,
             Pageable pageable);
 
+    @Query(value = """
+            SELECT t FROM TaskEntity t
+            WHERE t.status IN :activeStatuses
+              AND EXISTS (SELECT i.id FROM ProcessInstanceEntity i
+                          WHERE i.id = t.processInstanceId AND i.projectId = :projectId)
+              AND (t.assignee = :user OR (t.assignee IS NULL AND
+                   (:user MEMBER OF t.candidateUsers OR (:hasGroups = true AND EXISTS (
+                     SELECT candidateTask.id FROM TaskEntity candidateTask
+                     JOIN candidateTask.candidateGroups candidateGroup
+                     WHERE candidateTask.id = t.id AND candidateGroup IN :groups)))))
+            """, countQuery = """
+            SELECT COUNT(t) FROM TaskEntity t
+            WHERE t.status IN :activeStatuses
+              AND EXISTS (SELECT i.id FROM ProcessInstanceEntity i
+                          WHERE i.id = t.processInstanceId AND i.projectId = :projectId)
+              AND (t.assignee = :user OR (t.assignee IS NULL AND
+                   (:user MEMBER OF t.candidateUsers OR (:hasGroups = true AND EXISTS (
+                     SELECT candidateTask.id FROM TaskEntity candidateTask
+                     JOIN candidateTask.candidateGroups candidateGroup
+                     WHERE candidateTask.id = t.id AND candidateGroup IN :groups)))))
+            """)
+    Page<TaskEntity> findVisibleTasksByProject(
+            @Param("projectId") String projectId, @Param("user") String user,
+            @Param("groups") Collection<String> groups, @Param("hasGroups") boolean hasGroups,
+            @Param("activeStatuses") Collection<TaskStatus> activeStatuses, Pageable pageable);
+
     @Query("""
             SELECT t.taskDefinitionKey AS taskDefinitionKey, COUNT(t) AS taskCount
             FROM TaskEntity t

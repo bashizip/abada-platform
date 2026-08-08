@@ -25,6 +25,13 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
     Page<ProcessInstanceEntity> findFiltered(@Param("status") ProcessStatus status,
             @Param("processDefinitionId") String processDefinitionId, Pageable pageable);
 
+    @Query("select p from ProcessInstanceEntity p where p.projectId = :projectId "
+            + "and (:status is null or p.status = :status) "
+            + "and (:processDefinitionId is null or p.processDefinitionId = :processDefinitionId)")
+    Page<ProcessInstanceEntity> findFilteredByProject(@Param("projectId") String projectId,
+            @Param("status") ProcessStatus status,
+            @Param("processDefinitionId") String processDefinitionId, Pageable pageable);
+
     @Query("""
             SELECT p.processDefinitionId AS processDefinitionId, COUNT(p) AS instanceCount
             FROM ProcessInstanceEntity p

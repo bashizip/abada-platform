@@ -22,6 +22,8 @@ public interface PersistenceService {
 
     ProcessDefinitionEntity findProcessDefinitionById(String definitionId);
 
+    ProcessDefinitionEntity findProcessDefinitionByProjectAndId(String projectId, String definitionId);
+
     ProcessDefinitionEntity findProcessDefinitionByDeploymentId(String deploymentId);
 
     ProcessInstanceEntity findProcessInstanceById(String instanceId);
@@ -38,6 +40,11 @@ public interface PersistenceService {
             Pageable pageable);
 
     Page<ProcessDefinitionEntity> findProcessDefinitions(String processKey, Pageable pageable);
+
+    Page<ProcessDefinitionEntity> findProcessDefinitions(String projectId, String processKey, Pageable pageable);
+
+    Page<ProcessInstanceEntity> findProcessInstances(String projectId, ProcessStatus status,
+            String processDefinitionId, Pageable pageable);
 
     List<ProcessInstanceEntity> findProcessInstancesByIds(Collection<String> instanceIds);
 

@@ -5,6 +5,7 @@ import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.insight.InsightAnalyzer.Finding;
 import com.abada.engine.persistence.entity.InsightProposalEntity;
 import com.abada.engine.persistence.entity.InsightApprovalPolicyEntity;
+import com.abada.engine.persistence.entity.InsightApprovalPolicyId;
 import com.abada.engine.persistence.entity.InsightProposalReviewEntity;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
 import com.abada.engine.persistence.repository.InsightApprovalPolicyRepository;
@@ -12,6 +13,7 @@ import com.abada.engine.persistence.repository.InsightProposalRepository;
 import com.abada.engine.persistence.repository.InsightProposalReviewRepository;
 import com.abada.engine.persistence.repository.ProcessDefinitionRepository;
 import com.abada.engine.core.ActivityHistoryService;
+import com.abada.engine.project.ProjectConstants;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -81,8 +83,10 @@ public class InsightProposalService {
             }
             InsightProposalGenerator.Proposal generated = generator.generate(
                     definition.getProcessKey(), definition.getBpmnXml(), deploymentFindings);
-            InsightApprovalPolicyEntity policy = policies.findById(definition.getProcessKey()).orElse(null);
+            InsightApprovalPolicyEntity policy = policies.findById(new InsightApprovalPolicyId(
+                    definition.getProjectId(), definition.getProcessKey())).orElse(null);
             InsightProposalEntity proposal = new InsightProposalEntity();
+            proposal.setProjectId(definition.getProjectId());
             proposal.setWindowId(windowId);
             proposal.setDefinitionKey(definition.getProcessKey());
             proposal.setDefinitionDeploymentId(definition.getDeploymentId());
@@ -93,7 +97,10 @@ public class InsightProposalService {
             proposal.setRationale(generated.rationale());
             proposal.setStatus(InsightProposalEntity.Status.DRAFT);
             proposal.setRequiredApprovals(policy == null ? 1 : policy.getRequiredApprovals());
-            proposal.setRequiredGroups(policy == null ? "abada-insight-reviewer" : policy.getRequiredGroups());
+            proposal.setRequiredGroups(policy == null
+                    ? (ProjectConstants.DEFAULT_PROJECT_ID.equals(definition.getProjectId())
+                            ? "abada-insight-reviewer" : "lane:TECHNICAL")
+                    : policy.getRequiredGroups());
             proposal.setApprovalMode(policy == null ? InsightProposalEntity.ApprovalMode.PARALLEL
                     : policy.getApprovalMode());
             proposal.setCreatedAt(Instant.now());
@@ -113,8 +120,19 @@ public class InsightProposalService {
     @Transactional
     public InsightProposalEntity review(long proposalId, String actor, List<String> actorGroups,
             InsightProposalReviewEntity.Decision decision, String comment, Instant expectedUpdatedAt) {
+        return review(ProjectConstants.DEFAULT_PROJECT_ID, proposalId, actor, actorGroups,
+                decision, comment, expectedUpdatedAt);
+    }
+
+    @Transactional
+    public InsightProposalEntity review(String projectId, long proposalId, String actor,
+            List<String> actorGroups, InsightProposalReviewEntity.Decision decision,
+            String comment, Instant expectedUpdatedAt) {
         InsightProposalEntity proposal = proposals.findByIdForUpdate(proposalId)
                 .orElseThrow(() -> new InsightNotFoundException(proposalId));
+        if (!projectId.equals(proposal.getProjectId())) {
+            throw new InsightNotFoundException(proposalId);
+        }
         if (proposal.getStatus() != InsightProposalEntity.Status.DRAFT
                 && proposal.getStatus() != InsightProposalEntity.Status.IN_REVIEW) {
             throw new InsightConflictException(
@@ -196,14 +214,16 @@ public class InsightProposalService {
 
     private void adoptCurrentTarget(InsightProposalEntity proposal) {
         ProcessDefinitionEntity latest = definitions
-                .findFirstByProcessKeyOrderByVersionDesc(proposal.getDefinitionKey()).orElse(null);
+                .findFirstByProjectIdAndProcessKeyOrderByVersionDesc(
+                        proposal.getProjectId(), proposal.getDefinitionKey()).orElse(null);
         if (latest == null || !latest.getDeploymentId().equals(proposal.getDefinitionDeploymentId())
                 || !latest.getChecksum().equals(proposal.getTargetChecksum())) {
             proposal.setStatus(InsightProposalEntity.Status.SUPERSEDED);
             return;
         }
         byte[] source = proposal.getProposedSource().getBytes(StandardCharsets.UTF_8);
-        ProcessDefinitionEntity deployed = engine.deploy(new ByteArrayInputStream(source));
+        ProcessDefinitionEntity deployed = engine.deploy(proposal.getProjectId(),
+                new ByteArrayInputStream(source));
         proposal.setStatus(InsightProposalEntity.Status.ADOPTED);
         proposal.setAdoptedDeploymentId(deployed.getDeploymentId());
         proposal.setAdoptedVersion(deployed.getVersion());

@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import com.abada.engine.project.ProjectConstants;
 
 /**
  * Governance draft: a complete replacement APL document (with embedded
@@ -34,6 +35,9 @@ public class InsightProposalEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
+
+    @Column(name = "project_id")
+    private String projectId = ProjectConstants.DEFAULT_PROJECT_ID;
 
     @Column(name = "window_id")
     private Long windowId;
@@ -100,6 +104,9 @@ public class InsightProposalEntity {
     public long getId() {
         return id;
     }
+
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String projectId) { this.projectId = projectId; }
 
     public Long getWindowId() {
         return windowId;

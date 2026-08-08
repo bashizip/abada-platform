@@ -12,6 +12,7 @@ import com.abada.engine.dto.ActivityHistoryDto;
 import com.abada.engine.dto.ChildActivityInstance;
 import com.abada.engine.persistence.entity.ActivityHistoryEntity;
 import com.abada.engine.persistence.repository.ActivityHistoryRepository;
+import com.abada.engine.project.ProjectConstants;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.data.domain.Page;
@@ -55,10 +56,7 @@ public class CockpitController {
      */
     @GetMapping("/{instanceId}/variables")
     public ResponseEntity<Map<String, VariableValue>> getProcessVariables(@PathVariable String instanceId) {
-        ProcessInstance instance = engine.getProcessInstanceById(instanceId);
-        if (instance == null) {
-            throw notFound(instanceId);
-        }
+        ProcessInstance instance = requireInstance(instanceId);
 
         Map<String, VariableValue> typedVariables = instance.getVariables().entrySet().stream()
                 .collect(Collectors.toMap(
@@ -151,10 +149,7 @@ public class CockpitController {
      */
     @GetMapping("/{id}/activity-instances")
     public ResponseEntity<ActivityInstanceTree> getActivityInstances(@PathVariable String id) {
-        ProcessInstance instance = engine.getProcessInstanceById(id);
-        if (instance == null) {
-            throw notFound(id);
-        }
+        ProcessInstance instance = requireInstance(id);
 
         List<ChildActivityInstance> children = instance.getActiveTokens().stream()
                 .map(activityId -> {
@@ -184,7 +179,9 @@ public class CockpitController {
 
     private ProcessInstance requireInstance(String id) {
         ProcessInstance instance = engine.getProcessInstanceById(id);
-        if (instance == null) throw notFound(id);
+        if (instance == null || !ProjectConstants.DEFAULT_PROJECT_ID.equals(instance.getProjectId())) {
+            throw notFound(id);
+        }
         return instance;
     }
 

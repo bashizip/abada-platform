@@ -19,6 +19,7 @@ public class ProcessInstance {
     private ProcessStatus status;
     private boolean suspended = false;
     private String processDefinitionDeploymentId;
+    private String projectId = com.abada.engine.project.ProjectConstants.DEFAULT_PROJECT_ID;
     private long entityVersion;
     private String startedBy = "system";
 
@@ -65,6 +66,9 @@ public class ProcessInstance {
     public void setProcessDefinitionDeploymentId(String processDefinitionDeploymentId) {
         this.processDefinitionDeploymentId = processDefinitionDeploymentId;
     }
+
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String value) { projectId = value; }
 
     public long getEntityVersion() { return entityVersion; }
     public void setEntityVersion(long entityVersion) { this.entityVersion = entityVersion; }

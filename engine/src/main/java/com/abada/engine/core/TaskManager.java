@@ -266,6 +266,26 @@ public class TaskManager {
     }
 
     @Transactional(readOnly = true)
+    public Page<TaskInstance> getVisibleTasksForUser(String projectId, String user,
+            Collection<String> groups, TaskStatus status, Pageable pageable) {
+        Collection<String> effectiveGroups = groups == null || groups.isEmpty()
+                ? List.of(EMPTY_GROUP_SENTINEL) : groups;
+        boolean hasGroups = groups != null && !groups.isEmpty();
+        Collection<TaskStatus> statuses = status == null ? ACTIVE_STATUSES : List.of(status);
+        if (status != null && !ACTIVE_STATUSES.contains(status)) return Page.empty(pageable);
+        return taskRepository.findVisibleTasksByProject(projectId, user, effectiveGroups,
+                hasGroups, statuses, pageable).map(this::materialize);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TaskInstance> getVisibleTasksForUser(String projectId, String user,
+            Collection<String> groups, TaskStatus status) {
+        Pageable ordered = Pageable.unpaged(
+                Sort.by("startDate").ascending().and(Sort.by("id").ascending()));
+        return getVisibleTasksForUser(projectId, user, groups, status, ordered).getContent();
+    }
+
+    @Transactional(readOnly = true)
     public List<TaskInstance> getTasksForProcessInstance(String processInstanceId) {
         return taskRepository
                 .findByProcessInstanceIdAndStatusNotIn(processInstanceId, TERMINAL_STATUSES)

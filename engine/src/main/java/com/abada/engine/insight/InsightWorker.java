@@ -113,6 +113,7 @@ public class InsightWorker {
         window.setFactsProcessed(Math.toIntExact(analysis.factsProcessed()));
         for (Finding finding : analysis.findings()) {
             InsightFindingEntity entity = new InsightFindingEntity();
+            entity.setProjectId(finding.key().projectId());
             entity.setWindowId(windowId);
             entity.setDefinitionKey(definitionKeyOf(finding));
             entity.setDefinitionDeploymentId(finding.key().deploymentId());
@@ -162,7 +163,7 @@ public class InsightWorker {
             case MEDIUM -> 1.0;
             case LOW -> 0.5;
         };
-        return new Finding(new InsightAnalyzer.NodeKey(entity.getDefinitionKey(),
+        return new Finding(new InsightAnalyzer.NodeKey(entity.getProjectId(), entity.getDefinitionKey(),
                 entity.getDefinitionDeploymentId(), entity.getNodeId(), entity.getNodeType()),
                 entity.getSummary(), signal, entity.getObservedValue(), entity.getThreshold(),
                 entity.getSampleCount(), severity);

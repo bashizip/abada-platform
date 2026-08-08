@@ -30,13 +30,15 @@ public class InsightFactWriter {
      * otherwise flag is computed by the caller from the definition's rule
      * table (this writer never re-reads the definition).
      */
-    public void recordDecisionApplied(String visitId, String definitionKey, String definitionDeploymentId,
+    public void recordDecisionApplied(String projectId, String visitId, String definitionKey,
+            String definitionDeploymentId,
             String processInstanceId, String activityId, String decisionKey,
             List<Integer> matchedRuleIndexes, boolean fallbackUsed, Instant appliedAt) {
         if (repository.existsByVisitId(visitId)) {
             return;
         }
         InsightExecutionFactEntity fact = new InsightExecutionFactEntity();
+        fact.setProjectId(projectId);
         fact.setVisitId(visitId);
         fact.setDefinitionKey(definitionKey);
         fact.setDefinitionDeploymentId(definitionDeploymentId);
@@ -55,26 +57,30 @@ public class InsightFactWriter {
     }
 
     /** External-task terminal success (worker completion). */
-    public void recordExternalTaskSuccess(String visitId, String definitionKey, String definitionDeploymentId,
+    public void recordExternalTaskSuccess(String projectId, String visitId, String definitionKey,
+            String definitionDeploymentId,
             String processInstanceId, String activityId, String topic, Instant startedAt, Instant endedAt) {
-        recordExternalTaskTerminal(visitId, definitionKey, definitionDeploymentId, processInstanceId, activityId,
-                topic, Status.SUCCESS, startedAt, endedAt);
+        recordExternalTaskTerminal(projectId, visitId, definitionKey, definitionDeploymentId,
+                processInstanceId, activityId, topic, Status.SUCCESS, startedAt, endedAt);
     }
 
     /** External-task terminal failure (retries exhausted or BPMN error). */
-    public void recordExternalTaskFailure(String visitId, String definitionKey, String definitionDeploymentId,
+    public void recordExternalTaskFailure(String projectId, String visitId, String definitionKey,
+            String definitionDeploymentId,
             String processInstanceId, String activityId, String topic, Instant startedAt, Instant endedAt) {
-        recordExternalTaskTerminal(visitId, definitionKey, definitionDeploymentId, processInstanceId, activityId,
-                topic, Status.FAILED, startedAt, endedAt);
+        recordExternalTaskTerminal(projectId, visitId, definitionKey, definitionDeploymentId,
+                processInstanceId, activityId, topic, Status.FAILED, startedAt, endedAt);
     }
 
-    private void recordExternalTaskTerminal(String visitId, String definitionKey, String definitionDeploymentId,
+    private void recordExternalTaskTerminal(String projectId, String visitId, String definitionKey,
+            String definitionDeploymentId,
             String processInstanceId, String activityId, String topic, Status status,
             Instant startedAt, Instant endedAt) {
         if (repository.existsByVisitId(visitId)) {
             return;
         }
         InsightExecutionFactEntity fact = new InsightExecutionFactEntity();
+        fact.setProjectId(projectId);
         fact.setVisitId(visitId);
         fact.setDefinitionKey(definitionKey);
         fact.setDefinitionDeploymentId(definitionDeploymentId);
@@ -90,12 +96,14 @@ public class InsightFactWriter {
     }
 
     /** User-task completion. */
-    public void recordUserTaskCompleted(String visitId, String definitionKey, String definitionDeploymentId,
+    public void recordUserTaskCompleted(String projectId, String visitId, String definitionKey,
+            String definitionDeploymentId,
             String processInstanceId, String activityId, Instant startedAt, Instant endedAt) {
         if (repository.existsByVisitId(visitId)) {
             return;
         }
         InsightExecutionFactEntity fact = new InsightExecutionFactEntity();
+        fact.setProjectId(projectId);
         fact.setVisitId(visitId);
         fact.setDefinitionKey(definitionKey);
         fact.setDefinitionDeploymentId(definitionDeploymentId);

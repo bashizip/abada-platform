@@ -8,6 +8,7 @@ import com.abada.engine.persistence.repository.ProcessDefinitionRepository;
 import com.abada.engine.persistence.repository.ProcessInstanceRepository;
 import com.abada.engine.persistence.repository.TaskRepository;
 import com.abada.engine.core.model.ProcessStatus;
+import com.abada.engine.project.ProjectConstants;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
@@ -61,7 +62,14 @@ public class H2PersistenceServiceImpl implements PersistenceService {
 
     @Override
     public ProcessDefinitionEntity findProcessDefinitionById(String definitionId) {
-        return processDefinitionRepository.findFirstByProcessKeyOrderByVersionDesc(definitionId).orElse(null);
+        return processDefinitionRepository.findFirstByProjectIdAndProcessKeyOrderByVersionDesc(
+                ProjectConstants.DEFAULT_PROJECT_ID, definitionId).orElse(null);
+    }
+
+    @Override
+    public ProcessDefinitionEntity findProcessDefinitionByProjectAndId(String projectId, String definitionId) {
+        return processDefinitionRepository
+                .findFirstByProjectIdAndProcessKeyOrderByVersionDesc(projectId, definitionId).orElse(null);
     }
 
     @Override
@@ -86,18 +94,37 @@ public class H2PersistenceServiceImpl implements PersistenceService {
 
     @Override
     public Page<ProcessDefinitionEntity> findProcessDefinitions(Pageable pageable) {
-        return processDefinitionRepository.findAllBy(pageable);
+        return processDefinitionRepository.findByProjectId(ProjectConstants.DEFAULT_PROJECT_ID, pageable);
     }
 
     @Override
     public Page<ProcessDefinitionEntity> findProcessDefinitions(String processKey, Pageable pageable) {
-        return processKey == null || processKey.isBlank() ? processDefinitionRepository.findAll(pageable)
-                : processDefinitionRepository.findByProcessKey(processKey, pageable);
+        return processKey == null || processKey.isBlank()
+                ? processDefinitionRepository.findByProjectId(ProjectConstants.DEFAULT_PROJECT_ID, pageable)
+                : processDefinitionRepository.findByProjectIdAndProcessKey(
+                        ProjectConstants.DEFAULT_PROJECT_ID, processKey, pageable);
+    }
+
+    @Override
+    public Page<ProcessDefinitionEntity> findProcessDefinitions(String projectId, String processKey,
+            Pageable pageable) {
+        return processKey == null || processKey.isBlank()
+                ? processDefinitionRepository.findByProjectId(projectId, pageable)
+                : processDefinitionRepository.findByProjectIdAndProcessKey(projectId, processKey, pageable);
+    }
+
+    @Override
+    public Page<ProcessInstanceEntity> findProcessInstances(String projectId, ProcessStatus status,
+            String processDefinitionId, Pageable pageable) {
+        String definitionFilter = processDefinitionId == null || processDefinitionId.isBlank()
+                ? null : processDefinitionId;
+        return processInstanceRepository.findFilteredByProject(projectId, status, definitionFilter, pageable);
     }
 
     @Override
     public Page<ProcessInstanceEntity> findProcessInstances(Pageable pageable) {
-        return processInstanceRepository.findAll(pageable);
+        return processInstanceRepository.findFilteredByProject(
+                ProjectConstants.DEFAULT_PROJECT_ID, null, null, pageable);
     }
 
     @Override
@@ -105,7 +132,8 @@ public class H2PersistenceServiceImpl implements PersistenceService {
             Pageable pageable) {
         String definitionFilter = processDefinitionId == null || processDefinitionId.isBlank()
                 ? null : processDefinitionId;
-        return processInstanceRepository.findFiltered(status, definitionFilter, pageable);
+        return processInstanceRepository.findFilteredByProject(
+                ProjectConstants.DEFAULT_PROJECT_ID, status, definitionFilter, pageable);
     }
 
     @Override

@@ -30,6 +30,7 @@ import java.io.ByteArrayInputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.abada.engine.project.ProjectConstants;
 
 /**
  * REST controller for managing BPMN process definitions and instances.
@@ -174,7 +175,7 @@ public class ProcessController {
     @GetMapping("/instances/{instanceId}")
     public ResponseEntity<ProcessInstanceDTO> getProcessInstance(@PathVariable String instanceId) {
         ProcessInstance instance = engine.getProcessInstanceById(instanceId);
-        if (instance == null) {
+        if (instance == null || !ProjectConstants.DEFAULT_PROJECT_ID.equals(instance.getProjectId())) {
             throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                     "Process instance not found: " + instanceId);
         }
@@ -191,6 +192,11 @@ public class ProcessController {
     @PostMapping("/instance/{id}/fail")
     public ResponseEntity<ProcessActionResponse> failInstance(@PathVariable String id,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        ProcessInstance instance = engine.getProcessInstanceById(id);
+        if (instance == null || !ProjectConstants.DEFAULT_PROJECT_ID.equals(instance.getProjectId())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
+                    "Process instance not found: " + id);
+        }
         ProcessActionResponse response = idempotencyService.execute(idempotencyKey, "process.fail",
                 Map.of("processInstanceId", id), new TypeReference<ProcessActionResponse>() {}, () -> {
                     boolean failed = engine.failProcess(id);

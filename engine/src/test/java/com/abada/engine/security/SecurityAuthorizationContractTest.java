@@ -11,6 +11,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import com.abada.engine.persistence.entity.PrincipalEntity;
+import com.abada.engine.persistence.entity.ProjectWorkerBindingEntity;
+import com.abada.engine.persistence.repository.PrincipalRepository;
+import com.abada.engine.persistence.repository.ProjectWorkerBindingRepository;
+import com.abada.engine.project.ProjectConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,11 +46,32 @@ import static org.mockito.Mockito.when;
 class SecurityAuthorizationContractTest {
     @Autowired MockMvc mvc;
     @Autowired CommonsRequestLoggingFilter requestLoggingFilter;
+    @Autowired PrincipalRepository principals;
+    @Autowired ProjectWorkerBindingRepository workerBindings;
     @MockitoBean JwtDecoder jwtDecoder;
 
     @BeforeEach
     void configureJwtDecoder() {
         when(jwtDecoder.decode(anyString())).thenAnswer(invocation -> jwt(invocation.getArgument(0)));
+        PrincipalEntity worker = principals.findByIssuerAndSubjectId("oidc", "worker-1")
+                .orElseGet(PrincipalEntity::new);
+        worker.setIssuer("oidc");
+        worker.setSubjectId("worker-1");
+        worker.setUsername("service-account-test-worker");
+        worker.setPrincipalType(PrincipalEntity.Type.SERVICE);
+        if (worker.getFirstSeenAt() == null) worker.setFirstSeenAt(Instant.now());
+        worker.setLastSeenAt(Instant.now());
+        worker = principals.save(worker);
+        if (workerBindings.findByProjectIdAndPrincipalId(ProjectConstants.DEFAULT_PROJECT_ID,
+                worker.getId()).isEmpty()) {
+            ProjectWorkerBindingEntity binding = new ProjectWorkerBindingEntity();
+            binding.setProjectId(ProjectConstants.DEFAULT_PROJECT_ID);
+            binding.setPrincipalId(worker.getId());
+            binding.setTopics("topic");
+            binding.setCreatedAt(Instant.now());
+            binding.setCreatedBy("test");
+            workerBindings.save(binding);
+        }
     }
 
     private Jwt jwt(String token) {
@@ -62,9 +88,14 @@ class SecurityAuthorizationContractTest {
             case "insight-admin" -> "insight:read insight:review insight:configure";
             default -> "";
         };
-        return Jwt.withTokenValue(token).header("alg", "RS256").subject("user-1")
-                .claim("preferred_username", "alice").claim("groups", List.of("customers"))
-                .claim("scope", scope).issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build();
+        var builder = Jwt.withTokenValue(token).header("alg", "RS256")
+                .subject("worker".equals(token) ? "worker-1" : "user-1")
+                .claim("preferred_username", "worker".equals(token)
+                        ? "service-account-test-worker" : "alice")
+                .claim("groups", List.of("customers")).claim("scope", scope)
+                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300));
+        if ("worker".equals(token)) builder.claim("client_id", "test-worker");
+        return builder.build();
     }
 
     private JwtValidationException invalid(String message) {
@@ -116,7 +147,8 @@ class SecurityAuthorizationContractTest {
         mvc.perform(get("/v1/jobs").header("Authorization", "Bearer operator"))
                 .andExpect(status().isOk());
         mvc.perform(post("/v1/external-tasks/fetch-and-lock").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"workerId\":\"w\",\"topics\":[\"topic\"],\"lockDuration\":1000}")
+                        .content("{\"workerId\":\"w\",\"topics\":[\"topic\"],\"lockDuration\":1000,"
+                                + "\"projectId\":\"" + ProjectConstants.DEFAULT_PROJECT_ID + "\"}")
                         .header("Authorization", "Bearer worker"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Abada-Worker-Protocol-Version", "1"));

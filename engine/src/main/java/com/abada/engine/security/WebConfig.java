@@ -33,9 +33,9 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedOrigins(allowedOrigins)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                 .allowedHeaders("Authorization", "Content-Type", "Idempotency-Key", "traceparent", "tracestate",
-                        "X-Abada-Worker-Protocol-Version")
+                        "X-Abada-Worker-Protocol-Version", "If-Match")
                 .exposedHeaders("X-Page", "X-Page-Size", "X-Total-Count", "X-Total-Pages",
-                        "X-Abada-Worker-Protocol-Version")
+                        "X-Abada-Worker-Protocol-Version", "ETag")
                 .allowCredentials(true);
     }
 

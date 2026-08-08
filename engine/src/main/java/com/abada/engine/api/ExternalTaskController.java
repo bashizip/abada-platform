@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.abada.engine.project.ProjectWorkerService;
 
 /**
  * REST controller for external task workers.
@@ -32,13 +33,16 @@ public class ExternalTaskController {
     private final IdempotencyService idempotency;
     private final ObjectMapper objectMapper;
     private final String securityMode;
+    private final ProjectWorkerService projectWorkers;
 
     public ExternalTaskController(ExternalTaskCommandService commands, IdempotencyService idempotency,
-            ObjectMapper objectMapper, @Value("${abada.security.mode:disabled}") String securityMode) {
+            ObjectMapper objectMapper, @Value("${abada.security.mode:disabled}") String securityMode,
+            ProjectWorkerService projectWorkers) {
         this.commands = commands;
         this.idempotency = idempotency;
         this.objectMapper = objectMapper;
         this.securityMode = securityMode;
+        this.projectWorkers = projectWorkers;
     }
 
     /**
@@ -57,6 +61,12 @@ public class ExternalTaskController {
     @PostMapping("/fetch-and-lock")
     public ResponseEntity<List<LockedExternalTask>> fetchAndLock(@RequestBody FetchAndLockRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (!"disabled".equalsIgnoreCase(securityMode)
+                && (request.projectId() == null || request.projectId().isBlank())) {
+            throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    ApiErrorCode.INVALID_REQUEST, "projectId is required for secured workers");
+        }
+        if (request.projectId() != null) projectWorkers.requireCurrentWorker(request.projectId(), request.topics());
         return ResponseEntity.ok().header("X-Abada-Worker-Protocol-Version", "1")
                 .body(idempotency.execute(idempotencyKey, "external-task.fetch-and-lock", request,
                         new TypeReference<List<LockedExternalTask>>() {}, () -> commands.fetchAndLock(request)));
@@ -86,6 +96,7 @@ public class ExternalTaskController {
             @RequestBody JsonNode payload,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         CompleteExternalTaskRequest request = completeRequest(payload);
+        if (!"disabled".equalsIgnoreCase(securityMode)) projectWorkers.requireCurrentWorkerForTask(id);
         idempotency.execute(idempotencyKey, "external-task.complete", Map.of("id", id, "request", request), () -> {
             commands.complete(id, request.workerId(), request.effectiveVariables());
             return Map.of("status", "Completed", "externalTaskId", id);
@@ -104,6 +115,7 @@ public class ExternalTaskController {
     @PostMapping("/{id}/failure")
     public ResponseEntity<Void> handleFailure(@PathVariable String id, @RequestBody ExternalTaskFailureDto failureDto,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (!"disabled".equalsIgnoreCase(securityMode)) projectWorkers.requireCurrentWorkerForTask(id);
         idempotency.execute(idempotencyKey, "external-task.failure", Map.of("id", id, "failure", failureDto), () -> {
             commands.handleFailure(id, failureDto);
             return Map.of("status", "Failure recorded", "externalTaskId", id);
@@ -114,6 +126,7 @@ public class ExternalTaskController {
     @PostMapping("/{id}/extend-lock")
     public ResponseEntity<Void> extendLock(@PathVariable String id, @RequestBody ExtendLockRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (!"disabled".equalsIgnoreCase(securityMode)) projectWorkers.requireCurrentWorkerForTask(id);
         idempotency.execute(idempotencyKey, "external-task.extend-lock", Map.of("id", id, "request", request), () -> {
             commands.extendLock(id, request);
             return Map.of("status", "Lock extended", "externalTaskId", id);
@@ -124,6 +137,7 @@ public class ExternalTaskController {
     @PostMapping("/{id}/heartbeat")
     public ResponseEntity<Void> heartbeat(@PathVariable String id, @RequestBody ExtendLockRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (!"disabled".equalsIgnoreCase(securityMode)) projectWorkers.requireCurrentWorkerForTask(id);
         idempotency.execute(idempotencyKey, "external-task.heartbeat", Map.of("id", id, "request", request), () -> {
             commands.extendLock(id, request);
             return Map.of("status", "Heartbeat accepted", "externalTaskId", id);
@@ -135,6 +149,7 @@ public class ExternalTaskController {
     public ResponseEntity<Void> handleBpmnError(@PathVariable String id,
             @RequestBody ExternalTaskBpmnErrorRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (!"disabled".equalsIgnoreCase(securityMode)) projectWorkers.requireCurrentWorkerForTask(id);
         idempotency.execute(idempotencyKey, "external-task.bpmn-error", Map.of("id", id, "request", request), () -> {
             commands.handleBpmnError(id, request);
             return Map.of("status", "BPMN error handled", "externalTaskId", id);

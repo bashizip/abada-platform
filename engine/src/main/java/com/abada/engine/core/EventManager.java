@@ -126,6 +126,20 @@ public class EventManager {
             span.end();
         }
     }
+
+    @AtomicRuntimeCommand
+    public void correlateMessage(String projectId, String messageName, String correlationKey,
+            Map<String, Object> variables) {
+        var subscription = subscriptionRepository.findProjectMessage(projectId,
+                EventSubscriptionEntity.Type.MESSAGE, messageName, correlationKey);
+        if (subscription.isEmpty()) return;
+        EventSubscriptionEntity waiting = subscription.get();
+        waiting.setConsumedAt(Instant.now());
+        subscriptionRepository.save(waiting);
+        abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(), variables);
+        engineMetrics.recordEventConsumed("MESSAGE", messageName);
+        engineMetrics.recordEventCorrelated("MESSAGE", messageName);
+    }
 	
     @WithSpan("abada.event.broadcast.signal")
     @AtomicRuntimeCommand
@@ -161,6 +175,19 @@ public class EventManager {
             throw e;
         } finally {
             span.end();
+        }
+    }
+
+    @AtomicRuntimeCommand
+    public void broadcastSignal(String projectId, String signalName, Map<String, Object> variables) {
+        List<EventSubscriptionEntity> subscriptions = subscriptionRepository.findProjectSignals(projectId,
+                EventSubscriptionEntity.Type.SIGNAL, signalName);
+        engineMetrics.recordEventConsumed("SIGNAL", signalName);
+        for (EventSubscriptionEntity waiting : subscriptions) {
+            waiting.setConsumedAt(Instant.now());
+            subscriptionRepository.save(waiting);
+            abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(), variables);
+            engineMetrics.recordEventCorrelated("SIGNAL", signalName);
         }
     }
 

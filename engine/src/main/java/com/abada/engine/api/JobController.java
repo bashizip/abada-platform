@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 
 import java.util.List;
 import java.util.Map;
+import com.abada.engine.project.ProjectConstants;
 
 /**
  * REST controller for job/incident management in Orun Operations Cockpit.
@@ -52,8 +53,8 @@ public class JobController {
                         @RequestParam(defaultValue = "0") int page,
                         @RequestParam(defaultValue = Pagination.DEFAULT_PAGE_SIZE) int size) {
                 Pageable pageable = Pagination.request(page, size, Sort.by("id").ascending());
-                Page<ExternalTaskEntity> failedTasks = externalTaskRepository.findIncidents(withException, active,
-                                pageable);
+                Page<ExternalTaskEntity> failedTasks = externalTaskRepository.findIncidentsByProject(
+                                ProjectConstants.DEFAULT_PROJECT_ID, withException, active, pageable);
                 List<FailedJobDTO> response = failedTasks.stream()
                                 .map(task -> new FailedJobDTO(
                                                 task.getId(),
@@ -80,6 +81,7 @@ public class JobController {
                         @RequestBody RetriesRequest request,
                         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
+                requireDefaultJob(jobId);
                 idempotency.execute(idempotencyKey, "external-task.retries",
                                 Map.of("jobId", jobId, "retries", request.retries()), () -> {
                                         commands.setRetries(jobId, request.retries());
@@ -97,7 +99,8 @@ public class JobController {
          */
         @GetMapping(value = "/{jobId}/stacktrace", produces = MediaType.TEXT_PLAIN_VALUE)
         public ResponseEntity<String> getStacktrace(@PathVariable String jobId) {
-                ExternalTaskEntity task = externalTaskRepository.findById(jobId)
+                ExternalTaskEntity task = externalTaskRepository.findByIdAndProjectId(jobId,
+                                ProjectConstants.DEFAULT_PROJECT_ID)
                                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                                                 ApiErrorCode.RESOURCE_NOT_FOUND, "Job not found: " + jobId));
 
@@ -107,5 +110,11 @@ public class JobController {
                 }
 
                 return ResponseEntity.ok(stacktrace);
+        }
+
+        private ExternalTaskEntity requireDefaultJob(String jobId) {
+                return externalTaskRepository.findByIdAndProjectId(jobId, ProjectConstants.DEFAULT_PROJECT_ID)
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                                                ApiErrorCode.RESOURCE_NOT_FOUND, "Job not found: " + jobId));
         }
 }

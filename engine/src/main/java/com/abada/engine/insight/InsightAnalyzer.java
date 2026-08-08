@@ -4,6 +4,7 @@ import com.abada.engine.persistence.entity.InsightExecutionFactEntity;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity.NodeType;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity.Status;
 import com.abada.engine.persistence.repository.InsightExecutionFactRepository;
+import com.abada.engine.project.ProjectConstants;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,7 +36,12 @@ public class InsightAnalyzer {
 
     public record Baseline(double p95Millis, boolean present) {}
 
-    public record NodeKey(String definitionKey, String deploymentId, String nodeId, String nodeType) {}
+    public record NodeKey(String projectId, String definitionKey, String deploymentId,
+                          String nodeId, String nodeType) {
+        public NodeKey(String definitionKey, String deploymentId, String nodeId, String nodeType) {
+            this(ProjectConstants.DEFAULT_PROJECT_ID, definitionKey, deploymentId, nodeId, nodeType);
+        }
+    }
 
     public record Finding(NodeKey key, String summary, String signal, double observed,
                           double threshold, long samples, double severity) {}
@@ -43,9 +49,10 @@ public class InsightAnalyzer {
     public record Analysis(long factsProcessed, List<Finding> findings) {}
 
     /** p95 latency for a node from all facts strictly before the window start. */
-    public Baseline latencyBaseline(String definitionKey, String nodeId, Instant before) {
-        List<InsightExecutionFactEntity> prior = facts.findByDefinitionKeyAndActivityIdAndEndedAtBefore(
-                definitionKey, nodeId, before);
+    public Baseline latencyBaseline(String projectId, String definitionKey, String nodeId, Instant before) {
+        List<InsightExecutionFactEntity> prior = facts
+                .findByProjectIdAndDefinitionKeyAndActivityIdAndEndedAtBefore(
+                        projectId, definitionKey, nodeId, before);
         if (prior.isEmpty()) {
             return new Baseline(0, false);
         }
@@ -54,6 +61,10 @@ public class InsightAnalyzer {
                 .sorted()
                 .toList();
         return new Baseline(percentile(durations, 0.95), true);
+    }
+
+    public Baseline latencyBaseline(String definitionKey, String nodeId, Instant before) {
+        return latencyBaseline(ProjectConstants.DEFAULT_PROJECT_ID, definitionKey, nodeId, before);
     }
 
     /** The 95th percentile of duration samples (interpolated index). */
@@ -77,7 +88,8 @@ public class InsightAnalyzer {
 
         Map<NodeKey, List<InsightExecutionFactEntity>> byNode = new HashMap<>();
         for (InsightExecutionFactEntity fact : windowFacts) {
-            NodeKey key = new NodeKey(fact.getDefinitionKey(), fact.getDefinitionDeploymentId(),
+            NodeKey key = new NodeKey(fact.getProjectId(), fact.getDefinitionKey(),
+                    fact.getDefinitionDeploymentId(),
                     fact.getActivityId(), fact.getNodeType().name());
             byNode.computeIfAbsent(key, k -> new ArrayList<>()).add(fact);
         }
@@ -114,7 +126,8 @@ public class InsightAnalyzer {
                         .toList();
                 double p95 = percentile(durations, 0.95);
                 if (attempts >= minAttempts && !durations.isEmpty()) {
-                    Baseline baseline = latencyBaseline(key.definitionKey(), key.nodeId(), windowStart);
+                    Baseline baseline = latencyBaseline(key.projectId(), key.definitionKey(),
+                            key.nodeId(), windowStart);
                     if (baseline.present() && p95 >= baseline.p95Millis() * latencyFactor) {
                         findings.add(new Finding(key, "P95 latency above baseline",
                                 "LATENCY", p95, baseline.p95Millis() * latencyFactor, attempts,

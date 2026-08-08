@@ -39,7 +39,9 @@ public class ExternalTaskCommandService {
         while (locked.size() < request.effectiveMaxTasks()) {
             boolean acquired = false;
             for (String topic : request.topics()) {
-                var available = repository.findFirstAvailableForUpdate(topic, now);
+                var available = request.projectId() == null
+                        ? repository.findFirstAvailableForUpdate(topic, now)
+                        : repository.findFirstAvailableForProjectForUpdate(request.projectId(), topic, now);
                 if (available.isEmpty()) continue;
 
                 ExternalTaskEntity task = available.get();
@@ -171,11 +173,13 @@ public class ExternalTaskCommandService {
         String deploymentId = instance.getProcessDefinitionDeploymentId();
         Instant endedAt = Instant.now();
         if (succeeded) {
-            insightFactWriter.recordExternalTaskSuccess(task.getId(), definitionKey, deploymentId,
+            insightFactWriter.recordExternalTaskSuccess(instance.getProjectId(), task.getId(), definitionKey,
+                    deploymentId,
                     task.getProcessInstanceId(), task.getActivityId(), task.getTopicName(),
                     task.getCreatedAt(), endedAt);
         } else {
-            insightFactWriter.recordExternalTaskFailure(task.getId(), definitionKey, deploymentId,
+            insightFactWriter.recordExternalTaskFailure(instance.getProjectId(), task.getId(), definitionKey,
+                    deploymentId,
                     task.getProcessInstanceId(), task.getActivityId(), task.getTopicName(),
                     task.getCreatedAt(), endedAt);
         }

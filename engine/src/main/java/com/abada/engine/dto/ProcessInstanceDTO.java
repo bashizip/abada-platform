@@ -7,6 +7,7 @@ import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ProcessInstanceDTO(
+        String projectId,
         String id,
         String processDefinitionId,
         String processDefinitionName,

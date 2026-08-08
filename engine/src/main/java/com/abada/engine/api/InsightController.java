@@ -13,6 +13,7 @@ import com.abada.engine.persistence.repository.InsightProposalReviewRepository;
 import com.abada.engine.persistence.entity.InsightProposalReviewEntity;
 import com.abada.engine.security.Identity;
 import com.abada.engine.security.IdentityContext;
+import com.abada.engine.project.ProjectConstants;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -68,13 +69,16 @@ public class InsightController {
         }
         Page<InsightProposalEntity> result;
         if (parsedStatus != null && definitionKey != null && !definitionKey.isBlank()) {
-            result = proposals.findByStatusAndDefinitionKey(parsedStatus, definitionKey, pageable);
+            result = proposals.findByProjectIdAndStatusAndDefinitionKey(
+                    ProjectConstants.DEFAULT_PROJECT_ID, parsedStatus, definitionKey, pageable);
         } else if (parsedStatus != null) {
-            result = proposals.findByStatus(parsedStatus, pageable);
+            result = proposals.findByProjectIdAndStatus(
+                    ProjectConstants.DEFAULT_PROJECT_ID, parsedStatus, pageable);
         } else if (definitionKey != null && !definitionKey.isBlank()) {
-            result = proposals.findByDefinitionKey(definitionKey, pageable);
+            result = proposals.findByProjectIdAndDefinitionKey(
+                    ProjectConstants.DEFAULT_PROJECT_ID, definitionKey, pageable);
         } else {
-            result = proposals.findAll(pageable);
+            result = proposals.findByProjectId(ProjectConstants.DEFAULT_PROJECT_ID, pageable);
         }
         return ResponseEntity.ok(PageDTO.map(result, InsightProposalSummaryDTO::from));
     }
@@ -82,7 +86,8 @@ public class InsightController {
     /** Full proposal with the sources that an adoption review needs. */
     @GetMapping("/{proposalId}")
     public ResponseEntity<InsightProposalDetailDTO> detail(@PathVariable long proposalId) {
-        InsightProposalEntity proposal = proposals.findById(proposalId)
+        InsightProposalEntity proposal = proposals.findByIdAndProjectId(
+                        proposalId, ProjectConstants.DEFAULT_PROJECT_ID)
                 .orElseThrow(() -> new InsightNotFoundException(proposalId));
         return ResponseEntity.ok(InsightProposalDetailDTO.from(proposal,
                 reviews.findByProposalIdOrderByCreatedAtAsc(proposalId)));

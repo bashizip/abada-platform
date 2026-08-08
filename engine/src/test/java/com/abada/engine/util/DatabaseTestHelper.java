@@ -15,6 +15,12 @@ import com.abada.engine.persistence.repository.ProcessDefinitionRepository;
 import com.abada.engine.persistence.repository.ProcessInstanceRepository;
 import com.abada.engine.persistence.repository.TaskRepository;
 import com.abada.engine.persistence.repository.OutboxEventRepository;
+import com.abada.engine.persistence.repository.PrincipalRepository;
+import com.abada.engine.persistence.repository.ProjectMemberRepository;
+import com.abada.engine.persistence.repository.ProjectProcessDocumentRepository;
+import com.abada.engine.persistence.repository.ProjectRepository;
+import com.abada.engine.persistence.repository.ProjectWorkerBindingRepository;
+import com.abada.engine.project.ProjectConstants;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +42,11 @@ public class DatabaseTestHelper {
     private final TaskRepository taskRepository;
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final OutboxEventRepository outboxEventRepository;
+    private final ProjectProcessDocumentRepository projectProcessDocumentRepository;
+    private final ProjectWorkerBindingRepository projectWorkerBindingRepository;
+    private final ProjectMemberRepository projectMemberRepository;
+    private final PrincipalRepository principalRepository;
+    private final ProjectRepository projectRepository;
 
     public DatabaseTestHelper(ExternalTaskRepository externalTaskRepository,
             ActivityHistoryRepository activityHistoryRepository,
@@ -49,7 +60,11 @@ public class DatabaseTestHelper {
             InsightApprovalPolicyRepository insightApprovalPolicyRepository,
             JobRepository jobRepository, ProcessInstanceRepository processInstanceRepository,
             TaskRepository taskRepository, ProcessDefinitionRepository processDefinitionRepository,
-            OutboxEventRepository outboxEventRepository) {
+            OutboxEventRepository outboxEventRepository,
+            ProjectProcessDocumentRepository projectProcessDocumentRepository,
+            ProjectWorkerBindingRepository projectWorkerBindingRepository,
+            ProjectMemberRepository projectMemberRepository, PrincipalRepository principalRepository,
+            ProjectRepository projectRepository) {
         this.externalTaskRepository = externalTaskRepository;
         this.activityHistoryRepository = activityHistoryRepository;
         this.eventSubscriptionRepository = eventSubscriptionRepository;
@@ -65,10 +80,16 @@ public class DatabaseTestHelper {
         this.taskRepository = taskRepository;
         this.processDefinitionRepository = processDefinitionRepository;
         this.outboxEventRepository = outboxEventRepository;
+        this.projectProcessDocumentRepository = projectProcessDocumentRepository;
+        this.projectWorkerBindingRepository = projectWorkerBindingRepository;
+        this.projectMemberRepository = projectMemberRepository;
+        this.principalRepository = principalRepository;
+        this.projectRepository = projectRepository;
     }
 
     @Transactional
     public void cleanup() {
+        projectProcessDocumentRepository.deleteAll();
         insightProposalReviewRepository.deleteAll();
         insightProposalRepository.deleteAll();
         insightApprovalPolicyRepository.deleteAll();
@@ -84,5 +105,11 @@ public class DatabaseTestHelper {
         taskRepository.deleteAll();
         processInstanceRepository.deleteAll();
         processDefinitionRepository.deleteAll();
+        projectWorkerBindingRepository.deleteAll();
+        projectMemberRepository.deleteAll();
+        principalRepository.deleteAll();
+        projectRepository.findAll().stream()
+                .filter(project -> !ProjectConstants.DEFAULT_PROJECT_ID.equals(project.getId()))
+                .forEach(projectRepository::delete);
     }
 }
