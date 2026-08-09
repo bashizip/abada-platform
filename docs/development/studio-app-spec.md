@@ -1,10 +1,9 @@
 # Studio — AI Orchestration Authoring Application
 
 **Studio** is the authoring surface of the Abada platform: it lets workflow
-designers compose agentic workflows visually or as native APL YAML, embed deterministic decision
-tables, deploy them to the Abada
-Engine, and **run them live** — observing real decision outcomes instead of a
-simulation.
+designers compose agentic workflows visually or as native APL YAML, explore
+them with a local Dry Run, then explicitly deploy and start immutable process
+instances on the Abada Engine.
 
 This specification records what the Studio is, how it operates, what was
 achieved in the 2026-08 integration phases, and the operational boundaries
@@ -16,7 +15,7 @@ that must stay honest.
 
 | App | Role | Stack |
 | --- | --- | --- |
-| **Studio** | Author agentic workflows, compile to BPMN, deploy and run live | React 19, TypeScript, Vite |
+| **Studio** | Author native APL, Dry Run locally, deploy and inspect live instances | React 19, TypeScript, Vite |
 | **Abada Engine** | BPMN runtime, persistence, REST API, security | Java 21, Spring Boot 3.5 |
 | **Tenda** | End-user task application (human-in-the-loop) | React 18, TypeScript, Vite |
 | **Orun** | Operations and workflow-state inspection | React 19, TypeScript, Vite |
@@ -38,10 +37,10 @@ probabilistic work bounded by those rules.
    highlighting, structural validation and bidirectional diagram synchronization.
 3. **APL pipeline** — the canvas and YAML editor share one APL document model;
    BPMN is an explicit compatibility/import boundary rather than the authoring source.
-4. **Deployment to engine** — compile and deploy with idempotent reuse of the
-   latest definition version.
-5. **Live run** — start an instance with a payload, poll the engine, and prove
-   decision outputs applied in-transaction.
+4. **Dry Run** — animate a local, mocked and non-persistent scenario with
+   explicit pauses for agent output, gateway choice and human completion.
+5. **Deploy & Start** — save the current APL revision, deploy an immutable
+   definition, create a project-scoped instance and open its read-only canvas.
 6. **Audit log panel** — streaming event log of deploy/run activity.
 7. **Task inbox** — human-in-the-loop tasks from the engine.
 8. **Operations view** — engine instances and state inspection.
@@ -100,19 +99,24 @@ from the deployed table, not re-derived from a model call.
 - Shared helpers `normalizeTableInputs` and `resolveRuleOutcome` keep the
   vision's canonical YAML shape and the flattened form in sync.
 
-### Phase 3 — Studio: live Run panel (real execution)
+### Phase 3 — Studio: explicit exploration and execution
 
-- The fake walkthrough simulation was replaced by a real
-  **deploy → start → poll** loop (`handleRunLive` in `App.tsx`).
-- A new **Run on Engine** panel (`features/run/RunPanel.tsx`) provides a JSON
-  payload editor pre-filled from the workflow's DMN input expressions
-  (`deriveDefaultPayload`), a **Run Live** button, and results: status badge,
-  instance ID, definition version, **DECISION OUTPUTS · APPLIED
-  IN-TRANSACTION** cards, and raw instance variables.
-- Node statuses on the canvas are derived **only from engine-visible facts**
-  (`applyInstanceState` used in `App.tsx`): terminal status, decision outputs
-  present in instance variables, and the human task the instance is waiting
-  on.
+- **Dry Run** (`features/run/DryRunPanel.tsx`) is deliberately local: it does
+  not save, deploy, call an LLM, invoke tools or create an engine instance.
+  It advances one visible token at a time and asks the author to mock agent
+  output, choose non-deterministic branches and complete simulated human tasks.
+- **Deploy & Start** (`features/run/DeployDialog.tsx`) is the only authoring
+  action that persists execution state. It saves the project document, deploys
+  the immutable APL revision and starts a project-scoped instance. Deploying a
+  revision that was not dry-run requires an explicit warning acknowledgement.
+- The Instances tab opens a read-only canvas for the selected instance. Studio
+  polls active activities and durable history and applies only engine-reported
+  running/completed/waiting/failed states. The instance DTO carries its exact
+  definition deployment identifier so a later process version cannot alter
+  this projection.
+- **Review AI Optimization** opens the governed Insight proposal surface.
+  Loading, empty and error outcomes are shown there and never redirect to the
+  real-time audit stream.
 
 ### Phase 4 — Studio: post-transpilation authoring surfaces
 
@@ -151,21 +155,17 @@ Part 1 of the 1.1 execution plan (`docs/conductor/abada-execution-plan.md`):
   the engine task name (the BPMN `userTask` name = the node **description**)
   against human nodes.
 
-### Proof evidence (all green)
+### Current checkpoint evidence
 
 | Verification | Result |
 | --- | --- |
-| `npm run build` + `npm run lint` (Studio) | 0 errors |
-| Round-trip XML ⇄ APL ⇄ XML | inputs, rules, otherwise, outputs identical |
-| Real deploy (local engine, PostgreSQL + Keycloak) | HTTP 200, version bump on change |
-| Minimal workflow `start → decision-table → end` | instance **COMPLETED**, variables `risk: LOW`, `auto: true` written in-transaction |
-| Live-run helpers against real engine data | `extractDecisionOutputs` detects the decision; `applyInstanceState` maps COMPLETED/ACTIVE |
-| Human-gate detection | verified against engine semantics: `TaskStatus.AVAILABLE` enum, task name = node description (`/tasks` is user-scoped, so visibility depends on the authenticated user) |
-
-Real bugs caught by code review during Phase 3: the waiting-task detection
-initially compared the node **title** to the task name (the compiler emits the
-**description**) and used a non-existent `CREATED` status instead of the
-engine's `AVAILABLE` enum. Both were fixed and proven against the live engine.
+| `./mvnw test` (Engine) | 218 tests, 0 failures or errors, PostgreSQL/Testcontainers included |
+| `npm run lint` + `npm run build` (Studio) | 0 errors |
+| Anonymous Studio session | Sign-in surface only; no project dialog or unauthorized project discovery |
+| Alice development session | project Instances load without 403; exact deployed definition opens read-only |
+| Dry Run | token advances from start to agent and pauses for explicit mock output |
+| Insight review | governed empty state opens independently; audit stream remains a separate surface |
+| Deploy & Start | payload and non-dry-run warning are explicit before any persistent action |
 
 ---
 
@@ -178,15 +178,12 @@ engine's `AVAILABLE` enum. Both were fixed and proven against the live engine.
 - Node palette (sidebar): **AI Agent**, **Human Task**, **Decision Table**,
   **Gateway**, **Trigger Event**; nodes are added to the canvas and connected
   with labeled edges.
-- Node types map to BPMN as follows (compiler):
-  - `event` (start) → `bpmn:startEvent`
-  - `event` (end) → `bpmn:endEvent`
-  - `agent` → `bpmn:serviceTask` with topic `abada:agent` and
-    `camunda:properties` (model, prompt, confidence threshold)
-  - `human` → `bpmn:userTask` with `camunda:candidateGroups`; **the task name
-    is the node description** (not the title) — a fact the Run panel relies on
-  - `dmn` → `bpmn:businessRuleTask` + `abada:decisionTable` (native, in-transaction)
-  - `gateway` → `bpmn:exclusiveGateway` with conditional flows and a default
+- Node types serialize directly to native APL constructs:
+  - start and end `event` nodes → APL `webhook` and `end` nodes
+  - `agent` → APL `agent` with the versioned `abada.agent/v1` worker contract
+  - `human` → APL `approval-gate`
+  - `dmn` → APL `decision-table` with deterministic rules and fallback
+  - `gateway` → APL `condition` with labeled branches
 - Canvas node badges reflect **real run state only**: `idle`, `running`,
   `completed`, `failed`, `waiting` — applied from engine facts after a live
   run; sample workflows no longer carry hardcoded statuses.
@@ -201,18 +198,16 @@ WorkflowFile (React Flow model)
    │  workflowToAPL (lib/apl/parser.ts)
    ▼
 APLDocument (Abada Process Language, version abada.io/v1)
-   │  compileAPLToBPMN (lib/bpmn/compiler.ts)
+   │  stringifyAPLYaml → project document → Engine AplParser
    ▼
-BPMN 2.0 XML  ──►  engine deploy (strict=false)
-   │  transpileBPMNToAPL (lib/bpmn/transpiler.ts)   [BPMN import compatibility only]
-   ▼
-APLDocument  ──►  aplToWorkflow  ──►  WorkflowFile
+Immutable executable definition
+
+BPMN 2.0 XML  ──►  transpileBPMNToAPL  ──►  reviewable APL document
+                         [explicit import compatibility boundary only]
 ```
 
-- **Compiler** emits a single process with sequence flows, gateway conditions
-  as formal expressions, and the native `abada:decisionTable` extension;
-  boolean attributes are rendered explicitly (`isExecutable="true"`) so the
-  XML stays well-formed.
+- **Native path** stores and deploys canonical YAML directly. There is no XML
+  round-trip between Studio and the APL-native engine.
 - **Transpiler** reads standard BPMN back into APL. It recognizes native
   decision tables, agents (topic `abada:agent` or name heuristic), engine
   tasks, user tasks, gateways and events, and keeps the legacy `abada:dmn`
@@ -223,60 +218,44 @@ APLDocument  ──►  aplToWorkflow  ──►  WorkflowFile
 
 ### 3. Deployment to engine
 
-**Trigger:** "Deploy to Engine" button in the header.
+**Trigger:** **Deploy & Start** in the header.
 
-1. `workflowToAPL` → `compileAPLToBPMN` → multipart form (`file`, `strict=false`).
-2. `POST /v1/processes/deploy` with the Keycloak bearer token.
-3. Result logged to the audit panel: process definition id, version,
-   deployment id.
+1. Validate the JSON input payload and show whether the exact workflow
+   fingerprint completed a Dry Run.
+2. Save the current project APL document with its optimistic revision.
+3. Deploy that document through
+   `POST /v1/projects/{projectId}/documents/{documentId}/deploy`.
+4. Start the resulting process key through
+   `POST /v1/projects/{projectId}/processes/{processKey}/start`.
+5. Open the created instance in the read-only Instances canvas.
 
-Definitions are **immutable and versioned**: redeploying identical XML reuses
-the current version; any change bumps the version. The Run panel reuses the
-latest deployed version when present (`GET /v1/processes?key=...`), so
-repeated runs do not spam versions.
+Definitions are **immutable and versioned**. The instance response includes
+`processDefinitionDeploymentId`; Studio uses it to resolve the exact deployed
+APL source even when newer versions share the same process key.
 
-### 4. Run panel (live execution)
+### 4. Dry Run and live instance inspection
 
-**Trigger:** "Run" button in the header (opens the panel).
+**Dry Run trigger:** **Dry Run** in the header.
 
-**Input payload editor**
+- The payload editor is pre-filled by `deriveDefaultPayload` and validates a
+  JSON object before starting.
+- The local runner advances graph nodes one by one with loop protection. Agent
+  nodes require a mocked output, exclusive/inclusive decisions require an
+  explicit branch choice, and human tasks require simulated completion.
+- Dry Run never persists a document, calls the Engine, invokes a model/tool or
+  creates an instance. Its node colors are simulation state, not audit facts.
 
-- Pre-filled by `deriveDefaultPayload`: each DMN input expression
-  `${order.jurisdiction}` creates a path in a starter payload with a
-  type-appropriate default (`NUMBER: 14200`, `STRING: 'EU'`, `BOOLEAN: false`,
-  ...), chosen so the sample workflows' first rules fire on the first run.
-- JSON validated before running; "Reset defaults" re-derives the payload.
+**Live inspection trigger:** select an instance from the project Instances tab
+or complete **Deploy & Start**.
 
-**Run Live sequence** (`handleRunLive`, max 45 s):
-
-1. Find the deployed definition by process key; deploy only if absent
-   (idempotent reuse of the latest version otherwise).
-2. `POST /v1/processes/start?processId=...&username=<keycloak-username>` with
-   the payload. The engine identity comes from the authenticated token
-   (`getUserFromToken(keycloak.tokenParsed)`).
-3. Poll `GET /v1/processes/instances/{id}` every 1.5 s until: a terminal
-   status (`COMPLETED` / `FAILED` / `CANCELLED`), a visible human task, or the
-   deadline.
-4. Every poll, re-extract decision outputs: when a DMN node's declared outputs
-   all appear in the instance variables, the table was applied
-   in-transaction — log a success line with output chips.
-5. Every third poll, query `GET /v1/tasks?status=AVAILABLE` (best-effort) and
-   match `t.name` against human nodes' `description || title`; on a match the
-   run reports `waiting at <task>`.
-6. Final snapshot: status badge, duration, decision-output cards, raw
-   variables, and canvas node states via `applyInstanceState`.
-
-**Result surface**
-
-- Status badge: `COMPLETED` (green), `ACTIVE` (amber), `FAILED`/`CANCELLED`
-  (red); duration; instance id; definition + version; "waiting at" when
-  applicable.
-- **DECISION OUTPUTS · APPLIED IN-TRANSACTION** cards: one per executed table
-  (`decisionKey`, node title, `name = value` chips) — the visible proof of the
-  deterministic wall.
-- Collapsible **INSTANCE VARIABLES** block.
-- Honest ACTIVE messaging: the flow has paused awaiting a human task or an
-  external agent worker (there is no agent worker in the current stack).
+- Studio fetches the instance's exact immutable APL definition, then polls its
+  project-scoped instance, active-activity and history endpoints every 1.5 s.
+- Running token markers come only from active activities. Durable history maps
+  completed, waiting and failed activities; terminal instance state marks the
+  corresponding end/failure state.
+- Live canvases are read-only: node moves, connections, editing controls and
+  authoring actions are disabled. This prevents an observed instance from
+  being mistaken for its mutable project document.
 
 ### 5. Audit log panel
 
@@ -337,7 +316,7 @@ src/
 │   ├── designer/        # Canvas, AplEditor, NodeRenderer (status + diff badges),
 │   │                    #   EdgeRenderer, AIDiffModal (full-focus PR review)
 │   ├── dmn/             # DmnRuleInspector (matrix editor + APL YAML mirror)
-│   ├── run/RunPanel.tsx # live run panel
+│   ├── run/             # DryRunPanel + DeployDialog
 │   ├── inbox/TaskInbox.tsx
 │   ├── operations/ProcessOperations.tsx
 │   └── ai/ ...          # NL generation plumbing
@@ -348,13 +327,12 @@ src/
 │   │                    #   parseDecisionTableYaml, dmnConfigToAPLNode)
 │   ├── aiDiff/          # AI optimization proposal types + demo generator
 │   ├── bpmn/            # compiler.ts (APL → BPMN), transpiler.ts (BPMN → APL)
-│   └── run/liveRun.ts   # deriveDefaultPayload, extractDecisionOutputs,
-│                        #   applyInstanceState, mapTerminalStatus, sleep
+│   └── run/liveRun.ts   # payload defaults and engine-fact canvas overlays
 ├── components/          # Header (icon-only secondary actions, clean name +
 │                        #   tooltips), Sidebar, PropertiesInspector,
 │                        #   SimulationPanel, NLInputBar (prompt dock, NL-only),
 │                        #   NewWorkflowModal, ProcessDetailsModal, ui (IconButton)
-├── App.tsx              # state hub: handleRunLive, handleDeploy, handleGenerateWorkflow
+├── App.tsx              # state hub: Dry Run, Deploy & Start, live inspection, authoring
 └── types.ts             # WorkflowFile, WorkflowNode, SimulationLog, ...
 ```
 
@@ -362,11 +340,13 @@ src/
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `deployWorkflow(wf)` | `POST /v1/processes/deploy` | compile + multipart deploy |
-| `findProcessDefinition(key)` | `GET /v1/processes?key=` | idempotent reuse of latest version |
-| `startProcess(id, vars)` | `POST /v1/processes/start?processId=&username=` | start with authenticated user |
-| `getInstance(id)` | `GET /v1/processes/instances/{id}` | status + variables polling |
-| `getInstances()` | `GET /v1/processes/instances?size=20` | operations view |
+| `deployDocument(projectId, wf)` | `POST /v1/projects/{projectId}/documents/{id}/deploy` | deploy saved native APL |
+| `startProcess(id, vars, projectId)` | `POST /v1/projects/{projectId}/processes/{id}/start` | create live instance |
+| `getInstance(id, projectId)` | `GET /v1/projects/{projectId}/instances/{id}` | authoritative instance snapshot |
+| `getActivityInstances(id, projectId)` | `GET /v1/projects/{projectId}/instances/{id}/activity-instances` | active live tokens |
+| `getInstanceHistory(id, projectId)` | `GET /v1/projects/{projectId}/instances/{id}/history` | durable activity facts |
+| `getDefinitionForInstance(...)` | `GET /v1/projects/{projectId}/processes?key=` | resolve exact deployment version |
+| `getInstances(projectId)` | `GET /v1/projects/{projectId}/instances?size=20` | project Instances tab |
 | `getTasks(status?)` | `GET /v1/tasks?status=` | waiting-task detection |
 | `completeTask(id, vars)` | `POST /v1/tasks/{id}/complete` | human-in-the-loop |
 | `failInstance(id)` | `POST /v1/processes/instance/{id}/fail` | incident handling |
@@ -419,16 +399,15 @@ npm run build
   `serviceTask` topic `abada:agent`; with no worker running, a run stops there
   and reports ACTIVE. This is by design — agents must not advance BPMN state
   outside engine commands (1.1 track).
-- **`/tasks` is user-scoped.** Waiting-task detection only fires when the
-  authenticated user is a candidate; otherwise the run reports a neutral
-  ACTIVE message.
-- **Decision-output detection is a presence heuristic.** `extractDecisionOutputs`
-  declares a table applied when all its output names appear in the instance
-  variables. It is proven correct for the current engine behavior but is not a
-  substitute for the engine's own `DECISION_TABLE_APPLIED` history records
-  (operations RBAC restricts direct history access).
-- **Human task name = node description.** The compiler emits the description
-  as the BPMN `userTask` name; title-based matching would silently fail.
+- **Live animation follows observable engine facts.** Studio does not slow the
+  engine or invent intermediate activities to make an animation attractive.
+  Very fast automatic transitions may therefore appear as completed between
+  polls. Adding durable activity-entered/completed facts is the correct future
+  way to make every such transition replayable.
+- **Alice's global admin is development-only.** The bundled Alice user is
+  temporarily assigned `abada-admin` so the current integration checkpoint is
+  not blocked by permissions. Production multi-role hardening and the
+  `ADMIN_ROOT` first-admin handoff remain roadmap gates.
 - **hitPolicy is intentionally limited** to `FIRST | UNIQUE | COLLECT`; the
   engine rejects anything else at deployment (loud failure, not a guess).
 
@@ -436,10 +415,10 @@ npm run build
 
 ## Future enhancements
 
-- Render the engine's `DECISION_TABLE_APPLIED` history events directly in the
-  audit panel (requires operations RBAC or a dedicated endpoint).
 - Wire a real agent worker (external-worker protocol) so agent steps complete
   live from the Studio.
+- Add durable activity-entered/completed events for lossless live replay of
+  fast automatic paths.
 - Per-run diff of instance variables (before/after each decision table).
 - Decision-table outcome preview before deploy (client-side evaluation of the
   compiled table against the current payload).

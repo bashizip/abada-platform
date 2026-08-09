@@ -5,7 +5,7 @@ goal is to demonstrate agentic workflows as durable consumers of Abada's
 shared APL/BPMN runtime state machine. It does not weaken that state machine or move agent execution
 into transient, process-local memory.
 
-Last reviewed: 2026-08-08.
+Last reviewed: 2026-08-09.
 
 ## Release scope
 
@@ -22,6 +22,39 @@ The `1.0.0-rc.2` Compose family remains the supported evaluation and
 development baseline until the infrastructure track is complete.
 
 ## Track A — Agentic workflow integration
+
+### Current product checkpoint — make the loop observable end to end
+
+This checkpoint is the only active Studio priority before deeper security and
+administration work. It preserves the final product split: authors can explore
+locally, while every live execution is an explicit, durable engine action.
+
+- [x] Temporarily grant the bundled development user Alice global
+  `abada-admin`, while project creation continues to make her Owner,
+  Maintainer, Operator and Viewer of projects she creates. This is a local
+  unblocker, not the production authorization model.
+- [x] Rename and separate the authoring actions: **Dry Run** is local, mocked
+  and non-persistent; **Deploy & Start** saves APL, deploys an immutable
+  definition and creates a real project-scoped instance. Both expose explicit
+  tooltips and the latter warns when the exact revision was not dry-run.
+- [x] Restore **Review AI Optimization** as the Insight proposal review entry
+  point. Loading, no-proposal and backend-error states remain in that surface;
+  they never fall back to the audit stream.
+- [x] Make project instances selectable and open them as a read-only canvas
+  projection, polling project-scoped active activities and durable history.
+- [x] Carry the immutable deployment identifier on process-instance responses
+  so Studio loads the exact deployed APL version instead of the newest version
+  sharing the process key.
+- [x] Animate local Dry Run tokens node by node, pausing for mocked agent
+  output, gateway choice and human completion. For live instances, animate
+  only engine-reported active tokens and preserve completed/waiting/failed
+  facts; Studio must never fake engine progress.
+- [ ] Deliver the first real `abada:agent` external worker and persist model
+  attempts/results through the durable worker and history contracts.
+- [ ] Add restart/retry/cancellation evidence for the worker, then surface
+  model/tool metadata in the same live instance view.
+- [ ] Only after the runnable agentic loop is proven, resume multi-role
+  hardening, administrator UI and `ADMIN_ROOT` bootstrap work below.
 
 ### Runtime integration
 
