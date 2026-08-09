@@ -17,3 +17,12 @@ contract check is `./scripts/test/validate-platform-deployment.sh`.
 The former TLS setup and Docker Hub publishing helpers were removed. Local
 development now uses HTTP and the release workflow publishes immutable GHCR
 tags.
+
+To rebuild and redeploy only the local Engine and Studio services in an
+already-running development stack:
+
+```bash
+./scripts/dev/rebuild-engine-studio.sh
+# Force clean Docker build layers when needed:
+./scripts/dev/rebuild-engine-studio.sh --no-cache
+```
