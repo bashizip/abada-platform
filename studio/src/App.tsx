@@ -826,6 +826,7 @@ export default function App() {
                   selectedNodeId={isLiveReadOnly ? null : selectedNodeId}
                   onSelectNode={handleSelectNode}
                   onNodeMove={handleNodeMove}
+                  onDeleteNode={handleDeleteNode}
                   onConnectNodes={handleConnectNodes}
                   onAutoLayout={handleAutoLayout}
                   onAddNode={handleAddNode}

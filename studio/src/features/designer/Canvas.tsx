@@ -8,9 +8,10 @@ import {
   Connection,
   Edge,
   Node,
-  BackgroundVariant
+  BackgroundVariant,
+  Panel
 } from '@xyflow/react';
-import { Bot, Code2, CirclePlay, Workflow } from 'lucide-react';
+import { Bot, Code2, CirclePlay, Trash2, Workflow } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import { AbadaNode } from './NodeRenderer';
 import { AbadaEdge } from './EdgeRenderer';
@@ -24,6 +25,7 @@ interface CanvasProps {
   selectedNodeId: string | null;
   onSelectNode: (id: string | null) => void;
   onNodeMove: (id: string, x: number, y: number) => void;
+  onDeleteNode: (id: string) => void;
   onConnectNodes: (sourceId: string, targetId: string) => void;
   onAutoLayout?: (nodes: WorkflowNode[]) => void;
   onAddNode: (type: WorkflowNode['type']) => void;
@@ -42,6 +44,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   selectedNodeId,
   onSelectNode,
   onNodeMove,
+  onDeleteNode,
   onConnectNodes,
   onAutoLayout,
   onAddNode,
@@ -100,6 +103,11 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (!readOnly) onNodeMove(node.id, node.position.x, node.position.y);
   }, [onNodeMove, readOnly]);
 
+  const onNodesDelete = useCallback((deletedNodes: Node[]) => {
+    if (readOnly) return;
+    deletedNodes.forEach((node) => onDeleteNode(node.id));
+  }, [onDeleteNode, readOnly]);
+
   const onPaneClick = useCallback(() => {
     onSelectNode(null);
   }, [onSelectNode]);
@@ -138,7 +146,9 @@ export const Canvas: React.FC<CanvasProps> = ({
         edgeTypes={edgeTypes}
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
+        onNodesDelete={onNodesDelete}
         onPaneClick={onPaneClick}
+        deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
         fitView
@@ -147,6 +157,20 @@ export const Canvas: React.FC<CanvasProps> = ({
         elementsSelectable={!readOnly}
         proOptions={{ hideAttribution: true }}
       >
+        {!readOnly && selectedNodeId && (
+          <Panel position="top-right">
+            <button
+              type="button"
+              onClick={() => onDeleteNode(selectedNodeId)}
+              className="flex items-center gap-2 rounded-lg border border-[#E76F51]/50 bg-[#251B18]/95 px-3 py-2 text-[11px] font-semibold text-[#E76F51] shadow-warm-md transition-colors hover:border-[#E76F51] hover:bg-[#E76F51]/15 focus:outline-none focus:ring-2 focus:ring-[#E76F51]"
+              title="Delete selected node and its connected flows"
+              aria-label="Delete selected node"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete node
+            </button>
+          </Panel>
+        )}
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />
         {!readOnly && <AutoLayoutControl nodes={rawNodes} edges={rawEdges} onAutoLayout={onAutoLayout} />}
       </ReactFlow>
