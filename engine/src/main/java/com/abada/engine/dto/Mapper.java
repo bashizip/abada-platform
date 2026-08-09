@@ -13,6 +13,7 @@ public class Mapper {
                     pi.getProjectId(),
                     pi.getId(),
                     pi.getDefinition().getId(),
+                    pi.getProcessDefinitionDeploymentId(),
                     pi.getDefinition().getName(),
                     currentToken,
                     pi.getStatus(),

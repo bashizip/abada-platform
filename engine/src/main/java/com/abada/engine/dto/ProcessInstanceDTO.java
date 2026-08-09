@@ -10,6 +10,7 @@ public record ProcessInstanceDTO(
         String projectId,
         String id,
         String processDefinitionId,
+        String processDefinitionDeploymentId,
         String processDefinitionName,
         String currentActivityId,
         ProcessStatus status,

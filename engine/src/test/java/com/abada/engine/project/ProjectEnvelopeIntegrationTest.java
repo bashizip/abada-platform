@@ -7,6 +7,7 @@ import com.abada.engine.AbadaEngineApplication;
 import com.abada.engine.api.ApiException;
 import com.abada.engine.api.ProjectAuthoringController;
 import com.abada.engine.core.AbadaEngine;
+import com.abada.engine.dto.Mapper;
 import com.abada.engine.persistence.entity.PrincipalEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
 import com.abada.engine.persistence.repository.PrincipalRepository;
@@ -66,6 +67,8 @@ class ProjectEnvelopeIntegrationTest {
 
         var instance = engine.startProcess(first.getId(), "shared_flow", "owner", java.util.Map.of());
         assertThat(instance.getProjectId()).isEqualTo(first.getId());
+        assertThat(Mapper.ProcessInstanceMapper.toDto(instance).processDefinitionDeploymentId())
+                .isEqualTo(firstDefinition.getDeploymentId());
         assertThat(engine.getProcessInstances(first.getId(), null, null, PageRequest.of(0, 10)))
                 .hasSize(1);
         assertThat(engine.getProcessInstances(second.getId(), null, null, PageRequest.of(0, 10)))

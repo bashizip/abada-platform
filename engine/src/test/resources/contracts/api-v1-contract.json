@@ -70,7 +70,7 @@
     "InfoResponse": ["name", "service", "description", "version", "api", "engine", "health"],
     "DeploymentResponse": ["status", "processDefinitionId", "deploymentId", "version", "definitionFormatVersion", "compatibilityProfiles", "compatibilityReport"],
     "ProcessDefinitionDto": ["id", "name", "documentation", "bpmnXml", "deploymentId", "version", "createdAt"],
-    "ProcessInstanceDTO": ["id", "processDefinitionId", "processDefinitionName", "currentActivityId", "status", "suspended", "startDate", "endDate", "startedBy", "variables"],
+    "ProcessInstanceDTO": ["id", "processDefinitionId", "processDefinitionDeploymentId", "processDefinitionName", "currentActivityId", "status", "suspended", "startDate", "endDate", "startedBy", "variables"],
     "ProcessStartResponse": ["processInstanceId"],
     "ProcessActionResponse": ["status", "processInstanceId"],
     "TaskDetailsDto": ["id", "taskDefinitionKey", "name", "assignee", "status", "startDate", "endDate", "candidateUsers", "candidateGroups", "processInstanceId", "processDefinitionId", "processDefinitionName", "processStatus", "processSuspended", "processStartDate", "processEndDate", "currentActivityId", "variables"],
