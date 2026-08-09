@@ -18,6 +18,7 @@ import type { DiffChangeKind } from '@/lib/aiDiff/types';
 export type AbadaNodeType = Node<WorkflowNode & Record<string, unknown> & {
   isSelected?: boolean;
   isActiveSim?: boolean;
+  isLiveCurrent?: boolean;
   diffKind?: DiffChangeKind | null;
   diffAnnotation?: string;
   onConnectStart?: (nodeId: string) => void;
@@ -84,6 +85,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
   const styles = getNodeColor(data.type);
   const isSelected = selected;
   const isActiveSim = data.isActiveSim;
+  const isLiveCurrent = data.isLiveCurrent;
   
   // Selection already has a clear ring. Reserving the expensive blurred glow
   // for live execution avoids repainting it on every frame while dragging.
@@ -108,13 +110,19 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
   return (
     <div
       onClick={() => data.onSelectNode?.(id)}
-      className={`abada-node-card w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg z-10 group ${
+      className={`abada-node-card relative w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg z-10 group ${
         isSelected ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]' : ''
       } ${isAgentGlow ? 'glow-amethyst' : ''} ${
         isActiveSim ? 'scale-105 transition-transform' : ''
       } ${data.diffKind ? diffRing : ''}`}
       title={data.diffAnnotation || undefined}
     >
+      {isLiveCurrent && (
+        <span className="absolute -top-1.5 -right-1.5 z-30 flex h-4 w-4 items-center justify-center" title="Current live activity">
+          <span className="absolute h-full w-full rounded-full bg-[#9D4EDD]/50 animate-ping" />
+          <span className="relative h-2.5 w-2.5 rounded-full border border-[#EAE3D9] bg-[#9D4EDD]" />
+        </span>
+      )}
       <Handle type="target" position={Position.Left} className="opacity-0" />
       
       <div className={`px-3 py-2.5 rounded-t-2xl ${styles.headerBg} border-b border-[#3A322E] flex items-center justify-between`}>

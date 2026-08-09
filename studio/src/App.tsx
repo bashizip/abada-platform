@@ -10,16 +10,23 @@ import { ProcessDetailsModal } from '@/components/ProcessDetailsModal';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { ProjectDialog } from '@/components/ProjectDialog';
 import { AIDiffModal } from '@/features/designer/AIDiffModal';
+import { InsightReviewDialog } from '@/features/designer/InsightReviewDialog';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
-import { RunPanel } from '@/features/run/RunPanel';
-import { EngineAPI } from '@/api/engine';
+import { DryRunPanel } from '@/features/run/DryRunPanel';
+import { DeployDialog } from '@/features/run/DeployDialog';
+import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
 import { AplGenerationCandidate, AuthoringAPI } from '@/api/authoring';
 import { Project, ProjectAPI } from '@/api/projects';
+import { keycloak } from '@/auth/keycloakClient';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { AplEditor } from '@/features/designer/AplEditor';
-import { applyInstanceState, extractDecisionOutputs, mapTerminalStatus, sleep, RunResult } from '@/lib/run/liveRun';
+import {
+  deriveDefaultPayload,
+  deriveLiveExecutionOverlay,
+  NodeRunStatus,
+} from '@/lib/run/liveRun';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
@@ -71,12 +78,22 @@ export default function App() {
   const [simulationLogs, setSimulationLogs] = useState<SimulationLog[]>([]);
   const [showLogPanel, setShowLogPanel] = useState<boolean>(true);
 
-  // Live engine run state
+  // Dry Run and live-instance presentation state
   const [showRunPanel, setShowRunPanel] = useState<boolean>(false);
-  const [lastRunResult, setLastRunResult] = useState<RunResult | null>(null);
+  const [showDeployDialog, setShowDeployDialog] = useState(false);
+  const [dryRunFingerprint, setDryRunFingerprint] = useState<string | null>(null);
+  const [lastDryRunPayload, setLastDryRunPayload] = useState<Record<string, unknown>>({});
+  const [executionStatuses, setExecutionStatuses] = useState<Record<string, NodeRunStatus>>({});
+  const [activeSimulationNodeId, setActiveSimulationNodeId] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<'files' | 'palette' | 'instances'>('files');
+  const [selectedLiveInstance, setSelectedLiveInstance] = useState<ProcessInstanceDTO | null>(null);
+  const [liveWorkflow, setLiveWorkflow] = useState<WorkflowFile | null>(null);
+  const [activeLiveNodeIds, setActiveLiveNodeIds] = useState<string[]>([]);
+  const [instancesRefreshKey, setInstancesRefreshKey] = useState(0);
 
   // AI Diff review state (Insight Engine proposal preview)
   const [diffSnapshot, setDiffSnapshot] = useState<WorkflowDiffSnapshot | null>(null);
+  const [insightDialog, setInsightDialog] = useState<null | { state: 'loading' | 'empty' | 'error'; message?: string }>(null);
   const [showProcessDetails, setShowProcessDetails] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
@@ -93,6 +110,8 @@ export default function App() {
 
   // Get active workflow object
   const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId) || workflows[0];
+  const displayedWorkflow = selectedLiveInstance && liveWorkflow ? liveWorkflow : currentWorkflow;
+  const isLiveReadOnly = !!selectedLiveInstance;
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
 
   const workflowFingerprint = (workflow: WorkflowFile) => JSON.stringify({
@@ -102,6 +121,11 @@ export default function App() {
 
   const openProject = async (project: Project) => {
     setAuthoringCandidate(null);
+    setSelectedLiveInstance(null);
+    setLiveWorkflow(null);
+    setActiveLiveNodeIds([]);
+    setExecutionStatuses({});
+    setSidebarTab('files');
     setActiveProject(project);
     localStorage.setItem('abada.studio.projectId', project.id);
     const documents = await ProjectAPI.documents(project.id);
@@ -126,6 +150,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!keycloak.authenticated) return;
     ProjectAPI.list().then((available) => {
       setProjects(available);
       const remembered = localStorage.getItem('abada.studio.projectId');
@@ -391,32 +416,35 @@ export default function App() {
     setSelectedNodeId(newId);
   };
 
-  // Open the live Run panel
+  // Open the local, non-persistent Dry Run panel.
   const handleOpenRunPanel = () => {
+    setShowLogPanel(false);
     setShowRunPanel(true);
-    setShowLogPanel(true);
+    setSelectedLiveInstance(null);
+    setLiveWorkflow(null);
   };
 
   const handleOpenAiDiff = async () => {
+    setInsightDialog({ state: 'loading' });
     const definitionKey = currentWorkflow.processKey
       || currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     try {
       const page = await InsightAPI.listProposals(definitionKey, activeProject?.id);
       const summary = page.items.find((item) => item.status === 'DRAFT' || item.status === 'IN_REVIEW');
-      if (!summary) throw new Error(`No pending Insight proposal for ${definitionKey}`);
+      if (!summary) {
+        setInsightDialog({ state: 'empty' });
+        return;
+      }
       setDiffSnapshot(InsightAPI.toDiffSnapshot(await InsightAPI.getProposal(summary.id, activeProject?.id)));
+      setInsightDialog(null);
     } catch (error) {
-      setSimulationLogs((prev) => [...prev, {
-        id: `diff-error-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
-        nodeTitle: 'Insight Engine', nodeType: 'event', status: 'warning',
-        message: error instanceof Error ? error.message : String(error),
-      }]);
-      setShowLogPanel(true);
+      setInsightDialog({ state: 'error', message: error instanceof Error ? error.message : String(error) });
     }
   };
 
   const handleExitAiDiff = () => {
     setDiffSnapshot(null);
+    setInsightDialog(null);
   };
 
   // Governance gate approval: adopt the proposed graph as the new definition
@@ -463,191 +491,71 @@ export default function App() {
     setDiffSnapshot(null);
   };
 
-  // Live engine run: deploy-if-missing → start → poll → real decision outputs
-  const handleRunLive = async (payload: Record<string, any>): Promise<RunResult> => {
-    if (isSimulating) {
-      throw new Error('A run is already in progress.');
-    }
-
-    const wf = currentWorkflow;
-    const startedAt = Date.now();
-    const timestamp = () => new Date().toLocaleTimeString();
-    const addLog = (log: Omit<SimulationLog, 'id' | 'timestamp'>) => {
-      setSimulationLogs((prev) => [
-        ...prev,
-        {
-          ...log,
-          id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          timestamp: timestamp(),
-        },
-      ]);
-    };
-
-    setIsSimulating(true);
-    setShowLogPanel(true);
-    setShowRunPanel(true);
-
-    const processKey = wf.processKey
-      || wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
-    let version = 0;
-
+  const openLiveInstance = useCallback(async (instance: ProcessInstanceDTO) => {
+    if (!activeProject) return;
+    setSelectedLiveInstance(instance);
+    setSidebarTab('instances');
+    setDesignerMode('diagram');
+    setShowRunPanel(false);
     try {
-      // 1. Deploy canonical APL. The engine reuses an identical checksum and
-      // creates a new immutable version when the source changed.
-      addLog({
-        nodeId: 'system', nodeTitle: 'Deployment Compiler', nodeType: 'event', status: 'info',
-        message: `Validating and deploying native APL [${wf.name}] as definition [${processKey}]…`,
-      });
-      let deployWorkflow = wf;
-      if (activeProject) {
-        const wasDraft = !wf.documentId;
-        const saved = wf.documentId ? await ProjectAPI.saveDocument(activeProject.id, wf)
-          : await ProjectAPI.createDocument(activeProject.id, wf, wf.description || '');
-        deployWorkflow = { ...wf, id: saved.id, documentId: saved.id, revision: saved.revision };
-        persistedFingerprint.current.set(deployWorkflow.id, workflowFingerprint(deployWorkflow));
-        setWorkflows((items) => items.map((item) => item.id === wf.id ? deployWorkflow : item));
-        if (wasDraft) setActiveWorkflowId(saved.id);
+      const definition = await EngineAPI.getDefinitionForInstance(instance, activeProject.id);
+      let instanceWorkflow = workflows.find((workflow) => workflow.processKey === instance.processDefinitionId) || null;
+      if (definition?.schemaType === 'APL_NATIVE' && definition.bpmnXml) {
+        const parsed = aplToWorkflow(parseAPLYaml(definition.bpmnXml));
+        instanceWorkflow = { ...parsed, id: `instance-${instance.id}`, version: String(definition.version) };
       }
-      const deploy = activeProject
-        ? await ProjectAPI.deployDocument(activeProject.id, deployWorkflow)
-        : await EngineAPI.deployWorkflow(wf);
-      version = deploy.version;
-      addLog({
-        nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'success',
-        message: `Deployed native APL [${deploy.processDefinitionId}] v${deploy.version} · deployment ${deploy.deploymentId}.`,
-      });
-
-      // 2. Start an instance with the supplied payload
-      addLog({
-        nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'info',
-        message: `Starting instance with payload ${JSON.stringify(payload)}…`,
-      });
-      const { processInstanceId } = await EngineAPI.startProcess(processKey, payload, activeProject?.id);
-      addLog({
-        nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'success',
-        message: `Instance started: ${processInstanceId}.`,
-      });
-
-      // 3. Poll until terminal state, a human gate, or a 45s timeout
-      let instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
-      let outputs = extractDecisionOutputs(wf, instance.variables || {});
-      let waitingTaskName: string | undefined;
-      let pollCount = 0;
-      const deadline = Date.now() + 45_000;
-
-      while (true) {
-        const terminal = instance.status.toUpperCase();
-        if (terminal === 'COMPLETED' || terminal === 'FAILED' || terminal === 'CANCELLED') break;
-
-        const outputsNow = extractDecisionOutputs(wf, instance.variables || {});
-        for (const out of outputsNow) {
-          if (outputs.some((o) => o.decisionKey === out.decisionKey)) continue;
-          addLog({
-            nodeId: out.nodeId, nodeTitle: out.nodeTitle, nodeType: 'dmn', status: 'success',
-            message: `Decision table [${out.decisionKey}] applied in-transaction — outputs written to instance variables.`,
-            outputs: Object.entries(out.outputs).map(([name, value]) => ({ name, value: String(value) })),
-          });
-        }
-        outputs = outputsNow;
-
-        // Waiting on a human task visible to the current user?
-        // (engine task name = BPMN userTask name = node description; tasks endpoint
-        // only returns tasks assigned to or claimable by the authenticated user)
-        if (pollCount % 3 === 0) {
-          try {
-            const tasks = await EngineAPI.getTasks('AVAILABLE');
-            const waiting = tasks.find((t: any) =>
-              wf.nodes.some((n) => n.type === 'human' && (n.description || n.title) === t.name)
-            );
-            if (waiting) {
-              waitingTaskName = waiting.name;
-              break;
-            }
-          } catch {
-            // task polling is best-effort
-          }
-        }
-        pollCount++;
-
-        if (Date.now() > deadline) break;
-        await sleep(1500);
-        instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
-      }
-
-      // 4. Final snapshot
-      instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
-      outputs = extractDecisionOutputs(wf, instance.variables || {});
-      const terminal = instance.status.toUpperCase();
-      const durationMs = Date.now() - startedAt;
-
-      // Reflect real engine state on the canvas (only if the same workflow is still active)
-      if (activeWorkflowId === wf.id) {
-        const statuses = applyInstanceState(wf, instance, waitingTaskName);
-        updateActiveWorkflow((w) => ({
-          ...w,
-          nodes: w.nodes.map((n) => ({ ...n, status: statuses[n.id] || 'idle' })),
-        }));
-      }
-
-      if (terminal === 'COMPLETED') {
-        addLog({
-          nodeId: 'end', nodeTitle: 'Run Concluded', nodeType: 'event', status: 'success',
-          message: `Instance COMPLETED in ${(durationMs / 1000).toFixed(1)}s with ${outputs.length} decision table(s) applied.`,
-        });
-      } else if (terminal === 'FAILED' || terminal === 'CANCELLED') {
-        addLog({
-          nodeId: 'end', nodeTitle: 'Run Failed', nodeType: 'event', status: 'error',
-          message: `Instance ended with status ${terminal}. Inspect engine logs or the Operations view.`,
-        });
-      } else if (waitingTaskName) {
-        addLog({
-          nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'human', status: 'warning',
-          message: `Instance ACTIVE — waiting on human task [${waitingTaskName}]. Complete it from the Task Inbox.`,
-        });
-      } else {
-        addLog({
-          nodeId: 'system', nodeTitle: 'Process Runner', nodeType: 'event', status: 'warning',
-          message: 'Instance ACTIVE — the flow has paused awaiting a human task or an external agent worker. Open the Task Inbox or Operations to monitor.',
-        });
-      }
-
-      const result: RunResult = {
-        instanceId: processInstanceId,
-        processDefinitionId: processKey,
-        version,
-        status: mapTerminalStatus(terminal),
-        waitingAt: waitingTaskName,
-        durationMs,
-        decisionOutputs: outputs,
-        variables: instance.variables || {},
-      };
-      setLastRunResult(result);
-      return result;
-    } catch (err: any) {
-      const message = err instanceof Error ? err.message : String(err);
-      addLog({
-        nodeId: 'system', nodeTitle: 'Run Error', nodeType: 'event', status: 'error',
-        message: `Run failed: ${message}`,
-      });
-      const result: RunResult = {
-        instanceId: '',
-        processDefinitionId: processKey,
-        version,
-        status: 'FAILED',
-        durationMs: Date.now() - startedAt,
-        decisionOutputs: [],
-        variables: {},
-        error: message,
-      };
-      setLastRunResult(result);
-      return result;
-    } finally {
-      setIsSimulating(false);
+      if (!instanceWorkflow) throw new Error('The immutable definition for this instance is unavailable');
+      setLiveWorkflow(instanceWorkflow);
+      const [fresh, activities, history] = await Promise.all([
+        EngineAPI.getInstance(instance.id, activeProject.id),
+        EngineAPI.getActivityInstances(instance.id, activeProject.id),
+        EngineAPI.getInstanceHistory(instance.id, activeProject.id),
+      ]);
+      setSelectedLiveInstance(fresh);
+      const overlay = deriveLiveExecutionOverlay(instanceWorkflow, fresh, activities, history);
+      setExecutionStatuses(overlay.statuses);
+      setActiveLiveNodeIds(overlay.activeNodeIds);
+    } catch (reason) {
+      setSimulationLogs((logs) => [...logs, {
+        id: `instance-view-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
+        nodeTitle: 'Live Instance', nodeType: 'event', status: 'error',
+        message: reason instanceof Error ? reason.message : String(reason),
+      }]);
     }
-  };
+  }, [activeProject, workflows]);
 
-  // Deploy to Abada Engine
-  const handleDeploy = async () => {
+  const selectedLiveInstanceId = selectedLiveInstance?.id;
+  const selectedLiveInstanceStatus = selectedLiveInstance?.status;
+
+  useEffect(() => {
+    if (!activeProject || !selectedLiveInstanceId || !liveWorkflow) return;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const [fresh, activities, history] = await Promise.all([
+          EngineAPI.getInstance(selectedLiveInstanceId, activeProject.id),
+          EngineAPI.getActivityInstances(selectedLiveInstanceId, activeProject.id),
+          EngineAPI.getInstanceHistory(selectedLiveInstanceId, activeProject.id),
+        ]);
+        if (cancelled) return;
+        setSelectedLiveInstance(fresh);
+        const overlay = deriveLiveExecutionOverlay(liveWorkflow, fresh, activities, history);
+        setExecutionStatuses(overlay.statuses);
+        setActiveLiveNodeIds(overlay.activeNodeIds);
+      } catch {
+        // Keep the last authoritative snapshot visible; the next poll retries.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => {
+      const terminal = selectedLiveInstanceStatus?.toUpperCase() || '';
+      if (!['COMPLETED', 'FAILED', 'CANCELLED'].includes(terminal)) void refresh();
+    }, 1500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [activeProject, liveWorkflow, selectedLiveInstanceId, selectedLiveInstanceStatus]);
+
+  // Deploy the immutable definition, then create and open a live instance.
+  const handleDeploy = async (payload: Record<string, unknown>) => {
     if (isDeploying) return;
     setIsDeploying(true);
     setShowLogPanel(true);
@@ -684,7 +592,10 @@ export default function App() {
       const response = activeProject
         ? await ProjectAPI.deployDocument(activeProject.id, deployWorkflow)
         : await EngineAPI.deployWorkflow(currentWorkflow);
-      
+      const { processInstanceId } = await EngineAPI.startProcess(
+        response.processKey, payload, activeProject?.id
+      );
+      const instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
       setSimulationLogs(prev => [
         ...prev,
         {
@@ -694,9 +605,12 @@ export default function App() {
           nodeTitle: 'Abada Engine',
           nodeType: 'event',
           status: 'success',
-          message: `Deployment successful! Process Definition: [${response.processDefinitionId}], Version: ${response.version}, Deployment ID: ${response.deploymentId}`,
+          message: `Deployed [${response.processKey}] v${response.version} and started live instance ${processInstanceId}.`,
         }
       ]);
+      setShowDeployDialog(false);
+      setInstancesRefreshKey((value) => value + 1);
+      await openLiveInstance(instance);
     } catch (err: any) {
       setSimulationLogs(prev => [
         ...prev,
@@ -704,12 +618,13 @@ export default function App() {
           id: `deploy-${Date.now()}-err`,
           timestamp: timestamp(),
           nodeId: 'system',
-          nodeTitle: 'Deployment Error',
+          nodeTitle: 'Deploy & Start Error',
           nodeType: 'event',
           status: 'error',
-          message: `Failed to deploy: ${err.message}`,
+          message: `Deploy & Start failed: ${err.message}`,
         }
       ]);
+      throw err;
     } finally {
       setIsDeploying(false);
     }
@@ -820,12 +735,12 @@ export default function App() {
     <div className="flex flex-col h-screen w-screen bg-[#1A1614] text-[#EAE3D9] overflow-hidden">
       {/* Top Header */}
       <Header
-        currentWorkflow={currentWorkflow}
+        currentWorkflow={displayedWorkflow}
         onRunSimulation={handleOpenRunPanel}
         isSimulating={isSimulating}
         onNewWorkflow={() => setIsNewModalOpen(true)}
         onExportJSON={handleExportJSON}
-        onDeploy={handleDeploy}
+        onDeploy={() => setShowDeployDialog(true)}
         isDeploying={isDeploying}
         onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
         showLogPanel={showLogPanel}
@@ -838,6 +753,7 @@ export default function App() {
         onViewChange={setCurrentView}
         activeProject={activeProject}
         onOpenProjects={() => setShowProjects(true)}
+        readOnlyInstance={isLiveReadOnly}
       />
 
       {/* Main Studio Area */}
@@ -849,6 +765,11 @@ export default function App() {
             activeWorkflowId={activeWorkflowId}
             onSelectWorkflow={(id) => {
               setAuthoringCandidate(null);
+              setSelectedLiveInstance(null);
+              setLiveWorkflow(null);
+              setActiveLiveNodeIds([]);
+              setExecutionStatuses({});
+              setSidebarTab('files');
               setActiveWorkflowId(id);
               const wf = workflows.find((w) => w.id === id);
               if (wf && wf.nodes.length > 0) setSelectedNodeId(wf.nodes[0].id);
@@ -856,13 +777,26 @@ export default function App() {
             onAddNode={handleAddNode}
             onNewWorkflowModal={() => setIsNewModalOpen(true)}
             projectId={activeProject?.id}
+            activeTab={sidebarTab}
+            onTabChange={(tab) => {
+              setSidebarTab(tab);
+              if (tab !== 'instances') {
+                setSelectedLiveInstance(null);
+                setLiveWorkflow(null);
+                setActiveLiveNodeIds([]);
+                setExecutionStatuses({});
+              }
+            }}
+            selectedInstanceId={selectedLiveInstance?.id}
+            onSelectInstance={(instance) => void openLiveInstance(instance)}
+            instancesRefreshKey={instancesRefreshKey}
           />
         )}
 
         {/* View: Designer Canvas */}
         {currentView === 'designer' && (
           <>
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 rounded-xl border border-[#3A322E] bg-[#25201D]/95 p-1 shadow-warm-md">
+            {!isLiveReadOnly && <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 rounded-xl border border-[#3A322E] bg-[#25201D]/95 p-1 shadow-warm-md">
               <button onClick={() => setDesignerMode('diagram')}
                 className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'diagram' ? 'bg-[#F4A261] text-[#1A1614]' : 'text-[#A89F91] hover:text-[#EAE3D9]'}`}>
                 Diagram
@@ -871,15 +805,25 @@ export default function App() {
                 className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'apl' ? 'bg-[#2A9D8F] text-[#101816]' : 'text-[#A89F91] hover:text-[#EAE3D9]'}`}>
                 APL YAML
               </button>
-            </div>
+            </div>}
 
-            {designerMode === 'diagram' ? (
+            {isLiveReadOnly && selectedLiveInstance && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-xl border border-[#2A9D8F]/40 bg-[#15201E]/95 px-3 py-2 shadow-warm-md">
+                <span className="relative flex h-2.5 w-2.5"><span className="absolute h-full w-full rounded-full bg-[#2A9D8F]/50 animate-ping" /><span className="relative h-2.5 w-2.5 rounded-full bg-[#2A9D8F]" /></span>
+                <span className="text-[11px] font-semibold">Live Instance</span>
+                <span className="font-mono text-[10px] text-[#A89F91]">{selectedLiveInstance.id.slice(0, 8)}</span>
+                <span className="text-[10px] text-[#2A9D8F]">{selectedLiveInstance.status}</span>
+                <span className="text-[10px] text-[#737D69]">Read-only</span>
+              </div>
+            )}
+
+            {designerMode === 'diagram' || isLiveReadOnly ? (
               <>
                 <Canvas
-                  key={currentWorkflow.id}
-                  nodes={currentWorkflow.nodes}
-                  edges={currentWorkflow.edges}
-                  selectedNodeId={selectedNodeId}
+                  key={displayedWorkflow.id}
+                  nodes={displayedWorkflow.nodes}
+                  edges={displayedWorkflow.edges}
+                  selectedNodeId={isLiveReadOnly ? null : selectedNodeId}
                   onSelectNode={handleSelectNode}
                   onNodeMove={handleNodeMove}
                   onConnectNodes={handleConnectNodes}
@@ -887,22 +831,25 @@ export default function App() {
                   onAddNode={handleAddNode}
                   onOpenAplEditor={() => setDesignerMode('apl')}
                   onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
-                  isSimulating={false}
-                  activeSimulationNodeId={null}
+                  isSimulating={isSimulating}
+                  activeSimulationNodeId={activeSimulationNodeId}
+                  executionStatuses={executionStatuses}
+                  activeLiveNodeIds={activeLiveNodeIds}
+                  readOnly={isLiveReadOnly}
                 />
 
-                <PropertiesInspector
+                {!isLiveReadOnly && <PropertiesInspector
                   selectedNode={selectedNode}
                   onUpdateNode={handleUpdateNode}
                   onRunAgentTest={handleRunAgentTest}
                   nodeCount={currentWorkflow.nodes.length}
-                />
+                />}
 
-                <NLInputBar
+                {!isLiveReadOnly && <NLInputBar
                   onGenerateWorkflow={handleGenerateWorkflow}
                   isGenerating={isGenerating}
                   hasActiveWorkflow={workflows.length > 0}
-                />
+                />}
               </>
             ) : (
               <AplEditor
@@ -923,14 +870,26 @@ export default function App() {
               />
             )}
 
-            <RunPanel
+            {!isLiveReadOnly && <DryRunPanel
               workflow={currentWorkflow}
               isOpen={showRunPanel}
-              isRunning={isSimulating}
               onClose={() => setShowRunPanel(false)}
-              onRun={handleRunLive}
-              lastResult={lastRunResult}
-            />
+              onCompleted={(payload) => {
+                setDryRunFingerprint(workflowFingerprint(currentWorkflow));
+                setLastDryRunPayload(payload);
+                setIsSimulating(false);
+                setSimulationLogs((logs) => [...logs, {
+                  id: `dry-run-${Date.now()}`, timestamp: new Date().toLocaleTimeString(),
+                  nodeId: 'system', nodeTitle: 'Dry Run', nodeType: 'event', status: 'success',
+                  message: `Local Dry Run completed for ${currentWorkflow.name}; no engine instance was created.`,
+                }]);
+              }}
+              onOverlayChange={(statuses, activeNodeId, running) => {
+                setExecutionStatuses(statuses);
+                setActiveSimulationNodeId(activeNodeId);
+                setIsSimulating(running);
+              }}
+            />}
 
             <SimulationPanel
               logs={simulationLogs}
@@ -960,6 +919,16 @@ export default function App() {
         onClose={() => setShowProjects(false)} onOpen={(project) => void openProject(project)}
         onCreated={(project) => { setProjects((items) => [project, ...items]); void openProject(project); }} />
 
+      <DeployDialog
+        workflow={currentWorkflow}
+        isOpen={showDeployDialog}
+        isDeploying={isDeploying}
+        dryRunPassed={dryRunFingerprint === workflowFingerprint(currentWorkflow)}
+        defaultPayload={Object.keys(lastDryRunPayload).length ? lastDryRunPayload : deriveDefaultPayload(currentWorkflow)}
+        onClose={() => setShowDeployDialog(false)}
+        onConfirm={handleDeploy}
+      />
+
       {/* Process Details inspector modal — metadata payloads live here, not the header */}
       <ProcessDetailsModal
         workflow={currentWorkflow}
@@ -984,6 +953,14 @@ export default function App() {
           onApply={handleApplyAiDiff}
           onReject={handleRejectAiDiff}
           onExit={handleExitAiDiff}
+        />
+      )}
+      {insightDialog && (
+        <InsightReviewDialog
+          state={insightDialog.state}
+          message={insightDialog.message}
+          onRetry={() => void handleOpenAiDiff()}
+          onClose={() => setInsightDialog(null)}
         />
       )}
     </div>

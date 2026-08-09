@@ -28,6 +28,11 @@ interface SidebarProps {
   onAddNode: (type: NodeType) => void;
   onNewWorkflowModal: () => void;
   projectId?: string;
+  activeTab: 'files' | 'palette' | 'instances';
+  onTabChange: (tab: 'files' | 'palette' | 'instances') => void;
+  selectedInstanceId?: string;
+  onSelectInstance: (instance: ProcessInstanceDTO) => void;
+  instancesRefreshKey?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -37,8 +42,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddNode,
   onNewWorkflowModal,
   projectId,
+  activeTab,
+  onTabChange,
+  selectedInstanceId,
+  onSelectInstance,
+  instancesRefreshKey = 0,
 }) => {
-  const [activeTab, setActiveTab] = useState<'files' | 'palette' | 'instances'>('files');
   const [expandedFolder, setExpandedFolder] = useState<string>('all');
   
   const [instances, setInstances] = useState<ProcessInstanceDTO[]>([]);
@@ -52,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         .catch(err => console.error('Failed to fetch instances', err))
         .finally(() => setIsLoadingInstances(false));
     }
-  }, [activeTab, projectId]);
+  }, [activeTab, instancesRefreshKey, projectId]);
 
   const paletteItems: {
     type: NodeType;
@@ -117,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation Tabs */}
       <div className="flex items-center border-b border-[#3A322E] bg-[#1A1614]/60 p-1">
         <button
-          onClick={() => setActiveTab('files')}
+          onClick={() => onTabChange('files')}
           className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'files'
               ? 'bg-[#25201D] text-[#EAE3D9] shadow-warm-md border border-[#3A322E]'
@@ -128,7 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>Processes</span>
         </button>
         <button
-          onClick={() => setActiveTab('palette')}
+          onClick={() => onTabChange('palette')}
           className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'palette'
               ? 'bg-[#25201D] text-[#EAE3D9] shadow-warm-md border border-[#3A322E]'
@@ -139,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>Palette</span>
         </button>
         <button
-          onClick={() => setActiveTab('instances')}
+          onClick={() => onTabChange('instances')}
           className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'instances'
               ? 'bg-[#25201D] text-[#EAE3D9] shadow-warm-md border border-[#3A322E]'
@@ -280,7 +289,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={() => {
                 setIsLoadingInstances(true);
-                EngineAPI.getInstances().then(setInstances).finally(() => setIsLoadingInstances(false));
+                EngineAPI.getInstances(projectId).then(setInstances).finally(() => setIsLoadingInstances(false));
               }}
               className="text-xs text-[#2A9D8F] hover:text-[#34bdae] p-1 rounded hover:bg-[#1A1614] transition-all"
               title="Refresh Instances"
@@ -296,16 +305,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
             {instances.map((instance) => (
-              <div
+              <button
                 key={instance.id}
-                className="w-full text-left p-2.5 rounded-xl border transition-all bg-[#25201D] hover:bg-[#2F2926] border-[#3A322E]"
+                onClick={() => onSelectInstance(instance)}
+                className={`w-full text-left p-2.5 rounded-xl border transition-all hover:bg-[#2F2926] ${
+                  selectedInstanceId === instance.id
+                    ? 'bg-[#1A1614] border-[#2A9D8F]/60'
+                    : 'bg-[#25201D] border-[#3A322E]'
+                }`}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-semibold text-[#EAE3D9] truncate">
                     {instance.processDefinitionId.split(':')[0]}
                   </span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    instance.status === 'ACTIVE' ? 'bg-[#90A955]/10 text-[#90A955] border border-[#90A955]/30' :
+                    instance.status === 'ACTIVE' || instance.status === 'RUNNING' ? 'bg-[#90A955]/10 text-[#90A955] border border-[#90A955]/30' :
                     instance.status === 'COMPLETED' ? 'bg-[#9D4EDD]/10 text-[#9D4EDD] border border-[#9D4EDD]/30' :
                     'bg-[#E76F51]/10 text-[#E76F51] border border-[#E76F51]/30'
                   }`}>
@@ -316,7 +330,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>ID: {instance.id.substring(0, 8)}...</span>
                   <span>{new Date(instance.startDate).toLocaleTimeString()}</span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>

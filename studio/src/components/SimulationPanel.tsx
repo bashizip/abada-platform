@@ -131,7 +131,7 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
           <div className="py-8 text-center text-[#A89F91] text-xs">
             <Clock className="w-6 h-6 mx-auto mb-2 opacity-40 text-[#F4A261]" />
             <p>No execution events logged.</p>
-            <p className="text-[10px] text-[#A89F91]">Click "Run" in the top bar, then "Run Live" to execute on the engine.</p>
+            <p className="text-[10px] text-[#A89F91]">Use Dry Run for a local mocked walkthrough, or Deploy &amp; Start for a durable engine instance.</p>
           </div>
         ) : (
           logs.map((log) => (

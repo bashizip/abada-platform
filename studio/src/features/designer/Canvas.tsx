@@ -15,6 +15,7 @@ import '@xyflow/react/dist/style.css';
 import { AbadaNode } from './NodeRenderer';
 import { AbadaEdge } from './EdgeRenderer';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
+import type { NodeRunStatus } from '@/lib/run/liveRun';
 import { WorkflowNode, WorkflowEdge } from '@/types';
 
 interface CanvasProps {
@@ -30,6 +31,9 @@ interface CanvasProps {
   onFocusPrompt: () => void;
   isSimulating: boolean;
   activeSimulationNodeId: string | null;
+  executionStatuses?: Record<string, NodeRunStatus>;
+  activeLiveNodeIds?: string[];
+  readOnly?: boolean;
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -45,6 +49,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   onFocusPrompt,
   isSimulating,
   activeSimulationNodeId,
+  executionStatuses = {},
+  activeLiveNodeIds = [],
+  readOnly = false,
 }) => {
   const nodeTypes = useMemo(() => ({
     abadaNode: AbadaNode as any,
@@ -61,12 +68,14 @@ export const Canvas: React.FC<CanvasProps> = ({
       position: { x: node.x, y: node.y },
       data: {
         ...node,
+        status: executionStatuses[node.id] || 'idle',
         isActiveSim: activeSimulationNodeId === node.id,
+        isLiveCurrent: activeLiveNodeIds.includes(node.id),
         onSelectNode,
       },
       selected: selectedNodeId === node.id
     })),
-  [rawNodes, activeSimulationNodeId, selectedNodeId, onSelectNode]);
+  [rawNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, onSelectNode]);
 
   const reactFlowEdges: Edge[] = useMemo(() =>
     rawEdges.map(edge => ({
@@ -88,8 +97,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [onConnectNodes]);
 
   const onNodeDragStop = useCallback((event: any, node: Node) => {
-    onNodeMove(node.id, node.position.x, node.position.y);
-  }, [onNodeMove]);
+      if (!readOnly) onNodeMove(node.id, node.position.x, node.position.y);
+  }, [onNodeMove, readOnly]);
 
   const onPaneClick = useCallback(() => {
     onSelectNode(null);
@@ -130,23 +139,19 @@ export const Canvas: React.FC<CanvasProps> = ({
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
         onPaneClick={onPaneClick}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
         fitView
         minZoom={0.2}
         maxZoom={2}
-        nodesDraggable
-        nodesConnectable
-        elementsSelectable
+        elementsSelectable={!readOnly}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />
-        <AutoLayoutControl
-          nodes={rawNodes}
-          edges={rawEdges}
-          onAutoLayout={onAutoLayout}
-        />
+        {!readOnly && <AutoLayoutControl nodes={rawNodes} edges={rawEdges} onAutoLayout={onAutoLayout} />}
       </ReactFlow>
 
-      {rawNodes.length === 0 && (
+      {rawNodes.length === 0 && !readOnly && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto w-[520px] max-w-[calc(100%-3rem)] rounded-2xl border border-[#3A322E] bg-[#25201D]/95 p-6 shadow-warm-lg text-center">
             <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-[#F4A261]/10 border border-[#F4A261]/30 flex items-center justify-center">

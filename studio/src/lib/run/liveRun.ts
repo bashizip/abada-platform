@@ -1,5 +1,5 @@
 import { WorkflowFile } from '@/types';
-import { ProcessInstanceDTO } from '@/api/engine';
+import { ActivityHistoryDTO, ActivityInstanceDTO, ProcessInstanceDTO } from '@/api/engine';
 
 export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -113,6 +113,51 @@ export function extractDecisionOutputs(
 }
 
 export type NodeRunStatus = 'idle' | 'running' | 'completed' | 'failed' | 'waiting';
+
+export interface LiveExecutionOverlay {
+  statuses: Record<string, NodeRunStatus>;
+  activeNodeIds: string[];
+}
+
+/** Builds a read-only canvas overlay exclusively from project-scoped engine facts. */
+export function deriveLiveExecutionOverlay(
+  workflow: WorkflowFile,
+  instance: ProcessInstanceDTO,
+  activeActivities: ActivityInstanceDTO[],
+  history: ActivityHistoryDTO[],
+): LiveExecutionOverlay {
+  const statuses: Record<string, NodeRunStatus> = Object.fromEntries(
+    workflow.nodes.map((node) => [node.id, 'idle'])
+  );
+  const completedEvents = new Set([
+    'PROCESS_STARTED', 'EXTERNAL_TASK_COMPLETED', 'DECISION_TABLE_APPLIED',
+    'TASK_COMPLETED', 'TIMER_JOB_COMPLETED', 'EVENT_CORRELATED',
+  ]);
+  const failedEvents = new Set(['EXTERNAL_TASK_FAILED', 'TASK_FAILED']);
+  for (const event of history) {
+    if (!event.activityId || !(event.activityId in statuses)) continue;
+    if (completedEvents.has(event.eventType)) statuses[event.activityId] = 'completed';
+    if (failedEvents.has(event.eventType)) statuses[event.activityId] = 'failed';
+    if (event.eventType === 'TASK_CREATED' || event.eventType === 'TASK_ASSIGNED') {
+      statuses[event.activityId] = 'waiting';
+    }
+  }
+  const activeNodeIds = activeActivities.map((activity) => activity.activityId)
+    .filter((activityId) => activityId in statuses);
+  if (activeNodeIds.length === 0 && instance.currentActivityId && instance.currentActivityId in statuses) {
+    activeNodeIds.push(instance.currentActivityId);
+  }
+  activeNodeIds.forEach((activityId) => { statuses[activityId] = 'running'; });
+
+  const terminal = instance.status.toUpperCase();
+  if (terminal === 'COMPLETED') {
+    workflow.nodes.filter((node) => node.type === 'event' && node.subtype === 'end')
+      .forEach((node) => { statuses[node.id] = 'completed'; });
+  } else if ((terminal === 'FAILED' || terminal === 'CANCELLED') && instance.currentActivityId) {
+    statuses[instance.currentActivityId] = 'failed';
+  }
+  return { statuses, activeNodeIds };
+}
 
 /**
  * Maps real engine state onto the canvas. Only engine-visible facts are used:

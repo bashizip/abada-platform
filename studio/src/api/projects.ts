@@ -2,6 +2,7 @@ import { config } from '@/config/runtime';
 import { apiError, authenticatedFetch } from '@/api/authenticatedFetch';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
+import type { DeploymentResult, ProcessDefinitionDTO } from '@/api/engine';
 
 export type ProjectRole = 'OWNER' | 'MAINTAINER' | 'OPERATOR' | 'REVIEWER' | 'VIEWER';
 
@@ -86,13 +87,20 @@ export class ProjectAPI {
     }).then(checked<ProjectDocument>);
   }
 
-  static deployDocument(projectId: string, workflow: WorkflowFile): Promise<any> {
+  static async deployDocument(projectId: string, workflow: WorkflowFile): Promise<DeploymentResult> {
     if (!workflow.documentId || workflow.revision === undefined) {
       throw new Error('Save the process in the project before deploying');
     }
-    return authenticatedFetch(`${this.BASE}/${projectId}/documents/${workflow.documentId}/deploy`, {
+    const deployed = await authenticatedFetch(`${this.BASE}/${projectId}/documents/${workflow.documentId}/deploy`, {
       method: 'POST', headers: { ...headers(), 'If-Match': String(workflow.revision) },
-    }).then(checked<any>);
+    }).then(checked<ProcessDefinitionDTO>);
+    return {
+      projectId: deployed.projectId,
+      processKey: deployed.id,
+      deploymentId: deployed.deploymentId,
+      version: deployed.version,
+      schemaType: deployed.schemaType,
+    };
   }
 
   static members(projectId: string): Promise<ProjectMember[]> {

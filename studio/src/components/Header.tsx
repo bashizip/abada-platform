@@ -16,7 +16,7 @@ import {
 import { Project } from '@/api/projects';
 import { WorkflowFile } from '@/types';
 import { keycloak } from '@/auth/keycloakClient';
-import { IconButton, TooltipProvider } from '@/components/ui';
+import { IconButton, TooltipProvider, UITooltip } from '@/components/ui';
 
 interface HeaderProps {
   currentWorkflow: WorkflowFile;
@@ -37,6 +37,7 @@ interface HeaderProps {
   onViewChange?: (view: 'designer' | 'inbox' | 'operations') => void;
   activeProject?: Project;
   onOpenProjects?: () => void;
+  readOnlyInstance?: boolean;
 }
 
 /** Clean file identifier: process name only, no format/version pill noise. */
@@ -62,6 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
   onViewChange,
   activeProject,
   onOpenProjects,
+  readOnlyInstance = false,
 }) => {
   return (
     <TooltipProvider delayDuration={0}>
@@ -121,7 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls (right, never shrinks) */}
         <div className="flex items-center gap-3 shrink-0">
-          {currentView === 'designer' && (
+          {currentView === 'designer' && !readOnlyInstance && (
             <>
               <IconButton
                 icon={<Plus className="w-4 h-4 text-[#F4A261]" />}
@@ -147,57 +149,43 @@ export const Header: React.FC<HeaderProps> = ({
 
               <IconButton
                 icon={<GitCompare className="w-4 h-4 text-[#9D4EDD]" />}
-                label="AI Diff"
-                tooltip="Review AI Optimizations — open pending Insight-Engine proposals for review"
+                label="Review AI Optimization"
+                tooltip="Review AI Optimization — inspect, approve or reject the pending governed Insight proposal"
                 onClick={onOpenAiDiff}
                 active={isDiffActive}
               />
 
-              <button
-                type="button"
-                onClick={onRunSimulation}
-                disabled={isSimulating}
-                className={`text-xs font-semibold px-4 py-1.5 rounded-xl transition-all flex items-center gap-2 shadow-warm-md ${
-                  isSimulating
-                    ? 'bg-[#F4A261]/50 text-[#1A1614] cursor-not-allowed'
-                    : 'bg-[#F4A261] hover:bg-[#f5ad73] text-[#1A1614] active:scale-95'
-                }`}
-              >
-                {isSimulating ? (
-                  <>
-                    <RotateCcw className="w-3.5 h-3.5 animate-spin text-[#1A1614]" />
-                    <span>Running…</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-[#1A1614]" />
-                    <span>Run</span>
-                  </>
-                )}
-              </button>
+              <UITooltip content="Dry Run — animate a local mocked scenario without saving, deploying, calling an LLM or creating an instance">
+                <button
+                  type="button"
+                  onClick={onRunSimulation}
+                  disabled={isSimulating}
+                  className={`text-xs font-semibold px-4 py-1.5 rounded-xl transition-all flex items-center gap-2 shadow-warm-md ${
+                    isSimulating
+                      ? 'bg-[#F4A261]/50 text-[#1A1614] cursor-not-allowed'
+                      : 'bg-[#F4A261] hover:bg-[#f5ad73] text-[#1A1614] active:scale-95'
+                  }`}
+                >
+                  {isSimulating ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Dry Running…</span></>
+                    : <><Play className="w-3.5 h-3.5 fill-[#1A1614]" /><span>Dry Run</span></>}
+                </button>
+              </UITooltip>
 
-              <button
-                type="button"
-                onClick={onDeploy}
-                disabled={isDeploying}
-                className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
-                  isDeploying
-                    ? 'bg-[#2A9D8F]/50 text-[#1A1614] cursor-not-allowed'
-                    : 'bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] active:scale-95'
-                }`}
-              >
-                {isDeploying ? (
-                  <>
-                    <RotateCcw className="w-3.5 h-3.5 animate-spin text-[#1A1614]" />
-                    <span>Deploying…</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#1A1614]" />
-                    <span>Deploy</span>
-                  </>
-                )}
-              </button>
+              <UITooltip content="Deploy & Start — save the APL, publish an immutable engine definition and create a live process instance">
+                <button
+                  type="button"
+                  onClick={onDeploy}
+                  disabled={isDeploying}
+                  className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
+                    isDeploying
+                      ? 'bg-[#2A9D8F]/50 text-[#1A1614] cursor-not-allowed'
+                      : 'bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] active:scale-95'
+                  }`}
+                >
+                  {isDeploying ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Starting…</span></>
+                    : <><CheckCircle2 className="w-3.5 h-3.5" /><span>Deploy & Start</span></>}
+                </button>
+              </UITooltip>
             </>
           )}
 

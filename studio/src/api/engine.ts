@@ -12,14 +12,45 @@ export interface DeploymentResponse {
   compatibilityReport?: Record<string, unknown>;
 }
 
+export interface DeploymentResult {
+  projectId?: string;
+  processKey: string;
+  deploymentId: string;
+  version: number;
+  schemaType?: 'APL_NATIVE' | 'BPMN_XML';
+}
+
 export interface ProcessInstanceDTO {
   projectId?: string;
   id: string;
   processDefinitionId: string;
+  processDefinitionDeploymentId?: string;
+  processDefinitionName?: string;
+  currentActivityId?: string;
   startDate: string;
   endDate?: string;
   status: string;
+  suspended?: boolean;
+  startedBy?: string;
   variables: Record<string, any>;
+}
+
+export interface ActivityInstanceDTO {
+  activityId: string;
+  activityName: string;
+  executionId: string;
+}
+
+export interface ActivityHistoryDTO {
+  id: string;
+  processInstanceId: string;
+  processDefinitionId: string;
+  activityId?: string;
+  eventType: string;
+  actor: string;
+  occurredAt: string;
+  traceId?: string;
+  details: Record<string, unknown>;
 }
 
 import { config } from '@/config/runtime';
@@ -31,8 +62,12 @@ export interface ProcessDefinitionDTO {
   projectId?: string;
   id: string;
   name: string;
+  documentation?: string;
+  bpmnXml?: string;
+  deploymentId: string;
   version: number;
   schemaType: 'APL_NATIVE' | 'BPMN_XML';
+  createdAt?: string;
 }
 
 export class EngineAPI {
@@ -51,7 +86,7 @@ export class EngineAPI {
    * Deploys the canonical abada.io/v1 APL YAML directly. Studio never uses an
    * XML round-trip for authored or imported-and-converted workflows.
    */
-  static async deployWorkflow(workflow: WorkflowFile): Promise<DeploymentResponse> {
+  static async deployWorkflow(workflow: WorkflowFile): Promise<DeploymentResult> {
     const apl = workflowToAPL(workflow);
     const aplYaml = stringifyAPLYaml(apl);
 
@@ -71,7 +106,13 @@ export class EngineAPI {
       throw new Error(`Deployment failed: ${res.statusText} - ${text}`);
     }
 
-    return res.json();
+    const deployed = await res.json() as DeploymentResponse;
+    return {
+      processKey: deployed.processDefinitionId,
+      deploymentId: deployed.deploymentId,
+      version: deployed.version,
+      schemaType: deployed.schemaType,
+    };
   }
 
   /**
@@ -121,6 +162,42 @@ export class EngineAPI {
       throw new Error(`Failed to fetch instance: ${res.statusText}`);
     }
     return res.json();
+  }
+
+  static async getActivityInstances(instanceId: string, projectId: string): Promise<ActivityInstanceDTO[]> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/activity-instances`,
+      { headers: this.getHeaders() }
+    );
+    if (!res.ok) throw new Error(`Failed to fetch active activities: ${res.statusText}`);
+    const tree = await res.json() as { childActivityInstances?: ActivityInstanceDTO[] };
+    return tree.childActivityInstances || [];
+  }
+
+  static async getInstanceHistory(instanceId: string, projectId: string): Promise<ActivityHistoryDTO[]> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/history?size=100`,
+      { headers: this.getHeaders() }
+    );
+    if (!res.ok) throw new Error(`Failed to fetch instance history: ${res.statusText}`);
+    return res.json();
+  }
+
+  static async getDefinitionForInstance(
+    instance: ProcessInstanceDTO,
+    projectId: string
+  ): Promise<ProcessDefinitionDTO | null> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/processes?key=${encodeURIComponent(instance.processDefinitionId)}&size=100`,
+      { headers: this.getHeaders() }
+    );
+    if (!res.ok) throw new Error(`Failed to fetch process definition: ${res.statusText}`);
+    const definitions = await res.json() as ProcessDefinitionDTO[];
+    if (instance.processDefinitionDeploymentId) {
+      return definitions.find((definition) =>
+        definition.deploymentId === instance.processDefinitionDeploymentId) || null;
+    }
+    return definitions[0] || null;
   }
 
   /**
