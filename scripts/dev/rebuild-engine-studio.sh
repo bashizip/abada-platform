@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENGINE_IMAGE="${ABADA_LOCAL_ENGINE_IMAGE:-abada-engine:local}"
 STUDIO_IMAGE="${ABADA_LOCAL_STUDIO_IMAGE:-abada-studio:local}"
 HEALTH_TIMEOUT_SECONDS="${ABADA_REDEPLOY_HEALTH_TIMEOUT_SECONDS:-180}"
-BUILD_ARGS=()
+NO_CACHE=false
 
 usage() {
   cat <<'EOF'
@@ -23,7 +23,7 @@ EOF
 
 case "${1:-}" in
   "") ;;
-  --no-cache) BUILD_ARGS+=(--no-cache) ;;
+  --no-cache) NO_CACHE=true ;;
   -h|--help)
     usage
     exit 0
@@ -88,17 +88,23 @@ wait_for_health() {
   return 1
 }
 
+build_image() {
+  local dockerfile="$1"
+  local image="$2"
+  local context="$3"
+
+  if [[ "$NO_CACHE" == true ]]; then
+    docker build --no-cache -f "$dockerfile" -t "$image" "$context"
+  else
+    docker build -f "$dockerfile" -t "$image" "$context"
+  fi
+}
+
 echo "Building $ENGINE_IMAGE..."
-docker build "${BUILD_ARGS[@]}" \
-  -f "$ROOT_DIR/engine/Dockerfile.prod.engine" \
-  -t "$ENGINE_IMAGE" \
-  "$ROOT_DIR/engine"
+build_image "$ROOT_DIR/engine/Dockerfile.prod.engine" "$ENGINE_IMAGE" "$ROOT_DIR/engine"
 
 echo "Building $STUDIO_IMAGE..."
-docker build "${BUILD_ARGS[@]}" \
-  -f "$ROOT_DIR/studio/Dockerfile.prod" \
-  -t "$STUDIO_IMAGE" \
-  "$ROOT_DIR/studio"
+build_image "$ROOT_DIR/studio/Dockerfile.prod" "$STUDIO_IMAGE" "$ROOT_DIR/studio"
 
 export ABADA_ENGINE_IMAGE="$ENGINE_IMAGE"
 export ABADA_STUDIO_IMAGE="$STUDIO_IMAGE"
