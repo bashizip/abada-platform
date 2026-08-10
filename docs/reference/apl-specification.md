@@ -106,8 +106,8 @@ Every node in `flow.nodes` is a mapping with the following common keys:
   `approval-gate` the description is what the engine shows as the task name —
   the Studio Run panel matches tasks against it.
 - `next` wires the linear sequence flow (`sourceRef → targetRef`). `condition`
-  nodes must **not** set `next`; they route exclusively through their `rules`
-  (§3.4).
+  and `parallel` nodes must **not** set `next` together with their
+  branching key (`rules` / `branches`); see §3.4 and §3.7.
 
 ### 2.3 Formatting conventions
 
@@ -142,7 +142,7 @@ AI-generated and Studio-authored APL converge on one shape.
 The current APL node vocabulary (Studio `lib/apl/types.ts`):
 
 ```
-webhook | agent | engine-task | condition | approval-gate | decision-table | end
+webhook | agent | engine-task | condition | approval-gate | decision-table | parallel | end
 ```
 
 ### 3.1 `webhook` — trigger node
@@ -324,7 +324,39 @@ Compiles to the native deterministic decision-table primitive. Full contract in 
 | `rules` | array | yes | ordered rules; see §4.2 |
 | `next` | nodeId | yes | linear successor |
 
-### 3.7 `end` — terminal node
+### 3.7 `parallel` — fork / join gateway
+
+Compiles to the runtime parallel gateway. A `parallel` node is a **fork** when
+it declares `branches` (one token per branch, created unconditionally) and a
+**join** when several upstream nodes converge on it via their `next` and it
+continues along its single `next` successor. `branches` and `next` are
+mutually exclusive.
+
+```yaml
+- id: fanout
+  type: parallel
+  description: Run credit and fraud checks concurrently
+  branches:
+    - creditDesk
+    - fraudDesk
+- id: rejoin               # join: creditDesk and fraudDesk both point here
+  type: parallel
+  next: archive
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `branches` | nodeId[] | fork | ≥2 distinct declared targets; each gets an unconditional flow |
+| `next` | nodeId | join | single successor after all incoming tokens arrive |
+
+Engine semantics: a fork emits one token per branch and records the expected
+join token count; the join blocks token passage until every upstream branch
+arrives. Join token bookkeeping (`joinExpectedTokens` / `joinArrivedTokens`)
+persists with the instance and survives restart. Studio draws the fork's
+branches as plain outgoing edges; conditions are never attached to parallel
+flows.
+
+### 3.8 `end` — terminal node
 
 Compiles to the runtime end-event primitive. Completes the instance when the last token
 arrives.
@@ -482,6 +514,7 @@ sources are parsed directly as APL; neither path requires an XML round-trip.
 | `metadata.key` and `metadata.name` present | authoring requires a stable process key and a human-readable name |
 | `id` uniqueness / flow wiring | `next`/`rules.then` targets must exist for a valid graph; the compiler emits sequence flows only for declared links |
 | Gateway condition discipline | only explicit `${...}` labels become conditions; free text stays a description (never a condition) |
+| Parallel branch discipline | `branches` lists ≥2 distinct declared targets and never coexists with `next` |
 | Decision-table normalization | `normalizeTableInputs` / `resolveRuleOutcome` collapse map/array and flattened/wrapper forms before emission |
 
 Studio performs fast client-side checks, then the Engine rejects unknown node
@@ -503,6 +536,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, cycles, non-webhook entry |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while

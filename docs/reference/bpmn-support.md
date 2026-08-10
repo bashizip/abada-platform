@@ -59,15 +59,17 @@ The supported APL construct set maps 1:1 onto the BPMN elements above:
 | `agent` | External service task | Fixed durable topic `abada:agent` |
 | `decision-table` | Business rule task | Inline `inputs`/`rules`, `FIRST`/`UNIQUE`/`COLLECT`, `otherwise` fallback; applies `abada:decisionTable` semantics |
 | `condition` | Exclusive gateway | `if` rules become conditional flows; the `else` rule (or the last rule otherwise) becomes the default flow |
+| `parallel` | Parallel gateway | Fork: `branches` (≥2) get one unconditional flow each; join: upstream `next` flows converge on the node and it continues via its single `next`. Fork/join token bookkeeping persists across restarts |
 
 APL semantics that close or tighten holes:
 
 - Documents are **strictly acyclic**; any loop over `next` or condition targets
   is rejected at deployment.
-- A `condition` must route via `rules`, never `next`; a second `else` rule, a
-  missing `metadata.name`, an undeclared routing target, a second `webhook`
-  node or an unrecognized node type fails deployment with an index-friendly
-  validation error and rolls back.
+- A `condition` must route via `rules`, never `next`; a `parallel` node must
+  not combine `branches` with `next` or declare fewer than two distinct branch
+  targets; a second `else` rule, a missing `metadata.name`, an undeclared
+  routing target, a second `webhook` node or an unrecognized node type fails
+  deployment with an index-friendly validation error and rolls back.
 - `approval-gate` requires a non-empty `assignees` list; `engine`/`agent` are
   executed by external workers through fetch/lock/complete, exactly like
   `camunda:topic` service tasks.

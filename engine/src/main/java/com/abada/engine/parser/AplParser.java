@@ -49,6 +49,9 @@ import java.util.Set;
  *   <li>{@code condition}       → exclusive gateway; {@code if} rules become
  *       conditional flows and the {@code else} rule (or the last rule when no
  *       {@code else} is declared) becomes the default flow</li>
+ *   <li>{@code parallel}        → parallel gateway: a fork when it declares
+ *       {@code branches} (one token per branch), a join when several upstream
+ *       nodes converge on it and it continues via {@code next}</li>
  * </ul>
  *
  * <p>Unsupported or ambiguous constructs are rejected at deployment: the
@@ -66,7 +69,7 @@ public final class AplParser {
     public static final int MAX_DEPLOYMENT_BYTES = 10 * 1024 * 1024;
 
     private static final Set<String> SUPPORTED_TYPES = Set.of(
-            "webhook", "end", "agent", "engine-task", "decision-table", "approval-gate", "condition");
+            "webhook", "end", "agent", "engine-task", "decision-table", "approval-gate", "condition", "parallel");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -272,6 +275,37 @@ public final class AplParser {
                                 lastFlow.getTargetRef(), null, lastFlow.getConditionExpression(), true));
                     }
                     gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.EXCLUSIVE, defaultFlowId));
+                }
+                case "parallel" -> {
+                    JsonNode branches = node.path("branches");
+                    if (!branches.isMissingNode() && !branches.isNull()) {
+                        if (node.hasNonNull("next")) {
+                            throw validation("parallel node '" + nodeId
+                                    + "' must not combine 'branches' and 'next'");
+                        }
+                        if (!branches.isArray() || branches.size() < 2) {
+                            throw validation("parallel node '" + nodeId
+                                    + "' 'branches' must declare at least two distinct target nodes");
+                        }
+                        Set<String> branchTargets = new HashSet<>();
+                        for (JsonNode branch : branches) {
+                            String target = branch.asText(null);
+                            if (target == null || target.isBlank()) {
+                                throw validation("parallel node '" + nodeId + "' has an empty branch target");
+                            }
+                            if (!nodesById.containsKey(target)) {
+                                throw validation("parallel node '" + nodeId
+                                        + "' 'branches' target '" + target + "' is not a declared node");
+                            }
+                            if (!branchTargets.add(target)) {
+                                throw validation("parallel node '" + nodeId
+                                        + "' lists duplicate branch target '" + target + "'");
+                            }
+                            flows.add(new SequenceFlow(flowIdFor(nodeId, target, flowIds),
+                                    nodeId, target, null, null, false));
+                        }
+                    }
+                    gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.PARALLEL, null));
                 }
                 default -> throw validation("unsupported node type '" + type + "' for node '" + nodeId
                         + "'; supported: " + String.join(", ", SUPPORTED_TYPES));

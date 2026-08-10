@@ -1,0 +1,31 @@
+version: abada.io/v1
+metadata:
+  name: Parallel Fork Join
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: fanout
+    - id: fanout
+      type: parallel
+      branches:
+        - creditDesk
+        - fraudDesk
+    - id: creditDesk
+      type: engine-task
+      service: abada:credit-check
+      next: rejoin
+    - id: fraudDesk
+      type: engine-task
+      service: abada:fraud-check
+      next: rejoin
+    - id: rejoin
+      type: parallel
+      next: archive
+    - id: archive
+      type: engine-task
+      service: abada:archive
+      next: end
+    - id: end
+      type: end

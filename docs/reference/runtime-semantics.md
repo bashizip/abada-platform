@@ -63,7 +63,9 @@ should use external tasks and an idempotent worker operation.
   first true condition. If none match, it takes the configured default flow;
   absence of a matching/default flow is an execution error.
 - A parallel fork creates one token per outgoing flow. Its corresponding join
-  waits until every expected branch token arrives.
+  waits until every expected branch token arrives. Native APL exposes the same
+  semantics through the `parallel` node: `branches` become the fork flows, and
+  a node several upstream `next` flows converge on becomes the join.
 - An inclusive fork selects every true conditional flow, or its default when
   none match. The join waits only for branches selected by that fork.
 - Join-arrival and expected-token sets are durable and restored after restart.

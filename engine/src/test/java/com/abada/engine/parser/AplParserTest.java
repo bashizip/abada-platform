@@ -185,6 +185,76 @@ class AplParserTest {
     }
 
     @Test
+    void parallelForkAndJoinCompileIntoParallelGateways() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: fanout\n"
+                        + "      type: parallel\n"
+                        + "      branches: [branchA, branchB]\n"
+                        + "    - id: branchA\n      type: engine-task\n      service: abada:a\n      next: rejoin\n"
+                        + "    - id: branchB\n      type: engine-task\n      service: abada:b\n      next: rejoin\n"
+                        + "    - id: rejoin\n      type: parallel\n      next: end\n")
+                .getBytes(StandardCharsets.UTF_8)).definition();
+
+        GatewayMeta fanout = definition.getGateways().get("fanout");
+        GatewayMeta rejoin = definition.getGateways().get("rejoin");
+        assertThat(fanout).isNotNull();
+        assertThat(fanout.type()).isEqualTo(GatewayMeta.Type.PARALLEL);
+        assertThat(fanout.defaultFlowId()).isNull();
+        assertThat(rejoin).isNotNull();
+        assertThat(rejoin.type()).isEqualTo(GatewayMeta.Type.PARALLEL);
+
+        assertThat(definition.isParallelGateway("fanout")).isTrue();
+        assertThat(definition.isParallelGateway("rejoin")).isTrue();
+        assertThat(definition.getSequenceFlows()).extracting(SequenceFlow::getSourceRef)
+                .containsExactly("fanout", "fanout", "branchA", "branchB", "rejoin");
+        assertThat(definition.getSequenceFlows()).extracting(SequenceFlow::getTargetRef)
+                .contains("branchA", "branchB", "rejoin", "end");
+        assertThat(definition.getSequenceFlows()).noneMatch(SequenceFlow::isDefault);
+    }
+
+    @Test
+    void rejectsParallelCombiningBranchesAndNext() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: fanout\n"
+                        + "      type: parallel\n"
+                        + "      next: end\n"
+                        + "      branches: [branchA, branchB]\n"
+                        + "    - id: branchA\n      type: engine-task\n      service: abada:a\n      next: end\n"
+                        + "    - id: branchB\n      type: engine-task\n      service: abada:b\n      next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("must not combine 'branches' and 'next'");
+    }
+
+    @Test
+    void rejectsParallelWithFewerThanTwoBranches() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: fanout\n      type: parallel\n      branches: [end]\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("at least two distinct target nodes");
+    }
+
+    @Test
+    void rejectsParallelBranchTargetingUndeclaredNode() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: fanout\n      type: parallel\n      branches: [branchA, phantom]\n"
+                        + "    - id: branchA\n      type: engine-task\n      service: abada:a\n      next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("not a declared node");
+    }
+
+    @Test
+    void rejectsParallelDuplicateBranchTargets() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: fanout\n      type: parallel\n      branches: [end, end]\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("duplicate branch target");
+    }
+
+    @Test
     void rejectsConditionRoutingViaNext() {
         assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
                 "    - id: route\n"

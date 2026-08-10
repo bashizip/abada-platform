@@ -5,6 +5,7 @@ import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.core.model.DefinitionSchema;
 import com.abada.engine.core.model.TaskInstance;
 import com.abada.engine.dto.FetchAndLockRequest;
+import com.abada.engine.dto.LockedExternalTask;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
 import com.abada.engine.persistence.repository.ProcessDefinitionRepository;
 import com.abada.engine.util.DatabaseTestHelper;
@@ -110,6 +111,100 @@ class AplRuntimeTest {
                     assertThat(job.activityId()).isEqualTo("basicDesk"));
             externalTaskService.complete(basicJobs.getFirst().id(), Map.of("tier", true));
             assertThat(engine.getProcessInstanceById(defaulted.getId()).isCompleted()).isTrue();
+        }
+    }
+
+    @Test
+    void runsParallelForkAndJoinThroughEngineTasks() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/parallel-fork-join.apl.yaml");
+
+            var instance = engine.startProcess("parallel_fork_join", "alice", Map.of());
+            var externalTaskService = context.getBean(ExternalTaskCommandService.class);
+
+            // The fork created one durable job per branch, before the join runs.
+            var creditJob = externalTaskService.fetchAndLock(new FetchAndLockRequest(
+                    "worker-1", List.of("abada:credit-check"), 10_000L));
+            var fraudJob = externalTaskService.fetchAndLock(new FetchAndLockRequest(
+                    "worker-1", List.of("abada:fraud-check"), 10_000L));
+            assertThat(creditJob).singleElement().satisfies(job ->
+                    assertThat(job.activityId()).isEqualTo("creditDesk"));
+            assertThat(fraudJob).singleElement().satisfies(job ->
+                    assertThat(job.activityId()).isEqualTo("fraudDesk"));
+
+            // Completing a single branch does not satisfy the join: the stream
+            // must not advance to the archive job yet.
+            externalTaskService.complete(creditJob.getFirst().id(), Map.of("credit", "clear"));
+            assertThat(engine.getProcessInstanceById(instance.getId()).isCompleted()).isFalse();
+            assertThat(externalTaskService.fetchAndLock(new FetchAndLockRequest(
+                    "worker-1", List.of("abada:archive"), 10_000L))).isEmpty();
+
+            // Once the second branch arrives, the join releases the stream.
+            externalTaskService.complete(fraudJob.getFirst().id(), Map.of("fraud", "clear"));
+            var archiveJob = externalTaskService.fetchAndLock(new FetchAndLockRequest(
+                    "worker-1", List.of("abada:archive"), 10_000L));
+            assertThat(archiveJob).singleElement().satisfies(job ->
+                    assertThat(job.activityId()).isEqualTo("archive"));
+            externalTaskService.complete(archiveJob.getFirst().id(), Map.of("archived", true));
+
+            assertThat(engine.getProcessInstanceById(instance.getId()).isCompleted()).isTrue();
+            assertThat(engine.getProcessInstanceById(instance.getId()).getVariables())
+                    .containsEntry("credit", "clear")
+                    .containsEntry("fraud", "clear")
+                    .containsEntry("archived", true);
+        }
+    }
+
+    @Test
+    void recoversParallelJoinStateAcrossApplicationRestart() {
+        String instanceId;
+        try (ConfigurableApplicationContext first = startApplication()) {
+            first.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = first.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/parallel-fork-join.apl.yaml");
+            instanceId = engine.startProcess("parallel_fork_join", "alice", Map.of()).getId();
+
+            // Complete exactly one branch; the join token for the second branch
+            // must survive the restart.
+            var externalTaskService = first.getBean(ExternalTaskCommandService.class);
+            var branchJobs = externalTaskService.fetchAndLock(new FetchAndLockRequest(
+                    "worker-1", List.of("abada:credit-check", "abada:fraud-check"), 10_000L));
+            var creditJob = branchJobs.stream()
+                    .filter(job -> job.activityId().equals("creditDesk"))
+                    .findFirst().orElseThrow();
+            externalTaskService.complete(creditJob.id(), Map.of("credit", "clear"));
+        }
+
+        try (ConfigurableApplicationContext restarted = startApplication()) {
+            assertThat(restarted.getBean(ProcessDefinitionRepository.class)
+                    .findFirstByProcessKeyOrderByVersionDesc("parallel_fork_join"))
+                    .isPresent()
+                    .get()
+                    .extracting(ProcessDefinitionEntity::getSchemaType)
+                    .isEqualTo(DefinitionSchema.APL_NATIVE.name());
+
+            AbadaEngine engine = restarted.getBean(AbadaEngine.class);
+            var instance = engine.getProcessInstanceById(instanceId);
+            assertThat(instance.isCompleted()).isFalse();
+
+            // The join's arrived-token bookkeeping persisted: only the fraud
+            // branch is still pending, the consumed credit job is not replayed.
+            var externalTaskService = restarted.getBean(ExternalTaskCommandService.class);
+            var pending = externalTaskService.fetchAndLock(new FetchAndLockRequest(
+                    "worker-1", List.of("abada:fraud-check", "abada:archive"), 10_000L));
+            assertThat(pending).singleElement().satisfies(job ->
+                    assertThat(job.activityId()).isEqualTo("fraudDesk"));
+            externalTaskService.complete(pending.getFirst().id(), Map.of("fraud", "clear"));
+
+            var archiveJob = externalTaskService.fetchAndLock(new FetchAndLockRequest(
+                    "worker-1", List.of("abada:archive"), 10_000L));
+            assertThat(archiveJob).singleElement().satisfies(job ->
+                    assertThat(job.activityId()).isEqualTo("archive"));
+            externalTaskService.complete(archiveJob.getFirst().id(), Map.of("archived", true));
+
+            assertThat(engine.getProcessInstanceById(instanceId).isCompleted()).isTrue();
         }
     }
 

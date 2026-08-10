@@ -240,6 +240,10 @@ is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
   `decision-table` and `condition` nodes 1:1 into the canonical executable
   graph; the last condition rule becomes the default flow when no `else` rule
   is declared.
+- [x] Compile APL `parallel` nodes (fork via `branches`, join via converging
+  `next` flows) onto the runtime parallel gateway with durable join-token
+  bookkeeping; Studio transpiles `bpmn:parallelGateway` imports into `parallel`
+  nodes and its palette authoring exposes every APL node kind.
 - [x] Reject unsupported APL constructs at deployment (unknown node types,
   cycles, duplicate `else` rules, missing `metadata.name`/`flow.entry`,
   undeclared routing targets, more than one webhook entry).
