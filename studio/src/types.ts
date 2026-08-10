@@ -108,6 +108,9 @@ export interface WorkflowFile {
   documentId?: string;
   revision?: number;
   description?: string;
+  /** Project file-tree location: target folder id and file name. */
+  folderId?: string;
+  fileName?: string;
 }
 
 export const LANGUAGE_VERSION_ABADA_IO_V1 = 'abada.io/v1';

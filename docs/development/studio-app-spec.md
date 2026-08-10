@@ -155,11 +155,49 @@ Part 1 of the 1.1 execution plan (`docs/conductor/abada-execution-plan.md`):
   the engine task name (the BPMN `userTask` name = the node **description**)
   against human nodes.
 
+### Phase 5 — Studio: project file tree
+
+The second part of the 1.1 execution plan
+(`docs/conductor/abada-execution-plan.md`): the project became an IDE-like
+workspace with folders and typed files.
+
+- **Engine file tree.** New `project_folders` and `project_resources` tables
+  (migration `V13`); process documents gain an optional `folder_id` and a
+  display `file_name` decoupled from the immutable `metadata.key` and APL name.
+  New projects are seeded with `processes/`, `forms/` and `resources/` root
+  folders. A `GET /v1/projects/{projectId}/tree` endpoint assembles a recursive
+  folder/document/resource tree with breadcrumb `path`s.
+- **Folder semantics.** Folder names are unique per parent (root uniqueness is
+  service-enforced); rename, move with parent-cycle rejection, and delete are
+  available. Deleting a folder **archives** every contained process document
+  (deployments and instances stay immutable) while its generic files are
+  physically removed — documents are never hard-deleted.
+- **Typed resources.** Generic files (`FORM | RESOURCE`) hold arbitrary
+  content (BYTEA) with content type, size, SHA-256, optimistic revision and
+  JSON-base64 upload/replace/download endpoints.
+- **Root targeting.** Because JSON `null` cannot express "no parent", the
+  Studio sends the empty string as the root sentinel; the engine normalizes
+  blank parent/folder identifiers to `null`.
+- **Studio Project Explorer.** The Sidebar **Processes** tab renders the
+  backend tree (`components/ProjectExplorer.tsx`): expandable folders,
+  documents and resources with hover row actions (rename inline, move to a
+  folder, archive, delete), a folder/clone picker for moves, folder creation
+  inline, per-folder file import, a resource preview modal with replace
+  content/download, and an Unsaved Drafts section for local files that have
+  not yet been persisted by autosave.
+- **New process targeting.** The New Process dialog now includes a **Target
+  Folder** picker (defaulting to `processes/`); the chosen `folderId` is
+  carried on the draft so project autosave persists the document into the
+  selected folder.
+- The explorer replaces the flat workflow-file list; every tree document is
+  APL-native (`.apl.yaml`), so the Phase 4 per-row format pill no longer
+  applies there — the key/`processKey` invariant is enforced by the backend.
+
 ### Current checkpoint evidence
 
 | Verification | Result |
 | --- | --- |
-| `./mvnw test` (Engine) | 218 tests, 0 failures or errors, PostgreSQL/Testcontainers included |
+| `./mvnw test` (Engine) | 235 tests, 0 failures or errors, PostgreSQL/Testcontainers included |
 | `npm run lint` + `npm run build` (Studio) | 0 errors |
 | Anonymous Studio session | Sign-in surface only; no project dialog or unauthorized project discovery |
 | Alice development session | project Instances load without 403; exact deployed definition opens read-only |
@@ -181,9 +219,12 @@ Part 1 of the 1.1 execution plan (`docs/conductor/abada-execution-plan.md`):
 - Node types serialize directly to native APL constructs:
   - start and end `event` nodes → APL `webhook` and `end` nodes
   - `agent` → APL `agent` with the versioned `abada.agent/v1` worker contract
+  - `engine-task` → APL `engine-task` on the declared service topic
   - `human` → APL `approval-gate`
   - `dmn` → APL `decision-table` with deterministic rules and fallback
-  - `gateway` → APL `condition` with labeled branches
+  - `gateway` with exclusive subtype → APL `condition` with labeled branches
+  - `gateway` with parallel subtype → APL `parallel` (connecting ≥2 outgoing
+    edges emits `branches`; a single outgoing edge makes it the join's `next`)
 - Canvas node badges reflect **real run state only**: `idle`, `running`,
   `completed`, `failed`, `waiting` — applied from engine facts after a live
   run; sample workflows no longer carry hardcoded statuses.
@@ -295,6 +336,39 @@ validated deterministic local starter with a visible fallback label.
 - The empty canvas exposes visual, YAML and prompt entry points directly; the
   node palette remains available for incremental visual authoring.
 
+### 10. Project file tree (IDE-like workspace)
+
+**Surface:** the Sidebar **Processes** tab (`ProjectExplorer.tsx`, driven by
+`ProjectAPI.tree`).
+
+- **Content model.** Each project has root folders `processes/`, `forms/` and
+  `resources/` at creation. A tree node is a `FOLDER`, a `DOCUMENT` (project
+  APL process document) or a `RESOURCE` (generic typed file). Nodes carry a
+  breadcrumb `path`; documents display their file name (`fileName` or the
+  derived `<name>.apl.yaml`).
+- **Folders.** Created inline; renamed in place; moved to another folder or
+  back to the root; deleted with a confirmation dialog. Deleting archives all
+  contained process documents (kept for deployed instances) and permanently
+  removes generic files and sub-folders.
+- **Documents.** Clicking opens the process in the designer. Row actions:
+  rename file (`PATCH /documents/{id}`), move to folder, archive
+  (`POST /documents/{id}/archive`). Archived documents disappear from the
+  tree and are read-only server-side.
+- **Resources.** Imported per folder (or at root) with a name, `FORM |
+  RESOURCE` kind and content type; previewed in a modal (text decode for
+  text/JSON/YAML/XML/CSV, download otherwise); content replaceable with
+  optimistic revision; rename/move/delete available.
+- **Drafts.** Unsaved local canvases appear in an **Unsaved Drafts** section
+  until autosave persists them; the tree refresh key is bumped by App whenever
+  a document is created or saved so the explorer stays server-authoritative.
+
+### Empty projects without the seeded folders
+
+Projects created before the file-tree migration have no seeded folders; the
+tree renders their root-level documents and resources directly, and the New
+Process dialog's folder picker offers only "Project root" until a folder is
+created.
+
 ---
 
 ## Technical implementation
@@ -305,7 +379,8 @@ validated deterministic local starter with a visible fallback label.
 src/
 ├── api/
 │   ├── engine.ts        # EngineAPI client (deploy, start, instance, tasks, definitions)
-│   └── authoring.ts     # Project-scoped NL → validated APL candidate
+│   ├── authoring.ts     # Project-scoped NL → validated APL candidate
+│   └── projects.ts      # ProjectAPI client (tree, folders, resources, documents, members)
 ├── auth/
 │   └── keycloakClient.ts# OIDC (Keycloak) init, token, getUserFromToken
 ├── config/
@@ -329,9 +404,10 @@ src/
 │   ├── bpmn/            # compiler.ts (APL → BPMN), transpiler.ts (BPMN → APL)
 │   └── run/liveRun.ts   # payload defaults and engine-fact canvas overlays
 ├── components/          # Header (icon-only secondary actions, clean name +
-│                        #   tooltips), Sidebar, PropertiesInspector,
-│                        #   SimulationPanel, NLInputBar (prompt dock, NL-only),
-│                        #   NewWorkflowModal, ProcessDetailsModal, ui (IconButton)
+│                        #   tooltips), Sidebar, ProjectExplorer (file tree),
+│                        #   PropertiesInspector, SimulationPanel, NLInputBar
+│                        #   (prompt dock, NL-only), NewWorkflowModal (folder
+│                        #   target picker), ProcessDetailsModal, ui (IconButton)
 ├── App.tsx              # state hub: Dry Run, Deploy & Start, live inspection, authoring
 └── types.ts             # WorkflowFile, WorkflowNode, SimulationLog, ...
 ```
@@ -350,6 +426,10 @@ src/
 | `getTasks(status?)` | `GET /v1/tasks?status=` | waiting-task detection |
 | `completeTask(id, vars)` | `POST /v1/tasks/{id}/complete` | human-in-the-loop |
 | `failInstance(id)` | `POST /v1/processes/instance/{id}/fail` | incident handling |
+| `tree(projectId)` | `GET /v1/projects/{id}/tree` | project file tree |
+| `createFolder / renameFolder / moveFolder / deleteFolder` | `/v1/projects/{id}/folders…` | folder CRUD (empty string = root) |
+| `createResource / getResource / replaceResource / renameResource / moveResource / deleteResource` | `/v1/projects/{id}/resources…` | typed file lifecycle (base64) |
+| `renameDocument / moveDocument / archiveDocument` | `/v1/projects/{id}/documents/{docId}…` | file name, folder, archive |
 
 ### Authentication
 

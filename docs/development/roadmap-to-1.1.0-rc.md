@@ -126,6 +126,11 @@ locally, while every live execution is an explicit, durable engine action.
   global worker authority and an explicit project/topic binding.
 - [x] Add Studio **New project**, **Open project**, project switching, multiple
   process documents and Owner-managed roles/review lanes.
+- [x] Add the project file tree: seeded `processes/`, `forms/`, `resources/`
+  root folders, generic typed files (`FORM | RESOURCE`) with SHA-256 and
+  optimistic revisions, folder rename/move (cycle-safe) and archive-on-delete
+  folder semantics, plus the Studio Project Explorer and a folder target for
+  the New Process dialog.
 - [ ] Add PostgreSQL multi-project contention and negative-authorization
   evidence for every job/incident query, plus a project model for any future
   outbox administration surface, before declaring full operator-console

@@ -103,6 +103,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | undefined>();
   const [showProjects, setShowProjects] = useState(false);
+  const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const persistedFingerprint = useRef(new Map<string, string>());
   const failedAutosaveFingerprint = useRef(new Map<string, string>());
   const persistedProcessKeys = useRef(new Map<string, string>());
@@ -147,6 +148,7 @@ export default function App() {
       setSelectedNodeId(null);
     }
     setDesignerMode('diagram');
+    setTreeRefreshKey((value) => value + 1);
   };
 
   useEffect(() => {
@@ -178,7 +180,8 @@ export default function App() {
       if (!currentWorkflow.documentId) creatingWorkflowIds.current.add(currentWorkflow.id);
       const save = currentWorkflow.documentId
         ? ProjectAPI.saveDocument(activeProject.id, workflowToSave)
-        : ProjectAPI.createDocument(activeProject.id, workflowToSave, workflowToSave.description || '');
+        : ProjectAPI.createDocument(activeProject.id, workflowToSave, workflowToSave.description || '',
+            { folderId: workflowToSave.folderId ?? null, fileName: workflowToSave.fileName ?? null });
       save.then((saved) => {
         const persistedId = saved.id;
         persistedFingerprint.current.set(persistedId, fingerprint);
@@ -190,6 +193,7 @@ export default function App() {
         if (!currentWorkflow.documentId) {
           setActiveWorkflowId((id) => id === currentWorkflow.id ? persistedId : id);
         }
+        setTreeRefreshKey((value) => value + 1);
       }).catch((reason) => {
         failedAutosaveFingerprint.current.set(currentWorkflow.id, fingerprint);
         setSimulationLogs((logs) => [...logs, {
@@ -589,13 +593,16 @@ export default function App() {
         const saved = currentWorkflow.documentId
           ? await ProjectAPI.saveDocument(activeProject.id, currentWorkflow)
           : await ProjectAPI.createDocument(activeProject.id, currentWorkflow,
-              currentWorkflow.description || '');
+              currentWorkflow.description || '',
+              { folderId: currentWorkflow.folderId ?? null,
+                fileName: currentWorkflow.fileName ?? null });
         deployWorkflow = { ...currentWorkflow, id: saved.id, documentId: saved.id,
           revision: saved.revision, updatedAt: saved.updatedAt };
         persistedFingerprint.current.set(deployWorkflow.id, workflowFingerprint(deployWorkflow));
         setWorkflows((items) => items.map((item) => item.id === currentWorkflow.id
           ? deployWorkflow : item));
         if (wasDraft) setActiveWorkflowId(saved.id);
+        setTreeRefreshKey((value) => value + 1);
       }
       const response = activeProject
         ? await ProjectAPI.deployDocument(activeProject.id, deployWorkflow)
@@ -729,14 +736,52 @@ export default function App() {
   };
 
   // Create Custom Workflow File
-  const handleCreateNewWorkflow = (name: string, category: WorkflowFile['category']) => {
+  const handleCreateNewWorkflow = (name: string, category: WorkflowFile['category'], folderId?: string) => {
     const processKey = name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
     const draft = createEmptyWorkflow(`draft-${Date.now()}`, name, processKey, category);
+    if (folderId) draft.folderId = folderId;
+    draft.fileName = name;
     setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
     setAuthoringCandidate(null);
     setActiveWorkflowId(draft.id);
     setSelectedNodeId(null);
     setDesignerMode('diagram');
+  };
+
+  // Adopt a process document fetched from the backend that is not part of the
+  // locally loaded workflow set (e.g. opened from the project file tree).
+  const handleActivateDocument = (workflow: WorkflowFile) => {
+    if (!workflow.documentId) {
+      setActiveWorkflowId(workflow.id);
+      return;
+    }
+    setWorkflows((prev) => {
+      const existing = prev.some((item) => item.documentId === workflow.documentId);
+      return existing ? prev : [workflow, ...prev];
+    });
+    setAuthoringCandidate(null);
+    setSelectedLiveInstance(null);
+    setLiveWorkflow(null);
+    setActiveLiveNodeIds([]);
+    setExecutionStatuses({});
+    setActiveWorkflowId(workflow.id);
+    setSelectedNodeId(workflow.nodes[0]?.id || null);
+    setDesignerMode('diagram');
+  };
+
+  // Drop a document that was archived or deleted server-side from the local
+  // workflow set, switching away from it when it was active.
+  const handleRemoveDocument = (documentId: string) => {
+    const wasActive = workflows.find((item) => item.id === activeWorkflowId)?.documentId === documentId;
+    const remaining = workflows.filter((item) => item.documentId !== documentId);
+    if (wasActive) {
+      const nextActive = remaining.find((item) => !item.id.startsWith('draft-')) ?? remaining[0];
+      if (nextActive) {
+        setActiveWorkflowId(nextActive.id);
+        setSelectedNodeId(nextActive.nodes[0]?.id || null);
+      }
+    }
+    setWorkflows(remaining);
   };
 
   return (
@@ -782,6 +827,8 @@ export default function App() {
               const wf = workflows.find((w) => w.id === id);
               if (wf && wf.nodes.length > 0) setSelectedNodeId(wf.nodes[0].id);
             }}
+            onActivateWorkflow={handleActivateDocument}
+            onRemoveDocument={handleRemoveDocument}
             onAddNode={handleAddNode}
             onNewWorkflowModal={() => setIsNewModalOpen(true)}
             projectId={activeProject?.id}
@@ -798,6 +845,7 @@ export default function App() {
             selectedInstanceId={selectedLiveInstance?.id}
             onSelectInstance={(instance) => void openLiveInstance(instance)}
             instancesRefreshKey={instancesRefreshKey}
+            treeRefreshKey={treeRefreshKey}
           />
         )}
 
@@ -922,6 +970,7 @@ export default function App() {
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
         onCreateWorkflow={handleCreateNewWorkflow}
+        projectId={activeProject?.id}
       />
 
       <ProjectDialog isOpen={showProjects} projects={projects} activeProject={activeProject}

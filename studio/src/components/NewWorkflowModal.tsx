@@ -1,20 +1,40 @@
-import React, { useState } from 'react';
-import { X, Sparkles, Plus, Layers, CheckCircle } from 'lucide-react';
-import { WorkflowFile } from '@/types';
+import React, { useEffect, useState } from 'react';
+import { X, Plus, FolderTree } from 'lucide-react';
+import { ProjectAPI, ProjectTreeNode, flattenTreeFolders } from '@/api/projects';
 
 interface NewWorkflowModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateWorkflow: (name: string, category: 'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom') => void;
+  onCreateWorkflow: (name: string, category: 'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom', folderId?: string) => void;
+  projectId?: string;
 }
 
 export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
   isOpen,
   onClose,
   onCreateWorkflow,
+  projectId,
 }) => {
   const [fileName, setFileName] = useState<string>('');
   const [category, setCategory] = useState<'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom'>('finance');
+  const [folders, setFolders] = useState<{ folder: ProjectTreeNode; path: string }[]>([]);
+  const [folderId, setFolderId] = useState<string>('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setFileName('');
+    setFolderId('');
+    if (!projectId) return;
+    ProjectAPI.tree(projectId)
+      .then((tree) => {
+        const available = flattenTreeFolders(tree);
+        setFolders(available);
+        const processes = available.find((entry) => entry.path === 'processes');
+        const defaultsTo = processes?.folder.id ?? available[0]?.folder.id ?? '';
+        setFolderId(defaultsTo);
+      })
+      .catch(() => setFolders([]));
+  }, [isOpen, projectId]);
 
   if (!isOpen) return null;
 
@@ -24,8 +44,7 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
     const finalName = fileName.endsWith('.apl.yaml') || fileName.endsWith('.bpmn')
       ? fileName
       : `${fileName}.apl.yaml`;
-    onCreateWorkflow(finalName, category);
-    setFileName('');
+    onCreateWorkflow(finalName, category, folderId || undefined);
     onClose();
   };
 
@@ -69,6 +88,27 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
               <option value="custom">Custom Enterprise Process</option>
             </select>
           </div>
+
+          {folderId !== undefined && (
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block font-medium">Target Folder</label>
+              <div className="relative">
+                <FolderTree className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A89F91]" />
+                <select
+                  value={folderId}
+                  onChange={(e) => setFolderId(e.target.value)}
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+                >
+                  <option value="">Project root</option>
+                  {folders.map((entry) => (
+                    <option key={entry.folder.id} value={entry.folder.id}>
+                      {entry.path}/
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           <div className="pt-2 flex justify-end space-x-2">
             <button

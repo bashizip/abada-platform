@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { 
   Folder, 
-  FileText, 
-  Plus, 
   Bot, 
   UserCheck, 
   GitFork, 
+  GitMerge,
   SlidersHorizontal, 
   PlayCircle, 
   ChevronRight, 
@@ -13,19 +12,24 @@ import {
   Sparkles,
   Layers,
   Table,
-  Circle,
+  Zap,
+  CirclePlay,
+  Flag,
   HelpCircle,
   Activity,
   RotateCcw
 } from 'lucide-react';
-import { WorkflowFile, NodeType, getFileFormatLabel, getRuntimeStatusTag } from '@/types';
+import { WorkflowFile, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
+import { ProjectExplorer } from '@/components/ProjectExplorer';
 
 interface SidebarProps {
   workflows: WorkflowFile[];
   activeWorkflowId: string;
   onSelectWorkflow: (id: string) => void;
-  onAddNode: (type: NodeType) => void;
+  onActivateWorkflow: (workflow: WorkflowFile) => void;
+  onRemoveDocument: (documentId: string) => void;
+  onAddNode: (type: NodeType, subtype?: EventSubtype | GatewaySubtype) => void;
   onNewWorkflowModal: () => void;
   projectId?: string;
   activeTab: 'files' | 'palette' | 'instances';
@@ -33,12 +37,15 @@ interface SidebarProps {
   selectedInstanceId?: string;
   onSelectInstance: (instance: ProcessInstanceDTO) => void;
   instancesRefreshKey?: number;
+  treeRefreshKey?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   workflows,
   activeWorkflowId,
   onSelectWorkflow,
+  onActivateWorkflow,
+  onRemoveDocument,
   onAddNode,
   onNewWorkflowModal,
   projectId,
@@ -47,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedInstanceId,
   onSelectInstance,
   instancesRefreshKey = 0,
+  treeRefreshKey = 0,
 }) => {
   const [expandedFolder, setExpandedFolder] = useState<string>('all');
   
@@ -65,6 +73,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const paletteItems: {
     type: NodeType;
+    subtype?: EventSubtype | GatewaySubtype;
+    group: string;
     title: string;
     description: string;
     icon: React.ElementType;
@@ -74,7 +84,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
     glowClass?: string;
   }[] = [
     {
+      type: 'event',
+      subtype: 'start',
+      group: 'Events',
+      title: 'Start Event',
+      description: 'Webhook trigger that begins the APL process',
+      icon: CirclePlay,
+      color: '#F4A261',
+      bgColor: 'bg-[#F4A261]/10',
+      borderColor: 'border-[#F4A261]/40',
+    },
+    {
+      type: 'event',
+      subtype: 'end',
+      group: 'Events',
+      title: 'End Event',
+      description: 'Terminal node — workflow completion',
+      icon: Flag,
+      color: '#F4A261',
+      bgColor: 'bg-[#F4A261]/10',
+      borderColor: 'border-[#F4A261]/40',
+    },
+    {
       type: 'agent',
+      group: 'Activities',
       title: 'AI Agent Node',
       description: 'Autonomous LLM processing with confidence thresholds',
       icon: Bot,
@@ -84,9 +117,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       glowClass: 'glow-amethyst-subtle',
     },
     {
+      type: 'engine-task',
+      group: 'Activities',
+      title: 'Engine Task',
+      description: 'Durable external job on a declared service topic',
+      icon: Zap,
+      color: '#90A955',
+      bgColor: 'bg-[#90A955]/10',
+      borderColor: 'border-[#90A955]/40',
+    },
+    {
       type: 'human',
-      title: 'Human Task Node',
-      description: 'Escalation review, manual approval & SLA timer',
+      group: 'Activities',
+      title: 'Approval Gate',
+      description: 'Human review, escalation & SLA timer',
       icon: UserCheck,
       color: '#E76F51',
       bgColor: 'bg-[#E76F51]/10',
@@ -94,6 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       type: 'dmn',
+      group: 'Decisions & Routing',
       title: 'DMN Rule Table',
       description: 'Declarative policy decision matrix & hit rules',
       icon: Table,
@@ -103,18 +148,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       type: 'gateway',
+      subtype: 'exclusive',
+      group: 'Decisions & Routing',
       title: 'Exclusive Gateway',
-      description: 'Logic branch based on agent output or risk score',
+      description: 'Conditional branch on instance variables',
       icon: GitFork,
       color: '#F4A261',
       bgColor: 'bg-[#F4A261]/10',
       borderColor: 'border-[#F4A261]/40',
     },
     {
-      type: 'event',
-      title: 'Start / End Event',
-      description: 'Webhook trigger, timer or workflow completion',
-      icon: Circle,
+      type: 'gateway',
+      subtype: 'parallel',
+      group: 'Decisions & Routing',
+      title: 'Parallel Gateway',
+      description: 'Fork every branch concurrently, join on all arrivals',
+      icon: GitMerge,
       color: '#F4A261',
       bgColor: 'bg-[#F4A261]/10',
       borderColor: 'border-[#F4A261]/40',
@@ -163,63 +212,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Files Navigator Tab */}
       {activeTab === 'files' && (
         <div className="flex-1 overflow-y-auto p-3 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase">
-              Workflow Files
-            </span>
-            <button
-              onClick={onNewWorkflowModal}
-              className="text-xs text-[#F4A261] hover:text-[#f5ad73] p-1 rounded hover:bg-[#1A1614] transition-all flex items-center gap-1"
-              title="Add New Process File"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="space-y-1">
-            {workflows.map((wf) => {
-              const isActive = wf.id === activeWorkflowId;
-              return (
-                <button
-                  key={wf.id}
-                  onClick={() => onSelectWorkflow(wf.id)}
-                  className={`w-full text-left p-2.5 rounded-xl border transition-all group flex items-start gap-2.5 ${
-                    isActive
-                      ? 'bg-[#1A1614] border-[#F4A261]/50 text-[#EAE3D9] shadow-warm-md'
-                      : 'bg-[#25201D] hover:bg-[#2F2926] border-[#3A322E] text-[#A89F91] hover:text-[#EAE3D9]'
-                  }`}
-                >
-                  <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${isActive ? 'text-[#F4A261]' : 'text-[#A89F91]'}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium truncate group-hover:text-[#EAE3D9]">
-                        {wf.name}
-                      </span>
-                      {isActive && (
-                        <span className="w-2 h-2 rounded-full bg-[#F4A261] shrink-0" />
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between mt-1 text-[10px] text-[#A89F91]">
-                      <span className="capitalize flex items-center gap-1.5">
-                        <span className="capitalize">{wf.category}</span>
-                        <span
-                          className={`font-mono px-1 py-px rounded border ${
-                            getRuntimeStatusTag(wf.fileType) === 'APL Native'
-                              ? 'text-[#2A9D8F] border-[#2A9D8F]/30 bg-[#2A9D8F]/10'
-                              : 'text-[#F4A261] border-[#F4A261]/30 bg-[#F4A261]/10'
-                          }`}
-                          title={getRuntimeStatusTag(wf.fileType)}
-                        >
-                          {getFileFormatLabel(wf.fileType)}
-                        </span>
-                      </span>
-                      <span>v{wf.version}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          {projectId ? (
+            <ProjectExplorer
+              projectId={projectId}
+              activeWorkflowId={activeWorkflowId}
+              workflows={workflows}
+              onSelectWorkflow={onSelectWorkflow}
+              onActivateWorkflow={onActivateWorkflow}
+              onRemoveDocument={onRemoveDocument}
+              onNewWorkflow={onNewWorkflowModal}
+              refreshKey={treeRefreshKey}
+            />
+          ) : (
+            <div className="text-xs text-[#A89F91] text-center p-4 bg-[#1A1614] rounded-xl border border-[#3A322E]">
+              Open a project to browse its files.
+            </div>
+          )}
 
           <div className="pt-3 border-t border-[#3A322E]">
             <span className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase block mb-2">
@@ -247,33 +255,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {activeTab === 'palette' && (
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           <div className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase mb-1">
-            Click to Add Node
+            APL Node Palette
           </div>
 
           {paletteItems.map((item) => {
             const IconComponent = item.icon;
+            const previousItem = paletteItems[paletteItems.indexOf(item) - 1];
             return (
-              <button
-                type="button"
-                key={item.type}
-                onClick={() => onAddNode(item.type)}
-                className={`w-full text-left p-3 rounded-xl border ${item.borderColor} ${item.bgColor} hover:scale-[1.02] cursor-pointer transition-all ${item.glowClass || ''} group`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div
-                    className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${item.color}20`, color: item.color }}
-                  >
-                    <IconComponent className="w-3.5 h-3.5" />
+              <React.Fragment key={`${item.type}-${item.subtype || ''}`}>
+                {(!previousItem || previousItem.group !== item.group) && (
+                  <div className="text-[10px] font-semibold tracking-wider text-[#A89F91]/80 uppercase pt-2 first:pt-0">
+                    {item.group}
                   </div>
-                  <span className="text-xs font-semibold text-[#EAE3D9] group-hover:text-white">
-                    {item.title}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#A89F91] leading-relaxed">
-                  {item.description}
-                </p>
-              </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onAddNode(item.type, item.subtype)}
+                  className={`w-full text-left p-3 rounded-xl border ${item.borderColor} ${item.bgColor} hover:scale-[1.02] cursor-pointer transition-all ${item.glowClass || ''} group`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div
+                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                    >
+                      <IconComponent className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-semibold text-[#EAE3D9] group-hover:text-white">
+                      {item.title}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#A89F91] leading-relaxed">
+                    {item.description}
+                  </p>
+                </button>
+              </React.Fragment>
             );
           })}
         </div>

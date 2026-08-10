@@ -40,7 +40,66 @@ export interface ProjectDocument {
   revision: number;
   updatedAt: string;
   lastDeploymentId?: string;
+  folderId?: string | null;
+  fileName?: string | null;
 }
+
+export type ResourceKind = 'FORM' | 'RESOURCE';
+
+export interface ProjectFolder {
+  id: string;
+  projectId: string;
+  parentId: string | null;
+  name: string;
+  path: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectResource {
+  id: string;
+  projectId: string;
+  folderId: string | null;
+  name: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  kind: ResourceKind;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectResourceContent extends ProjectResource {
+  contentBase64: string;
+}
+
+export type ProjectTreeNodeKind = 'FOLDER' | 'DOCUMENT' | 'RESOURCE';
+
+export interface ProjectTreeNode {
+  id: string;
+  kind: ProjectTreeNodeKind;
+  name: string;
+  fileName: string | null;
+  processKey: string | null;
+  contentType: string | null;
+  status: string | null;
+  path: string;
+  revision: number;
+  children: ProjectTreeNode[];
+}
+
+/** Flattens a tree into folder entries with their breadcrumb paths. */
+export const flattenTreeFolders = (nodes: ProjectTreeNode[],
+  path: string[] = [], out: { folder: ProjectTreeNode; path: string }[] = []): { folder: ProjectTreeNode; path: string }[] => {
+  for (const node of nodes) {
+    if (node.kind !== 'FOLDER') continue;
+    out.push({ folder: node, path: [...path, node.name].join('/') });
+    flattenTreeFolders(node.children, [...path, node.name], out);
+  }
+  return out;
+};
 
 const headers = (json = true): HeadersInit => ({
   ...(json ? { 'Content-Type': 'application/json' } : {}),
@@ -49,6 +108,10 @@ const headers = (json = true): HeadersInit => ({
 const checked = async <T>(response: Response): Promise<T> => {
   if (!response.ok) throw await apiError(response);
   return response.json();
+};
+
+const checkedVoid = async (response: Response): Promise<void> => {
+  if (!response.ok) throw await apiError(response);
 };
 
 export class ProjectAPI {
@@ -68,11 +131,83 @@ export class ProjectAPI {
       .then(checked<ProjectDocument[]>);
   }
 
+  static tree(projectId: string): Promise<ProjectTreeNode[]> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/tree`, { headers: headers() })
+      .then(checked<ProjectTreeNode[]>);
+  }
+
+  static createFolder(projectId: string, name: string, parentId: string | null = null): Promise<ProjectFolder> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/folders`, { method: 'POST', headers: headers(),
+      body: JSON.stringify({ name, parentId: parentId ?? '' }) })
+      .then(checked<ProjectFolder>);
+  }
+
+  static renameFolder(projectId: string, folderId: string, name: string): Promise<ProjectFolder> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/folders/${folderId}`, {
+      method: 'PATCH', headers: headers(), body: JSON.stringify({ expectedRevision: -1, name }) })
+      .then(checked<ProjectFolder>);
+  }
+
+  static moveFolder(projectId: string, folderId: string, parentId: string | null,
+    revision: number): Promise<ProjectFolder> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/folders/${folderId}`, {
+      method: 'PATCH', headers: headers(), body: JSON.stringify({ expectedRevision: revision,
+        parentId: parentId ?? '' }) })
+      .then(checked<ProjectFolder>);
+  }
+
+  static deleteFolder(projectId: string, folderId: string): Promise<void> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/folders/${folderId}`, { method: 'DELETE' })
+      .then(checkedVoid);
+  }
+
+  static createResource(projectId: string, name: string, kind: ResourceKind,
+    contentType: string, contentBase64: string,
+    folderId: string | null = null): Promise<ProjectResource> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/resources`, { method: 'POST', headers: headers(),
+      body: JSON.stringify({ name, kind, contentType, contentBase64, folderId: folderId ?? '' }) })
+      .then(checked<ProjectResource>);
+  }
+
+  static getResource(projectId: string, resourceId: string): Promise<ProjectResourceContent> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/resources/${resourceId}`, { headers: headers() })
+      .then(checked<ProjectResourceContent>);
+  }
+
+  static replaceResource(projectId: string, resourceId: string, contentType: string,
+    contentBase64: string, expectedRevision: number): Promise<ProjectResource> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/resources/${resourceId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ contentType, contentBase64, expectedRevision }) })
+      .then(checked<ProjectResource>);
+  }
+
+  static renameResource(projectId: string, resourceId: string, name: string,
+    expectedRevision: number): Promise<ProjectResource> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/resources/${resourceId}`, {
+      method: 'PATCH', headers: headers(), body: JSON.stringify({ expectedRevision, name }) })
+      .then(checked<ProjectResource>);
+  }
+
+  static moveResource(projectId: string, resourceId: string, folderId: string | null,
+    expectedRevision: number): Promise<ProjectResource> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/resources/${resourceId}`, {
+      method: 'PATCH', headers: headers(),
+      body: JSON.stringify({ expectedRevision, folderId: folderId ?? '' }) })
+      .then(checked<ProjectResource>);
+  }
+
+  static deleteResource(projectId: string, resourceId: string): Promise<void> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/resources/${resourceId}`, { method: 'DELETE' })
+      .then(checkedVoid);
+  }
+
   static createDocument(projectId: string, workflow: WorkflowFile,
-    description = ''): Promise<ProjectDocument> {
+    description = '', location?: { folderId?: string | null; fileName?: string | null }): Promise<ProjectDocument> {
     const aplSource = stringifyAPLYaml(workflowToAPL(workflow));
     return authenticatedFetch(`${this.BASE}/${projectId}/documents`, { method: 'POST', headers: headers(),
-      body: JSON.stringify({ processKey: workflow.processKey, description, aplSource }) })
+      body: JSON.stringify({ processKey: workflow.processKey, description, aplSource,
+        folderId: location?.folderId ?? null, fileName: location?.fileName ?? null }) })
       .then(checked<ProjectDocument>);
   }
 
@@ -103,6 +238,28 @@ export class ProjectAPI {
     };
   }
 
+  static async renameDocument(projectId: string, documentId: string, fileName: string,
+    expectedRevision: number): Promise<ProjectDocument> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/documents/${documentId}`, {
+      method: 'PATCH', headers: headers(), body: JSON.stringify({ expectedRevision, fileName }) })
+      .then(checked<ProjectDocument>);
+  }
+
+  static async moveDocument(projectId: string, documentId: string, folderId: string | null,
+    expectedRevision: number): Promise<ProjectDocument> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/documents/${documentId}`, {
+      method: 'PATCH', headers: headers(), body: JSON.stringify({ expectedRevision,
+        folderId: folderId ?? '' }) })
+      .then(checked<ProjectDocument>);
+  }
+
+  static async archiveDocument(projectId: string, documentId: string, archived: boolean,
+    expectedRevision: number): Promise<ProjectDocument> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/documents/${documentId}/archive`, {
+      method: 'POST', headers: headers(), body: JSON.stringify({ expectedRevision, archived }) })
+      .then(checked<ProjectDocument>);
+  }
+
   static members(projectId: string): Promise<ProjectMember[]> {
     return authenticatedFetch(`${this.BASE}/${projectId}/members`, { headers: headers() })
       .then(checked<ProjectMember[]>);
@@ -124,6 +281,7 @@ export class ProjectAPI {
     const workflow = aplToWorkflow(parseAPLYaml(document.aplSource));
     return { ...workflow, id: document.id, documentId: document.id,
       processKey: document.processKey, description: document.description,
-      revision: document.revision, updatedAt: document.updatedAt };
+      revision: document.revision, updatedAt: document.updatedAt,
+      folderId: document.folderId ?? undefined, fileName: document.fileName ?? undefined };
   }
 }
