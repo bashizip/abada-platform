@@ -1,0 +1,61 @@
+version: abada.io/v1
+
+metadata:
+  key: lead_triage_demo
+  name: Lead Triage Demo
+  owner: sales-team
+  category: sales
+
+flow:
+  entry: receive-lead
+  nodes:
+    - id: receive-lead
+      type: webhook
+      description: Receive a new sales lead
+      next: analyze-lead
+
+    - id: analyze-lead
+      type: agent
+      description: Classify the lead priority
+      profile: abada.agent/v1
+      model: deepseek/deepseek-v4-flash-free
+      prompt: |
+        Analyze the company size: ${lead.companySize}.
+        Classify the lead priority.
+
+        Return exactly one value:
+        HIGH, MEDIUM, or LOW.
+      result_variable: lead_priority
+      confidence_threshold: 85
+      temperature: 0.1
+      max_attempts: 3
+      retry_backoff_ms: 2000
+      next: check-priority
+
+    - id: check-priority
+      type: condition
+      description: Route the lead according to the classified priority
+      rules:
+        - if: "${lead_priority == 'HIGH'}"
+          then: senior-sales-review
+        - else: standard-workflow
+          then: standard-workflow
+
+    - id: senior-sales-review
+      type: approval-gate
+      description: Senior sales director review
+      assignees:
+        - sales-director
+      mode: serial
+      sla_hours: 24
+      next: end
+
+    - id: standard-workflow
+      type: engine-task
+      description: Trigger the standard CRM sequence
+      service: trigger-crm-sequence
+      next: end
+
+    - id: end
+      type: end
+      description: Lead triage completed
