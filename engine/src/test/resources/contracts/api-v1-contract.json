@@ -34,6 +34,15 @@
     "/v1/external-tasks/{id}/heartbeat": ["post"],
     "/v1/external-tasks/{id}/bpmn-error": ["post"],
     "/v1/projects/{projectId}/authoring/generate": ["post"],
+    "/v1/projects/{projectId}/documents": ["get", "post"],
+    "/v1/projects/{projectId}/documents/{documentId}": ["get", "patch", "put"],
+    "/v1/projects/{projectId}/documents/{documentId}/archive": ["post"],
+    "/v1/projects/{projectId}/documents/{documentId}/deploy": ["post"],
+    "/v1/projects/{projectId}/tree": ["get"],
+    "/v1/projects/{projectId}/folders": ["post"],
+    "/v1/projects/{projectId}/folders/{folderId}": ["patch", "delete"],
+    "/v1/projects/{projectId}/resources": ["post"],
+    "/v1/projects/{projectId}/resources/{resourceId}": ["get", "put", "patch", "delete"],
     "/v1/insight/config/llm": ["get"],
     "/v1/insight/proposals": ["get"],
     "/v1/insight/proposals/{proposalId}": ["get"],
@@ -63,7 +72,10 @@
     "GenerateAplResponse",
     "InsightProposalDetailDTO",
     "InsightReviewRequest",
-    "InsightApprovalPolicyDTO"
+    "InsightApprovalPolicyDTO",
+    "ProjectFolderDTO",
+    "ProjectResourceDTO",
+    "ProjectTreeNodeDTO"
   ],
   "schemaProperties": {
     "ApiError": ["timestamp", "status", "code", "message", "path", "traceId", "details"],
@@ -85,6 +97,9 @@
     "ExternalTaskBpmnErrorRequest": ["workerId", "errorCode", "errorMessage", "variables"],
     "ExtendLockRequest": ["workerId", "lockDuration"],
     "ActivityHistoryDto": ["id", "processInstanceId", "processDefinitionId", "activityId", "eventType", "actor", "occurredAt", "traceId", "details"],
-    "FailedJobDTO": ["jobId", "processInstanceId", "activityId", "exceptionMessage", "retries"]
+    "FailedJobDTO": ["jobId", "processInstanceId", "activityId", "exceptionMessage", "retries"],
+    "ProjectFolderDTO": ["id", "projectId", "parentId", "name", "path", "revision", "system", "createdAt", "updatedAt"],
+    "ProjectResourceDTO": ["id", "projectId", "folderId", "name", "contentType", "sizeBytes", "sha256", "kind", "revision", "createdAt", "updatedAt"],
+    "ProjectTreeNodeDTO": ["id", "kind", "name", "fileName", "processKey", "contentType", "status", "path", "revision", "system", "children"]
   }
 }

@@ -8,7 +8,9 @@ import com.abada.engine.parser.AplParser;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
 import com.abada.engine.persistence.entity.ProjectProcessDocumentEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
+import com.abada.engine.persistence.entity.ProjectFolderEntity;
 import com.abada.engine.persistence.repository.ProjectProcessDocumentRepository;
+import com.abada.engine.persistence.repository.ProjectFolderRepository;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -21,13 +23,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ProjectDocumentService {
     private final ProjectProcessDocumentRepository documents;
+    private final ProjectFolderRepository folders;
     private final ProjectAccessService access;
     private final AbadaEngine engine;
     private final AplParser aplParser = new AplParser();
 
     public ProjectDocumentService(ProjectProcessDocumentRepository documents,
-            ProjectAccessService access, AbadaEngine engine) {
+            ProjectFolderRepository folders, ProjectAccessService access, AbadaEngine engine) {
         this.documents = documents;
+        this.folders = folders;
         this.access = access;
         this.engine = engine;
     }
@@ -48,6 +52,12 @@ public class ProjectDocumentService {
     @Transactional
     public ProjectProcessDocumentEntity create(String projectId, String processKey,
             String description, String aplSource) {
+        return create(projectId, processKey, description, aplSource, null, null);
+    }
+
+    @Transactional
+    public ProjectProcessDocumentEntity create(String projectId, String processKey,
+            String description, String aplSource, String folderId, String fileName) {
         access.requireActive(projectId, Role.MAINTAINER);
         var parsed = parse(aplSource);
         String key = validateKey(processKey);
@@ -59,15 +69,51 @@ public class ProjectDocumentService {
             throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.CONCURRENT_MODIFICATION,
                     "A process document with this key already exists in the project");
         }
+        String folder = ProjectTreeService.nullIfBlank(folderId);
+        if (folder != null) requireFolder(projectId, folder);
+        validateFileName(fileName);
         Instant now = Instant.now();
         ProjectProcessDocumentEntity document = new ProjectProcessDocumentEntity();
         document.setProjectId(projectId);
         document.setProcessKey(key);
+        document.setFolderId(folder);
+        document.setFileName(fileName);
         document.setName(parsed.getName());
         document.setDescription(description == null ? "" : description.strip());
         document.setAplSource(aplSource);
         document.setCreatedAt(now);
         document.setUpdatedAt(now);
+        document.setLastSavedBy(access.identity().username());
+        return documents.save(document);
+    }
+
+    /** Replaces the display file name only; processKey and APL metadata are untouched. */
+    @Transactional
+    public ProjectProcessDocumentEntity rename(String projectId, String documentId,
+            long expectedRevision, String fileName) {
+        access.requireActive(projectId, Role.MAINTAINER);
+        ProjectProcessDocumentEntity document = find(projectId, documentId);
+        requireMutable(document);
+        if (document.getEntityVersion() != expectedRevision) throw conflict();
+        validateFileName(fileName);
+        document.setFileName(fileName);
+        document.setUpdatedAt(Instant.now());
+        document.setLastSavedBy(access.identity().username());
+        return documents.save(document);
+    }
+
+    /** Moves the document into another folder of the same project (null = project root). */
+    @Transactional
+    public ProjectProcessDocumentEntity move(String projectId, String documentId,
+            long expectedRevision, String folderId) {
+        access.requireActive(projectId, Role.MAINTAINER);
+        ProjectProcessDocumentEntity document = find(projectId, documentId);
+        requireMutable(document);
+        if (document.getEntityVersion() != expectedRevision) throw conflict();
+        String folder = ProjectTreeService.nullIfBlank(folderId);
+        if (folder != null) requireFolder(projectId, folder);
+        document.setFolderId(folder);
+        document.setUpdatedAt(Instant.now());
         document.setLastSavedBy(access.identity().username());
         return documents.save(document);
     }
@@ -145,6 +191,29 @@ public class ProjectDocumentService {
         return documents.findByIdAndProjectId(documentId, projectId).orElseThrow(() ->
                 new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                         "Project process document not found"));
+    }
+
+    private ProjectFolderEntity requireFolder(String projectId, String folderId) {
+        return folders.findByIdAndProjectId(folderId, projectId).orElseThrow(() ->
+                new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
+                        "Project folder not found"));
+    }
+
+    private void requireMutable(ProjectProcessDocumentEntity document) {
+        if (document.getStatus() != ProjectProcessDocumentEntity.Status.ACTIVE) {
+            throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.ENGINE_COMMAND_REJECTED,
+                    "Archived process documents are read-only");
+        }
+    }
+
+    private void validateFileName(String fileName) {
+        if (fileName == null) return;
+        String value = fileName.strip();
+        if (value.isBlank() || value.length() > 255 || value.contains("/")
+                || value.equals(".") || value.equals("..")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST,
+                    "File name must contain 1 to 255 characters without '/'");
+        }
     }
 
     private InsightConflictException conflict() {

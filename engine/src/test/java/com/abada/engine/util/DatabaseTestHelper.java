@@ -17,6 +17,8 @@ import com.abada.engine.persistence.repository.TaskRepository;
 import com.abada.engine.persistence.repository.OutboxEventRepository;
 import com.abada.engine.persistence.repository.PrincipalRepository;
 import com.abada.engine.persistence.repository.ProjectMemberRepository;
+import com.abada.engine.persistence.repository.ProjectFolderRepository;
+import com.abada.engine.persistence.repository.ProjectResourceRepository;
 import com.abada.engine.persistence.repository.ProjectProcessDocumentRepository;
 import com.abada.engine.persistence.repository.ProjectRepository;
 import com.abada.engine.persistence.repository.ProjectWorkerBindingRepository;
@@ -43,6 +45,8 @@ public class DatabaseTestHelper {
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ProjectProcessDocumentRepository projectProcessDocumentRepository;
+    private final ProjectFolderRepository projectFolderRepository;
+    private final ProjectResourceRepository projectResourceRepository;
     private final ProjectWorkerBindingRepository projectWorkerBindingRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final PrincipalRepository principalRepository;
@@ -62,6 +66,8 @@ public class DatabaseTestHelper {
             TaskRepository taskRepository, ProcessDefinitionRepository processDefinitionRepository,
             OutboxEventRepository outboxEventRepository,
             ProjectProcessDocumentRepository projectProcessDocumentRepository,
+            ProjectFolderRepository projectFolderRepository,
+            ProjectResourceRepository projectResourceRepository,
             ProjectWorkerBindingRepository projectWorkerBindingRepository,
             ProjectMemberRepository projectMemberRepository, PrincipalRepository principalRepository,
             ProjectRepository projectRepository) {
@@ -81,6 +87,8 @@ public class DatabaseTestHelper {
         this.processDefinitionRepository = processDefinitionRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.projectProcessDocumentRepository = projectProcessDocumentRepository;
+        this.projectFolderRepository = projectFolderRepository;
+        this.projectResourceRepository = projectResourceRepository;
         this.projectWorkerBindingRepository = projectWorkerBindingRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.principalRepository = principalRepository;
@@ -108,8 +116,31 @@ public class DatabaseTestHelper {
         projectWorkerBindingRepository.deleteAll();
         projectMemberRepository.deleteAll();
         principalRepository.deleteAll();
+        projectResourceRepository.deleteAll();
+        deleteFolderTree(projectFolderRepository.findAll());
         projectRepository.findAll().stream()
                 .filter(project -> !ProjectConstants.DEFAULT_PROJECT_ID.equals(project.getId()))
                 .forEach(projectRepository::delete);
+    }
+
+    private void deleteFolderTree(java.util.List<com.abada.engine.persistence.entity.ProjectFolderEntity> folders) {
+        var byId = new java.util.HashMap<String, com.abada.engine.persistence.entity.ProjectFolderEntity>();
+        for (var folder : folders) byId.put(folder.getId(), folder);
+        folders.stream()
+                .sorted(java.util.Comparator.comparingInt(
+                        (com.abada.engine.persistence.entity.ProjectFolderEntity folder) ->
+                                folderDepth(byId, folder)).reversed())
+                .forEach(projectFolderRepository::delete);
+    }
+
+    private int folderDepth(java.util.Map<String, com.abada.engine.persistence.entity.ProjectFolderEntity> byId,
+            com.abada.engine.persistence.entity.ProjectFolderEntity folder) {
+        int depth = 0;
+        while (folder.getParentId() != null) {
+            depth++;
+            folder = byId.get(folder.getParentId());
+            if (folder == null) break;
+        }
+        return depth;
     }
 }

@@ -6,8 +6,10 @@ import com.abada.engine.project.ProjectDocumentService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -20,8 +22,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/v1/projects/{projectId}/documents")
 public class ProjectDocumentController {
-    public record CreateDocumentRequest(String processKey, String description, String aplSource) {}
+    public record CreateDocumentRequest(String processKey, String description, String aplSource,
+            String folderId, String fileName) {}
     public record SaveDocumentRequest(String description, String aplSource) {}
+    public record UpdateDocumentRequest(long expectedRevision, String fileName, String folderId) {}
     public record ArchiveDocumentRequest(long expectedRevision, boolean archived) {}
 
     private final ProjectDocumentService documents;
@@ -42,7 +46,8 @@ public class ProjectDocumentController {
     @PostMapping
     public ResponseEntity<ProjectProcessDocumentDTO> create(@PathVariable String projectId,
             @RequestBody CreateDocumentRequest request) {
-        var created = documents.create(projectId, request.processKey(), request.description(), request.aplSource());
+        var created = documents.create(projectId, request.processKey(), request.description(),
+                request.aplSource(), request.folderId(), request.fileName());
         return withRevision(created);
     }
 
@@ -50,6 +55,25 @@ public class ProjectDocumentController {
     public ResponseEntity<ProjectProcessDocumentDTO> get(@PathVariable String projectId,
             @PathVariable String documentId) {
         return withRevision(documents.get(projectId, documentId));
+    }
+
+    @PatchMapping("/{documentId}")
+    public ResponseEntity<ProjectProcessDocumentDTO> update(@PathVariable String projectId,
+            @PathVariable String documentId, @RequestBody UpdateDocumentRequest request) {
+        if (request.fileName() == null && request.folderId() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST,
+                    "Provide at least one of fileName or folderId");
+        }
+        var document = documents.get(projectId, documentId);
+        if (request.fileName() != null) {
+            document = documents.rename(projectId, documentId, request.expectedRevision(),
+                    request.fileName());
+        }
+        if (request.folderId() != null) {
+            document = documents.move(projectId, documentId, document.getEntityVersion(),
+                    request.folderId());
+        }
+        return withRevision(document);
     }
 
     @PutMapping("/{documentId}")

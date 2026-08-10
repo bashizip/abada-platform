@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("12");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("14");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -88,6 +88,46 @@ class PostgresSchemaUpgradeTest {
              var columns = connection.getMetaData().getColumns(null, schema, "process_definitions",
                      "schema_type")) {
             assertThat(columns.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var columns = connection.getMetaData().getColumns(null, schema,
+                     "project_process_documents", "folder_id")) {
+            assertThat(columns.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var columns = connection.getMetaData().getColumns(null, schema,
+                     "project_process_documents", "file_name")) {
+            assertThat(columns.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var tables = connection.getMetaData().getTables(null, schema, "project_folders", null)) {
+            assertThat(tables.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var tables = connection.getMetaData().getTables(null, schema, "project_resources", null)) {
+            assertThat(tables.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var columns = connection.getMetaData().getColumns(null, schema,
+                     "project_folders", "system_folder")) {
+            assertThat(columns.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var statement = connection.prepareStatement(
+                     "select count(*) from " + schema + ".project_folders pf "
+                             + "join " + schema + ".projects p on p.id = pf.project_id "
+                             + "where p.slug = 'default' and pf.parent_id is null "
+                             + "and pf.system_folder = true")) {
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getInt(1)).isEqualTo(6);
+            }
         }
     }
 

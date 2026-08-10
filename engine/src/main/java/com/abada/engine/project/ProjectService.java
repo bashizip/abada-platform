@@ -8,9 +8,11 @@ import com.abada.engine.persistence.entity.ProjectEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
 import com.abada.engine.persistence.repository.PrincipalRepository;
+import com.abada.engine.persistence.repository.ProjectFolderRepository;
 import com.abada.engine.persistence.repository.ProjectMemberRepository;
 import com.abada.engine.persistence.repository.ProjectProcessDocumentRepository;
 import com.abada.engine.persistence.repository.ProjectRepository;
+import com.abada.engine.persistence.entity.ProjectFolderEntity;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
@@ -29,15 +31,17 @@ public class ProjectService {
     private final ProjectMemberRepository members;
     private final PrincipalRepository principals;
     private final ProjectProcessDocumentRepository documents;
+    private final ProjectFolderRepository folders;
     private final ProjectAccessService access;
 
     public ProjectService(ProjectRepository projects, ProjectMemberRepository members,
             PrincipalRepository principals, ProjectProcessDocumentRepository documents,
-            ProjectAccessService access) {
+            ProjectFolderRepository folders, ProjectAccessService access) {
         this.projects = projects;
         this.members = members;
         this.principals = principals;
         this.documents = documents;
+        this.folders = folders;
         this.access = access;
     }
 
@@ -71,7 +75,20 @@ public class ProjectService {
         owner.setCreatedAt(now);
         owner.setCreatedBy(identity.username());
         members.save(owner);
+        seedDefaultFolders(project.getId(), now);
         return project;
+    }
+
+    private void seedDefaultFolders(String projectId, Instant now) {
+        for (String name : ProjectTreeService.SYSTEM_ROOT_FOLDER_NAMES) {
+            ProjectFolderEntity folder = new ProjectFolderEntity();
+            folder.setProjectId(projectId);
+            folder.setName(name);
+            folder.setSystemFolder(true);
+            folder.setCreatedAt(now);
+            folder.setUpdatedAt(now);
+            folders.save(folder);
+        }
     }
 
     @Transactional(readOnly = true)

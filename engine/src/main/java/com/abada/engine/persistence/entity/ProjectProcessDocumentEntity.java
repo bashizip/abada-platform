@@ -21,6 +21,10 @@ public class ProjectProcessDocumentEntity {
     private String projectId;
     @Column(name = "process_key", nullable = false)
     private String processKey;
+    @Column(name = "folder_id")
+    private String folderId;
+    @Column(name = "file_name")
+    private String fileName;
     @Column(nullable = false)
     private String name;
     @Column(nullable = false, columnDefinition = "TEXT")
@@ -50,6 +54,10 @@ public class ProjectProcessDocumentEntity {
     public void setProjectId(String value) { projectId = value; }
     public String getProcessKey() { return processKey; }
     public void setProcessKey(String value) { processKey = value; }
+    public String getFolderId() { return folderId; }
+    public void setFolderId(String value) { folderId = value; }
+    public String getFileName() { return fileName; }
+    public void setFileName(String value) { fileName = value; }
     public String getName() { return name; }
     public void setName(String value) { name = value; }
     public String getDescription() { return description; }
