@@ -29,7 +29,7 @@ import {
 } from '@/lib/run/liveRun';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
-import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
+import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
 
 type StudioView = 'designer' | 'inbox' | 'operations';
 type DesignerMode = 'diagram' | 'apl';
@@ -305,7 +305,7 @@ export default function App() {
     setSelectedNodeId(newNode.id);
   };
 
-  const handleAddNode = (type: NodeType) => {
+  const handleAddNode = (type: NodeType, subtype?: EventSubtype | GatewaySubtype) => {
     const id = `${type}-${Date.now()}`;
     const isFirstEvent = type === 'event'
       && !currentWorkflow.nodes.some((node) => node.type === 'event' && node.subtype === 'start');
@@ -313,14 +313,19 @@ export default function App() {
       agent: 'AI Validation Agent',
       human: 'Executive Review Task',
       dmn: 'Risk Matrix Policy',
-      gateway: 'Branching Gateway',
+      gateway: subtype === 'parallel' ? 'Parallel Gateway' : 'Branching Gateway',
       event: isFirstEvent ? 'Start Process' : 'End Process',
+      'engine-task': 'Engine Service Task',
     };
 
     const newNode: WorkflowNode = {
       id,
       type,
-      subtype: type === 'event' ? (isFirstEvent ? 'start' : 'end') : undefined,
+      subtype: type === 'event'
+        ? (subtype && ((subtype as EventSubtype) === 'start' || (subtype as EventSubtype) === 'end')
+          ? (subtype as EventSubtype)
+          : isFirstEvent ? 'start' : 'end')
+        : type === 'gateway' ? subtype : undefined,
       title: defaultTitles[type],
       description: `Newly instantiated ${type} node`,
       x: 120 + currentWorkflow.nodes.length * 260,
@@ -346,6 +351,9 @@ export default function App() {
         assigneeRole: 'Operations Analyst',
         slaHours: 24,
         formFields: ['Review Notes', 'Approval Signature'],
+      } : undefined,
+      engineTaskConfig: type === 'engine-task' ? {
+        service: 'abada:service',
       } : undefined,
     };
 

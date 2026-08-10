@@ -6,6 +6,8 @@ import {
   UserCheck, 
   Table, 
   GitFork, 
+  GitMerge,
+  Zap,
   Circle,
   Clock,
   CheckCircle2,
@@ -51,6 +53,14 @@ const getNodeColor = (type: NodeType) => {
         text: 'text-[#2A9D8F]',
         badgeBg: 'bg-[#2A9D8F]/20',
       };
+    case 'engine-task':
+      return {
+        border: 'border-[#90A955]',
+        bg: 'bg-[#25201D]',
+        headerBg: 'bg-[#90A955]/15',
+        text: 'text-[#90A955]',
+        badgeBg: 'bg-[#90A955]/20',
+      };
     case 'gateway':
     case 'event':
     default:
@@ -64,16 +74,20 @@ const getNodeColor = (type: NodeType) => {
   }
 };
 
-const getNodeIcon = (type: NodeType) => {
+const getNodeIcon = (type: NodeType, subtype?: WorkflowNode['subtype']) => {
   switch (type) {
     case 'agent':
       return <Bot className="w-4 h-4 text-[#9D4EDD]" />;
+    case 'engine-task':
+      return <Zap className="w-4 h-4 text-[#90A955]" />;
     case 'human':
       return <UserCheck className="w-4 h-4 text-[#E76F51]" />;
     case 'dmn':
       return <Table className="w-4 h-4 text-[#2A9D8F]" />;
     case 'gateway':
-      return <GitFork className="w-4 h-4 text-[#F4A261]" />;
+      return subtype === 'parallel'
+        ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
+        : <GitFork className="w-4 h-4 text-[#F4A261]" />;
     case 'event':
       return <Circle className="w-4 h-4 text-[#F4A261]" />;
     default:
@@ -128,7 +142,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
       <div className={`px-3 py-2.5 rounded-t-2xl ${styles.headerBg} border-b border-[#3A322E] flex items-center justify-between`}>
         <div className="flex items-center gap-2 min-w-0">
           <div className={`p-1 rounded-lg ${styles.badgeBg}`}>
-            {getNodeIcon(data.type)}
+            {getNodeIcon(data.type, data.subtype)}
           </div>
           <span className="text-xs font-semibold text-[#EAE3D9] truncate">
             {data.title}
@@ -177,6 +191,15 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
             <span className="truncate">{data.humanConfig.assigneeRole}</span>
             <span className="bg-[#E76F51]/20 px-1.5 py-0.5 rounded shrink-0">
               SLA {data.humanConfig.slaHours}h
+            </span>
+          </div>
+        )}
+
+        {data.type === 'engine-task' && data.engineTaskConfig && (
+          <div className="pt-2 border-t border-[#3A322E] flex items-center justify-between text-[10px] text-[#90A955]">
+            <span className="font-mono truncate">{data.engineTaskConfig.service}</span>
+            <span className="bg-[#90A955]/20 px-1.5 py-0.5 rounded shrink-0 ml-2">
+              Engine
             </span>
           </div>
         )}

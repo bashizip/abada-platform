@@ -6,6 +6,7 @@ import {
   UserCheck, 
   Table, 
   GitFork, 
+  GitMerge,
   Circle, 
   SlidersHorizontal, 
   Play, 
@@ -157,7 +158,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           {selectedNode.type === 'agent' && <Bot className="w-4 h-4 text-[#9D4EDD]" />}
           {selectedNode.type === 'human' && <UserCheck className="w-4 h-4 text-[#E76F51]" />}
           {selectedNode.type === 'dmn' && <Table className="w-4 h-4 text-[#2A9D8F]" />}
-          {(selectedNode.type === 'gateway' || selectedNode.type === 'event') && <GitFork className="w-4 h-4 text-[#F4A261]" />}
+          {selectedNode.type === 'engine-task' && <Zap className="w-4 h-4 text-[#90A955]" />}
+          {selectedNode.type === 'gateway' && (selectedNode.subtype === 'parallel'
+            ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
+            : <GitFork className="w-4 h-4 text-[#F4A261]" />)}
+          {selectedNode.type === 'event' && <Circle className="w-4 h-4 text-[#F4A261]" />}
           <h2 className="font-bold text-sm text-[#EAE3D9] tracking-wide capitalize">
             {selectedNode.type} Node Settings
           </h2>
@@ -363,6 +368,63 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         {/* DMN Decision Table Configuration (native decision-table block) */}
         {selectedNode.type === 'dmn' && selectedNode.dmnConfig && (
           <DmnRuleInspector node={selectedNode} onUpdateNode={onUpdateNode} />
+        )}
+
+        {/* Engine Task Configuration (external service topic) */}
+        {selectedNode.type === 'engine-task' && (
+          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold tracking-wider text-[#90A955] uppercase flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5" />
+                Engine Task Configuration
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">External Service Topic</label>
+              <input
+                type="text"
+                value={selectedNode.engineTaskConfig?.service || ''}
+                onChange={(e) => onUpdateNode({
+                  ...selectedNode,
+                  engineTaskConfig: {
+                    ...(selectedNode.engineTaskConfig || {}),
+                    service: e.target.value,
+                  },
+                })}
+                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] font-mono focus:outline-none focus:border-[#90A955]"
+              />
+              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                Workers subscribe to this topic to fetch the durable job (e.g. <span className="font-mono text-[#90A955]">abada:credit-check</span>).
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Gateway Configuration */}
+        {selectedNode.type === 'gateway' && (
+          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block">
+              Gateway Configuration
+            </span>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">Gateway Kind</label>
+              <select
+                value={selectedNode.subtype || 'exclusive'}
+                onChange={(e) => handleGeneralChange('subtype', e.target.value)}
+                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+              >
+                <option value="exclusive">Exclusive — one matching branch (&gt;1 outgoing edge routes via conditions)</option>
+                <option value="parallel">Parallel — unconditional fork / join</option>
+              </select>
+              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                {selectedNode.subtype === 'parallel'
+                  ? 'Fork: connect each outgoing edge; the engine runs every branch concurrently. Join: upstream nodes converge back here and it continues along its single outgoing edge.'
+                  : 'Conditional flows evaluate in order; the last flow becomes the default branch.'}
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Human Task Configuration */}

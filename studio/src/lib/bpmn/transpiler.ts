@@ -22,8 +22,8 @@ export function transpileBPMNToAPL(xmlString: string): APLDocument {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
-    isArray: (name) => {
-      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:exclusiveGateway', 'bpmn:businessRuleTask', 'bpmn:startEvent', 'bpmn:endEvent'];
+isArray: (name) => {
+      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:exclusiveGateway', 'bpmn:parallelGateway'];
       return arrayTags.includes(name);
     }
   });
@@ -178,6 +178,21 @@ export function transpileBPMNToAPL(xmlString: string): APLDocument {
         then: f['@_targetRef'],
       }))
     });
+  });
+
+  const processParallelGateways = process['bpmn:parallelGateway'] || [];
+  processParallelGateways.forEach((gw: any) => {
+    const outFlows = seqFlows.filter((f: any) => f['@_sourceRef'] === gw['@_id']);
+    // The fork keeps parallelism by declaring one branch per outgoing flow;
+    // a parallel gateway with a single successor is a join instead.
+    aplNodes.push({
+      id: gw['@_id'],
+      type: 'parallel',
+      description: gw['@_name'],
+      ...(outFlows.length >= 2
+        ? { branches: outFlows.map((f: any) => f['@_targetRef']) }
+        : { next: outFlows[0]?.['@_targetRef'] }),
+    } as APLNode);
   });
 
   return {

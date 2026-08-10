@@ -17,7 +17,7 @@ import { AbadaNode } from './NodeRenderer';
 import { AbadaEdge } from './EdgeRenderer';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
-import { WorkflowNode, WorkflowEdge } from '@/types';
+import { WorkflowNode, WorkflowEdge, EventSubtype, GatewaySubtype } from '@/types';
 
 interface CanvasProps {
   nodes: WorkflowNode[];
@@ -28,7 +28,7 @@ interface CanvasProps {
   onDeleteNode: (id: string) => void;
   onConnectNodes: (sourceId: string, targetId: string) => void;
   onAutoLayout?: (nodes: WorkflowNode[]) => void;
-  onAddNode: (type: WorkflowNode['type']) => void;
+  onAddNode: (type: WorkflowNode['type'], subtype?: EventSubtype | GatewaySubtype) => void;
   onOpenAplEditor: () => void;
   onFocusPrompt: () => void;
   isSimulating: boolean;

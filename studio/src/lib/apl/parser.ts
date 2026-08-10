@@ -223,13 +223,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         };
         break;
       case 'engine-task':
-        wNode.type = 'agent'; // Visual fallback
-        wNode.agentConfig = {
-          model: 'system-service',
-          systemPrompt: `Execute Engine Service: ${aplNode.service}`,
-          confidenceThreshold: 100,
-          temperature: 0,
-          tools: [aplNode.service],
+        wNode.type = 'engine-task';
+        wNode.engineTaskConfig = {
+          service: aplNode.service,
+          onError: aplNode.on_error,
         };
         break;
       case 'approval-gate':
@@ -256,6 +253,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
             then: { Next: r.then },
           })),
         };
+        break;
+      case 'parallel':
+        wNode.type = 'gateway';
+        wNode.subtype = 'parallel';
         break;
       case 'decision-table': {
         const table = aplNode as APLDecisionTableNode;
@@ -284,6 +285,14 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           source: aplNode.id,
           target: r.then,
           label: r.if ? `if ${r.if}` : 'else',
+        });
+      });
+    } else if (aplNode.type === 'parallel' && aplNode.branches) {
+      aplNode.branches.forEach((branch) => {
+        edges.push({
+          id: `e_${aplNode.id}_${branch}`,
+          source: aplNode.id,
+          target: branch,
         });
       });
     } else if (aplNode.next) {
@@ -391,18 +400,44 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
       } as APLNode);
     } else if (node.type === 'gateway') {
       const outEdges = wf.edges.filter(e => e.source === node.id);
+      if (node.subtype === 'parallel') {
+        // Parallel gateway: fork via `branches` (≥2 outgoing), join via the
+        // single `next` successor; upstream nodes converge on the gateway.
+        if (outEdges.length >= 2) {
+          aplNodes.push({
+            ...baseNode,
+            type: 'parallel',
+            branches: outEdges.map(e => e.target),
+          } as APLNode);
+        } else {
+          aplNodes.push({
+            ...baseNode,
+            type: 'parallel',
+            next: outEdges.length === 1 ? outEdges[0].target : undefined,
+          } as APLNode);
+        }
+      } else {
+        aplNodes.push({
+          ...baseNode,
+          type: 'condition',
+          rules: outEdges.map((e, idx) => {
+            const cond = toCondition(e.label, e.condition);
+            const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
+            return {
+              if: cond,
+              else: isElse ? e.target : undefined,
+              then: e.target,
+            };
+          })
+        } as APLNode);
+      }
+    } else if (node.type === 'engine-task') {
       aplNodes.push({
         ...baseNode,
-        type: 'condition',
-        rules: outEdges.map((e, idx) => {
-          const cond = toCondition(e.label, e.condition);
-          const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
-          return {
-            if: cond,
-            else: isElse ? e.target : undefined,
-            then: e.target,
-          };
-        })
+        type: 'engine-task',
+        service: node.engineTaskConfig?.service || 'abada:service',
+        on_error: node.engineTaskConfig?.onError,
+        next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'dmn') {
       // Native decision-table block: the deterministic "law" that constrains the

@@ -12,7 +12,7 @@ export interface APLDocument {
   };
 }
 
-export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'end';
+export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'parallel' | 'end';
 
 export interface APLBaseNode {
   id: string;
@@ -63,6 +63,13 @@ export interface APLConditionNode extends APLBaseNode {
   next?: never; 
 }
 
+export interface APLParallelNode extends APLBaseNode {
+  type: 'parallel';
+  /** Fork targets (≥2). A parallel node is a join when upstream nodes converge
+   *  on it and it continues via `next`. `branches` and `next` are exclusive. */
+  branches?: string[];
+}
+
 export type APLHitPolicy = 'FIRST' | 'UNIQUE' | 'COLLECT';
 
 export type APLValue = string | number | boolean;
@@ -105,6 +112,7 @@ export type APLNode =
   | APLAgentNode
   | APLEngineTaskNode
   | APLConditionNode
+  | APLParallelNode
   | APLDecisionTableNode
   | APLApprovalGateNode
   | APLEndNode;

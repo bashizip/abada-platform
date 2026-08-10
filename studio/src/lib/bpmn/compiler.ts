@@ -150,6 +150,23 @@ export function compileAPLToBPMN(apl: APLDocument): string {
           }
         };
       }
+      case 'parallel': {
+        // Parallel gateway: a fork emits one unconditional flow per branch; a
+        // join needs no outgoing flow configuration beyond `next`.
+        (node.branches || []).forEach((branch) => {
+          sequenceFlows.push({
+            '@_id': `Flow_${node.id}_${branch}`,
+            '@_sourceRef': node.id,
+            '@_targetRef': branch,
+          });
+        });
+        return {
+          'bpmn:parallelGateway': {
+            '@_id': node.id,
+            '@_name': node.description || 'Parallel Gateway',
+          }
+        };
+      }
       default:
         return {};
     }

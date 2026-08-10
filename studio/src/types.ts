@@ -1,4 +1,4 @@
-export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event';
+export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task';
 
 export type EventSubtype = 'start' | 'end' | 'timer' | 'message';
 export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive';
@@ -58,6 +58,13 @@ export interface HumanConfig {
   requireDoubleSignOff?: boolean;
 }
 
+export interface EngineTaskConfig {
+  /** External-task topic the engine publishes for this activity. */
+  service: string;
+  /** Error-handling flow target, emitted as an `on_error` edge. */
+  onError?: string;
+}
+
 export interface WorkflowNode {
   id: string;
   type: NodeType;
@@ -70,6 +77,7 @@ export interface WorkflowNode {
   agentConfig?: AgentConfig;
   dmnConfig?: DMNConfig;
   humanConfig?: HumanConfig;
+  engineTaskConfig?: EngineTaskConfig;
 }
 
 export interface WorkflowEdge {
