@@ -58,7 +58,15 @@ the normal external-task completion command.
 
 Required: `ABADA_ENGINE_URL`, `ABADA_AGENT_LLM_BASE_URL`, and
 `ABADA_AGENT_LLM_API_KEY`. Select the model with
-`ABADA_AGENT_LLM_MODEL`. For secured engines, configure either a short-lived
+`ABADA_AGENT_LLM_MODEL`. The sidecar routes each task to a provider gateway
+from the requested model name (the descriptor `model` field, falling back to
+`ABADA_AGENT_LLM_MODEL`): models starting with `gemini` or the `google/`
+prefix use the Google Gemini REST `:generateContent` endpoint with the API
+key sent as `x-goog-api-key` (the `google/` prefix is stripped from the model
+path); all other models use an OpenAI-compatible `/chat/completions` endpoint
+with `Authorization: Bearer`. Both gateways share the same prompt rendering,
+selected-inputs, output-schema and `_confidence` handling. For secured
+engines, configure either a short-lived
 `ABADA_ENGINE_TOKEN` or the preferred OIDC client-credentials settings:
 `ABADA_AGENT_OIDC_TOKEN_URL`, `ABADA_AGENT_OIDC_CLIENT_ID`, and
 `ABADA_AGENT_OIDC_CLIENT_SECRET`. The token is cached only until shortly

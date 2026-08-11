@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -38,19 +39,19 @@ public final class AgentWorkerMain {
                 ? () -> config.engineToken()
                 : new ClientCredentialsTokenSupplier(config);
         AbadaWorkerClient engine = new AbadaWorkerClient(config.engineUrl(), tokens);
-        OpenAiCompatibleGateway gateway = new OpenAiCompatibleGateway(config);
+        AgentGatewayFactory gateways = new AgentGatewayFactory(config);
         LOG.log(System.Logger.Level.INFO,
                 "agent_worker_started worker_id={0} topic=abada:agent", config.workerId());
         while (!Thread.currentThread().isInterrupted()) {
             List<LockedExternalTask> tasks = engine.fetchAndLock(config.projectId(), config.workerId(),
                     List.of("abada:agent"),
                     config.lockDuration(), config.maxTasks(), RequestOptions.defaults());
-            for (LockedExternalTask task : tasks) process(engine, gateway, config, task);
+            for (LockedExternalTask task : tasks) process(engine, gateways, config, task);
             if (tasks.isEmpty()) Thread.sleep(config.pollInterval().toMillis());
         }
     }
 
-    private static void process(AbadaWorkerClient engine, OpenAiCompatibleGateway gateway,
+    private static void process(AbadaWorkerClient engine, AgentGatewayFactory gateways,
             Config config, LockedExternalTask task) {
         AgentWorkDescriptor work = task.agentWork();
         RequestOptions options = new RequestOptions("agent-" + task.id(), task.traceParent(), null);
@@ -62,7 +63,7 @@ public final class AgentWorkerMain {
             if (!config.allowedTools().containsAll(requestedTools)) {
                 throw new IllegalArgumentException("Agent requests tools outside the configured allow-list");
             }
-            Object result = gateway.execute(work, task.variables());
+            Object result = gateways.gatewayFor(work).execute(work, task.variables());
             String resultVariable = blankToDefault(work.resultVariable(), task.activityId() + "_result");
             engine.complete(task.id(), config.workerId(), Map.of(resultVariable, result), options);
             long completed = COMPLETED.incrementAndGet();
@@ -91,6 +92,10 @@ public final class AgentWorkerMain {
 
     private static String blankToDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private static String resolveModel(Config config, AgentWorkDescriptor work) {
+        return blankToDefault(work.model(), config.defaultModel());
     }
 
     record Config(URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
@@ -186,18 +191,98 @@ public final class AgentWorkerMain {
         }
     }
 
-    static final class OpenAiCompatibleGateway {
-        private final Config config;
-        private final HttpClient http;
+    /** Common contract for LLM provider gateways behind APL {@code agent} tasks. */
+    interface AgentGateway {
+        Object execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception;
+    }
 
-        OpenAiCompatibleGateway(Config config) {
+    /**
+     * Routes a requested model name to the concrete {@link AgentGateway} that can
+     * serve it. Models named {@code gemini*} or prefixed {@code google/} use the
+     * Gemini gateway; everything else uses the OpenAI-compatible gateway.
+     */
+    static final class AgentGatewayFactory {
+        private final Config config;
+        private final OpenAiCompatibleGateway openAi;
+        private final GoogleGeminiGateway gemini;
+
+        AgentGatewayFactory(Config config) {
+            this.config = config;
+            this.openAi = new OpenAiCompatibleGateway(config);
+            this.gemini = new GoogleGeminiGateway(config);
+        }
+
+        AgentGateway gatewayFor(AgentWorkDescriptor work) {
+            return isGeminiModel(resolveModel(config, work)) ? gemini : openAi;
+        }
+
+        private static boolean isGeminiModel(String model) {
+            String normalized = model.strip().toLowerCase(Locale.ROOT);
+            return normalized.startsWith("gemini") || normalized.startsWith("google/");
+        }
+    }
+
+    /** Shared prompt rendering, input selection and result decoding for LLM gateways. */
+    abstract static class AbstractAgentGateway {
+        protected final Config config;
+        protected final HttpClient http;
+
+        AbstractAgentGateway(Config config) {
             this.config = config;
             this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         }
 
-        Object execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
+        protected String renderPrompt(AgentWorkDescriptor work, Map<String, Object> variables) {
+            String prompt = blankToDefault(work.prompt(), "Process the supplied workflow variables.");
+            for (Map.Entry<String, Object> variable : variables.entrySet()) {
+                prompt = prompt.replace("${" + variable.getKey() + "}", String.valueOf(variable.getValue()));
+            }
+            if (work.tools() != null && !work.tools().isEmpty()) {
+                prompt += "\nAllowed tool identifiers: " + String.join(", ", work.tools())
+                        + ". Return a result; do not claim an unperformed side effect.";
+            }
+            return prompt;
+        }
+
+        protected Map<String, Object> selectInputs(AgentWorkDescriptor work, Map<String, Object> variables) {
+            if (work.inputs() == null || work.inputs().isEmpty()) return variables;
+            Map<String, Object> selected = new LinkedHashMap<>();
+            work.inputs().forEach((name, expression) -> {
+                String key = expression == null ? name : expression.replaceAll("^\\$\\{|}$", "");
+                selected.put(name, variables.get(key));
+            });
+            return selected;
+        }
+
+        protected Object decodeResult(String content, AgentWorkDescriptor work) throws Exception {
+            if (work.outputSchema() == null || work.outputSchema().isEmpty()) return content;
+            JsonNode parsed = JSON.readTree(stripFence(content));
+            if (!parsed.isObject()) throw new IllegalStateException("Agent output must be a JSON object");
+            double confidence = parsed.path("_confidence").asDouble(100.0);
+            double minimum = work.confidenceThreshold() == null ? 0.0 : work.confidenceThreshold();
+            if (confidence < minimum) throw new IllegalStateException("Agent confidence is below the APL threshold");
+            return JSON.convertValue(parsed, Map.class);
+        }
+
+        protected String stripFence(String value) {
+            String stripped = value.strip();
+            if (stripped.startsWith("```")) {
+                stripped = stripped.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+            }
+            return stripped;
+        }
+    }
+
+    /** OpenAI-compatible {@code /chat/completions} gateway for the default provider family. */
+    static final class OpenAiCompatibleGateway extends AbstractAgentGateway implements AgentGateway {
+        OpenAiCompatibleGateway(Config config) {
+            super(config);
+        }
+
+        @Override
+        public Object execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
             long timeoutMs = work.timeoutMs() == null ? 60_000L : work.timeoutMs();
-            String model = blankToDefault(work.model(), config.defaultModel());
+            String model = resolveModel(config, work);
             String prompt = renderPrompt(work, variables);
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
@@ -221,45 +306,43 @@ public final class AgentWorkerMain {
             }
             return decodeResult(contentNode.asText(), work);
         }
+    }
 
-        private String renderPrompt(AgentWorkDescriptor work, Map<String, Object> variables) {
-            String prompt = blankToDefault(work.prompt(), "Process the supplied workflow variables.");
-            for (Map.Entry<String, Object> variable : variables.entrySet()) {
-                prompt = prompt.replace("${" + variable.getKey() + "}", String.valueOf(variable.getValue()));
-            }
-            if (work.tools() != null && !work.tools().isEmpty()) {
-                prompt += "\nAllowed tool identifiers: " + String.join(", ", work.tools())
-                        + ". Return a result; do not claim an unperformed side effect.";
-            }
-            return prompt;
+    /** Google Gemini {@code :generateContent} gateway for {@code gemini*} and {@code google/} models. */
+    static final class GoogleGeminiGateway extends AbstractAgentGateway implements AgentGateway {
+        GoogleGeminiGateway(Config config) {
+            super(config);
         }
 
-        private Map<String, Object> selectInputs(AgentWorkDescriptor work, Map<String, Object> variables) {
-            if (work.inputs() == null || work.inputs().isEmpty()) return variables;
-            Map<String, Object> selected = new LinkedHashMap<>();
-            work.inputs().forEach((name, expression) -> {
-                String key = expression == null ? name : expression.replaceAll("^\\$\\{|}$", "");
-                selected.put(name, variables.get(key));
-            });
-            return selected;
-        }
-
-        private Object decodeResult(String content, AgentWorkDescriptor work) throws Exception {
-            if (work.outputSchema() == null || work.outputSchema().isEmpty()) return content;
-            JsonNode parsed = JSON.readTree(stripFence(content));
-            if (!parsed.isObject()) throw new IllegalStateException("Agent output must be a JSON object");
-            double confidence = parsed.path("_confidence").asDouble(100.0);
-            double minimum = work.confidenceThreshold() == null ? 0.0 : work.confidenceThreshold();
-            if (confidence < minimum) throw new IllegalStateException("Agent confidence is below the APL threshold");
-            return JSON.convertValue(parsed, Map.class);
-        }
-
-        private String stripFence(String value) {
-            String stripped = value.strip();
-            if (stripped.startsWith("```")) {
-                stripped = stripped.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+        @Override
+        public Object execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
+            long timeoutMs = work.timeoutMs() == null ? 60_000L : work.timeoutMs();
+            String model = resolveModel(config, work).strip().replaceFirst("(?i)^google/", "");
+            String prompt = renderPrompt(work, variables);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("systemInstruction", Map.of("parts", List.of(Map.of("text", prompt))));
+            body.put("contents", List.of(Map.of("role", "user",
+                    "parts", List.of(Map.of("text", JSON.writeValueAsString(selectInputs(work, variables)))))));
+            Map<String, Object> generationConfig = new LinkedHashMap<>();
+            generationConfig.put("temperature", work.temperature() == null ? 0.2 : work.temperature());
+            generationConfig.put("maxOutputTokens", work.maxTokens() == null ? 2048 : work.maxTokens());
+            body.put("generationConfig", generationConfig);
+            HttpRequest request = HttpRequest.newBuilder(config.llmBaseUrl().resolve(
+                            config.llmBaseUrl().getPath().replaceAll("/+$", "")
+                                    + "/models/" + model + ":generateContent"))
+                    .timeout(Duration.ofMillis(timeoutMs)).header("x-goog-api-key", config.llmApiKey())
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build();
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("Gemini gateway returned HTTP " + response.statusCode());
             }
-            return stripped;
+            JsonNode contentNode = JSON.readTree(response.body()).path("candidates").path(0)
+                    .path("content").path("parts").path(0).path("text");
+            if (!contentNode.isTextual() || contentNode.asText().isBlank()) {
+                throw new IllegalStateException("Gemini gateway returned no assistant content");
+            }
+            return decodeResult(contentNode.asText(), work);
         }
     }
 }
