@@ -1,0 +1,36 @@
+Act as a principal frontend architect and lead UX designer for "Abada", a cloud-native, agent-first process orchestration platform. I need you to design and implement the **"Process Instance Detail" view** (the deep-dive drill-down screen when an operator or developer clicks on a specific workflow instance to inspect its exact execution state, history, and AI telemetry).
+
+### 1. Product Context & Aesthetic
+- **Aesthetic:** Ultra-clean, modern.
+
+### 2. Layout & Key Components of the Instance Detail View
+
+#### A. Top Header & Action Bar
+- **Breadcrumb / Navigation:** Return link to the instances list + Process Definition Name & Version (e.g., `lead-triage-demo v1.2.0`).
+- **Business-Meaningful Identifier:** Prominently display the custom business key extracted from workflow variables (e.g., `Lead: Acme Corp (CASE-7)`) alongside the raw execution ID as a subtle monospaced subtitle.
+- **Live Status & Duration Badge:** Pulsing indicator (`RUNNING`, `COMPLETED`, `FAILED`, `SUSPENDED`) + total elapsed time.
+- **Global Actions Dropdown/Buttons:** "Cancel Instance", "Force Retry", "Suspend/Resume", and "Export Execution Trace (JSON)".
+
+#### B. Main Workspace: Split-Screen Architecture
+Divide the screen between a visual canvas and a powerful telemetry inspector:
+
+1. **Left / Center Area: The Interactive Execution Canvas**
+   - Renders the compiled APL process flow graph.
+   - **Dynamic Path Highlighting:** Visually illuminates in bright glowing strokes the exact historical path the instance took, dimming unchosen alternative branches (e.g., skipped `else` routes).
+   - **Node State Indicators:** Highlights the currently active node(s) with a subtle pulsing border. Failed nodes glow soft red with retry counters; completed nodes show checkmarks. Clicking any node updates the right-hand inspector panel.
+
+2. **Right Area: The Deep-Dive Inspector Panel (Tabbed Drawer)**
+   A contextual inspector providing granular visibility into the currently selected node or the overall instance:
+   - **Tab 1: Node Telemetry & AI Inspector (Crucial for `type: agent`)**
+     - *For Agent Nodes:* Displays the fully rendered system prompt, selected input variables, the raw JSON payload sent to the LLM gateway (Google Gemini / OpenAI-compatible), the raw response text, the achieved `_confidence` score versus the strict APL threshold, and execution latency/token usage.
+     - *For Human Tasks:* Displays active SLA countdown timers, current assignee metadata, and form inputs.
+     - *For Engine Tasks:* Displays worker ID, request headers, and payload/response logs.
+   - **Tab 2: State Variables (Live Context)**
+     - A clean, searchable JSON tree viewer showing the exact runtime payload variables of the instance at this specific step.
+   - **Tab 3: Chronological Audit Trail / Timeline**
+     - A step-by-step event log (e.g., `Node 'Receive-Lead' completed`, `Agent task locked by worker-java-01`, `Transition evaluated to true`). Includes timestamps, worker IDs, and trace parents for distributed tracing.
+
+### 3. Technical & UX Polish
+- Smooth transitions when switching selected nodes in the graph.
+- Keyboard shortcuts support (e.g., pressing `Esc` to close inspector drawers, arrow keys to navigate nodes).
+- High performance rendering capable of handling complex enterprise workflows with dozens of nodes without UI lag.
