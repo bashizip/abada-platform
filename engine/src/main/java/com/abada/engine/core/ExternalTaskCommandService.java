@@ -1,15 +1,20 @@
 package com.abada.engine.core;
 
 import com.abada.engine.core.exception.ProcessEngineException;
+import com.abada.engine.core.model.AgentAttemptMetadata;
 import com.abada.engine.dto.ExtendLockRequest;
 import com.abada.engine.dto.ExternalTaskFailureDto;
 import com.abada.engine.dto.FetchAndLockRequest;
 import com.abada.engine.dto.LockedExternalTask;
 import com.abada.engine.persistence.entity.ExternalTaskEntity;
 import com.abada.engine.persistence.repository.ExternalTaskRepository;
+import com.abada.engine.core.model.ServiceTaskMeta;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
@@ -22,13 +27,15 @@ public class ExternalTaskCommandService {
     private final AbadaEngine engine;
     private final ActivityHistoryService history;
     private final InsightFactWriter insightFactWriter;
+    private final ObjectMapper objectMapper;
 
     public ExternalTaskCommandService(ExternalTaskRepository repository, AbadaEngine engine,
-            ActivityHistoryService history, InsightFactWriter insightFactWriter) {
+            ActivityHistoryService history, InsightFactWriter insightFactWriter, ObjectMapper objectMapper) {
         this.repository = repository;
         this.engine = engine;
         this.history = history;
         this.insightFactWriter = insightFactWriter;
+        this.objectMapper = objectMapper;
     }
 
     @AtomicRuntimeCommand
@@ -53,7 +60,7 @@ public class ExternalTaskCommandService {
                 ProcessInstance instance = requireInstance(task);
                 var serviceTask = instance.getDefinition().getServiceTask(task.getActivityId());
                 history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(),
-                        Map.of("externalTaskId", task.getId(), "workerId", request.workerId(), "topic", topic));
+                        lockDetails(task, request.workerId(), topic, serviceTask));
                 locked.add(new LockedExternalTask(task.getId(), task.getTopicName(), instance.getVariables(),
                         task.getProcessInstanceId(), task.getActivityId(), task.getRetries(),
                         task.getLockExpirationTime(), task.getTraceParent(), "1",
@@ -68,21 +75,28 @@ public class ExternalTaskCommandService {
 
     @AtomicRuntimeCommand
     public void complete(String id, Map<String, Object> variables) {
-        complete(id, null, variables);
+        complete(id, null, variables, null);
     }
 
     @AtomicRuntimeCommand
     public void complete(String id, String workerId, Map<String, Object> variables) {
+        complete(id, workerId, variables, null);
+    }
+
+    @AtomicRuntimeCommand
+    public void complete(String id, String workerId, Map<String, Object> variables,
+            AgentAttemptMetadata agent) {
         ExternalTaskEntity task = loadForUpdate(id);
         if (task.getStatus() == ExternalTaskEntity.Status.COMPLETED) return;
         requireOwnedActiveLock(task, workerId);
 
         task.setStatus(ExternalTaskEntity.Status.COMPLETED);
         task.setLockExpirationTime(null);
+        persistAgentMetadata(task, agent);
         repository.save(task);
         engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), variables);
         history.record("EXTERNAL_TASK_COMPLETED", requireInstance(task), task.getActivityId(),
-                Map.of("externalTaskId", id, "workerId", valueOrEmpty(task.getWorkerId())));
+                completedDetails(task, agent));
         recordExternalTaskFact(task, true);
     }
 
@@ -94,6 +108,7 @@ public class ExternalTaskCommandService {
         task.setExceptionMessage(failure.errorMessage());
         task.setExceptionStacktrace(failure.errorDetails());
         task.setRetries(failure.retries());
+        persistAgentMetadata(task, failure.agent());
         if (failure.retries() != null && failure.retries() == 0) {
             task.setStatus(ExternalTaskEntity.Status.FAILED);
             task.setLockExpirationTime(null);
@@ -105,7 +120,7 @@ public class ExternalTaskCommandService {
         task.setWorkerId(null);
         repository.save(task);
         history.record("EXTERNAL_TASK_FAILED", requireInstance(task), task.getActivityId(),
-                Map.of("externalTaskId", id, "retries", failure.retries() == null ? -1 : failure.retries()));
+                failedDetails(task, failure));
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
         }
@@ -158,6 +173,69 @@ public class ExternalTaskCommandService {
                 Map.of("externalTaskId", id, "errorCode", request.errorCode(),
                         "errorMessage", request.errorMessage() == null ? "" : request.errorMessage()));
         recordExternalTaskFact(task, false);
+    }
+
+    /** Agent request facts recorded when an {@code abada:agent} task is locked. */
+    private Map<String, Object> lockDetails(ExternalTaskEntity task, String workerId, String topic,
+            ServiceTaskMeta serviceTask) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("workerId", workerId);
+        details.put("topic", topic);
+        if (serviceTask != null && serviceTask.agentWork() != null) {
+            var work = serviceTask.agentWork();
+            Map<String, Object> requested = new LinkedHashMap<>();
+            requested.put("model", valueOrEmpty(work.model()));
+            requested.put("resultVariable", valueOrEmpty(work.resultVariable()));
+            if (work.tools() != null && !work.tools().isEmpty()) {
+                requested.put("tools", work.tools());
+            }
+            if (work.confidenceThreshold() != null) {
+                requested.put("confidenceThreshold", work.confidenceThreshold());
+            }
+            details.put("agent", requested);
+        }
+        return details;
+    }
+
+    private Map<String, Object> completedDetails(ExternalTaskEntity task, AgentAttemptMetadata agent) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("workerId", valueOrEmpty(task.getWorkerId()));
+        if (agent != null) details.put("agent", agentDetails(agent));
+        return details;
+    }
+
+    private Map<String, Object> failedDetails(ExternalTaskEntity task, ExternalTaskFailureDto failure) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("retries", failure.retries() == null ? -1 : failure.retries());
+        if (failure.agent() != null) details.put("agent", agentDetails(failure.agent()));
+        return details;
+    }
+
+    /** Model/tool metadata only; never prompts, tokens, credentials or payloads. */
+    private Map<String, Object> agentDetails(AgentAttemptMetadata agent) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("model", valueOrEmpty(agent.model()));
+        details.put("provider", valueOrEmpty(agent.provider()));
+        if (agent.attempt() != null) details.put("attempt", agent.attempt());
+        if (agent.durationMs() != null) details.put("durationMs", agent.durationMs());
+        if (agent.tools() != null && !agent.tools().isEmpty()) details.put("tools", agent.tools());
+        details.put("resultVariable", valueOrEmpty(agent.resultVariable()));
+        details.put("promptHash", valueOrEmpty(agent.promptHash()));
+        details.put("errorType", valueOrEmpty(agent.errorType()));
+        if (agent.confidence() != null) details.put("confidence", agent.confidence());
+        return details;
+    }
+
+    private void persistAgentMetadata(ExternalTaskEntity task, AgentAttemptMetadata agent) {
+        if (agent == null) return;
+        try {
+            task.setAgentMetadataJson(objectMapper.writeValueAsString(agent));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Could not serialize agent attempt metadata", exception);
+        }
     }
 
     /** Terminal fact for the analyzed signal; skips legacy rows without a known start. */

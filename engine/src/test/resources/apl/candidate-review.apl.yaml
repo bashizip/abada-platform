@@ -29,6 +29,8 @@ flow:
       next: notify
     - id: notify
       type: agent
+      confidence_threshold: 85
+      max_attempts: 4
       next: end
     - id: end
       type: end

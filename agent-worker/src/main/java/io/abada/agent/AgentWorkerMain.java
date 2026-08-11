@@ -3,6 +3,7 @@ package io.abada.agent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.abada.worker.AbadaWorkerClient;
+import io.abada.worker.AgentAttemptMetadata;
 import io.abada.worker.AgentWorkDescriptor;
 import io.abada.worker.LockedExternalTask;
 import io.abada.worker.RequestOptions;
@@ -11,10 +12,12 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -43,11 +46,26 @@ public final class AgentWorkerMain {
         LOG.log(System.Logger.Level.INFO,
                 "agent_worker_started worker_id={0} topic=abada:agent", config.workerId());
         while (!Thread.currentThread().isInterrupted()) {
-            List<LockedExternalTask> tasks = engine.fetchAndLock(config.projectId(), config.workerId(),
-                    List.of("abada:agent"),
-                    config.lockDuration(), config.maxTasks(), RequestOptions.defaults());
-            for (LockedExternalTask task : tasks) process(engine, gateways, config, task);
-            if (tasks.isEmpty()) Thread.sleep(config.pollInterval().toMillis());
+            try {
+                List<LockedExternalTask> tasks = engine.fetchAndLock(config.projectId(), config.workerId(),
+                        List.of("abada:agent"),
+                        config.lockDuration(), config.maxTasks(), RequestOptions.defaults());
+                for (LockedExternalTask task : tasks) process(engine, gateways, config, task);
+                if (tasks.isEmpty()) Thread.sleep(config.pollInterval().toMillis());
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } catch (Exception exception) {
+                // Keep the worker alive: transient auth, binding or engine failures
+                // must be retried rather than crash the sidecar.
+                LOG.log(System.Logger.Level.WARNING,
+                        "agent_fetch_failed message={0} retrying_in_ms={1}",
+                        safeMessage(exception), config.pollInterval().toMillis());
+                try {
+                    Thread.sleep(config.pollInterval().toMillis());
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         }
     }
 
@@ -55,6 +73,9 @@ public final class AgentWorkerMain {
             Config config, LockedExternalTask task) {
         AgentWorkDescriptor work = task.agentWork();
         RequestOptions options = new RequestOptions("agent-" + task.id(), task.traceParent(), null);
+        int configuredAttempts = work == null || work.maxAttempts() == null ? 3 : work.maxAttempts();
+        int currentRetries = task.retries() == null ? configuredAttempts : task.retries();
+        int attempt = Math.max(1, configuredAttempts - Math.min(currentRetries, configuredAttempts) + 1);
         try {
             if (work == null || !"abada.agent/v1".equals(work.profileVersion())) {
                 throw new IllegalArgumentException("Missing or unsupported abada.agent/v1 descriptor");
@@ -63,24 +84,40 @@ public final class AgentWorkerMain {
             if (!config.allowedTools().containsAll(requestedTools)) {
                 throw new IllegalArgumentException("Agent requests tools outside the configured allow-list");
             }
-            Object result = gateways.gatewayFor(work).execute(work, task.variables());
+            String model = resolveModel(config, work);
+            AgentGateway gateway = gateways.gatewayFor(work);
+            long startedNanos = System.nanoTime();
+            AgentResult result = gateway.execute(work, task.variables());
+            long durationMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                    Math.max(0, System.nanoTime() - startedNanos));
             String resultVariable = blankToDefault(work.resultVariable(), task.activityId() + "_result");
-            engine.complete(task.id(), config.workerId(), Map.of(resultVariable, result), options);
+            engine.complete(task.id(), config.workerId(), Map.of(resultVariable, result.value()),
+                    new AgentAttemptMetadata(model, gateway.provider(), attempt, durationMs,
+                            List.copyOf(requestedTools), resultVariable, promptHash(work.prompt()), null,
+                            result.confidence()),
+                    options);
             long completed = COMPLETED.incrementAndGet();
             LOG.log(System.Logger.Level.INFO,
-                    "agent_task_completed task_id={0} activity_id={1} completed_total={2} failed_total={3}",
-                    task.id(), task.activityId(), completed, FAILED.get());
+                    "agent_task_completed task_id={0} activity_id={1} model={2} attempt={3} completed_total={4} failed_total={5}",
+                    task.id(), task.activityId(), model, attempt, completed, FAILED.get());
         } catch (Exception exception) {
-            int configuredAttempts = work == null || work.maxAttempts() == null ? 3 : work.maxAttempts();
-            int currentRetries = task.retries() == null ? configuredAttempts : task.retries();
             int remaining = Math.max(0, Math.min(currentRetries, configuredAttempts) - 1);
             long backoff = work == null || work.retryBackoffMs() == null ? 2_000L : work.retryBackoffMs();
+            String model = work == null ? config.defaultModel() : resolveModel(config, work);
+            String provider = work == null ? "unknown" : gateways.gatewayFor(work).provider();
+            // A below-threshold attempt is the most interesting failure: keep the
+            // achieved score so operators can see exactly how far off it was.
+            Double achieved = exception instanceof ConfidenceBelowThresholdException
+                    ? ((ConfidenceBelowThresholdException) exception).confidence() : null;
             engine.fail(task.id(), config.workerId(), safeMessage(exception), exception.getClass().getSimpleName(),
-                    remaining, Duration.ofMillis(backoff), options);
+                    remaining, Duration.ofMillis(backoff),
+                    new AgentAttemptMetadata(model, provider, attempt, null, List.of(), null, null,
+                            exception.getClass().getSimpleName(), achieved),
+                    options);
             long failed = FAILED.incrementAndGet();
             LOG.log(System.Logger.Level.WARNING,
-                    "agent_task_failed task_id={0} activity_id={1} retries_remaining={2} completed_total={3} failed_total={4}",
-                    task.id(), task.activityId(), remaining, COMPLETED.get(), failed);
+                    "agent_task_failed task_id={0} activity_id={1} model={2} attempt={3} retries_remaining={4} completed_total={5} failed_total={6}",
+                    task.id(), task.activityId(), model, attempt, remaining, COMPLETED.get(), failed);
         }
     }
 
@@ -94,29 +131,41 @@ public final class AgentWorkerMain {
         return value == null || value.isBlank() ? fallback : value;
     }
 
+    /** Stable identifier for the prompt template; never contains prompt text. */
+    static String promptHash(String prompt) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest((prompt == null ? "" : prompt).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, 16);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            return "";
+        }
+    }
+
     private static String resolveModel(Config config, AgentWorkDescriptor work) {
         return blankToDefault(work.model(), config.defaultModel());
     }
 
     record Config(URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
             String oidcClientSecret, URI llmBaseUrl, String llmApiKey,
+            URI openAiBaseUrl, String openAiApiKey,
             String defaultModel, String workerId, String projectId,
             Duration pollInterval, Duration lockDuration,
             int maxTasks, Set<String> allowedTools) {
         Config(URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
                 String oidcClientSecret, URI llmBaseUrl, String llmApiKey,
+                URI openAiBaseUrl, String openAiApiKey,
                 String defaultModel, String workerId, Duration pollInterval,
                 Duration lockDuration, int maxTasks, Set<String> allowedTools) {
             this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
-                    llmBaseUrl, llmApiKey, defaultModel, workerId, "", pollInterval,
-                    lockDuration, maxTasks, allowedTools);
+                    llmBaseUrl, llmApiKey, openAiBaseUrl, openAiApiKey,
+                    defaultModel, workerId, "", pollInterval, lockDuration, maxTasks, allowedTools);
         }
 
         static Config fromEnvironment() {
             Map<String, String> env = System.getenv();
             String baseUrl = required(env, "ABADA_ENGINE_URL");
-            String llmUrl = required(env, "ABADA_AGENT_LLM_BASE_URL").replaceAll("/+$", "");
-            String apiKey = required(env, "ABADA_AGENT_LLM_API_KEY");
+            Endpoints endpoints = resolveEndpoints(env);
             Set<String> tools = Arrays.stream(env.getOrDefault("ABADA_AGENT_ALLOWED_TOOLS", "").split(","))
                     .map(String::strip).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
             String tokenUrl = env.getOrDefault("ABADA_AGENT_OIDC_TOKEN_URL", "");
@@ -128,13 +177,36 @@ public final class AgentWorkerMain {
             }
             return new Config(URI.create(baseUrl), staticToken,
                     tokenUrl.isBlank() ? null : URI.create(tokenUrl), clientId, clientSecret,
-                    URI.create(llmUrl), apiKey, env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gpt-5-mini"),
+                    URI.create(endpoints.llmUrl()), endpoints.apiKey(),
+                    URI.create(endpoints.openAiUrl()), endpoints.openAiKey(),
+                    env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gemini-2.5-flash"),
                     env.getOrDefault("ABADA_AGENT_WORKER_ID", "abada-agent-worker"),
                     env.getOrDefault("ABADA_AGENT_PROJECT_ID", ""),
                     Duration.ofMillis(longValue(env, "ABADA_AGENT_POLL_INTERVAL_MS", 1_000, 100, 60_000)),
                     Duration.ofMillis(longValue(env, "ABADA_AGENT_LOCK_DURATION_MS", 120_000, 1_000, 3_600_000)),
                     (int) longValue(env, "ABADA_AGENT_MAX_TASKS", 4, 1, 50), tools);
         }
+
+        /**
+         * Resolves the Gemini and OpenAI-compatible endpoints. At least one pair
+         * is required; each endpoint falls back to the other so a worker can run
+         * with only a Gemini or only an OpenAI-compatible provider.
+         */
+        static Endpoints resolveEndpoints(Map<String, String> env) {
+            String llmUrl = env.getOrDefault("ABADA_AGENT_LLM_BASE_URL", "").replaceAll("/+$", "");
+            String apiKey = env.getOrDefault("ABADA_AGENT_LLM_API_KEY", "").strip();
+            String openAiUrl = env.getOrDefault("ABADA_AGENT_OPENAI_BASE_URL", "").replaceAll("/+$", "");
+            String openAiKey = env.getOrDefault("ABADA_AGENT_OPENAI_API_KEY", "").strip();
+            if (llmUrl.isBlank() && openAiUrl.isBlank()) {
+                throw new IllegalArgumentException(
+                        "ABADA_AGENT_LLM_BASE_URL or ABADA_AGENT_OPENAI_BASE_URL is required");
+            }
+            if (llmUrl.isBlank()) { llmUrl = openAiUrl; apiKey = openAiKey; }
+            if (openAiUrl.isBlank()) { openAiUrl = llmUrl; openAiKey = apiKey; }
+            return new Endpoints(llmUrl, apiKey, openAiUrl, openAiKey);
+        }
+
+        record Endpoints(String llmUrl, String apiKey, String openAiUrl, String openAiKey) {}
 
         private static String required(Map<String, String> env, String key) {
             String value = env.get(key);
@@ -193,8 +265,36 @@ public final class AgentWorkerMain {
 
     /** Common contract for LLM provider gateways behind APL {@code agent} tasks. */
     interface AgentGateway {
-        Object execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception;
+        AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception;
+
+        /** Stable provider family reported in attempt metadata, e.g. {@code openai-compatible}. */
+        String provider();
     }
+
+    /** Decoded agent result plus the {@code _confidence} the model reported. */
+    record AgentResult(Object value, Double confidence) {}
+
+    /**
+     * Carries the achieved {@code _confidence} across the throw boundary so a
+     * below-threshold attempt still reports its score in failure metadata.
+     */
+    static final class ConfidenceBelowThresholdException extends IllegalStateException {
+        private final Double confidence;
+
+        ConfidenceBelowThresholdException(double confidence) {
+            super("Agent confidence is below the APL threshold");
+            this.confidence = confidence;
+        }
+
+        Double confidence() {
+            return confidence;
+        }
+    }
+
+    /**
+     * Renders the result under {@code resultVariable} and keeps the reported
+     * {@code _confidence} so it can be persisted in attempt metadata.
+     */
 
     /**
      * Routes a requested model name to the concrete {@link AgentGateway} that can
@@ -254,14 +354,16 @@ public final class AgentWorkerMain {
             return selected;
         }
 
-        protected Object decodeResult(String content, AgentWorkDescriptor work) throws Exception {
-            if (work.outputSchema() == null || work.outputSchema().isEmpty()) return content;
+        protected AgentResult decodeResult(String content, AgentWorkDescriptor work) throws Exception {
+            if (work.outputSchema() == null || work.outputSchema().isEmpty()) {
+                return new AgentResult(content, null);
+            }
             JsonNode parsed = JSON.readTree(stripFence(content));
             if (!parsed.isObject()) throw new IllegalStateException("Agent output must be a JSON object");
             double confidence = parsed.path("_confidence").asDouble(100.0);
             double minimum = work.confidenceThreshold() == null ? 0.0 : work.confidenceThreshold();
-            if (confidence < minimum) throw new IllegalStateException("Agent confidence is below the APL threshold");
-            return JSON.convertValue(parsed, Map.class);
+            if (confidence < minimum) throw new ConfidenceBelowThresholdException(confidence);
+            return new AgentResult(JSON.convertValue(parsed, Map.class), confidence);
         }
 
         protected String stripFence(String value) {
@@ -280,7 +382,12 @@ public final class AgentWorkerMain {
         }
 
         @Override
-        public Object execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
+        public String provider() {
+            return "openai-compatible";
+        }
+
+        @Override
+        public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
             long timeoutMs = work.timeoutMs() == null ? 60_000L : work.timeoutMs();
             String model = resolveModel(config, work);
             String prompt = renderPrompt(work, variables);
@@ -290,9 +397,9 @@ public final class AgentWorkerMain {
                     Map.of("role", "user", "content", JSON.writeValueAsString(selectInputs(work, variables)))));
             body.put("temperature", work.temperature() == null ? 0.2 : work.temperature());
             body.put("max_tokens", work.maxTokens() == null ? 2048 : work.maxTokens());
-            HttpRequest request = HttpRequest.newBuilder(config.llmBaseUrl().resolve(
-                            config.llmBaseUrl().getPath().replaceAll("/+$", "") + "/chat/completions"))
-                    .timeout(Duration.ofMillis(timeoutMs)).header("Authorization", "Bearer " + config.llmApiKey())
+            HttpRequest request = HttpRequest.newBuilder(config.openAiBaseUrl().resolve(
+                            config.openAiBaseUrl().getPath().replaceAll("/+$", "") + "/chat/completions"))
+                    .timeout(Duration.ofMillis(timeoutMs)).header("Authorization", "Bearer " + config.openAiApiKey())
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
@@ -315,7 +422,12 @@ public final class AgentWorkerMain {
         }
 
         @Override
-        public Object execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
+        public String provider() {
+            return "google-gemini";
+        }
+
+        @Override
+        public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
             long timeoutMs = work.timeoutMs() == null ? 60_000L : work.timeoutMs();
             String model = resolveModel(config, work).strip().replaceFirst("(?i)^google/", "");
             String prompt = renderPrompt(work, variables);

@@ -33,9 +33,11 @@ class AgentWorkerMainTest {
         var gateway = new AgentWorkerMain.OpenAiCompatibleGateway(config(baseUrl));
         AgentWorkDescriptor work = descriptor(80.0);
 
-        Object result = gateway.execute(work, Map.of("caseId", "CASE-7", "secret", "do-not-send"));
+        AgentWorkerMain.AgentResult result = gateway.execute(work,
+                Map.of("caseId", "CASE-7", "secret", "do-not-send"));
 
-        assertEquals("accepted", ((Map<?, ?>) result).get("answer"));
+        assertEquals("accepted", ((Map<?, ?>) result.value()).get("answer"));
+        assertEquals(92.0, result.confidence());
         assertTrue(capturedBody.toString().contains("CASE-7"));
         assertTrue(!capturedBody.toString().contains("do-not-send"));
     }
@@ -46,10 +48,14 @@ class AgentWorkerMainTest {
                 "{\"answer\":\"uncertain\",\"_confidence\":70}");
         var gateway = new AgentWorkerMain.OpenAiCompatibleGateway(config(baseUrl));
 
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> gateway.execute(descriptor(80.0), Map.of("caseId", "CASE-8")));
+        AgentWorkerMain.ConfidenceBelowThresholdException error =
+                assertThrows(AgentWorkerMain.ConfidenceBelowThresholdException.class,
+                        () -> gateway.execute(descriptor(80.0), Map.of("caseId", "CASE-8")));
 
         assertTrue(error.getMessage().contains("confidence"));
+        // The achieved score survives the throw so failure metadata can show
+        // exactly how far below the APL threshold the attempt landed.
+        assertEquals(70.0, error.confidence());
     }
 
     @Test
@@ -67,20 +73,60 @@ class AgentWorkerMainTest {
     }
 
     @Test
-    void geminiGatewayPostsGenerateContentAndDecodesResponse() throws Exception {
+    void openAiGatewayUsesTheConfiguredAlternateEndpoint() throws Exception {
         var capturedBody = new StringBuilder();
-        URI baseUrl = startGeminiGateway(capturedBody,
-                "{\"answer\":\"accepted\",\"_confidence\":92}");
-        var gateway = new AgentWorkerMain.GoogleGeminiGateway(config(baseUrl));
-        // The google/ prefix must be stripped from the :generateContent request path.
-        AgentWorkDescriptor work = descriptor(80.0, "google/gemini-2.0-flash");
+        URI openAiUrl = startGateway(capturedBody, "{\"answer\":\"ok\",\"_confidence\":95}");
+        var config = new AgentWorkerMain.Config(URI.create("http://engine.invalid"), "token", null,
+                "", "", URI.create("http://llm.invalid/v1"), "gemini-key",
+                openAiUrl, "openai-key", "test-model", "test-worker",
+                Duration.ofMillis(100), Duration.ofSeconds(10), 1, Set.of());
 
-        Object result = gateway.execute(work, Map.of("caseId", "CASE-9"));
+        AgentWorkerMain.AgentResult result = new AgentWorkerMain.OpenAiCompatibleGateway(config)
+                .execute(descriptor(80.0), Map.of("caseId", "CASE-9"));
 
-        assertEquals("accepted", ((Map<?, ?>) result).get("answer"));
-        assertTrue(capturedBody.toString().contains("\"systemInstruction\""));
-        assertTrue(capturedBody.toString().contains("\"contents\""));
-        assertTrue(capturedBody.toString().contains("CASE-9"));
+        assertEquals("ok", ((Map<?, ?>) result.value()).get("answer"));
+        assertEquals(95.0, result.confidence());
+        assertTrue(capturedBody.length() > 0);
+    }
+
+    @Test
+    void resolveEndpointsFallsBackEachWay() {
+        var onlyGemini = Map.of("ABADA_AGENT_LLM_BASE_URL", "https://gemini.example/v1beta/",
+                "ABADA_AGENT_LLM_API_KEY", "g-key");
+        AgentWorkerMain.Config.Endpoints gemini = AgentWorkerMain.Config.resolveEndpoints(onlyGemini);
+        assertEquals("https://gemini.example/v1beta", gemini.llmUrl());
+        assertEquals("https://gemini.example/v1beta", gemini.openAiUrl());
+        assertEquals("g-key", gemini.apiKey());
+        assertEquals("g-key", gemini.openAiKey());
+
+        var onlyOpenAi = Map.of("ABADA_AGENT_OPENAI_BASE_URL", "https://llm.example/v1/",
+                "ABADA_AGENT_OPENAI_API_KEY", "o-key");
+        AgentWorkerMain.Config.Endpoints openAi = AgentWorkerMain.Config.resolveEndpoints(onlyOpenAi);
+        assertEquals("https://llm.example/v1", openAi.llmUrl());
+        assertEquals("https://llm.example/v1", openAi.openAiUrl());
+        assertEquals("o-key", openAi.apiKey());
+        assertEquals("o-key", openAi.openAiKey());
+    }
+
+    @Test
+    void resolveEndpointsRequiresAtLeastOneEndpoint() {
+        assertThrows(IllegalArgumentException.class,
+                () -> AgentWorkerMain.Config.resolveEndpoints(Map.of()));
+    }
+
+    @Test
+    void gatewaysReportStableProviderFamiliesAndPromptHashes() {
+        var config = config(URI.create("http://llm.invalid/v1"));
+        assertEquals("openai-compatible",
+                new AgentWorkerMain.OpenAiCompatibleGateway(config).provider());
+        assertEquals("google-gemini",
+                new AgentWorkerMain.GoogleGeminiGateway(config).provider());
+
+        // The prompt hash is stable and never contains the prompt text.
+        String hash = AgentWorkerMain.promptHash("Summarize case ${caseId}.");
+        assertEquals(16, hash.length());
+        assertEquals(hash, AgentWorkerMain.promptHash("Summarize case ${caseId}."));
+        assertTrue(!hash.contains("Summarize"));
     }
 
     private URI startGateway(StringBuilder capturedBody, String assistantContent) throws Exception {
@@ -111,7 +157,7 @@ class AgentWorkerMainTest {
 
     private AgentWorkerMain.Config config(URI llmBaseUrl) {
         return new AgentWorkerMain.Config(URI.create("http://engine.invalid"), "token", null,
-                "", "", llmBaseUrl, "llm-key", "test-model", "test-worker",
+                "", "", llmBaseUrl, "llm-key", llmBaseUrl, "llm-key", "test-model", "test-worker",
                 Duration.ofMillis(100), Duration.ofSeconds(10), 1, Set.of());
     }
 

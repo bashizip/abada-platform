@@ -41,7 +41,7 @@ class AplParserTest {
         assertThat(definition.getServiceTasks().get("notify").agentWork()).satisfies(work -> {
             assertThat(work.profileVersion()).isEqualTo("abada.agent/v1");
             assertThat(work.resultVariable()).isEqualTo("notify_result");
-            assertThat(work.maxAttempts()).isEqualTo(3);
+            assertThat(work.maxAttempts()).isEqualTo(4);
             assertThat(work.timeoutMs()).isEqualTo(60_000L);
         });
         assertThat(definition.getDecisionTables()).containsOnlyKeys("score");

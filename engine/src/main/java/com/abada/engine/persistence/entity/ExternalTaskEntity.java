@@ -45,6 +45,10 @@ public class ExternalTaskEntity {
     @Column(name = "trace_parent", length = 128)
     private String traceParent;
 
+    /** Optional agent attempt metadata reported by an {@code abada:agent} worker (JSON). */
+    @Column(name = "agent_metadata", columnDefinition = "TEXT")
+    private String agentMetadataJson;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -159,6 +163,9 @@ public class ExternalTaskEntity {
     public void setBpmnErrorMessage(String value) { bpmnErrorMessage = value; }
     public String getTraceParent() { return traceParent; }
     public void setTraceParent(String value) { traceParent = value; }
+
+    public String getAgentMetadataJson() { return agentMetadataJson; }
+    public void setAgentMetadataJson(String value) { agentMetadataJson = value; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant value) { createdAt = value; }

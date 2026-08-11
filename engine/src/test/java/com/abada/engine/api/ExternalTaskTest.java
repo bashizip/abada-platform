@@ -103,6 +103,33 @@ public class ExternalTaskTest {
     }
 
     @Test
+    @DisplayName("Worker protocol v1 deserializes the optional agent block from the HTTP body")
+    void shouldPersistAgentAttemptMetadataFromWireFormat() {
+        abadaEngine.startProcess("ExternalTaskTestProcess");
+        LockedExternalTask locked = fetch("worker-1");
+
+        HttpEntity<Map<String, Object>> complete = new HttpEntity<>(Map.of(
+                "workerId", "worker-1",
+                "variables", Map.of("externalTaskResult", "SUCCESS"),
+                "agent", Map.of(
+                        "model", "gemini-2.0-flash",
+                        "provider", "google-gemini",
+                        "attempt", 1,
+                        "durationMs", 500L,
+                        "tools", List.of("crm.read"),
+                        "resultVariable", "externalTaskResult",
+                        "promptHash", "a1b2c3d4e5f6a7b8")), headers);
+        restTemplate.postForEntity("/v1/external-tasks/{id}/complete", complete, Void.class, locked.id());
+
+        ExternalTaskEntity task = externalTaskRepository.findById(locked.id()).orElseThrow();
+        assertNotNull(task.getAgentMetadataJson());
+        assertTrue(task.getAgentMetadataJson().contains("\"model\":\"gemini-2.0-flash\""));
+        assertTrue(task.getAgentMetadataJson().contains("\"provider\":\"google-gemini\""));
+        assertTrue(task.getAgentMetadataJson().contains("\"attempt\":1"));
+        assertTrue(task.getAgentMetadataJson().contains("\"tools\":[\"crm.read\"]"));
+    }
+
+    @Test
     @DisplayName("External worker should report failure and job should appear in failed jobs list")
     void shouldHandleExternalTaskFailure() {
         // 1. Start the process

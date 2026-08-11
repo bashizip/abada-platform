@@ -98,7 +98,7 @@ public class ExternalTaskController {
         CompleteExternalTaskRequest request = completeRequest(payload);
         if (!"disabled".equalsIgnoreCase(securityMode)) projectWorkers.requireCurrentWorkerForTask(id);
         idempotency.execute(idempotencyKey, "external-task.complete", Map.of("id", id, "request", request), () -> {
-            commands.complete(id, request.workerId(), request.effectiveVariables());
+            commands.complete(id, request.workerId(), request.effectiveVariables(), request.agent());
             return Map.of("status", "Completed", "externalTaskId", id);
         });
         return ResponseEntity.ok().build();

@@ -65,8 +65,16 @@ public final class AbadaWorkerClient {
     }
 
     public void complete(String taskId, String workerId, Map<String, Object> variables, RequestOptions options) {
-        send("/" + segment(taskId) + "/complete",
-                Map.of("workerId", workerId, "variables", variables == null ? Map.of() : variables), options);
+        complete(taskId, workerId, variables, null, options);
+    }
+
+    public void complete(String taskId, String workerId, Map<String, Object> variables,
+            AgentAttemptMetadata agent, RequestOptions options) {
+        java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("workerId", workerId);
+        body.put("variables", variables == null ? Map.of() : variables);
+        if (agent != null) body.put("agent", agent);
+        send("/" + segment(taskId) + "/complete", body, options);
     }
 
     public void heartbeat(String taskId, String workerId, Duration lockDuration, RequestOptions options) {
@@ -81,12 +89,18 @@ public final class AbadaWorkerClient {
 
     public void fail(String taskId, String workerId, String message, String details, Integer retries,
             Duration retryTimeout, RequestOptions options) {
+        fail(taskId, workerId, message, details, retries, retryTimeout, null, options);
+    }
+
+    public void fail(String taskId, String workerId, String message, String details, Integer retries,
+            Duration retryTimeout, AgentAttemptMetadata agent, RequestOptions options) {
         java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("workerId", workerId);
         body.put("errorMessage", message);
         body.put("errorDetails", details);
         body.put("retries", retries);
         body.put("retryTimeout", retryTimeout == null ? null : retryTimeout.toMillis());
+        if (agent != null) body.put("agent", agent);
         send("/" + segment(taskId) + "/failure", body, options);
     }
 

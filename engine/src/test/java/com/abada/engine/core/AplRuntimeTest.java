@@ -2,11 +2,16 @@ package com.abada.engine.core;
 
 import com.abada.engine.AbadaEngineApplication;
 import com.abada.engine.core.exception.ProcessEngineException;
+import com.abada.engine.core.model.AgentAttemptMetadata;
 import com.abada.engine.core.model.DefinitionSchema;
 import com.abada.engine.core.model.TaskInstance;
+import com.abada.engine.dto.ExternalTaskFailureDto;
 import com.abada.engine.dto.FetchAndLockRequest;
 import com.abada.engine.dto.LockedExternalTask;
+import com.abada.engine.persistence.entity.ActivityHistoryEntity;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
+import com.abada.engine.persistence.repository.ActivityHistoryRepository;
+import com.abada.engine.persistence.repository.ExternalTaskRepository;
 import com.abada.engine.persistence.repository.ProcessDefinitionRepository;
 import com.abada.engine.util.DatabaseTestHelper;
 import org.junit.jupiter.api.Test;
@@ -84,6 +89,104 @@ class AplRuntimeTest {
                     .containsEntry("rating", "pass")
                     .containsEntry("approved", true)
                     .containsEntry("handled", true);
+        }
+    }
+
+    @Test
+    void persistsAgentAttemptMetadataThroughWorkerAndHistoryContracts() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/candidate-review.apl.yaml");
+
+            var instance = engine.startProcess("candidate_review", "alice", Map.of("score", 88));
+            var pending = engine.getTaskManager().getVisibleTasksForUser("carol", List.of("recruiters"));
+            var gateTask = pending.stream()
+                    .filter(task -> task.getProcessInstanceId().equals(instance.getId()))
+                    .findFirst().orElseThrow();
+            engine.completeTask(gateTask.getId(), "carol", List.of("recruiters"), Map.of("approved", true));
+
+            var externalTaskService = context.getBean(ExternalTaskCommandService.class);
+            var agentJobs = externalTaskService.fetchAndLock(
+                    new FetchAndLockRequest("worker-1", List.of("abada:agent"), 10_000L));
+            assertThat(agentJobs).singleElement().satisfies(job -> {
+                assertThat(job.activityId()).isEqualTo("notify");
+                // The durable retry budget is seeded from the APL max_attempts.
+                assertThat(job.retries()).isEqualTo(4);
+            });
+
+            // The locked history event records the durable agent request facts.
+            var historyRepo = context.getBean(ActivityHistoryRepository.class);
+            var locked = historyRepo.findByProcessInstanceIdOrderByOccurredAtAsc(instance.getId()).stream()
+                    .filter(event -> "EXTERNAL_TASK_LOCKED".equals(event.getEventType()))
+                    .findFirst().orElseThrow();
+            assertThat(locked.getDetailsJson())
+                    .contains("\"agent\"")
+                    .contains("\"confidenceThreshold\":85.0");
+
+            // A real worker reports attempt metadata on the durable completion command.
+            externalTaskService.complete(agentJobs.getFirst().id(), "worker-1", Map.of("handled", true),
+                    new AgentAttemptMetadata("gemini-2.0-flash", "google-gemini", 1, 1_234L,
+                            List.of("crm.read"), "notify_result", "abc123", null, 93.0));
+
+            // The durable worker record carries the attempt metadata JSON.
+            var task = context.getBean(ExternalTaskRepository.class)
+                    .findById(agentJobs.getFirst().id()).orElseThrow();
+            assertThat(task.getAgentMetadataJson())
+                    .contains("\"model\":\"gemini-2.0-flash\"")
+                    .contains("\"provider\":\"google-gemini\"")
+                    .contains("\"attempt\":1")
+                    .contains("\"confidence\":93.0");
+
+            // The history contract exposes model, provider, attempt, tool and
+            // confidence facts.
+            var completed = historyRepo.findByProcessInstanceIdOrderByOccurredAtAsc(instance.getId()).stream()
+                    .filter(event -> "EXTERNAL_TASK_COMPLETED".equals(event.getEventType()))
+                    .findFirst().orElseThrow();
+            assertThat(completed.getDetailsJson())
+                    .contains("\"agent\"")
+                    .contains("\"model\":\"gemini-2.0-flash\"")
+                    .contains("\"tools\":[\"crm.read\"]")
+                    .contains("\"confidence\":93.0");
+        }
+    }
+
+    @Test
+    void persistsAgentFailureMetadataThroughWorkerAndHistoryContracts() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/candidate-review.apl.yaml");
+
+            var instance = engine.startProcess("candidate_review", "alice", Map.of("score", 88));
+            var pending = engine.getTaskManager().getVisibleTasksForUser("carol", List.of("recruiters"));
+            var gateTask = pending.stream()
+                    .filter(task -> task.getProcessInstanceId().equals(instance.getId()))
+                    .findFirst().orElseThrow();
+            engine.completeTask(gateTask.getId(), "carol", List.of("recruiters"), Map.of("approved", true));
+
+            var externalTaskService = context.getBean(ExternalTaskCommandService.class);
+            var agentJobs = externalTaskService.fetchAndLock(
+                    new FetchAndLockRequest("worker-1", List.of("abada:agent"), 10_000L));
+
+            externalTaskService.handleFailure(agentJobs.getFirst().id(), new ExternalTaskFailureDto(
+                    "worker-1", "LLM gateway returned HTTP 429", "RateLimitException", 2, 2_000L,
+                    new AgentAttemptMetadata("gpt-5-mini", "openai-compatible", 1, null,
+                            List.of(), null, null, "RateLimitException", null)));
+
+            var task = context.getBean(ExternalTaskRepository.class)
+                    .findById(agentJobs.getFirst().id()).orElseThrow();
+            assertThat(task.getAgentMetadataJson())
+                    .contains("\"errorType\":\"RateLimitException\"")
+                    .contains("\"model\":\"gpt-5-mini\"");
+
+            var failed = context.getBean(ActivityHistoryRepository.class)
+                    .findByProcessInstanceIdOrderByOccurredAtAsc(instance.getId()).stream()
+                    .filter(event -> "EXTERNAL_TASK_FAILED".equals(event.getEventType()))
+                    .findFirst().orElseThrow();
+            assertThat(failed.getDetailsJson())
+                    .contains("\"agent\"")
+                    .contains("\"errorType\":\"RateLimitException\"");
         }
     }
 

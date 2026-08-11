@@ -646,6 +646,9 @@ public class AbadaEngine {
                             serviceTaskMeta.topicName());
                     externalTask.setActivityId(tokenId);
                     externalTask.setCreatedAt(Instant.now());
+                    if (serviceTaskMeta.agentWork() != null && serviceTaskMeta.agentWork().maxAttempts() != null) {
+                        externalTask.setRetries(serviceTaskMeta.agentWork().maxAttempts());
+                    }
                     var spanContext = io.opentelemetry.api.trace.Span.current().getSpanContext();
                     if (spanContext.isValid()) {
                         externalTask.setTraceParent("00-" + spanContext.getTraceId() + "-" + spanContext.getSpanId()

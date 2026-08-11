@@ -67,6 +67,26 @@ class AbadaWorkerClientTest {
     }
 
     @Test
+    void sendsAgentAttemptMetadataOnCompletionAndFailure() {
+        AgentAttemptMetadata metadata = new AgentAttemptMetadata("gemini-2.0-flash", "google-gemini", 2,
+                1_500L, List.of("crm.read"), "summary", "abc123", null, 92.0);
+        client.complete("task-1", "worker-1", Map.of("summary", "done"), metadata, RequestOptions.defaults());
+        assertTrue(requestBody.get().contains("\"agent\""));
+        assertTrue(requestBody.get().contains("\"model\":\"gemini-2.0-flash\""));
+        assertTrue(requestBody.get().contains("\"provider\":\"google-gemini\""));
+        assertTrue(requestBody.get().contains("\"attempt\":2"));
+        assertTrue(requestBody.get().contains("\"confidence\":92.0"));
+
+        AgentAttemptMetadata failure = new AgentAttemptMetadata("gpt-5-mini", "openai-compatible", 1,
+                null, List.of(), null, null, "RateLimitException", null);
+        client.fail("task-2", "worker-1", "rate limited", "RateLimitException", 2, Duration.ofSeconds(2),
+                failure, RequestOptions.defaults());
+        assertTrue(requestBody.get().contains("\"agent\""));
+        assertTrue(requestBody.get().contains("\"errorType\":\"RateLimitException\""));
+        assertTrue(requestBody.get().contains("\"retries\":2"));
+    }
+
+    @Test
     void exposesTypedEngineErrors() {
         server.removeContext("/api/v1/external-tasks");
         server.createContext("/api/v1/external-tasks", request -> {
