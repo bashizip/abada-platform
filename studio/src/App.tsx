@@ -9,6 +9,7 @@ import { NewWorkflowModal } from '@/components/NewWorkflowModal';
 import { ProcessDetailsModal } from '@/components/ProcessDetailsModal';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { ProjectDialog } from '@/components/ProjectDialog';
+import { SignInGate } from '@/components/SignInGate';
 import { AIDiffModal } from '@/features/designer/AIDiffModal';
 import { InsightReviewDialog } from '@/features/designer/InsightReviewDialog';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
@@ -65,8 +66,9 @@ const bumpPatchVersion = (version: string): string => {
 
 export default function App() {
   const bootstrapWorkflow = useRef(createEmptyWorkflow('bootstrap-draft'));
-  const [workflows, setWorkflows] = useState<WorkflowFile[]>([bootstrapWorkflow.current]);
-  const [activeWorkflowId, setActiveWorkflowId] = useState<string>(bootstrapWorkflow.current.id);
+  const [workflows, setWorkflows] = useState<WorkflowFile[]>([]);
+  const [activeWorkflowId, setActiveWorkflowId] = useState<string>('');
+  const [authenticated, setAuthenticated] = useState<boolean>(keycloak.authenticated === true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [designerMode, setDesignerMode] = useState<DesignerMode>('diagram');
   const [authoringCandidate, setAuthoringCandidate] = useState<AuthoringCandidate | null>(null);
@@ -110,7 +112,8 @@ export default function App() {
   const creatingWorkflowIds = useRef(new Set<string>());
 
   // Get active workflow object
-  const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId) || workflows[0];
+  const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId)
+    || workflows[0] || bootstrapWorkflow.current;
   const displayedWorkflow = selectedLiveInstance && liveWorkflow ? liveWorkflow : currentWorkflow;
   const isLiveReadOnly = !!selectedLiveInstance;
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
@@ -142,9 +145,10 @@ export default function App() {
       setActiveWorkflowId(loaded[0].id);
       setSelectedNodeId(loaded[0].nodes[0]?.id || null);
     } else {
-      const emptyWorkflow = createEmptyWorkflow(`draft-${project.id}`);
-      setWorkflows([emptyWorkflow]);
-      setActiveWorkflowId(emptyWorkflow.id);
+      // No silent draft creation: the tree starts empty and processes are
+      // created explicitly through the New Process dialog.
+      setWorkflows([]);
+      setActiveWorkflowId('');
       setSelectedNodeId(null);
     }
     setDesignerMode('diagram');
@@ -152,7 +156,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!keycloak.authenticated) return;
+    const sync = () => setAuthenticated(keycloak.authenticated === true);
+    sync();
+    keycloak.onAuthSuccess = sync;
+    keycloak.onAuthLogout = sync;
+    keycloak.onTokenExpired = sync;
+    return () => {
+      keycloak.onAuthSuccess = undefined;
+      keycloak.onAuthLogout = undefined;
+      keycloak.onTokenExpired = undefined;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
     ProjectAPI.list().then((available) => {
       setProjects(available);
       const remembered = localStorage.getItem('abada.studio.projectId');
@@ -162,7 +179,7 @@ export default function App() {
     }).catch(() => setShowProjects(true));
     // Project discovery happens once per authenticated Studio session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
     if (!activeProject || currentWorkflow.nodes.length === 0) return;
@@ -735,16 +752,27 @@ export default function App() {
     downloadAnchor.remove();
   };
 
-  // Create Custom Workflow File
-  const handleCreateNewWorkflow = (name: string, category: WorkflowFile['category'], folderId?: string) => {
-    const processKey = name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}`;
-    const draft = createEmptyWorkflow(`draft-${Date.now()}`, name, processKey, category);
+  // Create a new process draft from the dedicated New Process dialog. The
+  // dialog prepares the workflow (empty, BPMN-imported or pasted APL); the
+  // draft is placed in processes/ and autosave persists it there.
+  const handleCreateNewWorkflow = (workflow: WorkflowFile, folderId?: string) => {
+    const fileName = (workflow.fileName || workflow.name).endsWith('.apl.yaml')
+      ? (workflow.fileName || workflow.name)
+      : `${workflow.fileName || workflow.name}.apl.yaml`;
+    const draft: WorkflowFile = {
+      ...workflow,
+      id: `draft-${Date.now()}`,
+      name: fileName,
+      fileName,
+      processKey: workflow.processKey
+        || fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+        || `process_${Date.now()}`,
+    };
     if (folderId) draft.folderId = folderId;
-    draft.fileName = name;
     setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
     setAuthoringCandidate(null);
     setActiveWorkflowId(draft.id);
-    setSelectedNodeId(null);
+    setSelectedNodeId(draft.nodes[0]?.id || null);
     setDesignerMode('diagram');
   };
 
@@ -786,12 +814,14 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#1A1614] text-[#EAE3D9] overflow-hidden">
+      {!authenticated && <SignInGate />}
+      {authenticated && (
+        <>
       {/* Top Header */}
       <Header
         currentWorkflow={displayedWorkflow}
         onRunSimulation={handleOpenRunPanel}
         isSimulating={isSimulating}
-        onNewWorkflow={() => setIsNewModalOpen(true)}
         onExportJSON={handleExportJSON}
         onDeploy={() => setShowDeployDialog(true)}
         isDeploying={isDeploying}
@@ -1020,6 +1050,8 @@ export default function App() {
           onRetry={() => void handleOpenAiDiff()}
           onClose={() => setInsightDialog(null)}
         />
+      )}
+        </>
       )}
     </div>
   );

@@ -87,6 +87,8 @@ export interface ProjectTreeNode {
   status: string | null;
   path: string;
   revision: number;
+  /** True for the six locked system root folders (never rename/move/delete). */
+  system?: boolean;
   children: ProjectTreeNode[];
 }
 

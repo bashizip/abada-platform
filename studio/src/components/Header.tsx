@@ -3,7 +3,6 @@ import {
   Cpu,
   Play,
   Download,
-  Plus,
   CheckCircle2,
   RotateCcw,
   ShieldCheck,
@@ -22,7 +21,6 @@ interface HeaderProps {
   currentWorkflow: WorkflowFile;
   onRunSimulation: () => void;
   isSimulating: boolean;
-  onNewWorkflow: () => void;
   onExportJSON: () => void;
   onDeploy: () => void;
   isDeploying: boolean;
@@ -48,7 +46,6 @@ export const Header: React.FC<HeaderProps> = ({
   currentWorkflow,
   onRunSimulation,
   isSimulating,
-  onNewWorkflow,
   onExportJSON,
   onDeploy,
   isDeploying,
@@ -125,13 +122,6 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-3 shrink-0">
           {currentView === 'designer' && !readOnlyInstance && (
             <>
-              <IconButton
-                icon={<Plus className="w-4 h-4 text-[#F4A261]" />}
-                label="New Canvas"
-                tooltip="Create a new workflow canvas"
-                onClick={onNewWorkflow}
-              />
-
               <IconButton
                 icon={<ShieldCheck className="w-4 h-4 text-[#9D4EDD]" />}
                 label="Audit Stream"

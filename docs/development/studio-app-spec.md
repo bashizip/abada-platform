@@ -175,20 +175,42 @@ workspace with folders and typed files.
 - **Typed resources.** Generic files (`FORM | RESOURCE`) hold arbitrary
   content (BYTEA) with content type, size, SHA-256, optimistic revision and
   JSON-base64 upload/replace/download endpoints.
+- **Locked system roots.** Every project owns exactly six mandatory system
+  folders (`processes`, `resources`, `forms`, `media`, `agents`, `tests`)
+  seeded at creation (migration `V14` backfills existing projects and freezes
+  the root at the database level: the root holds only system folders). They
+  can never be renamed, moved or deleted; the UI shows them locked and the
+  engine rejects the operations. New user folders may only be created inside
+  them, never at the project root — the Studio no longer offers root-level
+  creation, a "Project root" move target or a root file import.
 - **Root targeting.** Because JSON `null` cannot express "no parent", the
   Studio sends the empty string as the root sentinel; the engine normalizes
   blank parent/folder identifiers to `null`.
-- **Studio Project Explorer.** The Sidebar **Processes** tab renders the
-  backend tree (`components/ProjectExplorer.tsx`): expandable folders,
-  documents and resources with hover row actions (rename inline, move to a
-  folder, archive, delete), a folder/clone picker for moves, folder creation
-  inline, per-folder file import, a resource preview modal with replace
-  content/download, and an Unsaved Drafts section for local files that have
-  not yet been persisted by autosave.
-- **New process targeting.** The New Process dialog now includes a **Target
-  Folder** picker (defaulting to `processes/`); the chosen `folderId` is
-  carried on the draft so project autosave persists the document into the
-  selected folder.
+- **Studio Project Explorer.** The Sidebar **Project** tab renders the
+  backend tree (`components/ProjectExplorer.tsx`): the six locked system
+  folders at the top with expandable subfolders, documents and resources with
+  hover row actions (rename inline, move to a folder, archive, delete — never
+  on system roots), inline subfolder creation, per-folder file import
+  (processes/ rows open the New Process dialog instead), a folder/clone
+  picker for moves, a resource preview modal with replace content/download,
+  and an Unsaved Drafts section for local files that have not yet been
+  persisted by autosave.
+- **New process targeting.** The New Process dialog offers three creation
+  modes — **Empty APL** (blank canvas; the first event node is the start),
+  **Import BPMN** (BPMN 2.0 XML transpiled to APL) and **Paste APL** (source
+  parsed client-side) — and includes a **Target Folder** picker restricted to
+  `processes/` and its subfolders (default `processes/`). File names are
+  forced to `*.apl.yaml`; the chosen `folderId` is carried on the draft so
+  project autosave persists the document into the selected folder. No project
+  root option exists.
+- **Folder domains.** The system roots are typed: `processes/` accepts only
+  APL process documents (`*.apl.yaml`, authored via the New Process dialog —
+  no generic file import, no non-APL moves), `forms/` accepts only `FORM`
+  JSON files (import forces the `FORM` kind, `application/json` and a
+  `*.json` name), and `resources/`, `media/`, `agents/`, `tests/` accept
+  generic `RESOURCE` files. The move picker constrains targets accordingly —
+  documents stay under `processes/`, forms under `forms/`, resources under
+  the other roots, and user folders never leave their system root.
 - The explorer replaces the flat workflow-file list; every tree document is
   APL-native (`.apl.yaml`), so the Phase 4 per-row format pill no longer
   applies there — the key/`processKey` invariant is enforced by the backend.
@@ -346,15 +368,19 @@ validated deterministic local starter with a visible fallback label.
   APL process document) or a `RESOURCE` (generic typed file). Nodes carry a
   breadcrumb `path`; documents display their file name (`fileName` or the
   derived `<name>.apl.yaml`).
-- **Folders.** Created inline; renamed in place; moved to another folder or
-  back to the root; deleted with a confirmation dialog. Deleting archives all
-  contained process documents (kept for deployed instances) and permanently
-  removes generic files and sub-folders.
+- **Folders.** The six system roots are locked (no rename/move/delete; shown
+  with a lock badge). User folders are created inline only **inside** the
+  system roots (subfolders of `processes/`, `resources/`, `forms/`, `media/`,
+  `agents/` or `tests/`); no creation, import or move target exists at the
+  project root. User folders can be renamed in place, moved between folders
+  and deleted with a confirmation dialog. Deleting archives all contained
+  process documents (kept for deployed instances) and permanently removes
+  generic files and sub-folders.
 - **Documents.** Clicking opens the process in the designer. Row actions:
   rename file (`PATCH /documents/{id}`), move to folder, archive
   (`POST /documents/{id}/archive`). Archived documents disappear from the
   tree and are read-only server-side.
-- **Resources.** Imported per folder (or at root) with a name, `FORM |
+- **Resources.** Imported per folder with a name, `FORM |
   RESOURCE` kind and content type; previewed in a modal (text decode for
   text/JSON/YAML/XML/CSV, download otherwise); content replaceable with
   optimistic revision; rename/move/delete available.
@@ -362,12 +388,13 @@ validated deterministic local starter with a visible fallback label.
   until autosave persists them; the tree refresh key is bumped by App whenever
   a document is created or saved so the explorer stays server-authoritative.
 
-### Empty projects without the seeded folders
+### Projects created before the locked-root migration
 
-Projects created before the file-tree migration have no seeded folders; the
-tree renders their root-level documents and resources directly, and the New
-Process dialog's folder picker offers only "Project root" until a folder is
-created.
+Projects created before migration `V14` were backfilled with the six system
+folders; pre-existing root-level documents and resources remain readable in
+the tree (and can be moved into folders), but no new content can be placed at
+the project root — the New Process dialog's folder picker and the move/import
+actions offer only the system folders and their subfolders.
 
 ---
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Folder, 
+  FolderTree,
   Bot, 
   UserCheck, 
   GitFork, 
@@ -182,8 +182,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               : 'text-[#A89F91] hover:text-[#EAE3D9]'
           }`}
         >
-          <Folder className="w-3.5 h-3.5 text-[#F4A261]" />
-          <span>Processes</span>
+          <FolderTree className="w-3.5 h-3.5 text-[#F4A261]" />
+          <span>Project</span>
         </button>
         <button
           onClick={() => onTabChange('palette')}

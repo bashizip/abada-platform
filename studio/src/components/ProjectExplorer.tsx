@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ChevronDown, ChevronRight, FileJson, FileText, FileUp, Folder,
-  FolderInput, FolderPlus, FolderTree, Download, Loader2, Pencil, Plus,
+  FolderInput, FolderPlus, FolderTree, Download, Loader2, Lock, Pencil, Plus,
   RefreshCw, Trash2, X, Check,
 } from 'lucide-react';
 import {
@@ -23,11 +23,24 @@ interface ProjectExplorerProps {
 
 type RowKind = 'folder' | 'document' | 'resource';
 
+/** The six system roots define what a folder may contain. */
+type FolderDomain = 'processes' | 'forms' | 'other';
+
+const topRootOf = (path: string): string => path.split('/')[0] || path;
+
+const domainOf = (path: string): FolderDomain => {
+  const root = topRootOf(path);
+  if (root === 'processes') return 'processes';
+  if (root === 'forms') return 'forms';
+  return 'other';
+};
+
 interface MoveTarget {
   kind: RowKind;
   id: string;
   revision: number;
   display: string;
+  resourceKind?: 'FORM' | 'RESOURCE';
 }
 
 interface NewResourceState {
@@ -47,6 +60,12 @@ const base64ToBytes = (base64: string): Uint8Array<ArrayBuffer> => {
 
 const base64ToText = (base64: string): string =>
   new TextDecoder('utf-8').decode(base64ToBytes(base64));
+
+/** forms/ only accepts FORM JSON files; other roots take generic resources. */
+const contentTypeFor = (resource: NewResourceState, domain: FolderDomain): string => {
+  if (domain === 'forms') return 'application/json';
+  return resource.contentType || 'application/octet-stream';
+};
 
 const readFileAsBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -158,7 +177,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     }, 'Rename failed');
   };
 
-  const createFolder = (parentId: string | null): void => {
+  const createFolder = (parentId: string): void => {
     const name = newFolderValue.trim();
     if (!name) return;
     void run(async () => {
@@ -166,7 +185,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
       setCreatingFolderIn(null);
       setNewFolderValue('');
       await refetch();
-      setExpanded((current) => new Set(current).add(created.id));
+      setExpanded((current) => new Set(current).add(created.id).add(parentId));
     }, 'Folder creation failed');
   };
 
@@ -202,14 +221,21 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
   const submitNewResource = (): void => {
     if (!newResource) return;
-    const { folderId, name, kind, contentType, contentBase64 } = newResource;
-    if (!name.trim() || !contentBase64) {
+    const targetPath = newResource.folderId
+      ? folderEntries.find((entry) => entry.folder.id === newResource.folderId)?.path
+      : undefined;
+    const domain = targetPath ? domainOf(targetPath) : 'other';
+    const name = domain === 'forms' && !newResource.name.trim().endsWith('.json')
+      ? `${newResource.name.trim()}.json`
+      : newResource.name;
+    const kind = domain === 'forms' ? 'FORM' : newResource.kind;
+    if (!name.trim() || !newResource.contentBase64) {
       setActionError('Provide a file name and select a file to import');
       return;
     }
     void run(async () => {
       await ProjectAPI.createResource(projectId, name.trim(), kind,
-        contentType || 'application/octet-stream', contentBase64, folderId);
+        contentTypeFor(newResource, domain), newResource.contentBase64, newResource.folderId);
       setNewResource(null);
       await refetch();
     }, 'File creation failed');
@@ -269,6 +295,18 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
   const excluded = excludedMoveTargets();
 
+  // Domain-aware move targets: APL documents stay under processes/, JSON form
+  // files under forms/, everything else under the other four system roots,
+  // and user folders never leave their system root.
+  const moveTargets = folderEntries.filter((entry) => {
+    if (!moving) return false;
+    if (moving.kind === 'folder') return topRootOf(entry.path) === topRootOf(moving.display);
+    if (moving.kind === 'document') return domainOf(entry.path) === 'processes';
+    return moving.resourceKind === 'FORM'
+      ? domainOf(entry.path) === 'forms'
+      : domainOf(entry.path) === 'other';
+  });
+
   const commitMove = (folderId: string | null): void => {
     if (!moving) return;
     const operation = moving.kind === 'folder'
@@ -289,42 +327,68 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
   const drafts = workflows.filter((workflow) => !workflow.documentId);
 
-  const renderFolderRow = (node: ProjectTreeNode, depth: number): React.ReactElement => (
-    <div key={node.id} className="group">
-      <div
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-[#2F2926] cursor-pointer text-[#EAE3D9]"
-        style={{ paddingLeft: 8 + depth * 14 }}
-        onClick={() => toggleFolder(node.id)}
-      >
-        {expanded.has(node.id) ? <ChevronDown className="w-3.5 h-3.5 text-[#A89F91] shrink-0" /> 
-          : <ChevronRight className="w-3.5 h-3.5 text-[#A89F91] shrink-0" />}
-        <Folder className={`w-4 h-4 shrink-0 ${expanded.has(node.id) ? 'text-[#F4A261]' : 'text-[#A89F91]'}`} />
-        <span className="text-xs font-medium truncate flex-1">{node.name}</span>
-        <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-          <button title="New file" disabled={busy}
-            onClick={(event) => { event.stopPropagation(); setNewResource({
-              folderId: node.id, name: '', kind: 'RESOURCE', contentType: 'application/json',
-              contentBase64: '' }); }}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#2A9D8F]">
-            <Plus className="w-3 h-3" />
-          </button>
-          <button title="Rename" disabled={busy}
-            onClick={(event) => { event.stopPropagation(); startRename('folder', node.id, node.name); }}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
-            <Pencil className="w-3 h-3" />
-          </button>
-          <button title="Move" disabled={busy}
-            onClick={(event) => { event.stopPropagation(); setMoving({ kind: 'folder', id: node.id, revision: node.revision, display: node.path }); }}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
-            <FolderInput className="w-3 h-3" />
-          </button>
-          <button title="Delete folder" disabled={busy}
-            onClick={(event) => { event.stopPropagation(); deleteFolder(node); }}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#E76F51]">
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </span>
-      </div>
+  const renderFolderRow = (node: ProjectTreeNode, depth: number): React.ReactElement => {
+    const isSystemRoot = node.system === true;
+    return (
+      <div key={node.id} className="group">
+        <div
+          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-[#2F2926] cursor-pointer ${
+            isSystemRoot ? 'bg-[#1A1614]/50 border border-[#3A322E]/60 text-[#EAE3D9]' : 'text-[#EAE3D9]'}`}
+          style={{ paddingLeft: 8 + depth * 14 }}
+          onClick={() => toggleFolder(node.id)}
+        >
+          {expanded.has(node.id) ? <ChevronDown className="w-3.5 h-3.5 text-[#A89F91] shrink-0" /> 
+            : <ChevronRight className="w-3.5 h-3.5 text-[#A89F91] shrink-0" />}
+          <Folder className={`w-4 h-4 shrink-0 ${expanded.has(node.id) ? 'text-[#F4A261]' : 'text-[#A89F91]'}`} />
+          <span className="text-xs font-medium truncate flex-1">{node.name}</span>
+          {isSystemRoot && (
+            <span title="System folder — locked, cannot be renamed, moved or deleted">
+              <Lock className="w-3 h-3 text-[#E76F51]/70 shrink-0" />
+            </span>
+          )}
+          <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+            {domainOf(node.path) === 'processes' ? (
+              <button title="New process" disabled={busy}
+                onClick={(event) => { event.stopPropagation(); onNewWorkflow(); }}
+                className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#F4A261]">
+                <Plus className="w-3 h-3" />
+              </button>
+            ) : (
+              <button title="New file" disabled={busy}
+                onClick={(event) => { event.stopPropagation(); setNewResource({
+                  folderId: node.id, name: '', kind: domainOf(node.path) === 'forms' ? 'FORM' : 'RESOURCE',
+                  contentType: domainOf(node.path) === 'forms' ? 'application/json' : 'application/octet-stream',
+                  contentBase64: '' }); }}
+                className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#2A9D8F]">
+                <Plus className="w-3 h-3" />
+              </button>
+            )}
+            <button title="New subfolder" disabled={busy}
+              onClick={(event) => { event.stopPropagation(); setCreatingFolderIn(node.id); setNewFolderValue(''); }}
+              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#F4A261]">
+              <FolderPlus className="w-3 h-3" />
+            </button>
+            {!isSystemRoot && (
+              <>
+                <button title="Rename" disabled={busy}
+                  onClick={(event) => { event.stopPropagation(); startRename('folder', node.id, node.name); }}
+                  className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button title="Move" disabled={busy}
+                  onClick={(event) => { event.stopPropagation(); setMoving({ kind: 'folder', id: node.id, revision: node.revision, display: node.path }); }}
+                  className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+                  <FolderInput className="w-3 h-3" />
+                </button>
+                <button title="Delete folder" disabled={busy}
+                  onClick={(event) => { event.stopPropagation(); deleteFolder(node); }}
+                  className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#E76F51]">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </>
+            )}
+          </span>
+        </div>
       {renaming && renaming.kind === 'folder' && renaming.id === node.id && (
         <form className="flex items-center gap-1 px-2 ml-6" style={{ paddingLeft: 20 + depth * 14 }}
           onSubmit={(event) => { event.preventDefault(); commitRename('folder', node.id, node.revision); }}>
@@ -355,6 +419,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
       )}
     </div>
   );
+  };
 
   const renderDocumentRow = (node: ProjectTreeNode, depth: number): React.ReactElement => {
     const active = isActiveDocument(node);
@@ -420,7 +485,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
               <Pencil className="w-3 h-3" />
             </button>
             <button title="Move to folder" disabled={busy}
-              onClick={(event) => { event.stopPropagation(); setMoving({ kind: 'resource', id: node.id, revision: node.revision, display: node.path }); }}
+              onClick={(event) => { event.stopPropagation(); setMoving({ kind: 'resource', id: node.id, revision: node.revision, display: node.path, resourceKind: kind }); }}
               className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
               <FolderInput className="w-3 h-3" />
             </button>
@@ -469,14 +534,12 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
             <span className="text-xs font-semibold text-[#EAE3D9]">Move &quot;{moving.display}&quot; to</span>
             <button onClick={() => setMoving(null)} className="text-[#A89F91] hover:text-[#EAE3D9]"><X className="w-4 h-4" /></button>
           </div>
-          <button
-            disabled={busy || excluded.has('')}
-            onClick={() => commitMove(null)}
-            className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-[#A89F91] hover:bg-[#1A1614] disabled:opacity-40"
-          >
-            Project root (no folder)
-          </button>
-          {folderEntries.map((entry) => {
+          {moveTargets.length === 0 && (
+            <p className="text-[11px] text-[#A89F91] px-2 py-1.5">
+              No valid folder here — items stay within their system root.
+            </p>
+          )}
+          {moveTargets.map((entry) => {
             const depth = entry.path.split('/').length - 1;
             return (
               <button key={entry.folder.id}
@@ -560,7 +623,11 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
   const renderNewResourceModal = (): React.ReactElement | null => {
     if (!newResource) return null;
-    const targetPath = folderEntries.find((entry) => entry.folder.id === newResource.folderId)?.path;
+    const targetEntry = newResource.folderId
+      ? folderEntries.find((entry) => entry.folder.id === newResource.folderId)
+      : undefined;
+    const targetPath = targetEntry?.path;
+    const targetDomain = targetPath ? domainOf(targetPath) : 'other';
     return (
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl w-full max-w-md p-5 shadow-warm-lg space-y-4">
@@ -573,30 +640,37 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
               <X className="w-4 h-4" />
             </button>
           </div>
+          {targetDomain === 'forms' && (
+            <p className="text-[10px] text-[#2A9D8F] bg-[#2A9D8F]/10 border border-[#2A9D8F]/30 rounded-lg px-3 py-2">
+              forms/ only accepts FORM JSON files — the name is forced to *.json.
+            </p>
+          )}
           <div className="space-y-3">
             <div className="space-y-1.5">
               <label className="text-xs text-[#A89F91] block font-medium">File Name</label>
               <input value={newResource.name}
                 onChange={(event) => setNewResource({ ...newResource, name: event.target.value })}
-                placeholder="e.g. clearing_form_schema.json"
+                placeholder={targetDomain === 'forms' ? 'e.g. clearing_form.json' : 'e.g. clearing_form_schema.json'}
                 className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs text-[#A89F91] block font-medium">Kind</label>
                 <select value={newResource.kind}
+                  disabled={targetDomain === 'forms'}
                   onChange={(event) => setNewResource({ ...newResource, kind: event.target.value as ResourceKind })}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9]">
-                  <option value="RESOURCE">RESOURCE</option>
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] disabled:opacity-50">
                   <option value="FORM">FORM</option>
+                  <option value="RESOURCE">RESOURCE</option>
                 </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs text-[#A89F91] block font-medium">Content Type</label>
                 <input value={newResource.contentType}
+                  disabled={targetDomain === 'forms'}
                   onChange={(event) => setNewResource({ ...newResource, contentType: event.target.value })}
                   list="content-type-presets"
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]" />
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F] disabled:opacity-50" />
                 <datalist id="content-type-presets">
                   <option value="application/json" />
                   <option value="application/yaml" />
@@ -651,20 +725,9 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase">
-          Project Files
+          Project
         </span>
         <div className="flex items-center gap-0.5">
-          <button title="New Folder" disabled={busy}
-            onClick={() => setCreatingFolderIn('__root__')}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#F4A261]">
-            <FolderPlus className="w-3.5 h-3.5" />
-          </button>
-          <button title="Import File" disabled={busy}
-            onClick={() => setNewResource({ folderId: null, name: '', kind: 'RESOURCE',
-              contentType: 'application/json', contentBase64: '' })}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#2A9D8F]">
-            <FileUp className="w-3.5 h-3.5" />
-          </button>
           <button title="New Process" disabled={busy}
             onClick={onNewWorkflow}
             className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
@@ -677,19 +740,6 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           </button>
         </div>
       </div>
-
-      {creatingFolderIn === '__root__' && (
-        <form className="flex items-center gap-1 px-2 py-1 bg-[#1A1614] rounded-lg border border-[#3A322E]"
-          onSubmit={(event) => { event.preventDefault(); createFolder(null); }}>
-          <Folder className="w-3.5 h-3.5 text-[#F4A261] shrink-0" />
-          <input autoFocus value={newFolderValue} placeholder="Folder name (project root)"
-            onChange={(event) => setNewFolderValue(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Escape') { setCreatingFolderIn(null); setNewFolderValue(''); } }}
-            className="flex-1 min-w-0 bg-transparent px-1 py-1 text-xs text-[#EAE3D9]" />
-          <button type="submit" className="p-1 text-[#90A955]"><Check className="w-3.5 h-3.5" /></button>
-          <button type="button" onClick={() => { setCreatingFolderIn(null); setNewFolderValue(''); }} className="p-1 text-[#A89F91]"><X className="w-3.5 h-3.5" /></button>
-        </form>
-      )}
 
       {actionError && (
         <div className="text-[11px] text-[#E76F51] bg-[#E76F51]/10 border border-[#E76F51]/30 rounded-lg px-3 py-2">
@@ -712,7 +762,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
       {tree !== null && tree.length === 0 && !loadError && (
         <div className="text-xs text-[#A89F91] text-center p-4 bg-[#1A1614] rounded-xl border border-[#3A322E]">
           <FolderTree className="w-4 h-4 mx-auto mb-1.5 text-[#A89F91]" />
-          No files yet. Create a folder or a new process file.
+          No files yet. Import into the system folders or create a new process file.
         </div>
       )}
 
