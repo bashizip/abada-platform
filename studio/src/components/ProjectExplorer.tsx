@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, ChevronDown, ChevronRight, FileJson, FileText, FileUp, Folder,
+  Archive, ChevronRight, FileJson, FileText, FileUp, Folder,
   FolderInput, FolderPlus, FolderTree, Download, Loader2, Lock, Pencil, Plus,
   RefreshCw, Trash2, X, Check,
 } from 'lucide-react';
@@ -337,8 +337,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => toggleFolder(node.id)}
         >
-          {expanded.has(node.id) ? <ChevronDown className="w-3.5 h-3.5 text-[#A89F91] shrink-0" /> 
-            : <ChevronRight className="w-3.5 h-3.5 text-[#A89F91] shrink-0" />}
+          <ChevronRight className={`w-3.5 h-3.5 text-[#A89F91] shrink-0 transition-transform duration-200 ease-out ${expanded.has(node.id) ? 'rotate-90' : ''}`} />
           <Folder className={`w-4 h-4 shrink-0 ${expanded.has(node.id) ? 'text-[#F4A261]' : 'text-[#A89F91]'}`} />
           <span className="text-xs font-medium truncate flex-1">{node.name}</span>
           {isSystemRoot && (
@@ -400,8 +399,11 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           <button type="button" onClick={() => setRenaming(null)} className="p-1 text-[#A89F91]"><X className="w-3.5 h-3.5" /></button>
         </form>
       )}
-      {expanded.has(node.id) && (
-        <div>
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${expanded.has(node.id) ? 'opacity-100' : 'opacity-0'}`}
+        style={{ gridTemplateRows: expanded.has(node.id) ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden min-h-0 transition-opacity duration-200 ease-out">
           {creatingFolderIn === node.id && (
             <form className="flex items-center gap-1 px-2 py-1" style={{ paddingLeft: 20 + depth * 14 }}
               onSubmit={(event) => { event.preventDefault(); createFolder(node.id); }}>
@@ -416,7 +418,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           )}
           {node.children.map((child) => renderRow(child, depth + 1))}
         </div>
-      )}
+      </div>
     </div>
   );
   };

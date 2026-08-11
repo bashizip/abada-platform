@@ -196,7 +196,9 @@ workspace with folders and typed files.
   and an Unsaved Drafts section for local files that have not yet been
   persisted by autosave.
 - **New process targeting.** The New Process dialog offers three creation
-  modes — **Empty APL** (blank canvas; the first event node is the start),
+  modes — **Empty APL** (empty canvas; the studio seeds the start event node
+  because the engine requires at least one flow node, so first-time drawing
+  and autosave both have a valid graph),
   **Import BPMN** (BPMN 2.0 XML transpiled to APL) and **Paste APL** (source
   parsed client-side) — and includes a **Target Folder** picker restricted to
   `processes/` and its subfolders (default `processes/`). File names are
@@ -347,11 +349,14 @@ validated deterministic local starter with a visible fallback label.
 
 ### 9. Empty-project and APL authoring contract
 
-- A project with no process documents opens one local, empty process draft. It
-  must never clone a demo or a process from another project.
-- An empty draft is not persisted until it contains at least one node. Once it
-  does, project autosave creates the PostgreSQL-backed document and subsequent
-  edits use optimistic revisions.
+- A project with no process documents opens an empty workspace canvas (no
+  silent draft is persisted). The first visual mutation — a palette node, a
+  connection, or applying pasted/validated APL — materializes a local draft
+  rooted in `processes/`, and project autosave then persists the
+  PostgreSQL-backed document with optimistic revisions.
+- An empty process created through the New Process dialog is seeded with the
+  start event node (the engine requires at least one flow node), so it is a
+  valid document from the start and autosaves into its target folder.
 - `Diagram` and `APL YAML` are two projections of the same process. Applying
   validated YAML replaces the active diagram while retaining its project
   document identity and revision.

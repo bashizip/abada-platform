@@ -110,6 +110,8 @@ export default function App() {
   const failedAutosaveFingerprint = useRef(new Map<string, string>());
   const persistedProcessKeys = useRef(new Map<string, string>());
   const creatingWorkflowIds = useRef(new Set<string>());
+  const processesRootId = useRef<string | undefined>(undefined);
+  const materializedDraftId = useRef<string | undefined>(undefined);
 
   // Get active workflow object
   const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId)
@@ -132,7 +134,12 @@ export default function App() {
     setSidebarTab('files');
     setActiveProject(project);
     localStorage.setItem('abada.studio.projectId', project.id);
-    const documents = await ProjectAPI.documents(project.id);
+    const [documents, tree] = await Promise.all([
+      ProjectAPI.documents(project.id),
+      ProjectAPI.tree(project.id),
+    ]);
+    processesRootId.current = tree
+      .find((node) => node.kind === 'FOLDER' && node.name === 'processes')?.id;
     if (documents.length) {
       const loaded = documents.map(ProjectAPI.workflow);
       loaded.forEach((workflow) => {
@@ -182,7 +189,10 @@ export default function App() {
   }, [authenticated]);
 
   useEffect(() => {
-    if (!activeProject || currentWorkflow.nodes.length === 0) return;
+    if (!activeProject) return;
+    // The pristine workspace fallback is never persisted on its own; once the
+    // user draws on it the first mutation materializes a real draft entry.
+    if (currentWorkflow.id === bootstrapWorkflow.current.id) return;
     const persistedProcessKey = currentWorkflow.documentId
       ? persistedProcessKeys.current.get(currentWorkflow.documentId)
       : undefined;
@@ -198,7 +208,8 @@ export default function App() {
       const save = currentWorkflow.documentId
         ? ProjectAPI.saveDocument(activeProject.id, workflowToSave)
         : ProjectAPI.createDocument(activeProject.id, workflowToSave, workflowToSave.description || '',
-            { folderId: workflowToSave.folderId ?? null, fileName: workflowToSave.fileName ?? null });
+            { folderId: workflowToSave.folderId ?? processesRootId.current ?? null,
+              fileName: workflowToSave.fileName ?? null });
       save.then((saved) => {
         const persistedId = saved.id;
         persistedFingerprint.current.set(persistedId, fingerprint);
@@ -230,6 +241,9 @@ export default function App() {
   // the Auto Layout button keep working afterwards.
   const laidOutWorkflowIds = useRef(new Set<string>());
   useLayoutEffect(() => {
+    // Pristine empty workspace: layout applies once a draft actually
+    // materializes (the first mutation), never on mount.
+    if (!activeWorkflowId && workflows.length === 0) return;
     if (laidOutWorkflowIds.current.has(activeWorkflowId)) return;
     laidOutWorkflowIds.current.add(activeWorkflowId);
     updateActiveWorkflow((wf) => ({
@@ -239,11 +253,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkflowId]);
 
-  // Helper to update active workflow nodes/edges
+  // Helper to update active workflow nodes/edges. When nothing is active yet
+  // (empty project — the pristine workspace fallback is displayed), the first
+  // mutation materializes a real draft entry under the processes/ system root
+  // and activates it, so drawing and APL apply work even with zero documents.
   const updateActiveWorkflow = (updater: (wf: WorkflowFile) => WorkflowFile) => {
-    setWorkflows((prev) =>
-      prev.map((wf) => (wf.id === activeWorkflowId ? updater(wf) : wf))
-    );
+    let targetId: string | undefined = activeWorkflowId;
+    if (!targetId || !workflows.some((wf) => wf.id === targetId)) {
+      // A materialized draft can be dropped or re-keyed (project reload,
+      // autosave id swap) — only reuse it while it still exists in state.
+      const refId = materializedDraftId.current;
+      targetId = refId && workflows.some((wf) => wf.id === refId) ? refId : undefined;
+    }
+    if (!targetId) {
+      const draftId = `draft-${Date.now()}`;
+      materializedDraftId.current = draftId;
+      setActiveWorkflowId(draftId);
+      const draft = {
+        ...updater({ ...bootstrapWorkflow.current, folderId: processesRootId.current }),
+        id: draftId,
+      };
+      setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
+      return;
+    }
+    setWorkflows((prev) => prev.map((wf) => (wf.id === targetId ? updater(wf) : wf)));
   };
 
   // Node Actions
@@ -274,12 +307,23 @@ export default function App() {
       updatedAt: persistedTarget.updatedAt,
       description: persistedTarget.description,
     } : workflow;
+    let activeId = appliedWorkflow.id;
     if (authoringCandidate && !authoringCandidate.replaceWorkflowId) {
       setWorkflows((items) => [appliedWorkflow, ...items]);
-    } else {
+    } else if (workflows.some((item) => item.id === targetId)) {
       setWorkflows((items) => items.map((item) => item.id === targetId ? appliedWorkflow : item));
+    } else {
+      // Applying onto the pristine workspace fallback (empty project): mint a
+      // fresh draft under the processes/ system root and activate it.
+      const draftId = `draft-${Date.now()}`;
+      materializedDraftId.current = draftId;
+      activeId = draftId;
+      setWorkflows((items) => [
+        { ...appliedWorkflow, id: draftId, folderId: appliedWorkflow.folderId ?? processesRootId.current },
+        ...items.filter((item) => !item.id.startsWith('draft-')),
+      ]);
     }
-    setActiveWorkflowId(appliedWorkflow.id);
+    setActiveWorkflowId(activeId);
     setSelectedNodeId(appliedWorkflow.nodes[0]?.id || null);
     setAuthoringCandidate(null);
     setDesignerMode('diagram');
@@ -759,12 +803,22 @@ export default function App() {
     const fileName = (workflow.fileName || workflow.name).endsWith('.apl.yaml')
       ? (workflow.fileName || workflow.name)
       : `${workflow.fileName || workflow.name}.apl.yaml`;
-    const draft: WorkflowFile = {
+    // The engine requires at least one flow node (flow.nodes must declare at
+    // least one node), so an empty process is seeded with the start node —
+    // the empty canvas is equivalent to a start node.
+    const seeded: WorkflowFile = workflow.nodes.length > 0 ? workflow : {
       ...workflow,
+      nodes: [{
+        id: 'start', type: 'event', subtype: 'start', title: 'Start Process',
+        description: 'Webhook trigger that begins the APL process', x: 120, y: 220,
+      }],
+    };
+    const draft: WorkflowFile = {
+      ...seeded,
       id: `draft-${Date.now()}`,
       name: fileName,
       fileName,
-      processKey: workflow.processKey
+      processKey: seeded.processKey
         || fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
         || `process_${Date.now()}`,
     };
@@ -935,7 +989,7 @@ export default function App() {
                 {!isLiveReadOnly && <NLInputBar
                   onGenerateWorkflow={handleGenerateWorkflow}
                   isGenerating={isGenerating}
-                  hasActiveWorkflow={workflows.length > 0}
+                  hasActiveWorkflow={!!activeProject}
                 />}
               </>
             ) : (
