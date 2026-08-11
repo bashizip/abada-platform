@@ -49,7 +49,7 @@ locally, while every live execution is an explicit, durable engine action.
   output, gateway choice and human completion. For live instances, animate
   only engine-reported active tokens and preserve completed/waiting/failed
   facts; Studio must never fake engine progress.
-- [ ] Deliver the first real `abada:agent` external worker and persist model
+- [x] Deliver the first real `abada:agent` external worker and persist model
   attempts/results through the durable worker and history contracts.
 - [ ] Add restart/retry/cancellation evidence for the worker, then surface
   model/tool metadata in the same live instance view.
