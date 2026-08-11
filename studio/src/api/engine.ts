@@ -20,6 +20,31 @@ export interface DeploymentResult {
   schemaType?: 'APL_NATIVE' | 'BPMN_XML';
 }
 
+export interface InstanceQuery {
+  /** Optional ProcessStatus filter: RUNNING | COMPLETED | FAILED | SUSPENDED | CANCELLED. */
+  status?: string;
+  /** Optional process definition key filter. */
+  processDefinitionId?: string;
+  page?: number;
+  size?: number;
+}
+
+export interface ProjectJob {
+  id: string;
+  processInstanceId: string;
+  activityId: string;
+  exceptionMessage?: string | null;
+  retries?: number | null;
+}
+
+export interface InstancePage {
+  items: ProcessInstanceDTO[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface ProcessInstanceDTO {
   projectId?: string;
   id: string;
@@ -116,17 +141,97 @@ export class EngineAPI {
   }
 
   /**
-   * Gets a list of recent process instances
+   * Gets a page of process instances, optionally filtered by status and/or
+   * process definition. Reads the engine pagination headers so consumers get
+   * accurate totals for KPIs and infinite scroll.
    */
-  static async getInstances(projectId?: string): Promise<ProcessInstanceDTO[]> {
-    const path = projectId ? `/projects/${projectId}/instances?size=20` : '/processes/instances?size=20';
+  static async getInstances(projectId?: string, query: InstanceQuery = {}): Promise<InstancePage> {
+    const params = new URLSearchParams();
+    if (query.status) params.set('status', query.status);
+    if (query.processDefinitionId) params.set('processDefinitionId', query.processDefinitionId);
+    params.set('page', String(query.page ?? 0));
+    params.set('size', String(query.size ?? 50));
+    const path = projectId
+      ? `/projects/${projectId}/instances?${params}`
+      : `/processes/instances?${params}`;
     const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
       throw new Error(`Failed to fetch instances: ${res.statusText}`);
     }
+    const items = await res.json() as ProcessInstanceDTO[];
+    const header = (name: string): number => {
+      const value = res.headers.get(name);
+      return value === null || Number.isNaN(Number(value)) ? 0 : Number(value);
+    };
+    return {
+      items,
+      page: header('X-Page'),
+      pageSize: header('X-Page-Size') || items.length,
+      total: header('X-Total-Count'),
+      totalPages: header('X-Total-Pages'),
+    };
+  }
+
+  /** Lists every deployed process definition (one row per version) in a project. */
+  static async getProcessDefinitions(projectId: string): Promise<ProcessDefinitionDTO[]> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/processes?size=100`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch process definitions: ${res.statusText}`);
     return res.json();
+  }
+
+  /** Reads the typed variable map of a process instance. */
+  static async getInstanceVariables(instanceId: string, projectId: string): Promise<Record<string, unknown>> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/variables`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch instance variables: ${res.statusText}`);
+    return res.json();
+  }
+
+  /** Cancels a process instance (terminal state) with an audit reason. */
+  static async cancelInstance(instanceId: string, projectId: string, reason = 'Cancelled from Studio'): Promise<void> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}`,
+      { method: 'DELETE', headers: this.getHeaders(), body: JSON.stringify({ reason }) },
+    );
+    if (!res.ok) throw new Error(`Failed to cancel instance: ${res.statusText}`);
+  }
+
+  /**
+   * Lists external-task jobs (incidents) in a project — failed or in-flight
+   * durable jobs with retry counters and error messages.
+   */
+  static async getJobs(projectId: string, active = true): Promise<ProjectJob[]> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/jobs?active=${active}&size=100`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch jobs: ${res.statusText}`);
+    return res.json();
+  }
+
+  /** Sets the retry counter for a failed job, returning it to the OPEN queue. */
+  static async retryJob(projectId: string, jobId: string, retries: number): Promise<void> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/jobs/${encodeURIComponent(jobId)}/retries`,
+      { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ retries }) },
+    );
+    if (!res.ok) throw new Error(`Failed to retry job: ${res.statusText}`);
+  }
+
+  /** Suspends or resumes a process instance. */
+  static async setInstanceSuspension(instanceId: string, projectId: string, suspended: boolean): Promise<void> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/suspension`,
+      { method: 'PUT', headers: this.getHeaders(), body: JSON.stringify({ suspended }) },
+    );
+    if (!res.ok) throw new Error(`Failed to update instance suspension: ${res.statusText}`);
   }
 
   /**

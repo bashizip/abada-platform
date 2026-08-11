@@ -20,7 +20,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { WorkflowFile, NodeType, EventSubtype, GatewaySubtype } from '@/types';
-import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
+import { EngineAPI, ProcessDefinitionDTO, ProcessInstanceDTO } from '@/api/engine';
 import { ProjectExplorer } from '@/components/ProjectExplorer';
 
 interface SidebarProps {
@@ -60,16 +60,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
   
   const [instances, setInstances] = useState<ProcessInstanceDTO[]>([]);
   const [isLoadingInstances, setIsLoadingInstances] = useState<boolean>(false);
+  const [definitions, setDefinitions] = useState<ProcessDefinitionDTO[]>([]);
+  const [processFilter, setProcessFilter] = useState<string>('ALL');
 
   React.useEffect(() => {
-    if (activeTab === 'instances') {
-      setIsLoadingInstances(true);
-      EngineAPI.getInstances(projectId)
-        .then(data => setInstances(data))
-        .catch(err => console.error('Failed to fetch instances', err))
-        .finally(() => setIsLoadingInstances(false));
+    if (activeTab !== 'instances') return;
+    if (!projectId) {
+      setInstances([]);
+      setDefinitions([]);
+      return;
     }
+    setIsLoadingInstances(true);
+    EngineAPI.getInstances(projectId)
+      .then(page => setInstances(page.items))
+      .catch(err => console.error('Failed to fetch instances', err))
+      .finally(() => setIsLoadingInstances(false));
+    EngineAPI.getProcessDefinitions(projectId)
+      .then(items => {
+        const latestByKey = new Map<string, ProcessDefinitionDTO>();
+        for (const item of items) {
+          const current = latestByKey.get(item.id);
+          if (!current || item.version > current.version) latestByKey.set(item.id, item);
+        }
+        setDefinitions([...latestByKey.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(() => setDefinitions([]));
   }, [activeTab, instancesRefreshKey, projectId]);
+
+  const visibleInstances = processFilter === 'ALL'
+    ? instances
+    : instances.filter((instance) => instance.processDefinitionId === processFilter);
 
   const paletteItems: {
     type: NodeType;
@@ -304,7 +324,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={() => {
                 setIsLoadingInstances(true);
-                EngineAPI.getInstances(projectId).then(setInstances).finally(() => setIsLoadingInstances(false));
+                EngineAPI.getInstances(projectId).then(page => setInstances(page.items)).finally(() => setIsLoadingInstances(false));
               }}
               className="text-xs text-[#2A9D8F] hover:text-[#34bdae] p-1 rounded hover:bg-[#1A1614] transition-all"
               title="Refresh Instances"
@@ -313,13 +333,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
+          {definitions.length > 0 && (
+            <div className="relative">
+              <select
+                value={processFilter}
+                onChange={(event) => setProcessFilter(event.target.value)}
+                className="w-full appearance-none bg-[#1A1614] border border-[#3A322E] rounded-lg px-2.5 py-1.5 text-[11px] text-[#A89F91] focus:outline-none focus:border-[#F4A261] transition-colors"
+                title="Filter instances by process"
+              >
+                <option value="ALL">All processes</option>
+                {definitions.map((definition) => (
+                  <option key={`${definition.id}-${definition.deploymentId}`} value={definition.id}>
+                    {definition.name || definition.id} · v{definition.version}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A89F91]" />
+            </div>
+          )}
+
+          {processFilter !== 'ALL' && (
+            <div className="text-[10px] text-[#A89F91]">
+              {visibleInstances.length} of {instances.length} instances
+            </div>
+          )}
+
           <div className="space-y-2">
-            {instances.length === 0 && !isLoadingInstances && (
+            {visibleInstances.length === 0 && !isLoadingInstances && (
               <div className="text-xs text-[#A89F91] text-center p-4 bg-[#1A1614] rounded-xl border border-[#3A322E]">
-                No running instances found. Deploy and start a process to see it here.
+                {processFilter === 'ALL'
+                  ? 'No running instances found. Deploy and start a process to see it here.'
+                  : 'No instances for this process yet. Deploy and start it to see them here.'}
               </div>
             )}
-            {instances.map((instance) => (
+            {visibleInstances.map((instance) => (
               <button
                 key={instance.id}
                 onClick={() => onSelectInstance(instance)}
