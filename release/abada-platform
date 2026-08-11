@@ -13,6 +13,7 @@ Options:
   --telemetry        Add the bundled metrics, traces and logs stack
   --env-file PATH    Use an explicit environment file
   --no-pull          Skip image availability/pull checks during doctor
+  --agent            Also start the first-party abada:agent worker (dev only)
 USAGE
   exit 0
 fi
@@ -25,11 +26,13 @@ esac
 shift 2 || true
 TELEMETRY=false
 SKIP_PULL=false
+AGENT=false
 ENV_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --telemetry) TELEMETRY=true ;;
     --no-pull) SKIP_PULL=true ;;
+    --agent) AGENT=true ;;
     --env-file)
       [[ $# -ge 2 ]] || { echo "Error: --env-file requires a path" >&2; exit 64; }
       ENV_FILE="$2"
@@ -39,6 +42,11 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+if [[ "$AGENT" == true && "$MODE" == "prod" ]]; then
+  echo "Error: --agent is only supported in dev mode" >&2
+  exit 64
+fi
 
 if [[ -z "$ENV_FILE" ]]; then
   ENV_FILE="$ROOT_DIR/.env.$MODE"
@@ -57,6 +65,9 @@ fi
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.$MODE.yaml")
 if [[ "$TELEMETRY" == "true" ]]; then
   COMPOSE+=(-f "$ROOT_DIR/compose.telemetry.yaml")
+fi
+if [[ "$AGENT" == "true" ]]; then
+  COMPOSE+=(--profile agent)
 fi
 
 require_command() {
@@ -250,7 +261,7 @@ doctor() {
   if [[ "$SKIP_PULL" != "true" ]]; then
     "${COMPOSE[@]}" pull --quiet
   fi
-  echo "Preflight passed: profile=$MODE telemetry=$TELEMETRY"
+  echo "Preflight passed: profile=$MODE telemetry=$TELEMETRY agent=$AGENT"
 }
 
 configure_console_style() {

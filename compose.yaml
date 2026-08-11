@@ -42,7 +42,7 @@ services:
       ABADA_INSIGHT_ENABLED: ${ABADA_INSIGHT_ENABLED:-false}
       ABADA_LLM_BASE_URL: ${ABADA_LLM_BASE_URL:-}
       ABADA_LLM_API_KEY: ${ABADA_LLM_API_KEY:-}
-      ABADA_LLM_MODEL: ${ABADA_LLM_MODEL:-deepseek/deepseek-v4-flash-free}
+      ABADA_LLM_MODEL: ${ABADA_LLM_MODEL:-gemini-2.5-flash}
     volumes:
       - engine_logs:/app/logs
     networks:
@@ -136,16 +136,28 @@ services:
       ABADA_AGENT_OIDC_TOKEN_URL: ${ABADA_AGENT_OIDC_TOKEN_URL:-}
       ABADA_AGENT_OIDC_CLIENT_ID: ${ABADA_AGENT_OIDC_CLIENT_ID:-}
       ABADA_AGENT_OIDC_CLIENT_SECRET: ${ABADA_AGENT_OIDC_CLIENT_SECRET:-}
-      ABADA_AGENT_LLM_BASE_URL: ${ABADA_AGENT_LLM_BASE_URL:-}
-      ABADA_AGENT_LLM_API_KEY: ${ABADA_AGENT_LLM_API_KEY:-}
-      ABADA_AGENT_LLM_MODEL: ${ABADA_AGENT_LLM_MODEL:-gpt-5-mini}
+      # At least one LLM endpoint is required. Each gateway falls back to the
+      # other, so the OpenAI-compatible endpoint is purely additive.
+      ABADA_AGENT_LLM_BASE_URL: ${ABADA_AGENT_LLM_BASE_URL:-${ABADA_LLM_BASE_URL:-}}
+      ABADA_AGENT_LLM_API_KEY: ${ABADA_AGENT_LLM_API_KEY:-${ABADA_LLM_API_KEY:-}}
+      ABADA_AGENT_OPENAI_BASE_URL: ${ABADA_AGENT_OPENAI_BASE_URL:-${ABADA_AGENT_LLM_BASE_URL:-${ABADA_LLM_BASE_URL:-}}}
+      ABADA_AGENT_OPENAI_API_KEY: ${ABADA_AGENT_OPENAI_API_KEY:-${ABADA_AGENT_LLM_API_KEY:-${ABADA_LLM_API_KEY:-}}}
+      ABADA_AGENT_LLM_MODEL: ${ABADA_AGENT_LLM_MODEL:-${ABADA_LLM_MODEL:-gemini-2.5-flash}}
       ABADA_AGENT_ALLOWED_TOOLS: ${ABADA_AGENT_ALLOWED_TOOLS:-}
       ABADA_AGENT_PROJECT_ID: ${ABADA_AGENT_PROJECT_ID:-}
+      ABADA_AGENT_POLL_INTERVAL_MS: ${ABADA_AGENT_POLL_INTERVAL_MS:-1000}
       ABADA_AGENT_MAX_TASKS: ${ABADA_AGENT_MAX_TASKS:-4}
       ABADA_AGENT_LOCK_DURATION_MS: ${ABADA_AGENT_LOCK_DURATION_MS:-120000}
     networks:
       - edge
     restart: unless-stopped
+    # Liveness check: PID 1 is the worker JVM (java -jar agent-worker.jar).
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:

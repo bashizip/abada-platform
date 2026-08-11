@@ -5,10 +5,12 @@ param(
   [string]$Profile = "dev",
   [switch]$Telemetry,
   [string]$EnvFile,
-  [switch]$NoPull
+  [switch]$NoPull,
+  [switch]$Agent
 )
 
 $ErrorActionPreference = "Stop"
+if ($Agent -and $Profile -eq 'prod') { throw "--Agent is only supported in dev mode" }
 $Root = Split-Path -Parent $PSScriptRoot
 if (-not $EnvFile) { $EnvFile = Join-Path $Root ".env.$Profile" }
 if ($Profile -eq "dev" -and -not (Test-Path $EnvFile)) {
@@ -21,6 +23,7 @@ if (-not (Test-Path $EnvFile)) {
 
 $Compose = @("compose", "--env-file", $EnvFile, "-f", (Join-Path $Root "compose.yaml"), "-f", (Join-Path $Root "compose.$Profile.yaml"))
 if ($Telemetry) { $Compose += @("-f", (Join-Path $Root "compose.telemetry.yaml")) }
+if ($Agent) { $Compose += @("--profile", "agent") }
 
 function Invoke-Compose([string[]]$Arguments) {
   & docker @Compose @Arguments
@@ -176,7 +179,7 @@ function Invoke-Doctor {
   try { New-Item -ItemType File -Path $WriteTest | Out-Null } finally { Remove-Item $WriteTest -ErrorAction SilentlyContinue }
   Assert-PortsAvailable
   if (-not $NoPull) { Invoke-Compose @("pull", "--quiet") }
-  Write-Host "Preflight passed: profile=$Profile telemetry=$Telemetry"
+  Write-Host "Preflight passed: profile=$Profile telemetry=$Telemetry agent=$Agent"
 }
 
 function Write-Section([string]$Title) {

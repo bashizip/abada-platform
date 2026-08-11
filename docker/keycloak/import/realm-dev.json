@@ -59,6 +59,41 @@
   ],
   "clients": [
     {
+      "clientId": "abada-agent-worker",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "abada-dev-agent-worker-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "abada-frontend",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "abada-frontend",
       "enabled": true,
       "publicClient": true,
@@ -107,6 +142,12 @@
     }
   ],
   "users": [
+    {
+      "username": "service-account-abada-agent-worker",
+      "enabled": true,
+      "serviceAccountClientId": "abada-agent-worker",
+      "groups": ["abada-worker"]
+    },
     {
       "username": "alice",
       "email": "alice@abada.io",
