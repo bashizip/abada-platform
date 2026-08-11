@@ -35,6 +35,8 @@ interface CanvasProps {
   activeSimulationNodeId: string | null;
   executionStatuses?: Record<string, NodeRunStatus>;
   activeLiveNodeIds?: string[];
+  /** Edge ids along the instance's taken execution path — rendered as glowing flows. */
+  activePathEdges?: string[];
   readOnly?: boolean;
 }
 
@@ -54,6 +56,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   activeSimulationNodeId,
   executionStatuses = {},
   activeLiveNodeIds = [],
+  activePathEdges = [],
   readOnly = false,
 }) => {
   const nodeTypes = useMemo(() => ({
@@ -88,10 +91,11 @@ export const Canvas: React.FC<CanvasProps> = ({
       type: 'abadaEdge',
       data: {
         label: edge.label,
-        isFlowing: isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target),
+        isFlowing: activePathEdges.includes(edge.id)
+          || (isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target)),
       },
       markerEnd: 'url(#arrowhead-saffron)'
-    })), [rawEdges, isSimulating, activeSimulationNodeId]);
+    })), [rawEdges, isSimulating, activeSimulationNodeId, activePathEdges]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (connection.source && connection.target) {

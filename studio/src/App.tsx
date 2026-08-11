@@ -13,7 +13,11 @@ import { SignInGate } from '@/components/SignInGate';
 import { AIDiffModal } from '@/features/designer/AIDiffModal';
 import { InsightReviewDialog } from '@/features/designer/InsightReviewDialog';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
+import { Activity } from 'lucide-react';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
+import { InstanceOverviewBar } from '@/features/operations/InstanceOverviewBar';
+import { LiveInstanceInspector } from '@/features/operations/LiveInstanceInspector';
+import { InstanceDetailView } from '@/features/operations/InstanceDetailView';
 import { DryRunPanel } from '@/features/run/DryRunPanel';
 import { DeployDialog } from '@/features/run/DeployDialog';
 import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
@@ -28,11 +32,12 @@ import {
   deriveLiveExecutionOverlay,
   NodeRunStatus,
 } from '@/lib/run/liveRun';
+import { readInspectorPanelPinned, readInspectorPanelWidth, useInspectorPanelPrefs } from '@/lib/run/panelPrefs';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
 
-type StudioView = 'designer' | 'inbox' | 'operations';
+type StudioView = 'designer' | 'inbox' | 'operations' | 'instance';
 type DesignerMode = 'diagram' | 'apl';
 interface AuthoringCandidate extends AplGenerationCandidate {
   workflow: WorkflowFile;
@@ -91,7 +96,18 @@ export default function App() {
   const [selectedLiveInstance, setSelectedLiveInstance] = useState<ProcessInstanceDTO | null>(null);
   const [liveWorkflow, setLiveWorkflow] = useState<WorkflowFile | null>(null);
   const [activeLiveNodeIds, setActiveLiveNodeIds] = useState<string[]>([]);
+  const [liveSelectedNodeId, setLiveSelectedNodeId] = useState<string | null>(null);
   const [instancesRefreshKey, setInstancesRefreshKey] = useState(0);
+  const [instancePanelOpen, setInstancePanelOpen] = useState(true);
+  // Shared inspector layout prefs (width + pin) persist across reloads and are
+  // kept in sync between the live canvas view and the full-screen detail view.
+  const {
+    panelWidth: livePanelWidth,
+    setPanelWidth: setLivePanelWidth,
+    pinned: livePanelPinned,
+    setPinned: setLivePanelPinned,
+  } = useInspectorPanelPrefs();
+  const [detailInstance, setDetailInstance] = useState<ProcessInstanceDTO | null>(null);
 
   // AI Diff review state (Insight Engine proposal preview)
   const [diffSnapshot, setDiffSnapshot] = useState<WorkflowDiffSnapshot | null>(null);
@@ -130,6 +146,7 @@ export default function App() {
     setSelectedLiveInstance(null);
     setLiveWorkflow(null);
     setActiveLiveNodeIds([]);
+    setLiveSelectedNodeId(null);
     setExecutionStatuses({});
     setSidebarTab('files');
     setActiveProject(project);
@@ -564,12 +581,30 @@ export default function App() {
     setDiffSnapshot(null);
   };
 
+  // Open the full-screen deep-dive detail view for an instance.
+  const openInstanceDetail = useCallback((instance: ProcessInstanceDTO) => {
+    // Leave live-canvas presentation state behind so the designer's 1.5s
+    // live poll stops running behind the detail view.
+    setSelectedLiveInstance(null);
+    setLiveWorkflow(null);
+    setActiveLiveNodeIds([]);
+    setLiveSelectedNodeId(null);
+    setExecutionStatuses({});
+    setInstancePanelOpen(false);
+    setDetailInstance(instance);
+    setCurrentView('instance');
+  }, []);
+
   const openLiveInstance = useCallback(async (instance: ProcessInstanceDTO) => {
     if (!activeProject) return;
+    // Pick up any layout changes made in the full-screen detail view since boot.
+    setLivePanelWidth(readInspectorPanelWidth());
+    setLivePanelPinned(readInspectorPanelPinned());
     setSelectedLiveInstance(instance);
     setSidebarTab('instances');
     setDesignerMode('diagram');
     setShowRunPanel(false);
+    setInstancePanelOpen(true);
     try {
       const definition = await EngineAPI.getDefinitionForInstance(instance, activeProject.id);
       let instanceWorkflow = workflows.find((workflow) => workflow.processKey === instance.processDefinitionId) || null;
@@ -585,6 +620,7 @@ export default function App() {
         EngineAPI.getInstanceHistory(instance.id, activeProject.id),
       ]);
       setSelectedLiveInstance(fresh);
+      setLiveSelectedNodeId(fresh.currentActivityId ?? instanceWorkflow.nodes[0]?.id ?? null);
       const overlay = deriveLiveExecutionOverlay(instanceWorkflow, fresh, activities, history);
       setExecutionStatuses(overlay.statuses);
       setActiveLiveNodeIds(overlay.activeNodeIds);
@@ -845,6 +881,7 @@ export default function App() {
     setSelectedLiveInstance(null);
     setLiveWorkflow(null);
     setActiveLiveNodeIds([]);
+    setLiveSelectedNodeId(null);
     setExecutionStatuses({});
     setActiveWorkflowId(workflow.id);
     setSelectedNodeId(workflow.nodes[0]?.id || null);
@@ -895,6 +932,22 @@ export default function App() {
 
       {/* Main Studio Area */}
       <div className="flex flex-1 overflow-hidden relative">
+        {currentView === 'instance' && detailInstance ? (
+          <InstanceDetailView
+            instanceId={detailInstance.id}
+            projectId={activeProject?.id}
+            initialInstance={detailInstance}
+            onBack={() => {
+              setDetailInstance(null);
+              setCurrentView('operations');
+            }}
+            onOpenCanvas={(instance) => {
+              setCurrentView('designer');
+              void openLiveInstance(instance);
+            }}
+          />
+        ) : (
+          <>
         {/* Left Sidebar — only visible in Designer view */}
         {currentView === 'designer' && (
           <Sidebar
@@ -957,41 +1010,96 @@ export default function App() {
               </div>
             )}
 
+            {isLiveReadOnly && selectedLiveInstance && !instancePanelOpen && (
+              <button
+                type="button"
+                onClick={() => setInstancePanelOpen(true)}
+                className="absolute right-4 top-3 z-30 flex items-center gap-1.5 rounded-lg border border-[#2A9D8F]/40 bg-[#15201E]/95 px-3 py-1.5 text-[11px] font-semibold text-[#2A9D8F] shadow-warm-md transition-all hover:bg-[#15201E]"
+                title="Show instance details"
+              >
+                <Activity className="h-3.5 w-3.5" /> Instance Details
+              </button>
+            )}
+
             {designerMode === 'diagram' || isLiveReadOnly ? (
-              <>
-                <Canvas
-                  key={displayedWorkflow.id}
-                  nodes={displayedWorkflow.nodes}
-                  edges={displayedWorkflow.edges}
-                  selectedNodeId={isLiveReadOnly ? null : selectedNodeId}
-                  onSelectNode={handleSelectNode}
-                  onNodeMove={handleNodeMove}
-                  onDeleteNode={handleDeleteNode}
-                  onConnectNodes={handleConnectNodes}
-                  onAutoLayout={handleAutoLayout}
-                  onAddNode={handleAddNode}
-                  onOpenAplEditor={() => setDesignerMode('apl')}
-                  onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
-                  isSimulating={isSimulating}
-                  activeSimulationNodeId={activeSimulationNodeId}
-                  executionStatuses={executionStatuses}
-                  activeLiveNodeIds={activeLiveNodeIds}
-                  readOnly={isLiveReadOnly}
-                />
+              isLiveReadOnly && selectedLiveInstance && liveWorkflow ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="relative flex min-h-0 flex-1">
+                    <Canvas
+                      key={displayedWorkflow.id}
+                      nodes={displayedWorkflow.nodes}
+                      edges={displayedWorkflow.edges}
+                      selectedNodeId={liveSelectedNodeId}
+                      onSelectNode={setLiveSelectedNodeId}
+                      onNodeMove={handleNodeMove}
+                      onDeleteNode={handleDeleteNode}
+                      onConnectNodes={handleConnectNodes}
+                      onAutoLayout={handleAutoLayout}
+                      onAddNode={handleAddNode}
+                      onOpenAplEditor={() => setDesignerMode('apl')}
+                      onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
+                      isSimulating={isSimulating}
+                      activeSimulationNodeId={activeSimulationNodeId}
+                      executionStatuses={executionStatuses}
+                      activeLiveNodeIds={activeLiveNodeIds}
+                      readOnly
+                    />
+                    {instancePanelOpen && (
+                      <LiveInstanceInspector
+                        instance={selectedLiveInstance}
+                        workflow={liveWorkflow}
+                        projectId={activeProject?.id}
+                        definitionVersion={liveWorkflow.version}
+                        selectedNodeId={liveSelectedNodeId}
+                        onClose={() => setInstancePanelOpen(false)}
+                        panelWidth={livePanelWidth}
+                        onPanelWidthChange={setLivePanelWidth}
+                        pinned={livePanelPinned}
+                        onPinnedChange={setLivePanelPinned}
+                      />
+                    )}
+                  </div>
+                  <InstanceOverviewBar
+                    instance={selectedLiveInstance}
+                    definitionVersion={liveWorkflow.version}
+                  />
+                </div>
+              ) : (
+                <>
+                  <Canvas
+                    key={displayedWorkflow.id}
+                    nodes={displayedWorkflow.nodes}
+                    edges={displayedWorkflow.edges}
+                    selectedNodeId={selectedNodeId}
+                    onSelectNode={handleSelectNode}
+                    onNodeMove={handleNodeMove}
+                    onDeleteNode={handleDeleteNode}
+                    onConnectNodes={handleConnectNodes}
+                    onAutoLayout={handleAutoLayout}
+                    onAddNode={handleAddNode}
+                    onOpenAplEditor={() => setDesignerMode('apl')}
+                    onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
+                    isSimulating={isSimulating}
+                    activeSimulationNodeId={activeSimulationNodeId}
+                    executionStatuses={executionStatuses}
+                    activeLiveNodeIds={activeLiveNodeIds}
+                    readOnly={false}
+                  />
 
-                {!isLiveReadOnly && <PropertiesInspector
-                  selectedNode={selectedNode}
-                  onUpdateNode={handleUpdateNode}
-                  onRunAgentTest={handleRunAgentTest}
-                  nodeCount={currentWorkflow.nodes.length}
-                />}
+                  <PropertiesInspector
+                    selectedNode={selectedNode}
+                    onUpdateNode={handleUpdateNode}
+                    onRunAgentTest={handleRunAgentTest}
+                    nodeCount={currentWorkflow.nodes.length}
+                  />
 
-                {!isLiveReadOnly && <NLInputBar
-                  onGenerateWorkflow={handleGenerateWorkflow}
-                  isGenerating={isGenerating}
-                  hasActiveWorkflow={!!activeProject}
-                />}
-              </>
+                  <NLInputBar
+                    onGenerateWorkflow={handleGenerateWorkflow}
+                    isGenerating={isGenerating}
+                    hasActiveWorkflow={!!activeProject}
+                  />
+                </>
+              )
             ) : (
               <AplEditor
                 key={`${currentWorkflow.id}-${authoringCandidate ? 'candidate' : 'source'}`}
@@ -1039,14 +1147,26 @@ export default function App() {
               onClearLogs={() => setSimulationLogs([])}
               isSimulating={isSimulating}
             />
+
           </>
         )}
 
         {/* View: Task Inbox (Human-in-the-Loop) */}
         {currentView === 'inbox' && <TaskInbox projectId={activeProject?.id} />}
 
-        {/* View: Process Operations */}
-        {currentView === 'operations' && <ProcessOperations projectId={activeProject?.id} />}
+        {/* View: Process Instances Dashboard */}
+        {currentView === 'operations' && (
+          <ProcessOperations
+            projectId={activeProject?.id}
+            onOpenInstance={(instance) => {
+              setCurrentView('designer');
+              void openLiveInstance(instance);
+            }}
+            onOpenDetail={(instance) => openInstanceDetail(instance)}
+          />
+        )}
+          </>
+        )}
       </div>
 
       {/* New Process Canvas Modal */}

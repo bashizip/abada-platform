@@ -31,7 +31,7 @@ interface HeaderProps {
   onOpenProcessDetails?: () => void;
   onOpenSettings?: () => void;
   nodeCount: number;
-  currentView?: 'designer' | 'inbox' | 'operations';
+  currentView?: 'designer' | 'inbox' | 'operations' | 'instance';
   onViewChange?: (view: 'designer' | 'inbox' | 'operations') => void;
   activeProject?: Project;
   onOpenProjects?: () => void;
