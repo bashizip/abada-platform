@@ -43,7 +43,7 @@ import {
   NodeTelemetry,
   VariablesTab,
 } from '@/features/operations/instanceTelemetry';
-import { buildExecutionTrace, deriveInstancePath } from '@/lib/run/instanceDetail';
+import { buildExecutionTrace, deriveInstancePath, InstancePath } from '@/lib/run/instanceDetail';
 import { INSPECTOR_PANEL_DEFAULT_WIDTH, useInspectorPanelPrefs } from '@/lib/run/panelPrefs';
 import { WorkflowFile } from '@/types';
 
@@ -184,6 +184,23 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
     if (!workflow) return null;
     return deriveInstancePath(workflow, instance, activities, history);
   }, [workflow, instance, activities, history]);
+
+  /**
+   * Content-stable projection of the path: polls return new object identities
+   * for the same engine facts, and the daily tick re-renders this view. A
+   * stable identity keeps the Canvas edge components memoized so the SVG
+   * token motion (SMIL) never restarts while the instance facts are unchanged.
+   */
+  const stablePathCache = useRef<{ serialized: string | null; value: InstancePath | null }>({
+    serialized: null,
+    value: null,
+  });
+  const stablePath = useMemo(() => {
+    const serialized = JSON.stringify(path);
+    if (stablePathCache.current.serialized === serialized) return stablePathCache.current.value;
+    stablePathCache.current = { serialized, value: path };
+    return stablePathCache.current.value;
+  }, [path]);
 
   /* ---- Actions ---- */
   const mutate = async (action: () => Promise<void>, message: string) => {
@@ -376,7 +393,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             <div className="flex h-full items-center justify-center gap-2 text-xs text-[#A89F91]">
               <Loader2 className="h-4 w-4 animate-spin text-[#9D4EDD]" /> Loading execution graph…
             </div>
-          ) : workflow && path ? (
+          ) : workflow && stablePath ? (
             <Canvas
               nodes={workflow.nodes}
               edges={workflow.edges}
@@ -390,9 +407,10 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               onFocusPrompt={() => undefined}
               isSimulating={false}
               activeSimulationNodeId={null}
-              executionStatuses={path.statuses}
-              activeLiveNodeIds={path.activeNodeIds}
-              activePathEdges={path.activePathEdgeIds}
+              executionStatuses={stablePath.statuses}
+              activeLiveNodeIds={stablePath.activeNodeIds}
+              activePathEdges={stablePath.activePathEdgeIds}
+              activeTokenEdges={instance.suspended || isTerminal ? undefined : stablePath.tokenSteps}
               readOnly
             />
           ) : (
@@ -402,13 +420,14 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
           )}
 
           {/* Legend */}
-          {path && (
+          {stablePath && (
             <div className="pointer-events-none absolute bottom-4 left-4 z-20 flex items-center gap-3 rounded-lg border border-[#3A322E] bg-[#25201D]/95 px-3 py-2 text-[10px] text-[#A89F91] shadow-warm-md">
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#90A955]" /> Completed</span>
               <span className="flex items-center gap-1.5"><span className="relative flex h-2 w-2"><span className="absolute h-full w-full animate-ping rounded-full bg-[#9D4EDD] opacity-60" /><span className="relative h-2 w-2 rounded-full bg-[#9D4EDD]" /></span> Active</span>
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#E76F51]" /> Failed</span>
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#F4A261]" /> Waiting</span>
               <span className="flex items-center gap-1.5"><span className="h-0.5 w-5 rounded bg-[#9D4EDD]" /> Taken path</span>
+              <span className="flex items-center gap-1.5"><span className="relative h-2 w-2"><span className="absolute inset-0 rounded-full bg-[#9D4EDD]/40" /><span className="relative h-2 w-2 rounded-full bg-[#EAE3D9]" /></span> Token</span>
             </div>
           )}
         </div>

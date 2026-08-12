@@ -37,6 +37,11 @@ interface CanvasProps {
   activeLiveNodeIds?: string[];
   /** Edge ids along the instance's taken execution path — rendered as glowing flows. */
   activePathEdges?: string[];
+  /**
+   * Taken edges with their hop index from the entry node (id → hop). Edges
+   * present here get a marching token dot that flows into the running node.
+   */
+  activeTokenEdges?: Record<string, number>;
   readOnly?: boolean;
 }
 
@@ -57,6 +62,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   executionStatuses = {},
   activeLiveNodeIds = [],
   activePathEdges = [],
+  activeTokenEdges = {},
   readOnly = false,
 }) => {
   const nodeTypes = useMemo(() => ({
@@ -93,9 +99,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         label: edge.label,
         isFlowing: activePathEdges.includes(edge.id)
           || (isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target)),
+        tokenStep: activeTokenEdges[edge.id],
       },
       markerEnd: 'url(#arrowhead-saffron)'
-    })), [rawEdges, isSimulating, activeSimulationNodeId, activePathEdges]);
+    })), [rawEdges, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (connection.source && connection.target) {

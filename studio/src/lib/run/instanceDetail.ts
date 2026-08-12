@@ -14,6 +14,12 @@ export interface InstancePath {
   activeNodeIds: string[];
   /** Edge ids on the taken execution path (both endpoints touched by events/tokens). */
   activePathEdgeIds: string[];
+  /**
+   * Taken edges ordered as a chain from the entry node toward the running
+   * node: edge id → hop index. Feeds the marching token animation; an edge
+   * with no hop (unreachable from the entry or a stale loop) gets no token.
+   */
+  tokenSteps: Record<string, number>;
 }
 
 /**
@@ -38,7 +44,31 @@ export function deriveInstancePath(
   const activePathEdgeIds = workflow.edges
     .filter((edge) => touched.has(edge.source) && touched.has(edge.target))
     .map((edge) => edge.id);
-  return { statuses: overlay.statuses, activeNodeIds: overlay.activeNodeIds, activePathEdgeIds };
+  const takenIds = new Set(activePathEdgeIds);
+  const tokenSteps: Record<string, number> = {};
+  const entry = workflow.nodes.find((node) => node.type === 'event' && node.subtype === 'start');
+  const startId = entry?.id ?? workflow.nodes[0]?.id;
+  if (startId) {
+    const takenEdges = workflow.edges.filter((edge) => takenIds.has(edge.id));
+    const queue: string[] = [startId];
+    const hops = new Map<string, number>([[startId, 0]]);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const hop = hops.get(current)!;
+      for (const edge of takenEdges) {
+        if (edge.source !== current || hops.has(edge.target)) continue;
+        hops.set(edge.target, hop + 1);
+        tokenSteps[edge.id] = hop + 1;
+        queue.push(edge.target);
+      }
+    }
+  }
+  return {
+    statuses: overlay.statuses,
+    activeNodeIds: overlay.activeNodeIds,
+    activePathEdgeIds,
+    tokenSteps,
+  };
 }
 
 export type AuditTone = 'success' | 'failure' | 'running' | 'warning' | 'info' | 'external';

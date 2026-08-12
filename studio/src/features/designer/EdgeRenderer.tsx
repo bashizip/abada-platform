@@ -10,7 +10,20 @@ import {
 } from '@xyflow/react';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
 
-type AbadaEdgeType = Edge<{ label?: string; isFlowing?: boolean; diffKind?: DiffChangeKind | null }, 'abadaEdge'>;
+type AbadaEdgeType = Edge<{
+  label?: string;
+  isFlowing?: boolean;
+  diffKind?: DiffChangeKind | null;
+  /** Hop index along the taken path; presence draws a marching token dot. */
+  tokenStep?: number;
+}, 'abadaEdge'>;
+
+/**
+ * One token hop takes TOKEN_DURATION_S; each edge starts its token exactly one
+ * hop later than the previous edge, so tokens march back-to-back from the
+ * entry node into the currently running node.
+ */
+const TOKEN_DURATION_S = 1.6;
 
 export const AbadaEdge = memo(({
   id,
@@ -35,6 +48,8 @@ export const AbadaEdge = memo(({
   });
 
   const isActiveSim = data?.isFlowing;
+  const tokenStep = data?.tokenStep;
+  const tokenMoves = tokenStep !== undefined && isActiveSim;
   const diffStroke = data?.diffKind === 'added'
     ? '#90A955'
     : data?.diffKind === 'modified'
@@ -56,6 +71,21 @@ export const AbadaEdge = memo(({
           opacity="0.3"
           className="blur-xs"
         />
+      )}
+      {tokenMoves && (
+        <g>
+          <path id={`abada-token-ref-${id}`} d={edgePath} fill="none" stroke="none" pointerEvents="none" />
+          <circle r="7" fill="#9D4EDD" opacity="0.3">
+            <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin={`${tokenStep * TOKEN_DURATION_S}s`}>
+              <mpath href={`#abada-token-ref-${id}`} />
+            </animateMotion>
+          </circle>
+          <circle r="2.5" fill="#EAE3D9">
+            <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin={`${tokenStep * TOKEN_DURATION_S}s`}>
+              <mpath href={`#abada-token-ref-${id}`} />
+            </animateMotion>
+          </circle>
+        </g>
       )}
       <BaseEdge 
         path={edgePath} 
