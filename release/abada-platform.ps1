@@ -219,6 +219,7 @@ function Show-SuccessPanel {
   if ($Profile -eq 'dev') {
     Write-Url 'Tenda' 'http://tenda.localhost'
     Write-Url 'Orun' 'http://orun.localhost'
+    Write-Url 'Studio' 'http://studio.localhost'
     Write-Url 'Engine API' 'http://api.localhost/api/v1/info'
     Write-Url 'Keycloak' 'http://keycloak.localhost'
   }

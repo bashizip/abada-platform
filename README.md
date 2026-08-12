@@ -237,6 +237,7 @@ Validate the deployment without starting it.
 | Swagger | http://api.localhost/api/swagger-ui.html |
 | Tenda | http://tenda.localhost |
 | Orun | http://orun.localhost |
+| Studio | http://studio.localhost |
 | Keycloak | http://keycloak.localhost |
 | Grafana (telemetry overlay) | http://127.0.0.1:3000 |
 

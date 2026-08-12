@@ -317,6 +317,7 @@ print_success_panel() {
   if [[ "$MODE" == "dev" ]]; then
     print_url "Tenda" "http://tenda.localhost"
     print_url "Orun" "http://orun.localhost"
+    print_url "Studio" "http://studio.localhost"
     print_url "Engine API" "http://api.localhost/api/v1/info"
     print_url "Keycloak" "http://keycloak.localhost"
   else
