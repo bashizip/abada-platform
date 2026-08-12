@@ -11,7 +11,7 @@ tasks with the Java SDK and worker protocol v1.
 - id: summarize
   type: agent
   profile: abada.agent/v1
-  model: gemini-2.5-flash
+  model: gemini-3.6-flash
   prompt: Summarize case ${caseId} as JSON.
   inputs:
     caseId: ${caseId}
@@ -79,7 +79,9 @@ is rendered against the declared threshold.
   durable engine retries with a bounded retry delay; zero retries creates the
   normal incident. Agent-task retries are seeded from the APL `max_attempts`
   so the durable retry budget matches the descriptor.
-- Completion and failure use the external task ID as their idempotency key.
+- Completion and failure use the external task ID and attempt ordinal as their
+  idempotency key, so re-sent reports of the same attempt deduplicate while
+  retried attempts use fresh keys.
 - Model and other external effects are at-least-once. Providers and future
   tool adapters must support their own stable deduplication keys.
 - Logs contain task/activity IDs and counters, not tokens, prompts, variables,
@@ -94,16 +96,34 @@ falls back to the other when unset. Select the model with
 `ABADA_AGENT_LLM_MODEL`. The sidecar routes each task to a provider gateway
 from the requested model name (the descriptor `model` field, falling back to
 `ABADA_AGENT_LLM_MODEL`): models starting with `gemini` or the `google/`
-prefix use the Google Gemini REST `:generateContent` endpoint with the API
-key sent as `x-goog-api-key` (the `google/` prefix is stripped from the model
-path); all other models use an OpenAI-compatible `/chat/completions` endpoint
-with `Authorization: Bearer`. Both gateways share the same prompt rendering,
+prefix use the Google Gemini OpenAI-compatible `/openai/chat/completions`
+endpoint with the key sent as `Authorization: Bearer` (the `google/` prefix is
+stripped from the model id; Google retired the legacy REST
+`:generateContent` surface for new keys and current models, so this is the
+supported Gemini path); all other models use an OpenAI-compatible
+`/chat/completions` endpoint with `Authorization: Bearer`. Both gateways share
+the same prompt rendering,
 selected-inputs, output-schema and `_confidence` handling. By default the
 OpenAI-compatible gateway reuses the same endpoint and key. To route
 non-Gemini models to a different OpenAI-compatible endpoint (DeepSeek,
 OpenRouter, a local gateway, ...), set `ABADA_AGENT_OPENAI_BASE_URL` and
 `ABADA_AGENT_OPENAI_API_KEY`; when unset they fall back to
-`ABADA_AGENT_LLM_BASE_URL` and `ABADA_AGENT_LLM_API_KEY`. For secured
+`ABADA_AGENT_LLM_BASE_URL` and `ABADA_AGENT_LLM_API_KEY`.
+
+## Model allow-list
+
+The engine enforces an operator-defined allow-list of agent model ids. The
+engine rejects an APL document during deployment or authoring validation when
+an agent node declares a `model` outside
+`ABADA_AGENT_ALLOWED_MODELS` (a comma-separated list, default
+`gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`). The sidecar
+routes any model on that list per the gateway rules above; keep the list in
+sync with the endpoint(s) the sidecar can actually reach. This makes the
+"cost control" claim local: an operator can restrict which model ids any
+workflow may invoke without changing workflow definitions. Models that are
+not on the list fail fast at deployment time instead of at first execution.
+
+For secured
 engines, configure either a short-lived
 `ABADA_ENGINE_TOKEN` or the preferred OIDC client-credentials settings:
 `ABADA_AGENT_OIDC_TOKEN_URL`, `ABADA_AGENT_OIDC_CLIENT_ID`, and
@@ -137,6 +157,13 @@ targeted suite with:
 
 # 4. After any worker or SDK change, rebuild the local image and redeploy
 ./scripts/dev/build-agent-worker.sh
+```
+
+For a single command that rebuilds the Engine, Studio and Agent worker from
+the local working tree and starts the whole dev stack with the agent profile:
+
+```bash
+./scripts/dev/rebuild-all-dev.sh
 ```
 
 Provisioning creates the `abada-agent-worker` confidential client with the

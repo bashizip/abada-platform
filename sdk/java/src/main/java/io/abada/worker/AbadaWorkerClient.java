@@ -23,7 +23,8 @@ public final class AbadaWorkerClient {
     private final Supplier<String> bearerToken;
 
     public AbadaWorkerClient(URI engineBaseUri, Supplier<String> bearerToken) {
-        this(engineBaseUri, bearerToken, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
+        this(engineBaseUri, bearerToken, HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(10)).build(),
                 JsonMapper.builder().addModule(new JavaTimeModule()).build());
     }
 

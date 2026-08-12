@@ -63,9 +63,9 @@ class AgentWorkerMainTest {
         var factory = new AgentWorkerMain.AgentGatewayFactory(config(URI.create("http://llm.invalid/v1")));
 
         assertInstanceOf(AgentWorkerMain.GoogleGeminiGateway.class,
-                factory.gatewayFor(descriptor(0.0, "gemini-2.0-flash")));
+                factory.gatewayFor(descriptor(0.0, "gemini-3.6-flash")));
         assertInstanceOf(AgentWorkerMain.GoogleGeminiGateway.class,
-                factory.gatewayFor(descriptor(0.0, "google/gemini-2.5-pro")));
+                factory.gatewayFor(descriptor(0.0, "google/gemini-3.6-flash")));
         assertInstanceOf(AgentWorkerMain.OpenAiCompatibleGateway.class,
                 factory.gatewayFor(descriptor(0.0, "gpt-5-mini")));
         assertInstanceOf(AgentWorkerMain.OpenAiCompatibleGateway.class,
@@ -115,6 +115,23 @@ class AgentWorkerMainTest {
     }
 
     @Test
+    void geminiGatewayUsesOpenAiCompatibleEndpoint() throws Exception {
+        var capturedBody = new StringBuilder();
+        URI baseUrl = startServer("/v1/openai/chat/completions",
+                "{\"choices\":[{\"message\":{\"content\":\"%s\"}}]}", capturedBody,
+                "{\"answer\":\"high\",\"_confidence\":95}");
+        var gateway = new AgentWorkerMain.GoogleGeminiGateway(config(baseUrl));
+
+        AgentWorkerMain.AgentResult result = gateway.execute(descriptor(0.0, "gemini-3.6-flash"),
+                Map.of("caseId", "CASE-9"));
+
+        assertEquals("high", ((Map<?, ?>) result.value()).get("answer"));
+        assertEquals(95.0, result.confidence());
+        assertTrue(capturedBody.toString().contains("gemini-3.6-flash"));
+        assertTrue(capturedBody.toString().contains("\"system\""));
+    }
+
+    @Test
     void gatewaysReportStableProviderFamiliesAndPromptHashes() {
         var config = config(URI.create("http://llm.invalid/v1"));
         assertEquals("openai-compatible",
@@ -132,11 +149,6 @@ class AgentWorkerMainTest {
     private URI startGateway(StringBuilder capturedBody, String assistantContent) throws Exception {
         return startServer("/v1/chat/completions",
                 "{\"choices\":[{\"message\":{\"content\":\"%s\"}}]}", capturedBody, assistantContent);
-    }
-
-    private URI startGeminiGateway(StringBuilder capturedBody, String assistantContent) throws Exception {
-        return startServer("/v1/models/gemini-2.0-flash:generateContent",
-                "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"%s\"}]}}]}", capturedBody, assistantContent);
     }
 
     private URI startServer(String contextPath, String responseTemplate, StringBuilder capturedBody,

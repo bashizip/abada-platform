@@ -72,10 +72,11 @@ public final class AgentWorkerMain {
     private static void process(AbadaWorkerClient engine, AgentGatewayFactory gateways,
             Config config, LockedExternalTask task) {
         AgentWorkDescriptor work = task.agentWork();
-        RequestOptions options = new RequestOptions("agent-" + task.id(), task.traceParent(), null);
         int configuredAttempts = work == null || work.maxAttempts() == null ? 3 : work.maxAttempts();
         int currentRetries = task.retries() == null ? configuredAttempts : task.retries();
         int attempt = Math.max(1, configuredAttempts - Math.min(currentRetries, configuredAttempts) + 1);
+        RequestOptions options = new RequestOptions("agent-" + task.id() + "-attempt-" + attempt,
+                task.traceParent(), null);
         try {
             if (work == null || !"abada.agent/v1".equals(work.profileVersion())) {
                 throw new IllegalArgumentException("Missing or unsupported abada.agent/v1 descriptor");
@@ -179,7 +180,7 @@ public final class AgentWorkerMain {
                     tokenUrl.isBlank() ? null : URI.create(tokenUrl), clientId, clientSecret,
                     URI.create(endpoints.llmUrl()), endpoints.apiKey(),
                     URI.create(endpoints.openAiUrl()), endpoints.openAiKey(),
-                    env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gemini-2.5-flash"),
+                    env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gemini-3.6-flash"),
                     env.getOrDefault("ABADA_AGENT_WORKER_ID", "abada-agent-worker"),
                     env.getOrDefault("ABADA_AGENT_PROJECT_ID", ""),
                     Duration.ofMillis(longValue(env, "ABADA_AGENT_POLL_INTERVAL_MS", 1_000, 100, 60_000)),
@@ -223,7 +224,8 @@ public final class AgentWorkerMain {
 
     static final class ClientCredentialsTokenSupplier implements Supplier<String> {
         private final Config config;
-        private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        private final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(10)).build();
         private String token;
         private Instant refreshAt = Instant.EPOCH;
 
@@ -329,7 +331,8 @@ public final class AgentWorkerMain {
 
         AbstractAgentGateway(Config config) {
             this.config = config;
-            this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+            this.http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+                    .connectTimeout(Duration.ofSeconds(10)).build();
         }
 
         protected String renderPrompt(AgentWorkDescriptor work, Map<String, Object> variables) {
@@ -415,7 +418,7 @@ public final class AgentWorkerMain {
         }
     }
 
-    /** Google Gemini {@code :generateContent} gateway for {@code gemini*} and {@code google/} models. */
+    /** Google Gemini OpenAI-compatible gateway for {@code gemini*} and {@code google/} models. */
     static final class GoogleGeminiGateway extends AbstractAgentGateway implements AgentGateway {
         GoogleGeminiGateway(Config config) {
             super(config);
@@ -432,25 +435,23 @@ public final class AgentWorkerMain {
             String model = resolveModel(config, work).strip().replaceFirst("(?i)^google/", "");
             String prompt = renderPrompt(work, variables);
             Map<String, Object> body = new LinkedHashMap<>();
-            body.put("systemInstruction", Map.of("parts", List.of(Map.of("text", prompt))));
-            body.put("contents", List.of(Map.of("role", "user",
-                    "parts", List.of(Map.of("text", JSON.writeValueAsString(selectInputs(work, variables)))))));
-            Map<String, Object> generationConfig = new LinkedHashMap<>();
-            generationConfig.put("temperature", work.temperature() == null ? 0.2 : work.temperature());
-            generationConfig.put("maxOutputTokens", work.maxTokens() == null ? 2048 : work.maxTokens());
-            body.put("generationConfig", generationConfig);
+            body.put("model", model);
+            body.put("messages", List.of(Map.of("role", "system", "content", prompt),
+                    Map.of("role", "user", "content", JSON.writeValueAsString(selectInputs(work, variables)))));
+            body.put("temperature", work.temperature() == null ? 0.2 : work.temperature());
+            body.put("max_tokens", work.maxTokens() == null ? 2048 : work.maxTokens());
             HttpRequest request = HttpRequest.newBuilder(config.llmBaseUrl().resolve(
                             config.llmBaseUrl().getPath().replaceAll("/+$", "")
-                                    + "/models/" + model + ":generateContent"))
-                    .timeout(Duration.ofMillis(timeoutMs)).header("x-goog-api-key", config.llmApiKey())
+                                    + "/openai/chat/completions"))
+                    .timeout(Duration.ofMillis(timeoutMs)).header("Authorization", "Bearer " + config.llmApiKey())
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("Gemini gateway returned HTTP " + response.statusCode());
             }
-            JsonNode contentNode = JSON.readTree(response.body()).path("candidates").path(0)
-                    .path("content").path("parts").path(0).path("text");
+            JsonNode contentNode = JSON.readTree(response.body()).path("choices").path(0)
+                    .path("message").path("content");
             if (!contentNode.isTextual() || contentNode.asText().isBlank()) {
                 throw new IllegalStateException("Gemini gateway returned no assistant content");
             }
