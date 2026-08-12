@@ -80,3 +80,9 @@ docker/traefik/certs/
 # External nested repositories (own remotes)
 semaflow/
 semaflow-ui/
+
+# coding agent configs
+.kilo
+.claude
+.codex
+.qwen
