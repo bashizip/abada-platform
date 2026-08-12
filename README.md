@@ -1,30 +1,51 @@
 # Abada Platform
 
-**APL-native workflow authoring on a durable PostgreSQL orchestration core.**
+**Durable agentic orchestration: APL-native authoring on a PostgreSQL
+execution core.**
 
 Abada is a modular, self-hosted workflow platform built with **Java 21** and
-**Spring Boot 3**. Native `abada.io/v1` YAML and backward-compatible BPMN
+**Spring Boot 3**. Native `abada.io/v1` APL YAML and backward-compatible BPMN
 definitions compile into the same durable runtime state machine for humans,
 services, deterministic decisions, events, and AI-agent work.
 
-Abada is designed around a simple principle: autonomous agents may reason and act dynamically, but production workflows still require deterministic control over state, sequencing, permissions, timeouts, approvals, recovery, and observability.
+Abada is designed around a simple principle: autonomous agents may reason and
+act dynamically, but production workflows still require deterministic control
+over state, sequencing, permissions, timeouts, approvals, recovery, and
+observability.
 
-The open-source platform includes the PostgreSQL execution core, task and
-operations applications, Abada Studio, a Java worker SDK and agent sidecar,
-release-candidate container deployment, and optional telemetry.
+The open-source platform includes:
 
-> **🚧 1.1 agentic development status**
+- **Abada Studio** — the visual, APL-native authoring environment: diagram
+  and YAML editing, local dry runs with animated tokens, governed AI
+  optimization proposals, and live instance inspection with the engine-truthful
+  taken path.
+- **Abada Engine** — the durable PostgreSQL execution core that owns process,
+  token, task, subscription, timer, job, variable, worker and Insight state.
+- **Tenda** and **Orun** — human task and operations applications.
+- **Agent worker** — a first-party Java sidecar that turns `abada:agent` nodes
+  into durable, leased, retryable LLM calls.
+- **Java worker SDK** — typed clients for service workers and the agent
+  attempt/resume contract.
+- A self-contained release bundle (`release/`) and optional telemetry overlay.
+
+> **🚧 1.1 agentic checkpoint**
 >
-> Native APL, the governed Insight Loop, and the first-party agent worker are
-> present in this repository but are not yet a production-certified 1.1
-> release. The 1.0 release line remains the certified BPMN/PostgreSQL core.
+> The 1.1 roadmap work is present in this repository and progressing: native
+> APL runtime, deterministic decision tables, the governed Insight Loop,
+> project envelopes, and the first-party agent worker are implemented. The
+> `1.0.0-rc.2` release line remains the certified production baseline until the
+> remaining 1.1 agentic and infrastructure evidence closes. Progress is
+> tracked in the
+> [1.1 RC roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 
 📚 **Documentation**
 
 - [Platform Overview](docs/platform-overview.md)
 - [Architecture & Deployment Guide](docs/architecture/overview.md)
 - [API Documentation](docs/development/api.md)
+- [APL Specification](docs/reference/apl-specification.md)
 - [Observability Guide](docs/operations/observability.md)
+- [Release Notes](docs/release-notes/)
 
 ---
 
@@ -48,7 +69,7 @@ Abada provides that execution layer.
 Rather than letting model calls own process state, Abada combines:
 
 - **Agents reason**
-- **APL authors; the durable engine orchestrates**
+- **Studio authors APL; the durable engine orchestrates**
 - **Humans supervise**
 - **Telemetry explains everything**
 
@@ -78,7 +99,16 @@ Examples include:
 - Agent fails → Compensation path executes
 
 PostgreSQL and the engine state machine remain authoritative while AI agents
-participate through leased, retryable external work.
+participate through leased, retryable external work. Agents never advance
+BPMN state outside engine commands: the versioned `abada.agent/v1` profile and
+the agent worker keep model attempts, results and failures in the durable
+worker and history contracts.
+
+Agents also serve the platform itself through the **Insight Loop**: the engine
+writes terminal execution facts transactionally to PostgreSQL, analyzes
+non-overlapping windows without a streaming stack, and proposes governed APL
+improvements that Studio presents for diff review. Proposals are approved by
+policy lanes — never auto-applied.
 
 ---
 
@@ -88,7 +118,7 @@ Telemetry export is disabled by default and never participates in workflow
 correctness. Add the bundled overlay or point the engine at an external OTLP
 collector when observability is required.
 
-The engine emits **workflow-aware telemetry** using **OpenTelemetry**, allowing operators to follow execution from API request to BPMN activity, event correlation, task lifecycle, persistence layer, and infrastructure.
+The engine emits **workflow-aware telemetry** using **OpenTelemetry**, allowing operators to follow execution from API request to BPMN activity, event correlation, task lifecycle, persistence layer, and infrastructure. Trace context is preserved across engine commands and agent execution.
 
 ## Features
 
@@ -117,15 +147,9 @@ Current telemetry includes:
 - Job execution
 - Job failures
 
-Future releases will extend telemetry to include:
-
-- AI model invocations
-- Tool execution
-- Token usage
-- Decision latency
-- Agent retries
-- Human intervention
-- Agent-to-agent delegation
+Agent execution already keeps durable attempt, result and failure metadata in
+the history contracts. Remaining telemetry items — tool-call spans, token
+usage and decision latency metrics — land with the executable tool adapters.
 
 See the [Observability Guide](docs/operations/observability.md).
 
@@ -137,27 +161,34 @@ Abada is a modular monorepo.
 
 | Component | Description |
 |-----------|-------------|
-| **engine/** | Durable BPMN execution engine |
+| **engine/** | Durable APL/BPMN execution runtime with project envelopes, agent worker gateway and Insight Loop |
+| **studio/** | APL-native visual and YAML authoring environment with dry runs and live run inspection |
 | **tenda/** | Human task application |
-| **orun/** | Operations & observability dashboard |
-| **studio/** | APL-native visual and YAML authoring environment |
-| **admin/** | Administration UI (external repository) |
+| **orun/** | Operations & workflow-state application |
+| **agent-worker/** | First-party Java `abada:agent` sidecar (multiprovider LLM gateway) |
+| **sdk/java/** | Java external-worker SDK with agent attempt metadata |
+| **documentation/** | Curated Starlight documentation site |
+| **release/** | Self-contained versioned deployment bundle |
 
 ```
-                Users / Systems / Events
-                         │
-                         ▼
-                 Abada BPMN Core
-                         │
-         ┌───────────────┼───────────────┐
-         ▼               ▼               ▼
-      Humans         Services       AI Agents
-                         │
-                         ▼
-            Policies • Tools • Models • APIs
-                         │
-                         ▼
-          OpenTelemetry Execution Graph
+        Abada Studio ─── APL / BPMN documents
+                 │
+                 ▼
+         Abada Engine Core (PostgreSQL-authoritative)
+                 │
+     ┌───────────┼───────────────┬────────────────┐
+     ▼           ▼               ▼                ▼
+  Humans      Services     AI Agents       Insight Loop
+     │        (worker)    (agent worker)   (governed APL
+     │           │            │            proposals)
+     │           │            │                │
+     └───────────┴────────────┴────────────────┘
+                 │
+                 ▼
+   Policies • Tools • Models • APIs
+                 │
+                 ▼
+   OpenTelemetry Execution Graph
 ```
 
 Every public component is independently deployable using Docker.
@@ -173,8 +204,16 @@ For runtime topology, deployment strategies and system architecture, see the [Ar
 ```bash
 git clone https://github.com/bashizip/abada-engine.git
 cd abada-engine
+./release/abada-platform doctor dev
 ./release/abada-platform up dev
 ```
+
+The success screen prints every local URL and the development-only starter
+accounts: `alice` / `alice` in Tenda and Studio, `orun-admin` / `orun-admin`
+in Orun, `admin` / `admin` in Keycloak.
+
+Add `--telemetry` for the bundled Grafana, Prometheus, Jaeger, Loki, Grafana
+Alloy and OpenTelemetry Collector stack.
 
 ## Versioned release bundle
 
@@ -190,6 +229,9 @@ Windows:
 Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 -OutFile quickstart.ps1
 .\quickstart.ps1 -Version 1.0.0-rc.2
 ```
+
+The bundle is self-contained: it has no build contexts and does not require a
+repository clone. See [`release/README.md`](release/README.md).
 
 ## Container platforms
 
@@ -226,6 +268,14 @@ Validate the deployment without starting it.
 ./release/abada-platform doctor dev
 ```
 
+Rebuild the engine and Studio images, and provision the agent worker, with the
+component helpers under [`scripts/dev/`](scripts/dev/):
+
+```bash
+./scripts/dev/rebuild-all-dev.sh
+./scripts/dev/provision-agent-worker.sh
+```
+
 ---
 
 # Local Services
@@ -246,7 +296,7 @@ access remain visibly distinct:
 
 | Application | Username | Password | Purpose |
 | --- | --- | --- | --- |
-| Tenda | `alice` | `alice` | Deploy, start and complete workflow tasks |
+| Tenda / Studio | `alice` | `alice` | Deploy, start and complete workflow tasks; author and run APL |
 | Orun | `orun-admin` | `orun-admin` | Inspect workflow history and operations |
 | Keycloak admin | `admin` | `admin` | Manage the development realm |
 
@@ -256,7 +306,9 @@ session. Choose **Sign out and switch account**, then sign in as
 
 ---
 
-# Current Status (v1.0.0-rc.2)
+# Current Status
+
+## Certified baseline: `1.0.0-rc.2`
 
 Abada 1.0 RC combines stable REST and external-worker contracts, direct OIDC
 JWT validation, backend RBAC and a Java worker SDK with the durable,
@@ -271,46 +323,37 @@ Public-cloud production certification is not claimed; that infrastructure
 work is tracked in the
 [1.1 RC roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 
-The curated architecture and developer documentation is built with Astro 7,
-Starlight 0.41, MDX and Mermaid under [`documentation/`](documentation/).
-Browse the [published documentation](https://abada-engine-docs.vercel.app), or
-run `cd documentation && npm ci && npm run dev` to browse it locally. The site
-now includes deployment, telemetry, first-workflow, backup, upgrade and
-troubleshooting user guides for the 1.0 release candidate. Certification
-evidence is tracked in the
-[1.0 roadmap](docs/development/roadmap-to-1.0.md).
+## 1.1 agentic checkpoint (in development)
+
+The agentic loop is executable against the real engine: Studio dry runs
+animate token paths locally, while live runs show only engine-reported
+progress; the first-party agent worker persists model attempts through the
+durable worker contract; and the governed Insight Loop proposes APL changes
+that are reviewed lane by lane in Studio.
 
 The BPMN execution core is operational, while APIs and platform capabilities continue to evolve.
 
 ## Implemented
 
 - ✅ BPMN execution engine
+- ✅ Native `abada.io/v1` APL parser, immutable definitions and deterministic decision tables
+- ✅ Project envelopes: PostgreSQL-backed projects, folders, resources, file tree and role memberships
 - ✅ Process persistence
-- ✅ User Tasks
-- ✅ Service Tasks
-- ✅ Script Tasks
-- ✅ Message Events
-- ✅ Signal Events
-- ✅ Parallel Gateways
-- ✅ Exclusive Gateways
-- ✅ REST APIs
-- ✅ PostgreSQL
-- ✅ H2
-- ✅ OpenTelemetry
-- ✅ Prometheus
-- ✅ Grafana
-- ✅ Jaeger
-- ✅ Loki
-- ✅ Docker
-- ✅ Traefik
-- ✅ Keycloak Authentication
+- ✅ User, Service and Script Tasks
+- ✅ Message and Signal Events
+- ✅ Parallel and Exclusive Gateways
+- ✅ REST APIs (global + project-scoped)
+- ✅ PostgreSQL (H2 for local convenience)
+- ✅ OpenTelemetry, Prometheus, Grafana, Jaeger, Loki
+- ✅ Docker, Traefik, Keycloak Authentication
 - ✅ Stable API v1 and worker protocol v1
 - ✅ Java external-worker SDK
 - ✅ OIDC JWT validation and backend RBAC
-- ✅ Native APL parser and immutable APL definitions
-- ✅ Native deterministic decision tables
+- ✅ Versioned `abada.agent/v1` profile and first-party Java agent sidecar
+- ✅ Operator-defined agent model allow-list at deployment and authoring validation
 - ✅ PostgreSQL-authoritative Insight Loop with governed Studio review
-- ✅ Versioned `abada.agent/v1` profile and Java agent sidecar
+- ✅ Local dry-run simulation and live-instance path animation (engine-truthful)
+- ✅ Studio APL authoring with AI-assisted review and Apply/Discard workflow
 
 The exact guaranteed semantics are published in the
 [BPMN support matrix](docs/reference/bpmn-support.md). Unsupported constructs
@@ -318,12 +361,13 @@ are rejected at deployment instead of being silently ignored.
 
 ## Planned
 
-- ⏳ Additional BPMN compatibility profiles
+- ⏳ Restart/retry/cancellation evidence for the agent worker, then model/tool metadata in live views
+- ⏳ Executable tool adapters, policy enforcement and durable tool payloads
+- ⏳ Administrative user & roles workspace with `ADMIN_ROOT` bootstrap
 - ⏳ TypeScript and Python SDKs
-- ⏳ ❌ CMMN (superseded by agentic adaptive subprocesses)
-- ⏳ Production certification for the 1.1 agentic runtime
 - ⏳ Agent Memory Integrations
-- ⏳ Executable tool adapters and policy enforcement
+- ⏳ Realtime co-editing and project bundle import/export
+- ⏳ Production cloud certification for the 1.1 agentic runtime
 
 ---
 
@@ -338,6 +382,7 @@ Current capabilities include:
 - Durable PostgreSQL runtime state
 - Cluster-safe timer/external-task acquisition and durable event subscriptions
 - Deterministic mutation replay through `Idempotency-Key`
+- Project-scoped worker binding: secured workers hold a global authority and an explicit project/topic binding
 - Traefik load balancing
 - PostgreSQL persistence
 - Connection pooling
@@ -362,8 +407,7 @@ Current optimization work focuses on:
 - Event correlation
 - Job execution
 - Horizontal scaling
-- Redis integration
-- Kafka integration
+- Insight fact-write and analysis-window overhead at the published scale target
 
 ---
 
@@ -372,6 +416,7 @@ Current optimization work focuses on:
 Documentation:
 
 - [API Reference](docs/development/api.md)
+- [Machine-readable v1 contract](docs/reference/api-v1.md)
 
 Service information:
 
@@ -397,12 +442,12 @@ Swagger:
 # Roadmap
 
 The public roadmaps separate the certified 1.0 core from the 1.1 agentic and
-infrastructure evidence still required.
-
-See the complete roadmap:
+infrastructure evidence still required:
 
 - [Roadmap to 1.0](docs/development/roadmap-to-1.0.md)
 - [Roadmap to 1.1 RC](docs/development/roadmap-to-1.1.0-rc.md)
+- [Studio application specification](docs/development/studio-app-spec.md)
+- [Agent worker contract](docs/reference/agent-worker.md)
 
 ---
 
@@ -414,19 +459,13 @@ Contributions are welcome.
 
 Please:
 
+- Read [`AGENTS.md`](AGENTS.md) for the repository-wide working agreement
 - Include tests
 - Update documentation
 - Keep pull requests focused
-- Specify the affected component (`engine`, `tenda`, `orun`, etc.)
-
-Example commit messages:
-
-```
-engine: add timer persistence
-engine: improve message correlation
-observability: add workflow latency dashboard
-tenda: improve task claiming
-```
+- Specify the affected component in Conventional Commit style:
+  `feat(runtime): ...`, `fix(api): ...`, `feat(studio): ...`,
+  `test(release): ...`, `docs(architecture): ...`
 
 ---
 
