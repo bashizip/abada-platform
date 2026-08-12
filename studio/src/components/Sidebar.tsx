@@ -9,13 +9,11 @@ import {
   PlayCircle, 
   ChevronRight, 
   ChevronDown,
-  Sparkles,
   Layers,
   Table,
   Zap,
   CirclePlay,
   Flag,
-  HelpCircle,
   Activity,
   RotateCcw
 } from 'lucide-react';
@@ -56,8 +54,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   instancesRefreshKey = 0,
   treeRefreshKey = 0,
 }) => {
-  const [expandedFolder, setExpandedFolder] = useState<string>('all');
-  
   const [instances, setInstances] = useState<ProcessInstanceDTO[]>([]);
   const [isLoadingInstances, setIsLoadingInstances] = useState<boolean>(false);
   const [definitions, setDefinitions] = useState<ProcessDefinitionDTO[]>([]);

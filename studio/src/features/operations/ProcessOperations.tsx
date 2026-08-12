@@ -745,7 +745,7 @@ export const ProcessOperations: React.FC<{
                                     confirmLabel: 'Force fail',
                                     danger: true,
                                     onConfirm: () => void runMutation(
-                                      () => EngineAPI.failInstance(instance.id, projectId as string),
+                                      async () => { await EngineAPI.failInstance(instance.id, projectId as string); },
                                       `Failed ${deriveBusinessLabel(instance).label}`,
                                     ),
                                   });

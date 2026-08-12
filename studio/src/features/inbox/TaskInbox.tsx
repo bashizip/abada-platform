@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { EngineAPI } from '@/api/engine';
+import { EngineAPI, EngineUserTaskDTO } from '@/api/engine';
 import { CheckCircle, Clock, User, FileText } from 'lucide-react';
 
 export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<EngineUserTaskDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [selectedTask, setSelectedTask] = useState<EngineUserTaskDTO | null>(null);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -66,8 +66,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
               >
                 <div className="font-semibold text-sm mb-1">{task.name || 'Unnamed Task'}</div>
                 <div className="flex items-center justify-between text-xs text-[#A89F91]">
-                  <span className="flex items-center gap-1"><FileText className="w-3 h-3"/> {task.processDefinitionId.split(':')[0]}</span>
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {new Date(task.created).toLocaleDateString()}</span>
+                  <span className="flex items-center gap-1"><FileText className="w-3 h-3"/> {task.processDefinitionId ? task.processDefinitionId.split(':')[0] : 'Process'}</span>
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {task.created || task.createTime ? new Date(task.created || task.createTime!).toLocaleDateString() : 'Recent'}</span>
                 </div>
               </div>
             ))
@@ -83,7 +83,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
               <h1 className="text-2xl font-bold text-[#EAE3D9] mb-2">{selectedTask.name || 'Unnamed Task'}</h1>
               <div className="flex items-center gap-4 text-sm text-[#A89F91]">
                 <span className="flex items-center gap-1"><User className="w-4 h-4"/> Assignee: {selectedTask.assignee || 'Unassigned'}</span>
-                <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> Created: {new Date(selectedTask.created).toLocaleString()}</span>
+                <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> Created: {selectedTask.created || selectedTask.createTime ? new Date(selectedTask.created || selectedTask.createTime!).toLocaleString() : 'Recent'}</span>
               </div>
             </div>
 

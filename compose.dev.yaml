@@ -60,6 +60,7 @@ services:
       ABADA_API_URL: http://studio.localhost/api
       ABADA_OIDC_URL: http://keycloak.localhost
       ABADA_OIDC_REALM: abada-dev
+      ABADA_OIDC_CLIENT_ID: abada-frontend
       ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
     labels:
       traefik.enable: "true"

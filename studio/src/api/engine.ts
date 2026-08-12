@@ -57,7 +57,32 @@ export interface ProcessInstanceDTO {
   status: string;
   suspended?: boolean;
   startedBy?: string;
-  variables: Record<string, any>;
+  variables: Record<string, unknown>;
+}
+
+export interface EngineUserTaskDTO {
+  id: string;
+  name?: string;
+  assignee?: string;
+  created?: string;
+  createTime?: string;
+  dueDate?: string;
+  processInstanceId?: string;
+  processDefinitionId?: string;
+  taskDefinitionKey?: string;
+  status?: string;
+  variables?: Record<string, unknown>;
+}
+
+export interface TaskOperationResultDTO {
+  taskId: string;
+  status: string;
+  variables?: Record<string, unknown>;
+}
+
+export interface InstanceOperationResultDTO {
+  instanceId: string;
+  status: string;
 }
 
 export interface ActivityInstanceDTO {
@@ -237,7 +262,7 @@ export class EngineAPI {
   /**
    * Starts a new process instance using the authenticated user's identity.
    */
-  static async startProcess(processId: string, variables: Record<string, any> = {}, projectId?: string): Promise<{ processInstanceId: string }> {
+  static async startProcess(processId: string, variables: Record<string, unknown> = {}, projectId?: string): Promise<{ processInstanceId: string }> {
     const username = getUserFromToken(keycloak.tokenParsed)?.username || 'studio_user';
     const path = projectId
       ? `/projects/${projectId}/processes/${encodeURIComponent(processId)}/start`
@@ -324,7 +349,7 @@ export class EngineAPI {
   /**
    * Retrieves tasks, optionally filtered by status
    */
-  static async getTasks(status?: string, projectId?: string): Promise<any[]> {
+  static async getTasks(status?: string, projectId?: string): Promise<EngineUserTaskDTO[]> {
     const base = projectId ? `${this.BASE_URL}/projects/${projectId}/tasks` : `${this.BASE_URL}/tasks`;
     const url = status && status !== 'all' ? `${base}?status=${encodeURIComponent(status)}` : base;
     const res = await authenticatedFetch(url, { headers: this.getHeaders() });
@@ -335,7 +360,7 @@ export class EngineAPI {
   /**
    * Completes a task
    */
-  static async completeTask(taskId: string, variables: Record<string, any> = {}, projectId?: string): Promise<any> {
+  static async completeTask(taskId: string, variables: Record<string, unknown> = {}, projectId?: string): Promise<TaskOperationResultDTO> {
     const path = projectId ? `/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/complete`
       : `/tasks/complete?taskId=${encodeURIComponent(taskId)}`;
     const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
@@ -350,7 +375,7 @@ export class EngineAPI {
   /**
    * Fails a process instance
    */
-  static async failInstance(instanceId: string, projectId?: string): Promise<any> {
+  static async failInstance(instanceId: string, projectId?: string): Promise<InstanceOperationResultDTO> {
     const path = projectId ? `/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/fail`
       : `/processes/instance/${encodeURIComponent(instanceId)}/fail`;
     const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {

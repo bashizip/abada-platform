@@ -113,6 +113,9 @@ services:
     image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.2}
     environment:
       ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
+      ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
+      ABADA_OIDC_REALM: ${ABADA_OIDC_REALM:-abada-dev}
+      ABADA_OIDC_CLIENT_ID: ${ABADA_OIDC_CLIENT_ID:-abada-frontend}
     networks:
       - edge
     restart: unless-stopped

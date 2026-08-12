@@ -22,25 +22,20 @@ import {
   Info,
   Terminal
 } from 'lucide-react';
+import { UITooltip } from '@/components/ui';
 
 interface PropertiesInspectorProps {
   selectedNode: WorkflowNode | null;
   onUpdateNode: (updatedNode: WorkflowNode) => void;
-  onRunAgentTest: (agentConfig: AgentConfig, testInput: string) => Promise<any>;
+  onRunAgentTest?: (agentConfig: AgentConfig, testInput: string) => Promise<unknown>;
   nodeCount: number;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   selectedNode,
   onUpdateNode,
-  onRunAgentTest,
   nodeCount,
 }) => {
-  const [testPayload, setTestPayload] = useState<string>(
-    JSON.stringify({ orderId: 'ORD-9842', amountUSD: 14200, jurisdiction: 'EU', ipRiskScore: 78 }, null, 2)
-  );
-  const [testResult, setTestResult] = useState<any | null>(null);
-  const [isTesting, setIsTesting] = useState<boolean>(false);
 
   if (!selectedNode) {
     return (
@@ -155,21 +150,6 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const modelOptions = AGENT_MODEL_OPTIONS.includes(currentModel)
     ? AGENT_MODEL_OPTIONS
     : [currentModel, ...AGENT_MODEL_OPTIONS];
-
-  // Run live test for AI agent
-  const executeAgentTest = async () => {
-    if (!selectedNode.agentConfig) return;
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const res = await onRunAgentTest(selectedNode.agentConfig, testPayload);
-      setTestResult(res);
-    } catch (e: any) {
-      setTestResult({ error: e.message || 'Test failed' });
-    } finally {
-      setIsTesting(false);
-    }
-  };
 
   return (
     <aside className="w-80 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 shrink-0 overflow-y-auto">
@@ -372,56 +352,23 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
             {/* Live Test Drawer */}
             <div className="pt-3 border-t border-[#3A322E] space-y-2">
-              <span className="text-xs font-semibold text-[#EAE3D9] block">Interactive Prompt Test</span>
-              <textarea
-                rows={3}
-                value={testPayload}
-                onChange={(e) => setTestPayload(e.target.value)}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl p-2.5 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
-                placeholder="JSON payload..."
-              />
-              <button
-                onClick={executeAgentTest}
-                disabled={isTesting}
-                className="w-full py-2 bg-[#9D4EDD] hover:bg-[#8b32d4] text-white font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 glow-amethyst-subtle"
-              >
-                {isTesting ? (
-                  <>
-                    <Clock className="w-3.5 h-3.5 animate-spin" />
-                    <span>Executing Gemini API...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>Test Agent Logic</span>
-                  </>
-                )}
-              </button>
-
-              {testResult && (
-                <div className="p-3 bg-[#1A1614] rounded-xl border border-[#9D4EDD]/40 text-xs space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-[#9D4EDD] flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#90A955]" />
-                      Confidence: {testResult.calculatedConfidence}%
-                    </span>
-                    <span className="text-[10px] text-[#A89F91]">
-                      {testResult.executionTimeMs}ms
-                    </span>
-                  </div>
-
-                  {testResult.reasoningSteps && (
-                    <div className="space-y-1 border-t border-[#3A322E] pt-2">
-                      <span className="text-[10px] text-[#A89F91] block uppercase font-mono">Reasoning Steps:</span>
-                      {testResult.reasoningSteps.map((step: string, i: number) => (
-                        <p key={i} className="text-[11px] text-[#EAE3D9] leading-tight">
-                          {step}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[#EAE3D9] block">Agent Execution Contract</span>
+                <span className="text-[10px] text-[#2A9D8F] font-mono">abada.agent/v1</span>
+              </div>
+              <p className="text-[11px] text-[#A89F91] leading-relaxed bg-[#1A1614] p-2.5 rounded-xl border border-[#3A322E]">
+                Agent execution is bounded by the Engine runtime contract. Live execution runs via external workers (<span className="font-mono text-[#F4A261]">abada-agent-worker</span>) when instances are started on the Engine.
+              </p>
+              <UITooltip content="Use 'Dry Run' to mock agent choices locally, or 'Deploy & Start' to run live on the engine with the external agent worker.">
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-2 bg-[#9D4EDD]/30 border border-[#9D4EDD]/40 text-[#A89F91] font-semibold text-xs rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Bot className="w-3.5 h-3.5 text-[#9D4EDD]" />
+                  <span>External Worker Test (Deploy Required)</span>
+                </button>
+              </UITooltip>
             </div>
           </div>
         )}

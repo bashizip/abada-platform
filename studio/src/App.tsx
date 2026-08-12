@@ -64,12 +64,7 @@ const createEmptyWorkflow = (
   edges: [],
 });
 
-const bumpPatchVersion = (version: string): string => {
-  const parts = version.split('.');
-  if (parts.length !== 3) return version;
-  const [, , patch] = parts.map(Number);
-  return `${parts[0]}.${parts[1]}.${(patch || 0) + 1}`;
-};
+
 
 export default function App() {
   const bootstrapWorkflow = useRef(createEmptyWorkflow('bootstrap-draft'));
@@ -372,7 +367,7 @@ export default function App() {
     if (selectedNodeId === id) setSelectedNodeId(null);
   };
 
-  const handleDuplicateNode = (id: string) => {
+  const _handleDuplicateNode = (id: string) => {
     const target = currentWorkflow.nodes.find((n) => n.id === id);
     if (!target) return;
     const newNode: WorkflowNode = {
@@ -472,7 +467,7 @@ export default function App() {
     }));
   };
 
-  const handleAddDownstreamNode = (sourceId: string, type: NodeType) => {
+  const _handleAddDownstreamNode = (sourceId: string, type: NodeType) => {
     const sourceNode = currentWorkflow.nodes.find((n) => n.id === sourceId);
     if (!sourceNode) return;
 
@@ -827,12 +822,15 @@ export default function App() {
     };
   };
 
-  // Export JSON Schema
+  // Export canonical abada.io/v1 APL YAML process definition
   const handleExportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentWorkflow, null, 2));
+    const aplObj = workflowToAPL(displayedWorkflow);
+    const yamlContent = stringifyAPLYaml(aplObj);
+    const dataStr = 'data:text/yaml;charset=utf-8,' + encodeURIComponent(yamlContent);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `${currentWorkflow.name}.json`);
+    const filename = `${displayedWorkflow.processKey || 'process'}.apl.yaml`;
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', filename);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();

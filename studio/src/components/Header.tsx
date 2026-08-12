@@ -132,8 +132,8 @@ export const Header: React.FC<HeaderProps> = ({
 
               <IconButton
                 icon={<Download className="w-4 h-4 text-[#2A9D8F]" />}
-                label="Export Schema"
-                tooltip="Export Schema — download the workflow as a JSON definition"
+                label="Export APL"
+                tooltip="Export APL — download the canonical abada.io/v1 YAML process document"
                 onClick={onExportJSON}
               />
 
