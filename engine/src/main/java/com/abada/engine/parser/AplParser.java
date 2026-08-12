@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import org.springframework.stereotype.Component;
 import java.util.Deque;
 import java.util.HashSet;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Runtime graph compiler for native {@code abada.io/v1} APL YAML documents.
@@ -66,6 +68,10 @@ public final class AplParser {
     /** External-task topic emitted for {@code agent} nodes (worker contract). */
     public static final String AGENT_EXTERNAL_TOPIC = "abada:agent";
 
+    /** Default allow-list of agent LLM models deployable without extra configuration. */
+    public static final String DEFAULT_ALLOWED_AGENT_MODELS =
+            "gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini";
+
     public static final int MAX_DEPLOYMENT_BYTES = 10 * 1024 * 1024;
 
     private static final Set<String> SUPPORTED_TYPES = Set.of(
@@ -74,6 +80,24 @@ public final class AplParser {
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
     private final YAMLMapper yamlMapper = new YAMLMapper();
+
+    private final Set<String> allowedAgentModels;
+
+    public AplParser() {
+        this(DEFAULT_ALLOWED_AGENT_MODELS);
+    }
+
+    /**
+     * @param allowedAgentModelsCsv comma-separated model ids an agent node may
+     *        declare; a blank value disables the check.
+     */
+    public AplParser(String allowedAgentModelsCsv) {
+        this.allowedAgentModels = allowedAgentModelsCsv == null || allowedAgentModelsCsv.isBlank()
+                ? Set.of()
+                : Arrays.stream(allowedAgentModelsCsv.split(","))
+                        .map(String::strip).filter(value -> !value.isBlank())
+                        .collect(Collectors.toUnmodifiableSet());
+    }
 
     private static BpmnValidationException validation(String message) {
         return BpmnValidationException.single(new BpmnValidationIssue(
@@ -380,7 +404,14 @@ public final class AplParser {
         else if (!rawTools.isMissingNode() && !rawTools.isNull()) {
             throw validation("agent node '" + nodeId + "' tools must be a list");
         }
-        return new AgentWorkDescriptor(profile, node.path("model").asText(null),
+        String model = node.path("model").asText(null);
+        if (model != null && !model.isBlank() && !allowedAgentModels.isEmpty()
+                && !allowedAgentModels.contains(model.strip())) {
+            throw validation("agent node '" + nodeId + "' declares model '" + model.strip()
+                    + "' which is not on the allowed model list ("
+                    + String.join(", ", allowedAgentModels) + ")");
+        }
+        return new AgentWorkDescriptor(profile, model,
                 node.path("prompt").asText(""), inputs,
                 node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
                 confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs);

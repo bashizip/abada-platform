@@ -150,7 +150,7 @@ class AplParserTest {
                 "    - id: summarize\n"
                         + "      type: agent\n"
                         + "      profile: abada.agent/v1\n"
-                        + "      model: model-a\n"
+                        + "      model: gemini-3.6-flash\n"
                         + "      prompt: Summarize ${case}\n"
                         + "      inputs:\n        case: ${case}\n"
                         + "      result_variable: summary\n"
@@ -165,7 +165,7 @@ class AplParserTest {
                         + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
 
         var work = definition.getServiceTask("summarize").agentWork();
-        assertThat(work.model()).isEqualTo("model-a");
+        assertThat(work.model()).isEqualTo("gemini-3.6-flash");
         assertThat(work.inputs()).containsEntry("case", "${case}");
         assertThat(work.resultVariable()).isEqualTo("summary");
         assertThat(work.tools()).containsExactly("crm.read");
@@ -360,6 +360,53 @@ class AplParserTest {
     void declaresApiContractConstants() {
         assertThat(AplParser.LANGUAGE_VERSION).isEqualTo("abada.io/v1");
         assertThat(AplParser.AGENT_EXTERNAL_TOPIC).isEqualTo("abada:agent");
+    }
+
+    @Test
+    void rejectsAgentModelsOutsideTheAllowedList() {
+        String source = "version: abada.io/v1\n"
+                + "metadata:\n"
+                + "  name: Guarded Flow\n"
+                + "flow:\n"
+                + "  entry: start\n"
+                + "  nodes:\n"
+                + "    - id: start\n"
+                + "      type: webhook\n"
+                + "      next: agent-a\n"
+                + "    - id: agent-a\n"
+                + "      type: agent\n"
+                + "      model: gemini-2.5-flash\n"
+                + "      next: end\n"
+                + "    - id: end\n"
+                + "      type: end\n";
+        assertThatThrownBy(() -> parser.parseDetailed(source.getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("agent node 'agent-a' declares model 'gemini-2.5-flash'")
+                .hasMessageContaining("allowed model list")
+                .hasMessageContaining("gemini-3.6-flash");
+    }
+
+    @Test
+    void acceptsModelsOnTheAllowedListAndBlankModels() {
+        for (String model : new String[] { "gemini-3.6-flash", "deepseek/deepseek-v4-flash-free", "gpt-5-mini", " " }) {
+            String source = "version: abada.io/v1\n"
+                    + "metadata:\n"
+                    + "  name: Guarded Flow\n"
+                    + "flow:\n"
+                    + "  entry: start\n"
+                    + "  nodes:\n"
+                    + "    - id: start\n"
+                    + "      type: webhook\n"
+                    + "      next: agent-a\n"
+                    + "    - id: agent-a\n"
+                    + "      type: agent\n"
+                    + "      model: \"" + model.strip() + "\"\n"
+                    + "      next: end\n"
+                    + "    - id: end\n"
+                    + "      type: end\n";
+            assertThat(parser.parseDetailed(source.getBytes(StandardCharsets.UTF_8)).definition())
+                    .isNotNull();
+        }
     }
 
     private ParsedProcessDefinition parse(String resource) throws IOException {

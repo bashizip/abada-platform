@@ -33,6 +33,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,7 +61,8 @@ public class AbadaEngine {
 
     private final PersistenceService persistenceService;
     private final BpmnParser parser;
-    private final AplParser aplParser = new AplParser();
+    private final AplParser aplParser;
+
     private final TaskManager taskManager;
     private final EventManager eventManager;
     private final JobScheduler jobScheduler;
@@ -76,9 +78,11 @@ public class AbadaEngine {
     public AbadaEngine(PersistenceService persistenceService, TaskManager taskManager, @Lazy EventManager eventManager,
             @Lazy JobScheduler jobScheduler, ExternalTaskRepository externalTaskRepository, ObjectMapper om,
             EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
-            InsightFactWriter insightFactWriter) {
+            InsightFactWriter insightFactWriter,
+            @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
+        this.aplParser = new AplParser(allowedAgentModels);
         this.taskManager = taskManager;
         this.eventManager = eventManager;
         this.jobScheduler = jobScheduler;

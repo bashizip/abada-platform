@@ -126,14 +126,14 @@ class AplRuntimeTest {
 
             // A real worker reports attempt metadata on the durable completion command.
             externalTaskService.complete(agentJobs.getFirst().id(), "worker-1", Map.of("handled", true),
-                    new AgentAttemptMetadata("gemini-2.0-flash", "google-gemini", 1, 1_234L,
+                    new AgentAttemptMetadata("gemini-3.6-flash", "google-gemini", 1, 1_234L,
                             List.of("crm.read"), "notify_result", "abc123", null, 93.0));
 
             // The durable worker record carries the attempt metadata JSON.
             var task = context.getBean(ExternalTaskRepository.class)
                     .findById(agentJobs.getFirst().id()).orElseThrow();
             assertThat(task.getAgentMetadataJson())
-                    .contains("\"model\":\"gemini-2.0-flash\"")
+                    .contains("\"model\":\"gemini-3.6-flash\"")
                     .contains("\"provider\":\"google-gemini\"")
                     .contains("\"attempt\":1")
                     .contains("\"confidence\":93.0");
@@ -145,7 +145,7 @@ class AplRuntimeTest {
                     .findFirst().orElseThrow();
             assertThat(completed.getDetailsJson())
                     .contains("\"agent\"")
-                    .contains("\"model\":\"gemini-2.0-flash\"")
+                    .contains("\"model\":\"gemini-3.6-flash\"")
                     .contains("\"tools\":[\"crm.read\"]")
                     .contains("\"confidence\":93.0");
         }

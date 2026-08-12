@@ -112,7 +112,7 @@ public class ExternalTaskTest {
                 "workerId", "worker-1",
                 "variables", Map.of("externalTaskResult", "SUCCESS"),
                 "agent", Map.of(
-                        "model", "gemini-2.0-flash",
+                        "model", "gemini-3.6-flash",
                         "provider", "google-gemini",
                         "attempt", 1,
                         "durationMs", 500L,
@@ -123,7 +123,7 @@ public class ExternalTaskTest {
 
         ExternalTaskEntity task = externalTaskRepository.findById(locked.id()).orElseThrow();
         assertNotNull(task.getAgentMetadataJson());
-        assertTrue(task.getAgentMetadataJson().contains("\"model\":\"gemini-2.0-flash\""));
+        assertTrue(task.getAgentMetadataJson().contains("\"model\":\"gemini-3.6-flash\""));
         assertTrue(task.getAgentMetadataJson().contains("\"provider\":\"google-gemini\""));
         assertTrue(task.getAgentMetadataJson().contains("\"attempt\":1"));
         assertTrue(task.getAgentMetadataJson().contains("\"tools\":[\"crm.read\"]"));

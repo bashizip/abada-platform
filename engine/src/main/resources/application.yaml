@@ -49,6 +49,8 @@ abada:
     environment: ${ABADA_ENVIRONMENT:${spring.profiles.active:default}}
     otlp:
       endpoint: ${ABADA_TELEMETRY_OTLP_ENDPOINT:}
+  agent:
+    allowed-models: ${ABADA_AGENT_ALLOWED_MODELS:gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini}
 
 # SpringDoc OpenAPI / Swagger UI
 springdoc:

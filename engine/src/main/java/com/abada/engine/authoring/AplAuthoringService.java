@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /** Generates review-only APL candidates; this service never persists workflow state. */
@@ -39,13 +40,16 @@ public class AplAuthoringService {
     private final AplParser aplParser;
     private final ProjectProcessDocumentRepository documents;
     private final ObjectMapper objectMapper;
+    private final String defaultAgentModel;
 
     public AplAuthoringService(OpenAiCompatibleLlmClient llm, AplParser aplParser,
-            ProjectProcessDocumentRepository documents, ObjectMapper objectMapper) {
+            ProjectProcessDocumentRepository documents, ObjectMapper objectMapper,
+            @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
         this.llm = llm;
         this.aplParser = aplParser;
         this.documents = documents;
         this.objectMapper = objectMapper;
+        this.defaultAgentModel = allowedAgentModels.strip().split(",")[0].trim();
     }
 
     public Candidate generate(String projectId, Mode mode, String prompt, String baseAplSource) {
@@ -173,7 +177,7 @@ public class AplAuthoringService {
                     - id: analyze
                       type: agent
                       profile: abada.agent/v1
-                      model: openai-compatible
+                      model: %s
                       prompt: %s
                       confidence_threshold: 85
                       temperature: 0.2
@@ -182,7 +186,7 @@ public class AplAuthoringService {
                     - id: end
                       type: end
                       description: Records the terminal outcome.
-                """.formatted(key, quoted(name), quoted(prompt));
+                """.formatted(key, quoted(name), defaultAgentModel, quoted(prompt));
     }
 
     private String quoted(String value) {

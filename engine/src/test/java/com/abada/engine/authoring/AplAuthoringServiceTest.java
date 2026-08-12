@@ -21,7 +21,8 @@ class AplAuthoringServiceTest {
     @BeforeEach
     void setUp() {
         when(documents.findByProjectIdAndProcessKey(anyString(), anyString())).thenReturn(Optional.empty());
-        service = new AplAuthoringService(llm, new AplParser(), documents, new ObjectMapper());
+        service = new AplAuthoringService(llm, new AplParser(), documents, new ObjectMapper(),
+                AplParser.DEFAULT_ALLOWED_AGENT_MODELS);
     }
 
     @Test

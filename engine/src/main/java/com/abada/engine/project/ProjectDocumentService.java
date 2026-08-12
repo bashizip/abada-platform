@@ -5,6 +5,7 @@ import com.abada.engine.api.ApiException;
 import com.abada.engine.core.AbadaEngine;
 import com.abada.engine.insight.InsightProposalService.InsightConflictException;
 import com.abada.engine.parser.AplParser;
+import org.springframework.beans.factory.annotation.Value;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
 import com.abada.engine.persistence.entity.ProjectProcessDocumentEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
@@ -26,14 +27,16 @@ public class ProjectDocumentService {
     private final ProjectFolderRepository folders;
     private final ProjectAccessService access;
     private final AbadaEngine engine;
-    private final AplParser aplParser = new AplParser();
+    private final AplParser aplParser;
 
     public ProjectDocumentService(ProjectProcessDocumentRepository documents,
-            ProjectFolderRepository folders, ProjectAccessService access, AbadaEngine engine) {
+            ProjectFolderRepository folders, ProjectAccessService access, AbadaEngine engine,
+            @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
         this.documents = documents;
         this.folders = folders;
         this.access = access;
         this.engine = engine;
+        this.aplParser = new AplParser(allowedAgentModels);
     }
 
     @Transactional(readOnly = true)

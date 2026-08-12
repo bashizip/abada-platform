@@ -74,6 +74,9 @@ locally, while every live execution is an explicit, durable engine action.
 - [ ] Model human approval and escalation with supported BPMN user tasks.
 - [x] Define tool allowlists, credential boundaries and per-workflow policy
   inputs.
+- [x] Enforce an operator-defined agent model allow-list
+  (`ABADA_AGENT_ALLOWED_MODELS`) at deployment and authoring validation so
+  workflow documents cannot name models outside the approved set.
 - [ ] Record model, prompt/template version, tool decisions, actor and trace
   identifiers without logging secrets or complete sensitive payloads.
 - [ ] Make suspension and cancellation stop new agent work and produce
