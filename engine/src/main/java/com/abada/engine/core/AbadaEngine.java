@@ -536,11 +536,19 @@ public class AbadaEngine {
         return cacheDefinition(definition);
     }
 
+    /**
+     * Reloads immutable, already-admitted definitions without re-applying the
+     * current agent model allow-list: tightening the list after deployment
+     * must not change the semantics of running instances (runtime invariant
+     * "definitions are immutable once deployed").
+     */
+    private static final AplParser definitionReloadParser = new AplParser("");
+
     private ParsedProcessDefinition cacheDefinition(ProcessDefinitionEntity entity) {
         byte[] source = entity.getBpmnXml().getBytes(StandardCharsets.UTF_8);
         return definitionsByDeploymentId.computeIfAbsent(entity.getDeploymentId(), ignored -> {
             if (DefinitionSchema.from(entity.getSchemaType()) == DefinitionSchema.APL_NATIVE) {
-                return aplParser.parse(source);
+                return definitionReloadParser.parse(source);
             }
             return parser.parseDetailed(new java.io.ByteArrayInputStream(source),
                             new BpmnParseOptions(Arrays.stream(entity.getCompatibilityProfiles().split(","))

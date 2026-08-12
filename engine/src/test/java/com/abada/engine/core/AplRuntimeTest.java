@@ -4,15 +4,18 @@ import com.abada.engine.AbadaEngineApplication;
 import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.core.model.AgentAttemptMetadata;
 import com.abada.engine.core.model.DefinitionSchema;
+import com.abada.engine.core.model.ProcessStatus;
 import com.abada.engine.core.model.TaskInstance;
 import com.abada.engine.dto.ExternalTaskFailureDto;
 import com.abada.engine.dto.FetchAndLockRequest;
 import com.abada.engine.dto.LockedExternalTask;
 import com.abada.engine.persistence.entity.ActivityHistoryEntity;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
+import com.abada.engine.persistence.entity.ProcessInstanceEntity;
 import com.abada.engine.persistence.repository.ActivityHistoryRepository;
 import com.abada.engine.persistence.repository.ExternalTaskRepository;
 import com.abada.engine.persistence.repository.ProcessDefinitionRepository;
+import com.abada.engine.persistence.repository.ProcessInstanceRepository;
 import com.abada.engine.util.DatabaseTestHelper;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.WebApplicationType;
@@ -329,6 +332,75 @@ class AplRuntimeTest {
                     .hasMessageContaining("not a declared node");
 
             assertThat(context.getBean(ProcessDefinitionRepository.class).count()).isZero();
+        }
+    }
+
+    @Test
+    void agentModelAllowListGatesNewDeploymentsWithoutBreakingAdmittedOnes() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+
+            // A model outside the current allow-list is rejected at admission.
+            String legacyApl = "version: abada.io/v1\n"
+                    + "metadata:\n"
+                    + "  key: legacy_agent_flow\n"
+                    + "  name: Legacy Agent Flow\n"
+                    + "flow:\n"
+                    + "  entry: start\n"
+                    + "  nodes:\n"
+                    + "    - id: start\n"
+                    + "      type: webhook\n"
+                    + "      next: analyze\n"
+                    + "    - id: analyze\n"
+                    + "      type: agent\n"
+                    + "      profile: abada.agent/v1\n"
+                    + "      model: gemini-2.5-flash\n"
+                    + "      prompt: Classify the lead.\n"
+                    + "      result_variable: out\n"
+                    + "      next: end\n"
+                    + "    - id: end\n"
+                    + "      type: end\n";
+            assertThatThrownBy(() -> engine.deploy(new java.io.ByteArrayInputStream(
+                    legacyApl.getBytes(StandardCharsets.UTF_8))))
+                    .isInstanceOf(ProcessEngineException.class)
+                    .hasMessageContaining("not on the allowed model list");
+
+            // A definition admitted under an older operator policy keeps
+            // materializing its instances after the allow-list is tightened.
+            ProcessDefinitionEntity admitted = new ProcessDefinitionEntity();
+            admitted.setProjectId(com.abada.engine.project.ProjectConstants.DEFAULT_PROJECT_ID);
+            admitted.setId("legacy_agent_flow");
+            admitted.setProcessKey("legacy_agent_flow");
+            admitted.setVersion(1);
+            admitted.setName("Legacy Agent Flow");
+            admitted.setBpmnXml(legacyApl);
+            admitted.setSchemaType(DefinitionSchema.APL_NATIVE.name());
+            admitted.setDeploymentId("legacy-deployment");
+            admitted.setChecksum("legacy-checksum");
+            admitted.setDefinitionFormatVersion("apl-native-1");
+            admitted.setCompatibilityProfiles("abada-native-1");
+            admitted.setDetectedNamespaces("abada.io/v1");
+            admitted.setCompatibilityReport("{}");
+            admitted.setCompilerVersion("apl-1");
+            context.getBean(ProcessDefinitionRepository.class).save(admitted);
+
+            ProcessInstanceEntity instance = new ProcessInstanceEntity("legacy-instance-1",
+                    "legacy_agent_flow", "analyze", ProcessStatus.RUNNING);
+            instance.setProjectId(com.abada.engine.project.ProjectConstants.DEFAULT_PROJECT_ID);
+            instance.setProcessDefinitionDeploymentId("legacy-deployment");
+            instance.setVariablesJson("{}");
+            instance.setStartDate(java.time.Instant.now());
+            context.getBean(ProcessInstanceRepository.class).save(instance);
+
+            var page = engine.getProcessInstances(com.abada.engine.project.ProjectConstants.DEFAULT_PROJECT_ID, null, null,
+                    org.springframework.data.domain.PageRequest.of(0, 10));
+            assertThat(page.getContent()).singleElement().satisfies(pi -> {
+                assertThat(pi.getId()).isEqualTo("legacy-instance-1");
+                assertThat(pi.getDefinition().getId()).isEqualTo("legacy_agent_flow");
+                assertThat(pi.getDefinition().getServiceTask("analyze").agentWork().model())
+                        .isEqualTo("gemini-2.5-flash");
+            });
         }
     }
 
