@@ -74,7 +74,8 @@ export default function App() {
 
   const {
     selectedLiveInstance, liveWorkflow, activeLiveNodeIds, liveSelectedNodeId, setLiveSelectedNodeId,
-    executionStatuses, instancesRefreshKey, setInstancesRefreshKey,
+    executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges,
+    instancesRefreshKey, setInstancesRefreshKey,
     instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance,
     livePanelWidth, setLivePanelWidth, livePanelPinned, setLivePanelPinned,
     openLiveInstance, openInstanceDetail, clearLiveInstanceState
@@ -502,6 +503,8 @@ export default function App() {
                       activeSimulationNodeId={activeSimulationNodeId}
                       executionStatuses={executionStatuses}
                       activeLiveNodeIds={activeLiveNodeIds}
+                      activePathEdges={activePathEdges}
+                      activeTokenEdges={activeTokenEdges}
                       readOnly
                     />
                     {instancePanelOpen && (
@@ -602,10 +605,9 @@ export default function App() {
                 showToast('error', 'Dry Run blocked: ' + message);
               }}
               onOverlayChange={(statuses, activeNodeId, running) => {
-                // Not supported cleanly here anymore, but leaving stub for type signature
-                // Actually, wait, DryRunPanel updates statuses.
-                // We don't have setExecutionStatuses from useDryRunSimulation, it was removed.
-                // Let's ignore it for now as the user's plan is just to refactor God Component App.tsx
+                setExecutionStatuses(statuses);
+                setActiveSimulationNodeId(activeNodeId);
+                setIsSimulating(running);
               }}
             />}
 

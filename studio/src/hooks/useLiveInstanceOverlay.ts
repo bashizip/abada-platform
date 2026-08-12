@@ -1,10 +1,17 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
 import { Project } from '@/api/projects';
 import { WorkflowFile, SimulationLog } from '@/types';
 import { deriveLiveExecutionOverlay, NodeRunStatus } from '@/lib/run/liveRun';
+import { deriveInstancePath } from '@/lib/run/instanceDetail';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { readInspectorPanelPinned, readInspectorPanelWidth, useInspectorPanelPrefs } from '@/lib/run/panelPrefs';
+
+/**
+ * Terminal statuses where the token animation should stop (the taken path
+ * stays visible, but marching dots are suppressed).
+ */
+const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED'];
 
 export function useLiveInstanceOverlay(
   activeProject: Project | undefined,
@@ -20,6 +27,8 @@ export function useLiveInstanceOverlay(
   const [activeLiveNodeIds, setActiveLiveNodeIds] = useState<string[]>([]);
   const [liveSelectedNodeId, setLiveSelectedNodeId] = useState<string | null>(null);
   const [executionStatuses, setExecutionStatuses] = useState<Record<string, NodeRunStatus>>({});
+  const [activePathEdges, setActivePathEdges] = useState<string[]>([]);
+  const [activeTokenEdges, setActiveTokenEdges] = useState<Record<string, number>>({});
   const [instancesRefreshKey, setInstancesRefreshKey] = useState(0);
   const [instancePanelOpen, setInstancePanelOpen] = useState(true);
   const [detailInstance, setDetailInstance] = useState<ProcessInstanceDTO | null>(null);
@@ -31,12 +40,39 @@ export function useLiveInstanceOverlay(
     setPinned: setLivePanelPinned,
   } = useInspectorPanelPrefs();
 
+  /**
+   * Content-stable cache: polls return new object identities for the same
+   * engine facts. Serializing and comparing prevents state updates (and SMIL
+   * animation restarts) when nothing actually changed.
+   */
+  const stablePathRef = useRef<string | null>(null);
+
+  const applyPathOverlay = useCallback((
+    workflow: WorkflowFile,
+    instance: ProcessInstanceDTO,
+    activities: import('@/api/engine').ActivityInstanceDTO[],
+    history: import('@/api/engine').ActivityHistoryDTO[],
+  ) => {
+    const path = deriveInstancePath(workflow, instance, activities, history);
+    const serialized = JSON.stringify(path);
+    if (stablePathRef.current === serialized) return;
+    stablePathRef.current = serialized;
+    setActivePathEdges(path.activePathEdgeIds);
+    const isTerminal = TERMINAL_STATUSES.includes(
+      (instance.status || '').toUpperCase(),
+    );
+    setActiveTokenEdges(isTerminal || instance.suspended ? {} : path.tokenSteps);
+  }, []);
+
   const openInstanceDetail = useCallback((instance: ProcessInstanceDTO) => {
     setSelectedLiveInstance(null);
     setLiveWorkflow(null);
     setActiveLiveNodeIds([]);
     setLiveSelectedNodeId(null);
     setExecutionStatuses({});
+    setActivePathEdges([]);
+    setActiveTokenEdges({});
+    stablePathRef.current = null;
     setInstancePanelOpen(false);
     setDetailInstance(instance);
     setCurrentView('instance');
@@ -51,6 +87,7 @@ export function useLiveInstanceOverlay(
     setDesignerMode('diagram');
     setShowRunPanel(false);
     setInstancePanelOpen(true);
+    stablePathRef.current = null;
 
     try {
       const definition = await EngineAPI.getDefinitionForInstance(instance, activeProject.id);
@@ -72,6 +109,7 @@ export function useLiveInstanceOverlay(
       const overlay = deriveLiveExecutionOverlay(instanceWorkflow, fresh, activities, history);
       setExecutionStatuses(overlay.statuses);
       setActiveLiveNodeIds(overlay.activeNodeIds);
+      applyPathOverlay(instanceWorkflow, fresh, activities, history);
     } catch (reason) {
       setSimulationLogs((logs) => [...logs, {
         id: `instance-view-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
@@ -79,7 +117,7 @@ export function useLiveInstanceOverlay(
         message: reason instanceof Error ? reason.message : String(reason),
       }]);
     }
-  }, [activeProject, workflows, setLivePanelWidth, setLivePanelPinned, setSidebarTab, setDesignerMode, setShowRunPanel, setSimulationLogs]);
+  }, [activeProject, workflows, setLivePanelWidth, setLivePanelPinned, setSidebarTab, setDesignerMode, setShowRunPanel, setSimulationLogs, applyPathOverlay]);
 
   const selectedLiveInstanceId = selectedLiveInstance?.id;
   const selectedLiveInstanceStatus = selectedLiveInstance?.status;
@@ -99,6 +137,7 @@ export function useLiveInstanceOverlay(
         const overlay = deriveLiveExecutionOverlay(liveWorkflow, fresh, activities, history);
         setExecutionStatuses(overlay.statuses);
         setActiveLiveNodeIds(overlay.activeNodeIds);
+        applyPathOverlay(liveWorkflow, fresh, activities, history);
       } catch {
         // Keep the last authoritative snapshot visible; the next poll retries.
       }
@@ -106,10 +145,10 @@ export function useLiveInstanceOverlay(
     void refresh();
     const timer = window.setInterval(() => {
       const terminal = selectedLiveInstanceStatus?.toUpperCase() || '';
-      if (!['COMPLETED', 'FAILED', 'CANCELLED'].includes(terminal)) void refresh();
+      if (!TERMINAL_STATUSES.includes(terminal)) void refresh();
     }, 1500);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [activeProject, liveWorkflow, selectedLiveInstanceId, selectedLiveInstanceStatus]);
+  }, [activeProject, liveWorkflow, selectedLiveInstanceId, selectedLiveInstanceStatus, applyPathOverlay]);
 
   const clearLiveInstanceState = useCallback(() => {
     setSelectedLiveInstance(null);
@@ -117,6 +156,9 @@ export function useLiveInstanceOverlay(
     setActiveLiveNodeIds([]);
     setLiveSelectedNodeId(null);
     setExecutionStatuses({});
+    setActivePathEdges([]);
+    setActiveTokenEdges({});
+    stablePathRef.current = null;
   }, []);
 
   return {
@@ -126,6 +168,9 @@ export function useLiveInstanceOverlay(
     liveSelectedNodeId,
     setLiveSelectedNodeId,
     executionStatuses,
+    activePathEdges,
+    activeTokenEdges,
+    setExecutionStatuses,
     instancesRefreshKey,
     setInstancesRefreshKey,
     instancePanelOpen,
