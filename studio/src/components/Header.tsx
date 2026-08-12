@@ -31,8 +31,8 @@ interface HeaderProps {
   onOpenProcessDetails?: () => void;
   onOpenSettings?: () => void;
   nodeCount: number;
-  currentView?: 'designer' | 'inbox' | 'operations' | 'instance';
-  onViewChange?: (view: 'designer' | 'inbox' | 'operations') => void;
+  currentView?: 'designer' | 'inbox' | 'operations' | 'instance' | 'administration';
+  onViewChange?: (view: 'designer' | 'inbox' | 'operations' | 'administration') => void;
   activeProject?: Project;
   onOpenProjects?: () => void;
   readOnlyInstance?: boolean;
@@ -115,6 +115,19 @@ export const Header: React.FC<HeaderProps> = ({
                 {view === 'designer' ? 'Canvas' : view === 'inbox' ? 'Task Inbox' : 'Operations'}
               </button>
             ))}
+            {(activeProject?.currentUserRoles?.includes('OWNER') || activeProject?.currentUserRoles?.includes('MAINTAINER')) && (
+              <button
+                key="administration"
+                onClick={() => onViewChange?.('administration')}
+                className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ml-1 ${
+                  currentView === 'administration'
+                    ? 'bg-[#25201D] text-[#EAE3D9] border border-[#3A322E]'
+                    : 'text-[#A89F91] hover:text-[#EAE3D9] border border-transparent'
+                }`}
+              >
+                Administration
+              </button>
+            )}
           </div>
         </div>
 

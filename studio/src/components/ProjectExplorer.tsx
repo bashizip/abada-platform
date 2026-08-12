@@ -9,6 +9,7 @@ import {
   ResourceKind, flattenTreeFolders,
 } from '@/api/projects';
 import { WorkflowFile } from '@/types';
+import { FormEditor, FormSchema } from '@/features/designer/FormEditor';
 
 interface ProjectExplorerProps {
   projectId: string;
@@ -562,6 +563,41 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
   const renderPreview = (): React.ReactElement | null => {
     if (!preview) return null;
+
+    if (preview.kind === 'FORM') {
+      let schema: FormSchema;
+      try {
+        schema = JSON.parse(base64ToText(preview.contentBase64));
+      } catch {
+        schema = { title: preview.name.replace('.json', ''), fields: [] };
+      }
+
+      return (
+        <div className="fixed inset-0 z-40 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-7xl h-[90vh]">
+            <FormEditor
+              initialSchema={schema}
+              saving={busy}
+              onClose={() => setPreview(null)}
+              onSave={async (newSchema) => {
+                const json = JSON.stringify(newSchema, null, 2);
+                const bytes = new TextEncoder().encode(json);
+                const base64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+                await run(async () => {
+                  const updated = await ProjectAPI.replaceResource(
+                    projectId, preview.id, 'application/json', base64, preview.revision
+                  );
+                  setPreview(await ProjectAPI.getResource(projectId, updated.id));
+                  await refetch();
+                  setPreview(null);
+                }, 'Failed to save form');
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+
     const isText = !preview.contentType || preview.contentType.startsWith('text/') ||
       preview.contentType.includes('json') || preview.contentType.includes('yaml') ||
       preview.contentType.includes('xml') || preview.contentType.includes('csv');
