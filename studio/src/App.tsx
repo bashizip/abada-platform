@@ -20,6 +20,7 @@ import { LiveInstanceInspector } from '@/features/operations/LiveInstanceInspect
 import { InstanceDetailView } from '@/features/operations/InstanceDetailView';
 import { DryRunPanel } from '@/features/run/DryRunPanel';
 import { DeployDialog } from '@/features/run/DeployDialog';
+import { agentModelGuardMessage, invalidAgentModels } from '@/lib/agentModels';
 import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
 import { AplGenerationCandidate, AuthoringAPI } from '@/api/authoring';
@@ -33,6 +34,7 @@ import {
   NodeRunStatus,
 } from '@/lib/run/liveRun';
 import { readInspectorPanelPinned, readInspectorPanelWidth, useInspectorPanelPrefs } from '@/lib/run/panelPrefs';
+import { DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype, SimulationLog, AgentConfig, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
@@ -413,7 +415,7 @@ export default function App() {
       x: 120 + currentWorkflow.nodes.length * 260,
       y: 220,
       agentConfig: type === 'agent' ? {
-        model: 'gemini-3.6-flash',
+        model: DEFAULT_AGENT_MODEL,
         systemPrompt: 'Evaluate incoming data and perform risk verification.',
         confidenceThreshold: 85,
         temperature: 0.2,
@@ -483,7 +485,7 @@ export default function App() {
       x: sourceNode.x + 240,
       y: sourceNode.y,
       agentConfig: type === 'agent' ? {
-        model: 'gemini-3.6-flash',
+        model: DEFAULT_AGENT_MODEL,
         systemPrompt: 'Downstream agent handling post-processing.',
         confidenceThreshold: 90,
         temperature: 0.1,
@@ -684,6 +686,10 @@ export default function App() {
     ]);
 
     try {
+      const invalidModels = invalidAgentModels(currentWorkflow.nodes);
+      if (invalidModels.length > 0) {
+        throw new Error(agentModelGuardMessage(invalidModels));
+      }
       let deployWorkflow = currentWorkflow;
       if (activeProject) {
         const wasDraft = !currentWorkflow.documentId;
@@ -1131,6 +1137,14 @@ export default function App() {
                   id: `dry-run-${Date.now()}`, timestamp: new Date().toLocaleTimeString(),
                   nodeId: 'system', nodeTitle: 'Dry Run', nodeType: 'event', status: 'success',
                   message: `Local Dry Run completed for ${currentWorkflow.name}; no engine instance was created.`,
+                }]);
+              }}
+              onBlocked={(message) => {
+                setShowLogPanel(true);
+                setSimulationLogs((logs) => [...logs, {
+                  id: `dry-run-blocked-${Date.now()}`, timestamp: new Date().toLocaleTimeString(),
+                  nodeId: 'system', nodeTitle: 'Dry Run Blocked', nodeType: 'event', status: 'error',
+                  message,
                 }]);
               }}
               onOverlayChange={(statuses, activeNodeId, running) => {

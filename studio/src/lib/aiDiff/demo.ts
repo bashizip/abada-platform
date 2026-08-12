@@ -1,5 +1,6 @@
 import { WorkflowFile, WorkflowEdge } from '@/types';
 import { WorkflowDiffSnapshot, DiffProposal, DiffNodeChange, DiffEdgeChange } from './types';
+import { DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
 
 /**
  * Builds a demo Insight-Engine proposal over a workflow snapshot, the same
@@ -25,7 +26,7 @@ export const buildDemoProposal = (wf: WorkflowFile): WorkflowDiffSnapshot => {
         kind: 'modified',
         annotation:
           '# OPTIMIZATION (Insight Engine):\n' +
-          '# Switched to gemini-3.6-pro and tightened the prompt to enforce\n' +
+          '# Switched to gemini-3.6-flash and tightened the prompt to enforce\n' +
           '# strict JSON schema output, resolving an 18% parsing failure rate.',
       });
       return [
@@ -34,7 +35,7 @@ export const buildDemoProposal = (wf: WorkflowFile): WorkflowDiffSnapshot => {
           agentConfig: n.agentConfig
             ? {
                 ...n.agentConfig,
-                model: 'gemini-3.6-pro',
+                model: 'gemini-3.6-flash',
                 systemPrompt:
                   'Extract {income, creditScore, requestedAmount} from the payload.\n' +
                   'Return valid JSON adhering strictly to the schema. No markdown fences.',
@@ -63,7 +64,7 @@ export const buildDemoProposal = (wf: WorkflowFile): WorkflowDiffSnapshot => {
       x: startNode.x + 260,
       y: startNode.y + 40,
       agentConfig: {
-        model: 'gemini-3.6-flash',
+        model: DEFAULT_AGENT_MODEL,
         systemPrompt:
           'Normalize the incoming payload into a clean JSON document with the ' +
           '{ income: number, creditScore: number, requestedAmount: number } shape.',

@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { APLDocument, APLHitPolicy, APLNode, APLValue } from '../apl/types';
 import { normalizeTableInputs } from '../apl/parser';
+import { DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
 
 /** Coerces a string back to the typed value the engine stored. */
 const coerceValue = (raw: string): APLValue => {
@@ -137,7 +138,7 @@ isArray: (name) => {
         id: st['@_id'],
         type: 'agent',
         description: name,
-        model: props.model || 'gemini-3.6-flash',
+        model: props.model || DEFAULT_AGENT_MODEL,
         prompt: props.prompt || undefined,
         confidence_threshold: props.confidence_threshold
           ? Number(props.confidence_threshold)

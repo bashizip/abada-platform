@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { WorkflowNode, NodeType, AgentConfig, HumanConfig } from '@/types';
 import { DmnRuleInspector } from '@/features/dmn/DmnRuleInspector';
+import { AGENT_MODEL_OPTIONS, DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
 import { 
   Bot, 
   UserCheck, 
@@ -92,7 +93,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
           <div className="flex justify-between text-[#A89F91]">
             <span>Model Engine</span>
-            <span className="text-[#9D4EDD] font-mono">Gemini 3.6 Flash</span>
+            <span className="text-[#9D4EDD] font-mono">{DEFAULT_AGENT_MODEL}</span>
           </div>
           <div className="flex justify-between text-[#A89F91]">
             <span>Default Fallback</span>
@@ -123,6 +124,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     });
   };
 
+  // Numeric agent settings round-trip into the node APL; an empty field is
+  // written back as undefined so the YAML omits the key (engine default wins).
+  const handleAgentNumber = (field: 'maxTokens' | 'maxAttempts', raw: string) => {
+    if (raw.trim() === '') {
+      handleAgentChange(field, undefined);
+      return;
+    }
+    const parsed = Number(raw);
+    handleAgentChange(field, Number.isFinite(parsed) ? parsed : undefined);
+  };
+
   // Handle human task updates
   const handleHumanChange = (field: keyof HumanConfig, value: any) => {
     if (!selectedNode.humanConfig) return;
@@ -134,6 +146,15 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       },
     });
   };
+
+  // Model selector options stay in sync with the node's APL: the curated list
+  // is always joined by the current model when it is not among the options, so
+  // the dropdown can never render an empty/ghost selection.
+  const agentConfig = selectedNode.agentConfig;
+  const currentModel = agentConfig?.model || DEFAULT_AGENT_MODEL;
+  const modelOptions = AGENT_MODEL_OPTIONS.includes(currentModel)
+    ? AGENT_MODEL_OPTIONS
+    : [currentModel, ...AGENT_MODEL_OPTIONS];
 
   // Run live test for AI agent
   const executeAgentTest = async () => {
@@ -208,8 +229,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <Sparkles className="w-3.5 h-3.5" />
                 AI Agent Configuration
               </span>
-              <span className="text-[10px] bg-[#9D4EDD]/20 text-[#9D4EDD] px-2 py-0.5 rounded-full font-mono">
-                Gemini Engine
+              <span className="max-w-[50%] truncate text-[10px] bg-[#9D4EDD]/20 text-[#9D4EDD] px-2 py-0.5 rounded-full font-mono" title={currentModel}>
+                {currentModel}
               </span>
             </div>
 
@@ -217,14 +238,19 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <div className="space-y-1.5">
               <label className="text-xs text-[#A89F91] block">LLM Engine Model</label>
               <select
-                value={selectedNode.agentConfig.model}
+                value={currentModel}
                 onChange={(e) => handleAgentChange('model', e.target.value)}
                 className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
               >
-                <option value="gemini-3.6-flash">gemini-3.6-flash (Fast Reasoning)</option>
-                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (Complex Logic)</option>
-                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Ultra Low Latency)</option>
+                {modelOptions.map((model) => (
+                  <option key={model} value={model}>
+                    {model}{model === DEFAULT_AGENT_MODEL ? ' (Default)' : ''}
+                  </option>
+                ))}
               </select>
+              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                Mirrored into the node's APL (<span className="font-mono text-[#9D4EDD]">model:</span>). Any model id already in the YAML stays selected and is listed first.
+              </p>
             </div>
 
             {/* System Prompt */}
@@ -277,6 +303,41 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 onChange={(e) => handleAgentChange('temperature', Number(e.target.value))}
                 className="w-full accent-[#F4A261] bg-[#1A1614] h-1.5 rounded-lg cursor-pointer"
               />
+            </div>
+
+            {/* Max Tokens & Max Attempts — mirrored into max_tokens / max_attempts */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#A89F91] block">Max Tokens</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="engine default"
+                  value={selectedNode.agentConfig.maxTokens ?? ''}
+                  onChange={(e) => handleAgentNumber('maxTokens', e.target.value)}
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                />
+                <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                  APL <span className="font-mono text-[#9D4EDD]">max_tokens:</span> — empty leaves the engine default.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#A89F91] block">Max Attempts</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="1"
+                  placeholder="engine default"
+                  value={selectedNode.agentConfig.maxAttempts ?? ''}
+                  onChange={(e) => handleAgentNumber('maxAttempts', e.target.value)}
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                />
+                <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                  APL <span className="font-mono text-[#9D4EDD]">max_attempts:</span> durable retries before the job fails.
+                </p>
+              </div>
             </div>
 
             {/* Tools Checklist */}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Braces, CheckCircle2, ChevronRight, FlaskConical, Play, RotateCcw, X } from 'lucide-react';
 import { WorkflowEdge, WorkflowFile, WorkflowNode } from '@/types';
 import { deriveDefaultPayload, NodeRunStatus, sleep } from '@/lib/run/liveRun';
+import { agentModelGuardMessage, invalidAgentModels } from '@/lib/agentModels';
 
 type PauseState =
   | { kind: 'agent'; node: WorkflowNode; edges: WorkflowEdge[] }
@@ -14,6 +15,7 @@ interface DryRunPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onCompleted: (payload: Record<string, unknown>) => void;
+  onBlocked?: (message: string) => void;
   onOverlayChange: (
     statuses: Record<string, NodeRunStatus>,
     activeNodeId: string | null,
@@ -25,7 +27,7 @@ const initialStatuses = (workflow: WorkflowFile): Record<string, NodeRunStatus> 
   Object.fromEntries(workflow.nodes.map((node) => [node.id, 'idle']));
 
 export const DryRunPanel: React.FC<DryRunPanelProps> = ({
-  workflow, isOpen, onClose, onCompleted, onOverlayChange,
+  workflow, isOpen, onClose, onCompleted, onBlocked, onOverlayChange,
 }) => {
   const defaults = useMemo(() => deriveDefaultPayload(workflow), [workflow]);
   const [payloadText, setPayloadText] = useState(() => JSON.stringify(defaults, null, 2));
@@ -89,6 +91,14 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
       || workflow.nodes.find((node) => !workflow.edges.some((edge) => edge.target === node.id));
     if (!start) {
       setPayloadError('Dry Run requires a start node');
+      return;
+    }
+
+    const invalidModels = invalidAgentModels(workflow.nodes);
+    if (invalidModels.length > 0) {
+      const message = agentModelGuardMessage(invalidModels);
+      setPayloadError(message);
+      onBlocked?.(message);
       return;
     }
 
