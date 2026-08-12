@@ -1,0 +1,1 @@
+Read https://cuelume-site.pages.dev/agents.md and follow it to install cuelume and add interaction sounds to this project.
