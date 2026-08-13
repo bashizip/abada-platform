@@ -460,11 +460,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               >
                 <option value="exclusive">Exclusive — one matching branch (&gt;1 outgoing edge routes via conditions)</option>
                 <option value="parallel">Parallel — unconditional fork / join</option>
+                <option value="inclusive">Inclusive — every matching branch fires</option>
               </select>
               <p className="text-[10px] text-[#A89F91] leading-relaxed">
                 {selectedNode.subtype === 'parallel'
                   ? 'Fork: connect each outgoing edge; the engine runs every branch concurrently. Join: upstream nodes converge back here and it continues along its single outgoing edge.'
-                  : 'Conditional flows evaluate in order; the last flow becomes the default branch.'}
+                  : selectedNode.subtype === 'inclusive'
+                    ? 'Fork: every outgoing edge whose condition matches fires (zero matches need an else/fallback edge, or the run fails loudly). Join: upstream nodes converge back here and it continues along its single outgoing edge.'
+                    : 'Conditional flows evaluate in order; the last flow becomes the default branch.'}
               </p>
             </div>
           </div>

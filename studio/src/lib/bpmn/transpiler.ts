@@ -24,7 +24,7 @@ export function transpileBPMNToAPL(xmlString: string): APLDocument {
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
 isArray: (name) => {
-      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:scriptTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:exclusiveGateway', 'bpmn:parallelGateway'];
+      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:scriptTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:exclusiveGateway', 'bpmn:inclusiveGateway', 'bpmn:parallelGateway'];
       return arrayTags.includes(name);
     }
   });
@@ -192,6 +192,26 @@ isArray: (name) => {
         then: f['@_targetRef'],
       }))
     });
+  });
+
+  const processInclusiveGateways = process['bpmn:inclusiveGateway'] || [];
+  processInclusiveGateways.forEach((gw: any) => {
+    const outFlows = seqFlows.filter((f: any) => f['@_sourceRef'] === gw['@_id']);
+    const defaultFlowId = gw['@_default'];
+    aplNodes.push({
+      id: gw['@_id'],
+      type: 'inclusive',
+      description: gw['@_name'],
+      ...(outFlows.length >= 2
+        ? {
+            rules: outFlows.map((f: any) => ({
+              if: f['bpmn:conditionExpression'] ? f['bpmn:conditionExpression']['#text'] : undefined,
+              else: f['@_id'] === defaultFlowId ? f['@_targetRef'] : undefined,
+              then: f['@_targetRef'],
+            }))
+          }
+        : { next: outFlows[0]?.['@_targetRef'] }),
+    } as APLNode);
   });
 
   const processParallelGateways = process['bpmn:parallelGateway'] || [];

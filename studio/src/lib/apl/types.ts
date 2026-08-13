@@ -12,7 +12,7 @@ export interface APLDocument {
   };
 }
 
-export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'parallel' | 'end';
+export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'inclusive' | 'parallel' | 'end';
 
 export interface APLBaseNode {
   id: string;
@@ -61,6 +61,19 @@ export interface APLConditionNode extends APLBaseNode {
   }[];
   // Note: condition nodes use 'rules' instead of 'next' for routing
   next?: never; 
+}
+
+export interface APLInclusiveNode extends APLBaseNode {
+  type: 'inclusive';
+  /** Fork: every matching `if` rule fires (zero-matches need an explicit
+   *  `else` target). A fork never declares `next`. */
+  rules?: {
+    if?: string;
+    else?: string;
+    then: string;
+  }[];
+  /** Join: several upstream nodes converge and it continues via `next`. */
+  next?: string;
 }
 
 export interface APLParallelNode extends APLBaseNode {
@@ -120,6 +133,7 @@ export type APLNode =
   | APLAgentNode
   | APLEngineTaskNode
   | APLConditionNode
+  | APLInclusiveNode
   | APLParallelNode
   | APLDecisionTableNode
   | APLApprovalGateNode

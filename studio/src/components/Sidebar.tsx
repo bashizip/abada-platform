@@ -195,6 +195,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       bgColor: 'bg-[#F4A261]/10',
       borderColor: 'border-[#F4A261]/40',
     },
+    {
+      type: 'gateway',
+      subtype: 'inclusive',
+      group: 'Decisions & Routing',
+      title: 'Inclusive Gateway',
+      description: 'Fork every matching branch, zero-matches need an else flow',
+      icon: GitMerge,
+      color: '#F4A261',
+      bgColor: 'bg-[#F4A261]/10',
+      borderColor: 'border-[#F4A261]/40',
+    },
   ];
 
   return (

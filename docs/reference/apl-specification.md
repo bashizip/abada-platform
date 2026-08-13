@@ -142,7 +142,7 @@ AI-generated and Studio-authored APL converge on one shape.
 The current APL node vocabulary (Studio `lib/apl/types.ts`):
 
 ```
-webhook | agent | engine-task | script | condition | approval-gate | decision-table | parallel | end
+webhook | agent | engine-task | script | condition | approval-gate | decision-table | inclusive | parallel | end
 ```
 
 ### 3.1 `webhook` — trigger node
@@ -384,7 +384,43 @@ persists with the instance and survives restart. Studio draws the fork's
 branches as plain outgoing edges; conditions are never attached to parallel
 flows.
 
-### 3.9 `end` — terminal node
+### 3.9 `inclusive` — inclusive fork / join gateway
+
+Compiles to the runtime inclusive gateway. An `inclusive` node is a **fork**
+when it declares `rules`: **every** matching `if` rule fires (zero or more
+tokens). An explicit `else` rule is the only way to declare a default flow —
+when no rule matches and no `else` exists, the command fails loudly and rolls
+back, exactly like a BPMN inclusive gateway without a `default` flow. A
+**join** is an `inclusive` node on which several upstream nodes converge via
+their `next` and which continues along its single `next` successor.
+
+```yaml
+- id: route
+  type: inclusive
+  description: Route by path
+  rules:
+    - if: "${path == 'C' || path == 'CD'}"
+      then: taskC
+    - if: "${path == 'D' || path == 'CD'}"
+      then: taskD
+- id: rejoin            # join: taskC and taskD both route here
+  type: inclusive
+  next: archive
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `rules[].if` | string | fork | condition expression (§5); every matching rule fires |
+| `rules[].else` | nodeId | fork | **target node id**; the only default form — fires when no rule matches |
+| `rules[].then` | nodeId | fork | target node id of this branch |
+| `next` | nodeId | join | single successor after all expected tokens arrive |
+
+Engine semantics: the inclusive join waits for as many tokens as the fork
+actually spawned (`chooseInclusive`), not for every upstream edge — partial
+matches join correctly. Join token bookkeeping persists with the instance and
+survives restart.
+
+### 3.10 `end` — terminal node
 
 Compiles to the runtime end-event primitive. Completes the instance when the last token
 arrives.

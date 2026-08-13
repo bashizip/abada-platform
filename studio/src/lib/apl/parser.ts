@@ -266,6 +266,22 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.type = 'gateway';
         wNode.subtype = 'parallel';
         break;
+      case 'inclusive':
+        wNode.type = 'gateway';
+        wNode.subtype = 'inclusive';
+        wNode.dmnConfig = {
+          decisionKey: `RULE_${aplNode.id.toUpperCase()}`,
+          hitPolicy: 'FIRST',
+          inputs: [],
+          outputs: [],
+          rules: (aplNode.rules || []).map((r, i) => ({
+            id: `r${i}`,
+            when: r.if,
+            otherwise: !!r.else,
+            then: { Next: r.then },
+          })),
+        };
+        break;
       case 'decision-table': {
         const table = aplNode as APLDecisionTableNode;
         wNode.type = 'dmn';
@@ -421,6 +437,30 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
           aplNodes.push({
             ...baseNode,
             type: 'parallel',
+            next: outEdges.length === 1 ? outEdges[0].target : undefined,
+          } as APLNode);
+        }
+      } else if (node.subtype === 'inclusive') {
+        // Inclusive gateway: the fork fires every matching rule (an explicit
+        // `else` edge is the only default); a single outgoing edge marks a join.
+        if (outEdges.length >= 2) {
+          aplNodes.push({
+            ...baseNode,
+            type: 'inclusive',
+            rules: outEdges.map((e, idx) => {
+              const cond = toCondition(e.label, e.condition);
+              const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
+              return {
+                if: cond,
+                else: isElse ? e.target : undefined,
+                then: e.target,
+              };
+            }),
+          } as APLNode);
+        } else {
+          aplNodes.push({
+            ...baseNode,
+            type: 'inclusive',
             next: outEdges.length === 1 ? outEdges[0].target : undefined,
           } as APLNode);
         }

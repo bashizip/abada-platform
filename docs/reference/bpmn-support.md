@@ -60,6 +60,7 @@ The supported APL construct set maps 1:1 onto the BPMN elements above:
 | `script` | Script task | In-transaction server-side script; the APL form of an embedded Java delegate (`camunda:class`) |
 | `decision-table` | Business rule task | Inline `inputs`/`rules`, `FIRST`/`UNIQUE`/`COLLECT`, `otherwise` fallback; applies `abada:decisionTable` semantics |
 | `condition` | Exclusive gateway | `if` rules become conditional flows; the `else` rule (or the last rule otherwise) becomes the default flow |
+| `inclusive` | Inclusive gateway | Fork: every matching `if` rule fires; only an explicit `else` rule is a default — zero matches without one fail loudly. Join: waits for the tokens the fork actually spawned |
 | `parallel` | Parallel gateway | Fork: `branches` (≥2) get one unconditional flow each; join: upstream `next` flows converge on the node and it continues via its single `next`. Fork/join token bookkeeping persists across restarts |
 
 APL semantics that close or tighten holes:

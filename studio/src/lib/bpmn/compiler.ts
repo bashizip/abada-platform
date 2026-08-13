@@ -162,6 +162,40 @@ export function compileAPLToBPMN(apl: APLDocument): string {
           }
         };
       }
+      case 'inclusive': {
+        // Inclusive gateway: every matching conditional flow fires; the `else`
+        // flow is the gateway default (the engine treats it as fallback-only).
+        const flowIds: string[] = [];
+        const usedFlowIds = new Set<string>();
+        (node.rules || []).forEach((rule) => {
+          const base = `Flow_${node.id}_${rule.then}`;
+          let flowId = base;
+          let suffix = 1;
+          while (usedFlowIds.has(flowId)) flowId = `${base}_${suffix++}`;
+          usedFlowIds.add(flowId);
+          flowIds.push(flowId);
+          sequenceFlows.push({
+            '@_id': flowId,
+            '@_sourceRef': node.id,
+            '@_targetRef': rule.then,
+            ...(rule.if ? {
+              'bpmn:conditionExpression': {
+                '@_xsi:type': 'bpmn:tFormalExpression',
+                '#text': rule.if
+              }
+            } : {})
+          });
+        });
+        const elseRule = (node.rules || []).find((rule) => rule.else);
+        const defaultFlowId = elseRule ? flowIds[(node.rules || []).indexOf(elseRule)] : undefined;
+        return {
+          'bpmn:inclusiveGateway': {
+            '@_id': node.id,
+            '@_name': node.description || 'Inclusive Gateway',
+            ...(defaultFlowId ? { '@_default': defaultFlowId } : {})
+          }
+        };
+      }
       case 'parallel': {
         // Parallel gateway: a fork emits one unconditional flow per branch; a
         // join needs no outgoing flow configuration beyond `next`.
