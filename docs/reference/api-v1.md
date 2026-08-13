@@ -72,3 +72,27 @@ The Engine validates every result with `AplParser`, retries an invalid model
 candidate at most twice, and returns a deterministic valid starter if the
 OpenAI-compatible provider is absent or unavailable. This endpoint never
 persists or deploys its candidate; Studio requires an explicit Apply action.
+
+## Worker health
+
+`GET /api/v1/projects/{projectId}/workers/health` returns the operational
+liveness and incident state of every bound (or attempted) external
+worker/topic in the project: principal, topic, binding status, derived
+liveness (`ONLINE`, `OFFLINE`, `ERROR`), last heartbeat, last success, last
+rejection message and timestamp, consecutive failures and the last reported
+worker id. It is readable by `VIEWER`, `OPERATOR` and `OWNER` memberships.
+
+The engine records a worker heartbeat on every `fetch-and-lock` poll
+(debounced to at most one write per ten seconds per topic), and records any
+rejected fetch — unbound worker, topic outside the binding — as a durable
+error row, so a failing agent worker is visible in the operations surface
+instead of only its own container logs. Rows are operational metadata, not
+workflow state; writes never block or fail the fetch, and records older than
+24 hours are not returned.
+
+First-party engine workers (by default the `service-account-abada-agent-worker`
+principal bound to topic `abada:agent`, overridable via `abada.workers.first-party`)
+are bound to every project automatically: on project creation, and through an
+idempotent startup sweep that backfills projects created before the principal
+first appeared. Manual `PUT .../workers/{principalId}` bindings are still
+supported for third-party workers.

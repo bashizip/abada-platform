@@ -129,9 +129,12 @@ engines, configure either a short-lived
 `ABADA_AGENT_OIDC_TOKEN_URL`, `ABADA_AGENT_OIDC_CLIENT_ID`, and
 `ABADA_AGENT_OIDC_CLIENT_SECRET`. The token is cached only until shortly
 before expiry. A secured worker also sets `ABADA_AGENT_PROJECT_ID`; its OIDC
-service principal must have the global worker authority and an Owner-created
-binding for that project and every topic it polls. The engine rejects an
-unscoped secured fetch or a topic outside the binding.
+service principal must have the global worker authority. First-party engine
+workers are bound to every project automatically
+(`abada.workers.first-party` in the Engine configuration), so no per-project
+binding is needed to poll. The engine rejects an unscoped secured fetch or a
+topic outside the binding; third-party workers still require an Owner-created
+binding for the project and every topic they poll.
 
 The Compose service is opt-in through the `agent` profile. Build locally by
 installing `sdk/java` and packaging `agent-worker` with the Java 21 Maven
@@ -167,10 +170,11 @@ the local working tree and starts the whole dev stack with the agent profile:
 ```
 
 Provisioning creates the `abada-agent-worker` confidential client with the
-engine audience and groups mappers, puts its service account in the
-`abada-worker` group, and binds the observed principal to the Default
-project's `abada:agent` topic. The worker then runs with
-`ABADA_AGENT_PROJECT_ID=00000000-0000-0000-0000-000000000001` and polls that
-topic. Deploy an APL definition with an `agent` node (for example
-`examples/lead-triage-demo.apl.yaml`) from Studio; completion and failure
-attempt metadata is visible on the external-task row and in activity history.
+engine audience and groups mappers and puts its service account in the
+`abada-worker` group. The Engine's startup sweep then binds the observed
+first-party principal to every active project's `abada:agent` topic. The
+worker runs with `ABADA_AGENT_PROJECT_ID` pointing at the project whose tasks
+it polls (for example the Default project). Deploy an APL definition with an
+`agent` node (for example `examples/lead-triage-demo.apl.yaml`) from Studio;
+completion and failure attempt metadata is visible on the external-task row
+and in activity history.
