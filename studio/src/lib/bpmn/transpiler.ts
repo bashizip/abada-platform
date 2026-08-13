@@ -24,7 +24,7 @@ export function transpileBPMNToAPL(xmlString: string): APLDocument {
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
 isArray: (name) => {
-      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:scriptTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:exclusiveGateway', 'bpmn:inclusiveGateway', 'bpmn:parallelGateway'];
+      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:scriptTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:intermediateCatchEvent', 'bpmn:exclusiveGateway', 'bpmn:inclusiveGateway', 'bpmn:parallelGateway'];
       return arrayTags.includes(name);
     }
   });
@@ -65,6 +65,45 @@ isArray: (name) => {
       type: 'end',
       description: ee['@_name'],
     });
+  });
+
+  const messagesByName = new Map(
+    asArray<any>(root['bpmn:message']).map((m) => [m['@_id'], m['@_name']])
+  );
+  const signalsByName = new Map(
+    asArray<any>(root['bpmn:signal']).map((s) => [s['@_id'], s['@_name']])
+  );
+
+  const processCatchEvents = process['bpmn:intermediateCatchEvent'] || [];
+  processCatchEvents.forEach((ce: any) => {
+    if (ce['bpmn:messageEventDefinition']) {
+      const ref = ce['bpmn:messageEventDefinition']['@_messageRef'];
+      aplNodes.push({
+        id: ce['@_id'],
+        type: 'message-catch',
+        description: ce['@_name'],
+        message: messagesByName.get(ref) || ref,
+        next: getNext(ce['@_id']),
+      });
+    } else if (ce['bpmn:timerEventDefinition']) {
+      const def = ce['bpmn:timerEventDefinition'];
+      aplNodes.push({
+        id: ce['@_id'],
+        type: 'timer',
+        description: ce['@_name'],
+        duration: def['bpmn:timeDuration'] ?? def['bpmn:timeDuration']?.['#text'] ?? '',
+        next: getNext(ce['@_id']),
+      });
+    } else if (ce['bpmn:signalEventDefinition']) {
+      const ref = ce['bpmn:signalEventDefinition']['@_signalRef'];
+      aplNodes.push({
+        id: ce['@_id'],
+        type: 'signal',
+        description: ce['@_name'],
+        signal: signalsByName.get(ref) || ref,
+        next: getNext(ce['@_id']),
+      });
+    }
   });
 
   const getProperties = (el: any): Record<string, string> => {

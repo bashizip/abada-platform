@@ -12,7 +12,7 @@ export interface APLDocument {
   };
 }
 
-export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'inclusive' | 'parallel' | 'end';
+export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'inclusive' | 'parallel' | 'message-catch' | 'timer' | 'signal' | 'end';
 
 export interface APLBaseNode {
   id: string;
@@ -124,6 +124,24 @@ export interface APLApprovalGateNode extends APLBaseNode {
   sla_hours?: number;
 }
 
+export interface APLMessageCatchNode extends APLBaseNode {
+  type: 'message-catch';
+  /** Message name; correlates against the instance variable `correlationKey`. */
+  message: string;
+}
+
+export interface APLTimerNode extends APLBaseNode {
+  type: 'timer';
+  /** ISO-8601 duration (duration form only). */
+  duration: string;
+}
+
+export interface APLSignalNode extends APLBaseNode {
+  type: 'signal';
+  /** Broadcast signal name. */
+  signal: string;
+}
+
 export interface APLEndNode extends APLBaseNode {
   type: 'end';
 }
@@ -138,4 +156,7 @@ export type APLNode =
   | APLDecisionTableNode
   | APLApprovalGateNode
   | APLScriptNode
+  | APLMessageCatchNode
+  | APLTimerNode
+  | APLSignalNode
   | APLEndNode;

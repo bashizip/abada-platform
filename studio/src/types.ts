@@ -1,6 +1,6 @@
 export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script';
 
-export type EventSubtype = 'start' | 'end' | 'timer' | 'message';
+export type EventSubtype = 'start' | 'end' | 'timer' | 'message' | 'signal';
 export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive';
 
 export interface AgentConfig {
@@ -72,6 +72,11 @@ export interface ScriptConfig {
   format?: string;
 }
 
+export interface CatchEventConfig {
+  /** Message name (`message-catch`), ISO-8601 duration (`timer`) or signal name (`signal`). */
+  definitionRef: string;
+}
+
 export interface WorkflowNode {
   id: string;
   type: NodeType;
@@ -86,6 +91,7 @@ export interface WorkflowNode {
   humanConfig?: HumanConfig;
   engineTaskConfig?: EngineTaskConfig;
   scriptConfig?: ScriptConfig;
+  catchEventConfig?: CatchEventConfig;
 }
 
 export interface WorkflowEdge {

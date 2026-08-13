@@ -23,6 +23,8 @@ export function compileAPLToBPMN(apl: APLDocument): string {
   };
 
   const sequenceFlows: any[] = [];
+  const messages: any[] = [];
+  const signals: any[] = [];
   
   const elements = apl.flow.nodes.map(node => {
     if (node.next) {
@@ -115,6 +117,38 @@ export function compileAPLToBPMN(apl: APLDocument): string {
                 }))
               }
             }
+          }
+        };
+      }
+      case 'message-catch': {
+        const messageDefId = `Message_${node.id}`;
+        messages.push({ '@_id': messageDefId, '@_name': node.message });
+        return {
+          'bpmn:intermediateCatchEvent': {
+            '@_id': node.id,
+            '@_name': node.description || 'Message Catch',
+            'bpmn:messageEventDefinition': { '@_messageRef': messageDefId }
+          }
+        };
+      }
+      case 'timer':
+        return {
+          'bpmn:intermediateCatchEvent': {
+            '@_id': node.id,
+            '@_name': node.description || 'Timer',
+            'bpmn:timerEventDefinition': {
+              'bpmn:timeDuration': node.duration
+            }
+          }
+        };
+      case 'signal': {
+        const signalDefId = `Signal_${node.id}`;
+        signals.push({ '@_id': signalDefId, '@_name': node.signal });
+        return {
+          'bpmn:intermediateCatchEvent': {
+            '@_id': node.id,
+            '@_name': node.description || 'Signal Catch',
+            'bpmn:signalEventDefinition': { '@_signalRef': signalDefId }
           }
         };
       }
@@ -238,7 +272,9 @@ export function compileAPLToBPMN(apl: APLDocument): string {
         ...processObj,
         ...mergedElements,
         'bpmn:sequenceFlow': sequenceFlows
-      }
+      },
+      ...(messages.length ? { 'bpmn:message': messages } : {}),
+      ...(signals.length ? { 'bpmn:signal': signals } : {}),
     }
   };
 

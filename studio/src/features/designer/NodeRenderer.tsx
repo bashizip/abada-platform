@@ -11,6 +11,8 @@ import {
   Code2,
   Circle,
   Clock,
+  Mail,
+  Radio,
   CheckCircle2,
   XCircle,
   Loader2
@@ -100,6 +102,9 @@ const getNodeIcon = (type: NodeType, subtype?: WorkflowNode['subtype']) => {
         ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
         : <GitFork className="w-4 h-4 text-[#F4A261]" />;
     case 'event':
+      if (subtype === 'message') return <Mail className="w-4 h-4 text-[#F4A261]" />;
+      if (subtype === 'timer') return <Clock className="w-4 h-4 text-[#F4A261]" />;
+      if (subtype === 'signal') return <Radio className="w-4 h-4 text-[#F4A261]" />;
       return <Circle className="w-4 h-4 text-[#F4A261]" />;
     default:
       return <Bot className="w-4 h-4 text-[#F4A261]" />;

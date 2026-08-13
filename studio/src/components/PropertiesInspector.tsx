@@ -20,7 +20,9 @@ import {
   Zap, 
   Sliders, 
   Info,
-  Terminal
+  Terminal,
+  Mail,
+  Radio
 } from 'lucide-react';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 
@@ -166,7 +168,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           {selectedNode.type === 'gateway' && (selectedNode.subtype === 'parallel'
             ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
             : <GitFork className="w-4 h-4 text-[#F4A261]" />)}
-          {selectedNode.type === 'event' && <Circle className="w-4 h-4 text-[#F4A261]" />}
+          {selectedNode.type === 'event'
+            && (selectedNode.subtype === 'message'
+              ? <Mail className="w-4 h-4 text-[#F4A261]" />
+              : selectedNode.subtype === 'timer'
+                ? <Clock className="w-4 h-4 text-[#F4A261]" />
+                : selectedNode.subtype === 'signal'
+                  ? <Radio className="w-4 h-4 text-[#F4A261]" />
+                  : <Circle className="w-4 h-4 text-[#F4A261]" />)}
           <h2 className="font-bold text-sm text-[#EAE3D9] tracking-wide capitalize">
             {selectedNode.type} Node Settings
           </h2>
@@ -439,6 +448,55 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 Executed by the engine inside the workflow transaction. All instance
                 variables are bound by name plus the <span className="font-mono text-[#2A9D8F]">variables</span>
                 map — the APL form of an embedded Java delegate.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Catch Event Configuration (durable message/timer/signal subscription) */}
+        {selectedNode.type === 'event'
+          && (selectedNode.subtype === 'message' || selectedNode.subtype === 'timer' || selectedNode.subtype === 'signal')
+          && (
+          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block flex items-center gap-1.5">
+              {selectedNode.subtype === 'message'
+                ? <Mail className="w-3.5 h-3.5" />
+                : selectedNode.subtype === 'timer'
+                  ? <Clock className="w-3.5 h-3.5" />
+                  : <Radio className="w-3.5 h-3.5" />}
+              {selectedNode.subtype === 'message'
+                ? 'Message Catch'
+                : selectedNode.subtype === 'timer'
+                  ? 'Timer Catch'
+                  : 'Signal Catch'} Configuration
+            </span>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">
+                {selectedNode.subtype === 'message'
+                  ? 'Message Name'
+                  : selectedNode.subtype === 'timer'
+                    ? 'Duration (ISO-8601)'
+                    : 'Signal Name'}
+              </label>
+              <input
+                type="text"
+                value={selectedNode.catchEventConfig?.definitionRef || ''}
+                onChange={(e) => onUpdateNode({
+                  ...selectedNode,
+                  catchEventConfig: {
+                    definitionRef: e.target.value,
+                  },
+                })}
+                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261] font-mono"
+                placeholder={selectedNode.subtype === 'timer' ? 'PT1H' : 'MyMessage'}
+              />
+              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                {selectedNode.subtype === 'message'
+                  ? 'The instance suspends on a durable subscription and resumes when a message with this name is correlated against the correlationKey variable.'
+                  : selectedNode.subtype === 'timer'
+                    ? 'The instance suspends and the durable job scheduler resumes it after the duration elapses.'
+                    : 'The instance suspends on a durable subscription and resumes when this signal is broadcast.'}
               </p>
             </div>
           </div>

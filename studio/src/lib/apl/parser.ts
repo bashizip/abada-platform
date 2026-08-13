@@ -266,6 +266,21 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.type = 'gateway';
         wNode.subtype = 'parallel';
         break;
+      case 'message-catch':
+        wNode.type = 'event';
+        wNode.subtype = 'message';
+        wNode.catchEventConfig = { definitionRef: aplNode.message };
+        break;
+      case 'timer':
+        wNode.type = 'event';
+        wNode.subtype = 'timer';
+        wNode.catchEventConfig = { definitionRef: aplNode.duration };
+        break;
+      case 'signal':
+        wNode.type = 'event';
+        wNode.subtype = 'signal';
+        wNode.catchEventConfig = { definitionRef: aplNode.signal };
+        break;
       case 'inclusive':
         wNode.type = 'gateway';
         wNode.subtype = 'inclusive';
@@ -388,6 +403,15 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
           type: 'webhook',
           next: getNextNode(node.id, node.type),
         } as APLNode);
+      } else if (node.subtype === 'message' || node.subtype === 'timer' || node.subtype === 'signal') {
+        const ref = node.catchEventConfig?.definitionRef || '';
+        aplNodes.push(
+          node.subtype === 'message'
+            ? { ...baseNode, type: 'message-catch', message: ref, next: getNextNode(node.id, node.type) }
+            : node.subtype === 'timer'
+              ? { ...baseNode, type: 'timer', duration: ref, next: getNextNode(node.id, node.type) }
+              : { ...baseNode, type: 'signal', signal: ref, next: getNextNode(node.id, node.type) }
+        );
       } else {
         aplNodes.push({
           ...baseNode,
