@@ -107,7 +107,7 @@ Every node in `flow.nodes` is a mapping with the following common keys:
   the Studio Run panel matches tasks against it.
 - `next` wires the linear sequence flow (`sourceRef → targetRef`). `condition`
   and `parallel` nodes must **not** set `next` together with their
-  branching key (`rules` / `branches`); see §3.4 and §3.7.
+  branching key (`rules` / `branches`); see §3.4 and §3.8.
 
 ### 2.3 Formatting conventions
 
@@ -142,7 +142,7 @@ AI-generated and Studio-authored APL converge on one shape.
 The current APL node vocabulary (Studio `lib/apl/types.ts`):
 
 ```
-webhook | agent | engine-task | condition | approval-gate | decision-table | parallel | end
+webhook | agent | engine-task | script | condition | approval-gate | decision-table | parallel | end
 ```
 
 ### 3.1 `webhook` — trigger node
@@ -240,7 +240,35 @@ integration, webhook sink). It is the deterministic sibling of `agent`.
 | `on_error` | nodeId | no | error path hint consumed by Studio to draw the error edge |
 | `next` | nodeId | yes | linear successor |
 
-### 3.4 `condition` — exclusive branching
+### 3.4 `script` — in-transaction script step
+
+Compiles to the runtime script task, executed by the engine inside the
+workflow transaction with all instance variables bound by name plus the
+`variables` map. This is the APL form of an embedded Java delegate
+(`camunda:class`): synchronous, deterministic server-side work.
+
+```yaml
+- id: deriveTier
+  type: script
+  description: Derive the shipping tier
+  format: javascript
+  script: |
+    variables.put('shippingTier', variables.orderValue >= 100 ? 'premium' : 'standard');
+  next: done
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `script` | string | yes | JavaScript/ECMAScript body; a blank body is rejected at deployment |
+| `format` | string | no | engine script engine name; default `javascript` |
+| `next` | nodeId | yes | linear successor |
+
+Engine semantics: the script runs inside the advance transaction; a throwing
+script rolls the whole command back (state, variables, history and outbox
+together). Side effects are at-least-once — applications must make external
+side effects idempotent, exactly as with embedded Java delegates.
+
+### 3.5 `condition` — exclusive branching
 
 Compiles to the runtime exclusive gateway. Routes through `rules`; the last rule or
 the rule with `else` becomes the gateway **default** flow. `next` must not be
@@ -268,7 +296,7 @@ taken when no condition matches. Studio never emits free-text edge labels as
 conditions — only explicit `${...}` expressions are treated as conditions
 (`workflowToAPL` guard), keeping deployed gateways deterministic.
 
-### 3.5 `approval-gate` — human validation node
+### 3.6 `approval-gate` — human validation node
 
 Compiles to the runtime user task with candidate groups from `assignees`.
 The engine creates an `AVAILABLE` human task claimable by the listed groups.
@@ -295,7 +323,7 @@ assignment follows the Abada assignment semantics (`direct`/`claim`, see
 `docs/bpmn/assignment-semantics.md`), and completing the task advances the
 instance in-transaction.
 
-### 3.6 `decision-table` — native deterministic decision table
+### 3.7 `decision-table` — native deterministic decision table
 
 Compiles to the native deterministic decision-table primitive. Full contract in §4.
 
@@ -324,7 +352,7 @@ Compiles to the native deterministic decision-table primitive. Full contract in 
 | `rules` | array | yes | ordered rules; see §4.2 |
 | `next` | nodeId | yes | linear successor |
 
-### 3.7 `parallel` — fork / join gateway
+### 3.8 `parallel` — fork / join gateway
 
 Compiles to the runtime parallel gateway. A `parallel` node is a **fork** when
 it declares `branches` (one token per branch, created unconditionally) and a
@@ -356,7 +384,7 @@ persists with the instance and survives restart. Studio draws the fork's
 branches as plain outgoing edges; conditions are never attached to parallel
 flows.
 
-### 3.8 `end` — terminal node
+### 3.9 `end` — terminal node
 
 Compiles to the runtime end-event primitive. Completes the instance when the last token
 arrives.

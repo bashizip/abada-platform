@@ -24,7 +24,7 @@ export function transpileBPMNToAPL(xmlString: string): APLDocument {
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
 isArray: (name) => {
-      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:exclusiveGateway', 'bpmn:parallelGateway'];
+      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:scriptTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:exclusiveGateway', 'bpmn:parallelGateway'];
       return arrayTags.includes(name);
     }
   });
@@ -165,6 +165,19 @@ isArray: (name) => {
       assignees: ut['@_camunda:assignee'] ? [ut['@_camunda:assignee']] : ['reviewer'],
       next: getNext(ut['@_id']),
     });
+  });
+
+  const processScriptTasks = process['bpmn:scriptTask'] || [];
+  processScriptTasks.forEach((st: any) => {
+    const script = st['bpmn:script'];
+    aplNodes.push({
+      id: st['@_id'],
+      type: 'script',
+      description: st['@_name'] || '',
+      script: typeof script === 'string' ? script : script?.['#text'] ?? '',
+      format: st['@_scriptFormat'] || 'javascript',
+      next: getNext(st['@_id']),
+    } as APLNode);
   });
 
   const processGateways = process['bpmn:exclusiveGateway'] || [];

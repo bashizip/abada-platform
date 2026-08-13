@@ -12,7 +12,7 @@ export interface APLDocument {
   };
 }
 
-export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'parallel' | 'end';
+export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'parallel' | 'end';
 
 export interface APLBaseNode {
   id: string;
@@ -96,6 +96,14 @@ export interface APLDecisionTableNode extends APLBaseNode {
   rules?: APLDecisionTableRule[];
 }
 
+export interface APLScriptNode extends APLBaseNode {
+  type: 'script';
+  /** Server-side JavaScript/ECMAScript executed in-transaction by the engine. */
+  script: string;
+  /** Script engine name; defaults to `javascript`. */
+  format?: string;
+}
+
 export interface APLApprovalGateNode extends APLBaseNode {
   type: 'approval-gate';
   assignees: string[];
@@ -115,4 +123,5 @@ export type APLNode =
   | APLParallelNode
   | APLDecisionTableNode
   | APLApprovalGateNode
+  | APLScriptNode
   | APLEndNode;

@@ -1,5 +1,5 @@
 import { XMLBuilder } from 'fast-xml-parser';
-import { APLDocument, APLDecisionTableNode, APLValue } from '../apl/types';
+import { APLDocument, APLDecisionTableNode, APLScriptNode, APLValue } from '../apl/types';
 import { normalizeTableInputs, resolveRuleOutcome } from '../apl/parser';
 import { DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
 
@@ -75,6 +75,17 @@ export function compileAPLToBPMN(apl: APLDocument): string {
             '@_camunda:topic': node.service
           }
         };
+      case 'script': {
+        const scriptNode = node as APLScriptNode;
+        return {
+          'bpmn:scriptTask': {
+            '@_id': node.id,
+            '@_name': node.description || 'Script',
+            '@_scriptFormat': scriptNode.format || 'javascript',
+            'bpmn:script': scriptNode.script
+          }
+        };
+      }
       case 'decision-table': {
         // Native deterministic decision table: the engine validates and executes
         // abada:decisionTable inside the workflow transaction (the table is the

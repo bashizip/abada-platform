@@ -412,6 +412,38 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
         )}
 
+        {/* Script Configuration (in-transaction server-side script) */}
+        {selectedNode.type === 'script' && (
+          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+            <span className="text-[11px] font-semibold tracking-wider text-[#2A9D8F] uppercase block flex items-center gap-1.5">
+              <Terminal className="w-3.5 h-3.5" />
+              Script Configuration
+            </span>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">Script Body</label>
+              <textarea
+                rows={8}
+                value={selectedNode.scriptConfig?.script || ''}
+                onChange={(e) => onUpdateNode({
+                  ...selectedNode,
+                  scriptConfig: {
+                    ...(selectedNode.scriptConfig || { format: 'javascript' }),
+                    script: e.target.value,
+                  },
+                })}
+                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] font-mono leading-relaxed focus:outline-none focus:border-[#2A9D8F] resize-y"
+                placeholder="variables.put('result', variables.input * 2);"
+              />
+              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                Executed by the engine inside the workflow transaction. All instance
+                variables are bound by name plus the <span className="font-mono text-[#2A9D8F]">variables</span>
+                map — the APL form of an embedded Java delegate.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Gateway Configuration */}
         {selectedNode.type === 'gateway' && (
           <div className="space-y-4 pt-4 border-t border-[#3A322E]">

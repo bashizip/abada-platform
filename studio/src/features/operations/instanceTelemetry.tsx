@@ -291,6 +291,7 @@ export const NodeIcon: React.FC<{ type: WorkflowFile['nodes'][number]['type']; s
   switch (type) {
     case 'agent': return <Bot className="h-4 w-4 text-[#9D4EDD]" />;
     case 'engine-task': return <Zap className="h-4 w-4 text-[#90A955]" />;
+    case 'script': return <Code2 className="h-4 w-4 text-[#2A9D8F]" />;
     case 'human': return <UserCheck className="h-4 w-4 text-[#E76F51]" />;
     case 'dmn': return <Table className="h-4 w-4 text-[#2A9D8F]" />;
     case 'gateway': return subtype === 'parallel'
@@ -405,6 +406,21 @@ export const NodeTelemetry: React.FC<{
           {nodeEvents.length === 0 && (
             <p className="text-[11px] text-[#A89F91]">No task events recorded for this node yet.</p>
           )}
+        </div>
+      )}
+
+      {/* Script step */}
+      {node.type === 'script' && (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-[#2A9D8F]/30 bg-[#1A1614] p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#2A9D8F]">
+              <Code2 className="h-3.5 w-3.5" /> Script step
+            </div>
+            <InfoRow label="Format"><span className="font-mono">{node.scriptConfig?.format ?? 'javascript'}</span></InfoRow>
+            <InfoRow label="First line">
+              <span className="font-mono text-[10px]">{node.scriptConfig?.script.split('\n')[0] ?? '—'}</span>
+            </InfoRow>
+          </div>
         </div>
       )}
 

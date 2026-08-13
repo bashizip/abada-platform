@@ -78,6 +78,45 @@ locally, while every live execution is an explicit, durable engine action.
 - [ ] Only after the runnable agentic loop is proven, resume multi-role
   hardening, administrator UI and `ADMIN_ROOT` bootstrap work below.
 
+### APL ↔ BPMN parity (kitchen-sink gate)
+
+The completeness measure is a kitchen-sink process authored and executed in
+native APL. Scope decisions: embedded `camunda:class` delegates map to the
+`script` node (APL stays language-agnostic); event-based gateways gain true
+competing-event runtime semantics (first catch to fire wins, siblings cancel
+atomically), lifting the BPMN-side "Limited" support.
+
+- [ ] `script` node: compile to the existing `ScriptTaskMeta` runtime primitive
+  with an `ABADA-APL-VALIDATION-001` rejection matrix; Authoring surface in
+  Studio (node type, inspector, APL↔BPMN compiler and transpiler); update
+  `docs/reference/apl-specification.md` and the support matrix.
+- [ ] `inclusive` gateway node: fork via all-matching `routes` (zero or more
+  tokens) with optional `else` default, join via converging upstreams +
+  `next`; reuse `GatewayMeta.Type.INCLUSIVE`; e2e fork/join and restart
+  recovery in `AplRuntimeTest`.
+- [ ] `message-catch` node: durable subscription by message name and
+  `correlation_key` variable, reusing the message-event runtime.
+- [ ] `timer` node: duration-form ISO-8601 catch, reusing the timer-job
+  runtime.
+- [ ] `signal` node: broadcast subscription by signal name, reusing the
+  signal-event runtime.
+- [ ] `event-gateway` node and competing-event semantics: N outgoing catch
+  children, first-to-fire advances and sibling subscriptions/timers are
+  cancelled in the same transaction, pending races survive restart; lift the
+  BPMN-side event-based gateway from "Limited" to "Supported" with a new
+  `EventGatewayTest`.
+- [ ] Kitchen-sink gate: author
+  `engine/src/test/resources/apl/kitchen-sink.apl.yaml` mapping
+  `docs/features/kitchen-sink-process.md` 1:1 (webhook → Set Variables gate →
+  parallel fork → script ║ event-gateway (FastTrackMessage or 1h timer) →
+  parallel join → inclusive fork (path C/D) → Task C/D gates → inclusive join
+  → external `kitchen-sink-topic` task → end) and prove it end to end in a new
+  `AplKitchenSinkTest` (script in-transaction, message wins the race, timer
+  fallback, inclusive C and D routes, worker completion, restart recovery).
+  Reconcile the drift between the kitchen-sink doc and the legacy BPMN file -
+  both suites must prove the same shape. Make the APL round trip (APL ↔ BPMN)
+  fidelity of the kitchen-sink document part of the Studio checks.
+
 ### Runtime integration
 
 - [x] Define the versioned `abada.agent/v1` contract as an external-worker profile;

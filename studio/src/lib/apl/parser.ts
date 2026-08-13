@@ -230,6 +230,13 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onError: aplNode.on_error,
         };
         break;
+      case 'script':
+        wNode.type = 'script';
+        wNode.scriptConfig = {
+          script: aplNode.script,
+          format: aplNode.format || 'javascript',
+        };
+        break;
       case 'approval-gate':
         wNode.type = 'human';
         wNode.humanConfig = {
@@ -438,6 +445,14 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         type: 'engine-task',
         service: node.engineTaskConfig?.service || 'abada:service',
         on_error: node.engineTaskConfig?.onError,
+        next: getNextNode(node.id, node.type),
+      } as APLNode);
+    } else if (node.type === 'script') {
+      aplNodes.push({
+        ...baseNode,
+        type: 'script',
+        script: node.scriptConfig?.script || '',
+        format: node.scriptConfig?.format || 'javascript',
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'dmn') {

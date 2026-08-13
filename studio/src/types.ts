@@ -1,4 +1,4 @@
-export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task';
+export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script';
 
 export type EventSubtype = 'start' | 'end' | 'timer' | 'message';
 export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive';
@@ -65,6 +65,13 @@ export interface EngineTaskConfig {
   onError?: string;
 }
 
+export interface ScriptConfig {
+  /** Server-side JavaScript/ECMAScript executed inside the workflow transaction. */
+  script: string;
+  /** Engine script engine name; defaults to `javascript`. */
+  format?: string;
+}
+
 export interface WorkflowNode {
   id: string;
   type: NodeType;
@@ -78,6 +85,7 @@ export interface WorkflowNode {
   dmnConfig?: DMNConfig;
   humanConfig?: HumanConfig;
   engineTaskConfig?: EngineTaskConfig;
+  scriptConfig?: ScriptConfig;
 }
 
 export interface WorkflowEdge {

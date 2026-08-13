@@ -201,6 +201,7 @@ export default function App() {
       agent: 'AI Validation Agent', human: 'Executive Review Task', dmn: 'Risk Matrix Policy',
       gateway: subtype === 'parallel' ? 'Parallel Gateway' : 'Branching Gateway',
       event: isFirstEvent ? 'Start Process' : 'End Process', 'engine-task': 'Engine Service Task',
+      script: 'Script Step',
     };
     const newNode: WorkflowNode = {
       id, type,
@@ -215,6 +216,7 @@ export default function App() {
       dmnConfig: type === 'dmn' ? { decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`, hitPolicy: 'FIRST', inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }], outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }], rules: [{ id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } }, { id: 'r2', otherwise: true, then: { AllowPass: false } }] } : undefined,
       humanConfig: type === 'human' ? { assigneeRole: 'Operations Analyst', slaHours: 24, formFields: ['Review Notes', 'Approval Signature'] } : undefined,
       engineTaskConfig: type === 'engine-task' ? { service: 'abada:service' } : undefined,
+      scriptConfig: type === 'script' ? { script: '', format: 'javascript' } : undefined,
     };
     updateActiveWorkflow((wf) => {
       const sourceExists = selectedNodeId && wf.nodes.some((node) => node.id === selectedNodeId);

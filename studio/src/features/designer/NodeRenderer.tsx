@@ -8,6 +8,7 @@ import {
   GitFork, 
   GitMerge,
   Zap,
+  Code2,
   Circle,
   Clock,
   CheckCircle2,
@@ -61,6 +62,14 @@ const getNodeColor = (type: NodeType) => {
         text: 'text-[#90A955]',
         badgeBg: 'bg-[#90A955]/20',
       };
+    case 'script':
+      return {
+        border: 'border-[#2A9D8F]',
+        bg: 'bg-[#25201D]',
+        headerBg: 'bg-[#2A9D8F]/15',
+        text: 'text-[#2A9D8F]',
+        badgeBg: 'bg-[#2A9D8F]/20',
+      };
     case 'gateway':
     case 'event':
     default:
@@ -80,6 +89,8 @@ const getNodeIcon = (type: NodeType, subtype?: WorkflowNode['subtype']) => {
       return <Bot className="w-4 h-4 text-[#9D4EDD]" />;
     case 'engine-task':
       return <Zap className="w-4 h-4 text-[#90A955]" />;
+    case 'script':
+      return <Code2 className="w-4 h-4 text-[#2A9D8F]" />;
     case 'human':
       return <UserCheck className="w-4 h-4 text-[#E76F51]" />;
     case 'dmn':
@@ -200,6 +211,15 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
             <span className="font-mono truncate">{data.engineTaskConfig.service}</span>
             <span className="bg-[#90A955]/20 px-1.5 py-0.5 rounded shrink-0 ml-2">
               Engine
+            </span>
+          </div>
+        )}
+
+        {data.type === 'script' && data.scriptConfig && (
+          <div className="pt-2 border-t border-[#3A322E] flex items-center justify-between text-[10px] text-[#2A9D8F]">
+            <span className="font-mono truncate">{data.scriptConfig.script.split('\n')[0]}</span>
+            <span className="bg-[#2A9D8F]/20 px-1.5 py-0.5 rounded shrink-0 ml-2">
+              Script
             </span>
           </div>
         )}

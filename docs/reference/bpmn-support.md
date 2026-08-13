@@ -57,6 +57,7 @@ The supported APL construct set maps 1:1 onto the BPMN elements above:
 | `approval-gate` | User task | `assignees` list becomes candidate groups |
 | `engine-task` | External service task | `service` declares the durable topic |
 | `agent` | External service task | Fixed durable topic `abada:agent` |
+| `script` | Script task | In-transaction server-side script; the APL form of an embedded Java delegate (`camunda:class`) |
 | `decision-table` | Business rule task | Inline `inputs`/`rules`, `FIRST`/`UNIQUE`/`COLLECT`, `otherwise` fallback; applies `abada:decisionTable` semantics |
 | `condition` | Exclusive gateway | `if` rules become conditional flows; the `else` rule (or the last rule otherwise) becomes the default flow |
 | `parallel` | Parallel gateway | Fork: `branches` (≥2) get one unconditional flow each; join: upstream `next` flows converge on the node and it continues via its single `next`. Fork/join token bookkeeping persists across restarts |
