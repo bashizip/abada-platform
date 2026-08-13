@@ -68,8 +68,13 @@ locally, while every live execution is an explicit, durable engine action.
   suspension/cancellation reject late completion atomically, and a live lease
   survives an engine restart without duplicate dispatch. Evidence:
   [`AgentWorkerResilienceTest`](../../engine/src/test/java/com/abada/engine/core/AgentWorkerResilienceTest.java).
-- [ ] Surface model/tool metadata from the persisted agent attempt record in
-  the same live instance view.
+- [x] Surface model/tool metadata from the persisted agent attempt record in
+  the same live instance view. History `details.agent` facts (model, provider,
+  attempt, latency, confidence, tools, error type) are written by
+  `ExternalTaskCommandService.agentDetails`, read by
+  `aggregateNodeTelemetry` and rendered in `NodeTelemetry` for both the
+  instance detail view and the live canvas inspector
+  (`studio/src/features/operations/instanceTelemetry.tsx`).
 - [ ] Only after the runnable agentic loop is proven, resume multi-role
   hardening, administrator UI and `ADMIN_ROOT` bootstrap work below.
 
