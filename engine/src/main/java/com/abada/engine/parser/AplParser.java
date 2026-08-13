@@ -12,6 +12,7 @@ import com.abada.engine.core.model.AgentWorkDescriptor;
 import com.abada.engine.core.model.GatewayMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.SequenceFlow;
+import com.abada.engine.core.model.ScriptTaskMeta;
 import com.abada.engine.core.model.ServiceTaskMeta;
 import com.abada.engine.core.model.TaskMeta;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -47,6 +48,8 @@ import java.util.stream.Collectors;
  *   <li>{@code decision-table}  → native deterministic decision table
  *       (FIRST | UNIQUE | COLLECT, ordered {@code when}/{@code otherwise}
  *       rules with typed {@code then} outputs);</li>
+ *   <li>{@code script}          → server-side script task executed inside the
+ *       workflow transaction (the APL form of an embedded Java delegate)</li>
  *   <li>{@code approval-gate}   → user task with candidate-group assignment</li>
  *   <li>{@code condition}       → exclusive gateway; {@code if} rules become
  *       conditional flows and the {@code else} rule (or the last rule when no
@@ -75,7 +78,8 @@ public final class AplParser {
     public static final int MAX_DEPLOYMENT_BYTES = 10 * 1024 * 1024;
 
     private static final Set<String> SUPPORTED_TYPES = Set.of(
-            "webhook", "end", "agent", "engine-task", "decision-table", "approval-gate", "condition", "parallel");
+            "webhook", "end", "agent", "engine-task", "decision-table", "script",
+            "approval-gate", "condition", "parallel");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -200,6 +204,7 @@ public final class AplParser {
         Set<String> flowIds = new HashSet<>();
         Map<String, TaskMeta> userTasks = new LinkedHashMap<>();
         Map<String, ServiceTaskMeta> serviceTasks = new LinkedHashMap<>();
+        Map<String, ScriptTaskMeta> scriptTasks = new LinkedHashMap<>();
         Map<String, DecisionTableMeta> decisionTables = new LinkedHashMap<>();
         Map<String, GatewayMeta> gateways = new LinkedHashMap<>();
         Map<String, Object> endEvents = new LinkedHashMap<>();
@@ -236,6 +241,17 @@ public final class AplParser {
                     }
                     decisionTables.put(nodeId, new DecisionTableMeta(nodeId, nodeName, decisionKey,
                             hitPolicy, parseInputs(node, nodeId), parseRules(node, nodeId)));
+                }
+                case "script" -> {
+                    String script = node.path("script").asText(null);
+                    if (script == null || script.isBlank()) {
+                        throw validation("script node '" + nodeId + "' requires a non-empty 'script' body");
+                    }
+                    String format = node.path("format").asText("javascript");
+                    if (format.isBlank()) {
+                        throw validation("script node '" + nodeId + "' must not declare an empty 'format'");
+                    }
+                    scriptTasks.put(nodeId, new ScriptTaskMeta(nodeId, nodeName, format, script));
                 }
                 case "approval-gate" -> {
                     JsonNode assignees = node.path("assignees");
@@ -353,7 +369,7 @@ public final class AplParser {
         String definitionId = processId;
         return new BpmnParseResult(
                 new ParsedProcessDefinition(definitionId, name, null, entry,
-                        userTasks, serviceTasks, Map.of(), decisionTables,
+                        userTasks, serviceTasks, scriptTasks, decisionTables,
                         flows, gateways, Map.of(), endEvents,
                         rawSource, null, null),
                 new CompatibilityReport(Set.of(CompatibilityProfiles.ABADA_NATIVE),

@@ -137,6 +137,35 @@ class AplParserTest {
     }
 
     @Test
+    void compilesScriptNodeIntoRuntimeScriptTask() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: compute\n"
+                        + "      type: script\n"
+                        + "      description: Derive a field\n"
+                        + "      format: javascript\n"
+                        + "      script: |\n"
+                        + "        variables.put('derived', variables.input * 2);\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+
+        assertThat(definition.getScriptTask("compute")).isNotNull()
+                .satisfies(script -> {
+                    assertThat(script.name()).isEqualTo("Derive a field");
+                    assertThat(script.format()).isEqualTo("javascript");
+                    assertThat(script.script()).contains("variables.put");
+                });
+        assertThat(definition.getSequenceFlows()).extracting(SequenceFlow::getSourceRef)
+                .containsExactly("compute");
+    }
+
+    @Test
+    void rejectsScriptNodeWithoutABody() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: compute\n      type: script\n      next: end\n").getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("requires a non-empty 'script' body");
+    }
+
+    @Test
     void rejectsUnknownNodeType() {
         assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
                 "    - id: secret\n      type: ai-dreamer\n      next: end\n").getBytes(StandardCharsets.UTF_8)))

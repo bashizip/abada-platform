@@ -96,6 +96,24 @@ class AplRuntimeTest {
     }
 
     @Test
+    void executesScriptNodeInTransactionAndCompletes() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/script-transform.apl.yaml");
+
+            var premium = engine.startProcess("script_transform", "alice", Map.of("orderValue", 120));
+            assertThat(engine.getProcessInstanceById(premium.getId()).isCompleted()).isTrue();
+            assertThat(engine.getProcessInstanceById(premium.getId()).getVariables())
+                    .containsEntry("shippingTier", "premium");
+
+            var standard = engine.startProcess("script_transform", "bob", Map.of("orderValue", 45));
+            assertThat(engine.getProcessInstanceById(standard.getId()).getVariables())
+                    .containsEntry("shippingTier", "standard");
+        }
+    }
+
+    @Test
     void persistsAgentAttemptMetadataThroughWorkerAndHistoryContracts() {
         try (ConfigurableApplicationContext context = startApplication()) {
             context.getBean(DatabaseTestHelper.class).cleanup();
