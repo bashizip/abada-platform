@@ -6,7 +6,8 @@ import type {
 import {
   BaseEdge, 
   EdgeLabelRenderer, 
-  getBezierPath
+  getBezierPath,
+  Position,
 } from '@xyflow/react';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
 
@@ -25,6 +26,61 @@ type AbadaEdgeType = Edge<{
  */
 const TOKEN_DURATION_S = 1.6;
 
+/**
+ * Vertical offset tolerance (px) for treating a forward edge as connecting
+ * directly-adjacent rows. Nodes are 128px tall; anything within the top
+ * quarter-bands of the target is still "next to" it and reads best as a
+ * clean horizontal line. Larger offsets — merging far-apart branch rows —
+ * fall back to a bezier so convergence stays visible instead of slashing
+ * diagonally across the canvas.
+ */
+const ADJACENT_ROW_TOLERANCE_PX = 48;
+
+/**
+ * Straight-line edge by default: directly adjacent nodes (same row flowing
+ * rightwards, or same column flowing downwards) connect with a single clean
+ * horizontal/vertical segment, snapped to the source port's level. Any
+ * larger offset or backward edge becomes a bezier so branches, loops and
+ * convergence stay clearly readable instead of slashing across the canvas.
+ */
+function buildEdgePath(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  sourcePosition: Position,
+  targetPosition: Position,
+): { path: string; labelX: number; labelY: number } {
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+
+  if (Math.abs(dy) <= ADJACENT_ROW_TOLERANCE_PX && dx > 0) {
+    return {
+      path: `M ${sourceX} ${sourceY} L ${targetX} ${sourceY}`,
+      labelX: (sourceX + targetX) / 2,
+      labelY: sourceY - 14,
+    };
+  }
+
+  if (Math.abs(dx) <= ADJACENT_ROW_TOLERANCE_PX && dy > 0) {
+    return {
+      path: `M ${sourceX} ${sourceY} L ${sourceX} ${targetY}`,
+      labelX: sourceX - 14,
+      labelY: (sourceY + targetY) / 2,
+    };
+  }
+
+  const [path, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  return { path, labelX, labelY };
+}
+
 export const AbadaEdge = memo(({
   id,
   sourceX,
@@ -38,14 +94,14 @@ export const AbadaEdge = memo(({
   data,
   selected
 }: EdgeProps<AbadaEdgeType>) => {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const { path: edgePath, labelX, labelY } = buildEdgePath(
     sourceX,
     sourceY,
-    sourcePosition,
     targetX,
     targetY,
+    sourcePosition,
     targetPosition,
-  });
+  );
 
   const isActiveSim = data?.isFlowing;
   const tokenStep = data?.tokenStep;
