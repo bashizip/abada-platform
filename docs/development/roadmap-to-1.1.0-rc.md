@@ -86,19 +86,19 @@ native APL. Scope decisions: embedded `camunda:class` delegates map to the
 competing-event runtime semantics (first catch to fire wins, siblings cancel
 atomically), lifting the BPMN-side "Limited" support.
 
-- [ ] `script` node: compile to the existing `ScriptTaskMeta` runtime primitive
+- [x] `script` node: compile to the existing `ScriptTaskMeta` runtime primitive
   with an `ABADA-APL-VALIDATION-001` rejection matrix; Authoring surface in
   Studio (node type, inspector, APL↔BPMN compiler and transpiler); update
   `docs/reference/apl-specification.md` and the support matrix.
-- [ ] `inclusive` gateway node: fork via all-matching `routes` (zero or more
+- [x] `inclusive` gateway node: fork via all-matching `routes` (zero or more
   tokens) with optional `else` default, join via converging upstreams +
   `next`; reuse `GatewayMeta.Type.INCLUSIVE`; e2e fork/join and restart
   recovery in `AplRuntimeTest`.
-- [ ] `message-catch` node: durable subscription by message name and
-  `correlation_key` variable, reusing the message-event runtime.
-- [ ] `timer` node: duration-form ISO-8601 catch, reusing the timer-job
+- [x] `message-catch` node: durable subscription by message name and
+  `correlationKey` variable, reusing the message-event runtime.
+- [x] `timer` node: duration-form ISO-8601 catch, reusing the timer-job
   runtime.
-- [ ] `signal` node: broadcast subscription by signal name, reusing the
+- [x] `signal` node: broadcast subscription by signal name, reusing the
   signal-event runtime.
 - [ ] `event-gateway` node and competing-event semantics: N outgoing catch
   children, first-to-fire advances and sibling subscriptions/timers are

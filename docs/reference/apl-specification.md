@@ -142,7 +142,7 @@ AI-generated and Studio-authored APL converge on one shape.
 The current APL node vocabulary (Studio `lib/apl/types.ts`):
 
 ```
-webhook | agent | engine-task | script | condition | approval-gate | decision-table | inclusive | parallel | end
+webhook | agent | engine-task | script | condition | approval-gate | decision-table | inclusive | parallel | message-catch | timer | signal | end
 ```
 
 ### 3.1 `webhook` — trigger node
@@ -420,7 +420,75 @@ actually spawned (`chooseInclusive`), not for every upstream edge — partial
 matches join correctly. Join token bookkeeping persists with the instance and
 survives restart.
 
-### 3.10 `end` — terminal node
+### 3.10 `message-catch` — message subscription node
+
+Compiles to a message intermediate catch event. The instance suspends on a
+durable subscription and resumes only when a message with this name is
+correlated against the instance variable `correlationKey` — identical
+semantics to the BPMN message catch (the runtime correlation contract is
+documented in `runtime-semantics.md`).
+
+```yaml
+- id: catchFastTrack
+  type: message-catch
+  description: Wait for the fast-track message
+  message: FastTrackMessage
+  next: done
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `message` | string | yes | message name the runtime matches during correlation |
+| `next` | nodeId | yes | sole successor after correlation |
+
+Engine semantics: on arrival the runtime registers the suspension in the same
+transaction as the waiting token (restart-safe); correlation resumes the
+instance inside the mutating command transaction and any failure rolls the
+instance back to waiting.
+
+### 3.11 `timer` — duration timer node
+
+Compiles to a timer intermediate catch event with a duration definition. The
+instance suspends and the durable job scheduler resumes it once the ISO-8601
+duration has elapsed.
+
+```yaml
+- id: catchTimeout
+  type: timer
+  description: Wait one hour
+  duration: PT1H
+  next: done
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `duration` | string | yes | ISO-8601 duration (`PT1H`); validated with `Duration.parse` at deploy time |
+| `next` | nodeId | yes | sole successor after the timer fires |
+
+Engine semantics: the timer is scheduled as a durable job in the same
+transaction as the suspension; on expiry the job command advances the process
+with the usual optimistic-lock and rollback guarantees.
+
+### 3.12 `signal` — broadcast signal node
+
+Compiles to a signal intermediate catch event. The instance suspends on a
+durable subscription and resumes when a signal with this name is broadcast —
+one broadcast resumes every waiting instance subscribed to that name.
+
+```yaml
+- id: catchGo
+  type: signal
+  description: Wait for the go signal
+  signal: proceed
+  next: done
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `signal` | string | yes | signal name the runtime matches during broadcast |
+| `next` | nodeId | yes | sole successor after the signal fires |
+
+### 3.13 `end` — terminal node
 
 Compiles to the runtime end-event primitive. Completes the instance when the last token
 arrives.

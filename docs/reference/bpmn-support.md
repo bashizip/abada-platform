@@ -62,6 +62,9 @@ The supported APL construct set maps 1:1 onto the BPMN elements above:
 | `condition` | Exclusive gateway | `if` rules become conditional flows; the `else` rule (or the last rule otherwise) becomes the default flow |
 | `inclusive` | Inclusive gateway | Fork: every matching `if` rule fires; only an explicit `else` rule is a default — zero matches without one fail loudly. Join: waits for the tokens the fork actually spawned |
 | `parallel` | Parallel gateway | Fork: `branches` (≥2) get one unconditional flow each; join: upstream `next` flows converge on the node and it continues via its single `next`. Fork/join token bookkeeping persists across restarts |
+| `message-catch` | Message intermediate catch event | Durable subscription by message name, correlated against the instance `correlationKey` variable — identical to the BPMN message catch |
+| `timer` | Duration timer intermediate catch event | Durable ISO-8601 duration job; `duration` validated with `Duration.parse` at deployment |
+| `signal` | Signal intermediate catch event | Durable broadcast subscription by signal name |
 
 APL semantics that close or tighten holes:
 
@@ -72,8 +75,10 @@ APL semantics that close or tighten holes:
   targets; a second `else` rule, a missing `metadata.name`, an undeclared
   routing target, a second `webhook` node or an unrecognized node type fails
   deployment with an index-friendly validation error and rolls back.
-- `approval-gate` requires a non-empty `assignees` list; `engine`/`agent` are
-  executed by external workers through fetch/lock/complete, exactly like
+- `approval-gate` requires a non-empty `assignees` list; `message-catch`,
+  `timer` and `signal` require a non-blank definition (`message` name,
+  `Duration.parse`-valid ISO-8601 `duration`, `signal` name); `engine`/`agent`
+  are executed by external workers through fetch/lock/complete, exactly like
   `camunda:topic` service tasks.
 
 Executable evidence: [`AplParserTest`](../../engine/src/test/java/com/abada/engine/parser/AplParserTest.java)
