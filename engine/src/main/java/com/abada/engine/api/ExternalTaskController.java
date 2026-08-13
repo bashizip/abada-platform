@@ -17,7 +17,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.abada.engine.project.ProjectAccessService;
 import com.abada.engine.project.ProjectWorkerService;
+import com.abada.engine.project.WorkerHealthService;
 
 /**
  * REST controller for external task workers.
@@ -34,15 +36,20 @@ public class ExternalTaskController {
     private final ObjectMapper objectMapper;
     private final String securityMode;
     private final ProjectWorkerService projectWorkers;
+    private final ProjectAccessService access;
+    private final WorkerHealthService workerHealth;
 
     public ExternalTaskController(ExternalTaskCommandService commands, IdempotencyService idempotency,
             ObjectMapper objectMapper, @Value("${abada.security.mode:disabled}") String securityMode,
-            ProjectWorkerService projectWorkers) {
+            ProjectWorkerService projectWorkers, ProjectAccessService access,
+            WorkerHealthService workerHealth) {
         this.commands = commands;
         this.idempotency = idempotency;
         this.objectMapper = objectMapper;
         this.securityMode = securityMode;
         this.projectWorkers = projectWorkers;
+        this.access = access;
+        this.workerHealth = workerHealth;
     }
 
     /**
@@ -66,10 +73,22 @@ public class ExternalTaskController {
             throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
                     ApiErrorCode.INVALID_REQUEST, "projectId is required for secured workers");
         }
-        if (request.projectId() != null) projectWorkers.requireCurrentWorker(request.projectId(), request.topics());
-        return ResponseEntity.ok().header("X-Abada-Worker-Protocol-Version", "1")
-                .body(idempotency.execute(idempotencyKey, "external-task.fetch-and-lock", request,
-                        new TypeReference<List<LockedExternalTask>>() {}, () -> commands.fetchAndLock(request)));
+        if (request.projectId() != null) {
+            try {
+                projectWorkers.requireCurrentWorker(request.projectId(), request.topics());
+            } catch (ApiException exception) {
+                workerHealth.noteFetchFailure(request.projectId(),
+                        access.identity().principalId(), request.workerId(),
+                        request.topics(), exception.getMessage());
+                throw exception;
+            }
+        }
+        List<LockedExternalTask> locked = idempotency.execute(idempotencyKey,
+                "external-task.fetch-and-lock", request,
+                new TypeReference<List<LockedExternalTask>>() {}, () -> commands.fetchAndLock(request));
+        workerHealth.noteFetchSuccess(request.projectId(), access.identity().principalId(),
+                request.workerId(), request.topics(), locked != null && !locked.isEmpty());
+        return ResponseEntity.ok().header("X-Abada-Worker-Protocol-Version", "1").body(locked);
     }
 
     /**
