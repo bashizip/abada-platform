@@ -9,4 +9,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PrincipalRepository extends JpaRepository<PrincipalEntity, String> {
     Optional<PrincipalEntity> findByIssuerAndSubjectId(String issuer, String subjectId);
     Page<PrincipalEntity> findByUsernameContainingIgnoreCase(String query, Pageable pageable);
+    Optional<PrincipalEntity> findFirstByUsernameIgnoreCase(String username);
 }

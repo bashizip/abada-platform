@@ -33,16 +33,19 @@ public class ProjectService {
     private final ProjectProcessDocumentRepository documents;
     private final ProjectFolderRepository folders;
     private final ProjectAccessService access;
+    private final ProjectWorkerService projectWorkers;
 
     public ProjectService(ProjectRepository projects, ProjectMemberRepository members,
             PrincipalRepository principals, ProjectProcessDocumentRepository documents,
-            ProjectFolderRepository folders, ProjectAccessService access) {
+            ProjectFolderRepository folders, ProjectAccessService access,
+            ProjectWorkerService projectWorkers) {
         this.projects = projects;
         this.members = members;
         this.principals = principals;
         this.documents = documents;
         this.folders = folders;
         this.access = access;
+        this.projectWorkers = projectWorkers;
     }
 
     @Transactional
@@ -76,6 +79,7 @@ public class ProjectService {
         owner.setCreatedBy(identity.username());
         members.save(owner);
         seedDefaultFolders(project.getId(), now);
+        projectWorkers.ensureFirstPartyBindings(project.getId());
         return project;
     }
 

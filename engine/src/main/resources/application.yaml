@@ -51,6 +51,11 @@ abada:
       endpoint: ${ABADA_TELEMETRY_OTLP_ENDPOINT:}
   agent:
     allowed-models: ${ABADA_AGENT_ALLOWED_MODELS:gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini}
+  workers:
+    first-party:
+      - username: ${ABADA_FIRST_PARTY_AGENT_USERNAME:service-account-abada-agent-worker}
+        topics:
+          - ${ABADA_FIRST_PARTY_AGENT_TOPICS:abada:agent}
 
 # SpringDoc OpenAPI / Swagger UI
 springdoc:

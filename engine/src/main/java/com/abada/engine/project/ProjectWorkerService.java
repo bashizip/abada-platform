@@ -22,15 +22,38 @@ public class ProjectWorkerService {
     private final ProjectAccessService access;
     private final ExternalTaskRepository externalTasks;
     private final ProcessInstanceRepository processInstances;
+    private final List<FirstPartyWorkersProperties.FirstPartyWorker> firstPartyWorkers;
 
     public ProjectWorkerService(ProjectWorkerBindingRepository bindings, PrincipalRepository principals,
             ProjectAccessService access, ExternalTaskRepository externalTasks,
-            ProcessInstanceRepository processInstances) {
+            ProcessInstanceRepository processInstances, FirstPartyWorkersProperties workerProperties) {
         this.bindings = bindings;
         this.principals = principals;
         this.access = access;
         this.externalTasks = externalTasks;
         this.processInstances = processInstances;
+        this.firstPartyWorkers = workerProperties.getFirstParty();
+    }
+
+    /**
+     * Binds every configured first-party worker to the given project. Idempotent
+     * and safe to run on project creation and on engine startup.
+     */
+    @Transactional
+    public void ensureFirstPartyBindings(String projectId) {
+        for (FirstPartyWorkersProperties.FirstPartyWorker worker : firstPartyWorkers) {
+            principals.findFirstByUsernameIgnoreCase(worker.username()).ifPresent(principal ->
+                    bindings.findByProjectIdAndPrincipalId(projectId, principal.getId())
+                            .orElseGet(() -> {
+                                ProjectWorkerBindingEntity binding = new ProjectWorkerBindingEntity();
+                                binding.setProjectId(projectId);
+                                binding.setPrincipalId(principal.getId());
+                                binding.setTopics(String.join(",", normalize(worker.topics())));
+                                binding.setCreatedAt(Instant.now());
+                                binding.setCreatedBy(principal.getUsername());
+                                return bindings.save(binding);
+                            }));
+        }
     }
 
     @Transactional(readOnly = true)
