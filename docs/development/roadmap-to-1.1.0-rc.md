@@ -5,7 +5,7 @@ goal is to demonstrate agentic workflows as durable consumers of Abada's
 shared APL/BPMN runtime state machine. It does not weaken that state machine or move agent execution
 into transient, process-local memory.
 
-Last reviewed: 2026-08-09.
+Last reviewed: 2026-08-13.
 
 ## Release scope
 
@@ -51,6 +51,17 @@ locally, while every live execution is an explicit, durable engine action.
   facts; Studio must never fake engine progress.
 - [x] Deliver the first real `abada:agent` external worker and persist model
   attempts/results through the durable worker and history contracts.
+- [x] Surface durable worker liveness end to end: every fetch-and-lock poll
+  writes a debounced heartbeat and every rejected fetch a durable incident
+  row, exposed per project via `GET /api/v1/projects/{projectId}/workers/health`
+  and shown in the Studio operations view (Online/Error/Offline, last
+  heartbeat, last rejection, consecutive failures). Evidence:
+  [`WorkerHealthServiceTest`](../../engine/src/test/java/com/abada/engine/project/WorkerHealthServiceTest.java).
+- [x] Auto-bind first-party engine workers (the `service-account-abada-agent-worker`
+  principal on topic `abada:agent`, via `abada.workers.first-party`) to every
+  project at creation and through an idempotent startup sweep, removing the
+  manual per-project binding step for the platform's own agent. Evidence:
+  [`FirstPartyWorkerBindingTest`](../../engine/src/test/java/com/abada/engine/project/FirstPartyWorkerBindingTest.java).
 - [ ] Add restart/retry/cancellation evidence for the worker, then surface
   model/tool metadata in the same live instance view.
 - [ ] Only after the runnable agentic loop is proven, resume multi-role
