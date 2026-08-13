@@ -120,6 +120,22 @@ export interface ProcessDefinitionDTO {
   createdAt?: string;
 }
 
+/** Liveness and incident record for one external worker topic in a project. */
+export interface WorkerHealthDTO {
+  projectId: string;
+  principalId: string;
+  principalUsername: string;
+  topic: string;
+  bound: boolean;
+  status: 'ONLINE' | 'ERROR' | 'OFFLINE';
+  lastSeenAt?: string | null;
+  lastSuccessAt?: string | null;
+  lastErrorAt?: string | null;
+  lastErrorMessage?: string | null;
+  consecutiveFailures: number;
+  lastWorkerId?: string | null;
+}
+
 export class EngineAPI {
   private static readonly BASE_URL = `${config.apiUrl}/v1`;
 
@@ -248,6 +264,20 @@ export class EngineAPI {
       { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ retries }) },
     );
     if (!res.ok) throw new Error(`Failed to retry job: ${res.statusText}`);
+  }
+
+  /**
+   * Lists the liveness and incident state of every bound (or attempted)
+   * external worker/topic in a project — heartbeat, status and the recent
+   * rejection errors that otherwise only appear in worker container logs.
+   */
+  static async getWorkerHealth(projectId: string): Promise<WorkerHealthDTO[]> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/workers/health`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch worker health: ${res.statusText}`);
+    return res.json();
   }
 
   /** Suspends or resumes a process instance. */

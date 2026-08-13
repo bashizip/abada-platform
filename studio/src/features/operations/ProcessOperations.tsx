@@ -24,6 +24,7 @@ import {
   ProcessInstanceDTO,
 } from '@/api/engine';
 import { TooltipProvider, UITooltip } from '@/components/ui';
+import { WorkerHealthPanel } from './WorkerHealthPanel';
 import {
   InstanceStatus,
   STATUS_META,
@@ -424,6 +425,9 @@ export const ProcessOperations: React.FC<{
           accent="bg-[#9D4EDD]"
         />
       </div>
+
+      {/* ===== Agent worker liveness ===== */}
+      <WorkerHealthPanel projectId={projectId} />
 
       {/* ===== Filter toolbar ===== */}
       <div className="flex shrink-0 flex-wrap items-center gap-3 px-6 pt-4">
