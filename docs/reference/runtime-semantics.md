@@ -102,6 +102,19 @@ should use external tasks and an idempotent worker operation.
   unconsumed subscriptions in stable ID order and advances every matched
   instance atomically as one command. Competing broadcasts observe consumed
   rows after the winner commits. A failure rolls the broadcast command back.
+- An event-based gateway (BPMN `eventBasedGateway`, APL `event-gateway` node)
+  forks one durable wait state per outgoing catch child (message, timer or
+  signal) in the same transaction as the fork. When the first child fires, its
+  advancement and the cancellation of every sibling wait state commit
+  together: sibling tokens leave the active set, sibling message/signal
+  subscriptions are locked and marked consumed, and sibling timer jobs
+  (available or leased) become `CANCELLED` so a late loser can never produce a
+  duplicate transition. Pending races persist across restart. A join counts an
+  event gateway as one logical incoming stream no matter how many of its
+  children converge on the join. Evidence:
+  [`EventGatewayTest`](../../engine/src/test/java/com/abada/engine/core/EventGatewayTest.java)
+  and the kitchen-sink gate
+  [`AplKitchenSinkTest`](../../engine/src/test/java/com/abada/engine/core/AplKitchenSinkTest.java).
 - A duration timer accepts an ISO-8601 duration and creates a durable job in
   the same transaction as the waiting token. Invalid duration or job creation
   failure aborts the command.

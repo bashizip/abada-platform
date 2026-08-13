@@ -1,0 +1,73 @@
+version: abada.io/v1
+metadata:
+  name: Kitchen Sink Process
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      description: Start
+      next: initialTask
+    - id: initialTask
+      type: approval-gate
+      description: Set Variables
+      assignees: [test-user]
+      next: parallelFork
+    - id: parallelFork
+      type: parallel
+      description: Parallel Fork
+      branches:
+        - embedScript
+        - eventRace
+    - id: embedScript
+      type: script
+      description: Embedded Delegate
+      script: |
+        variables.put('delegateExecuted', true);
+      next: parallelJoin
+    - id: eventRace
+      type: event-gateway
+      description: FastTrack or Timeout
+      events:
+        - type: message-catch
+          description: FastTrack Message
+          message: FastTrackMessage
+          next: parallelJoin
+        - type: timer
+          description: One Hour Timeout
+          duration: PT1H
+          next: parallelJoin
+    - id: parallelJoin
+      type: parallel
+      description: Parallel Join
+      next: routeInclusive
+    - id: routeInclusive
+      type: inclusive
+      description: Inclusive Fork
+      rules:
+        - if: "${path == 'C'}"
+          then: taskC
+        - if: "${path == 'D'}"
+          then: taskD
+    - id: taskC
+      type: approval-gate
+      description: Task C
+      assignees: [test-user]
+      next: rejoinInclusive
+    - id: taskD
+      type: approval-gate
+      description: Task D
+      assignees: [test-user]
+      next: rejoinInclusive
+    - id: rejoinInclusive
+      type: inclusive
+      description: Inclusive Join
+      next: externalStep
+    - id: externalStep
+      type: engine-task
+      description: Final External Step
+      service: kitchen-sink-topic
+      next: done
+    - id: done
+      type: end
+      description: End

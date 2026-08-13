@@ -25,6 +25,9 @@ export function compileAPLToBPMN(apl: APLDocument): string {
   const sequenceFlows: any[] = [];
   const messages: any[] = [];
   const signals: any[] = [];
+  // Catch children emitted by event-gateway nodes (declared before the map so
+  // the case branch can append without a temporal-dead-zone access).
+  const catchElements: any[] = [];
   
   const elements = apl.flow.nodes.map(node => {
     if (node.next) {
@@ -247,13 +250,79 @@ export function compileAPLToBPMN(apl: APLDocument): string {
           }
         };
       }
+      case 'event-gateway': {
+        // Event-based gateway: each inline catch child becomes an intermediate
+        // catch event wired from the gateway; only the first child to fire
+        // advances the instance, so the engine cancels the sibling wait
+        // states. Child ids are deterministic (`<gateway>_e<index>`) so the
+        // APL ↔ BPMN round trip is stable.
+        const gatewayNode = node as { events?: {
+          type: string;
+          description?: string;
+          message?: string;
+          duration?: string;
+          signal?: string;
+          next: string;
+        }[] };
+        (gatewayNode.events || []).forEach((child, index) => {
+          const childId = `${node.id}_e${index}`;
+          sequenceFlows.push({
+            '@_id': `Flow_${node.id}_${childId}`,
+            '@_sourceRef': node.id,
+            '@_targetRef': childId,
+          });
+          sequenceFlows.push({
+            '@_id': `Flow_${childId}_${child.next}`,
+            '@_sourceRef': childId,
+            '@_targetRef': child.next,
+          });
+          if (child.type === 'message-catch') {
+            const messageDefId = `Message_${childId}`;
+            messages.push({ '@_id': messageDefId, '@_name': child.message });
+            catchElements.push({
+              'bpmn:intermediateCatchEvent': {
+                '@_id': childId,
+                '@_name': child.description || 'Message Catch',
+                'bpmn:messageEventDefinition': { '@_messageRef': messageDefId }
+              }
+            });
+          } else if (child.type === 'timer') {
+            catchElements.push({
+              'bpmn:intermediateCatchEvent': {
+                '@_id': childId,
+                '@_name': child.description || 'Timer',
+                'bpmn:timerEventDefinition': {
+                  'bpmn:timeDuration': child.duration
+                }
+              }
+            });
+          } else if (child.type === 'signal') {
+            const signalDefId = `Signal_${childId}`;
+            signals.push({ '@_id': signalDefId, '@_name': child.signal });
+            catchElements.push({
+              'bpmn:intermediateCatchEvent': {
+                '@_id': childId,
+                '@_name': child.description || 'Signal Catch',
+                'bpmn:signalEventDefinition': { '@_signalRef': signalDefId }
+              }
+            });
+          }
+        });
+        return {
+          'bpmn:eventBasedGateway': {
+            '@_id': node.id,
+            '@_name': node.description || 'Event Gateway',
+          }
+        };
+      }
       default:
         return {};
     }
   });
 
+  const allElements = elements.concat(catchElements);
   const mergedElements: any = {};
-  elements.forEach((el: any) => {
+  allElements.forEach((el: any) => {
     const key = Object.keys(el)[0];
     if (!key) return;
     if (!mergedElements[key]) mergedElements[key] = [];

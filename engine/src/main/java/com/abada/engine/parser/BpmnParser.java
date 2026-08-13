@@ -175,6 +175,9 @@ public class BpmnParser {
             for (ParallelGateway gateway : model.getModelElementsByType(ParallelGateway.class)) {
                 gateways.put(gateway.getId(), new GatewayMeta(gateway.getId(), GatewayMeta.Type.PARALLEL, null));
             }
+            for (EventBasedGateway gateway : model.getModelElementsByType(EventBasedGateway.class)) {
+                gateways.put(gateway.getId(), new GatewayMeta(gateway.getId(), GatewayMeta.Type.EVENT, null));
+            }
 
             Map<String, EventMeta> events = new HashMap<>();
             for (IntermediateCatchEvent event : model.getModelElementsByType(IntermediateCatchEvent.class)) {

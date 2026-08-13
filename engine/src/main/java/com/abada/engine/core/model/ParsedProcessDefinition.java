@@ -264,6 +264,50 @@ public class ParsedProcessDefinition implements Serializable {
         return gw != null && gw.type() == GatewayMeta.Type.PARALLEL;
     }
 
+    /**
+     * An event gateway is a competing-event wait point: its token registers a
+     * wait state per catch child and the first fired child to advance wins,
+     * cancelling all sibling wait states in the same transaction.
+     */
+    public boolean isEventGateway(String activityId) {
+        GatewayMeta gw = gateways.get(activityId);
+        return gw != null && gw.type() == GatewayMeta.Type.EVENT;
+    }
+
+    /** Catch-event children of an event gateway (its outgoing targets). */
+    public List<String> getEventGatewayChildren(String gatewayId) {
+        return getOutgoing(gatewayId).stream()
+                .map(SequenceFlow::getTargetRef)
+                .filter(this::isCatchEvent)
+                .toList();
+    }
+
+    /** The event gateway a catch event belongs to, or null for standalone events. */
+    public String getEventGatewayOf(String catchEventId) {
+        for (Map.Entry<String, GatewayMeta> entry : gateways.entrySet()) {
+            if (entry.getValue().type() != GatewayMeta.Type.EVENT) continue;
+            boolean child = getOutgoing(entry.getKey()).stream()
+                    .anyMatch(flow -> flow.getTargetRef().equals(catchEventId));
+            if (child) return entry.getKey();
+        }
+        return null;
+    }
+
+    /**
+     * Number of logical token streams entering a join gateway. Children of the
+     * same event gateway count as a single stream: only one competing child
+     * ever fires, so an N-child event gateway contributes exactly one token to
+     * the join. Without event gateways this equals the incoming flow count.
+     */
+    public int logicalIncomingCount(String joinId) {
+        Set<String> logicalSources = new HashSet<>();
+        for (SequenceFlow flow : getIncoming(joinId)) {
+            String gateway = getEventGatewayOf(flow.getSourceRef());
+            logicalSources.add(gateway != null ? gateway : flow.getSourceRef());
+        }
+        return logicalSources.size();
+    }
+
     public String getTaskName(String id) {
         TaskMeta meta = userTasks.get(id);
         return meta != null ? meta.getName() : null;

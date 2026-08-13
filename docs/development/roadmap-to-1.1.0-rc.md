@@ -100,22 +100,38 @@ atomically), lifting the BPMN-side "Limited" support.
   runtime.
 - [x] `signal` node: broadcast subscription by signal name, reusing the
   signal-event runtime.
-- [ ] `event-gateway` node and competing-event semantics: N outgoing catch
+- [x] `event-gateway` node and competing-event semantics: N outgoing catch
   children, first-to-fire advances and sibling subscriptions/timers are
   cancelled in the same transaction, pending races survive restart; lift the
   BPMN-side event-based gateway from "Limited" to "Supported" with a new
-  `EventGatewayTest`.
-- [ ] Kitchen-sink gate: author
+  [`EventGatewayTest`](../../engine/src/test/java/com/abada/engine/core/EventGatewayTest.java)
+  (APL + BPMN fixtures, message/timer/signal races, atomic sibling
+  cancellation, restart recovery). The losing sibling tokens leave the active
+  set, sibling message/signal subscriptions are consumed and sibling timer
+  jobs are cancelled (`CANCELLED`) inside the winning event's transaction;
+  join bookkeeping counts an event gateway as one logical stream no matter how
+  many children converge on the join.
+- [x] Kitchen-sink gate: author
   `engine/src/test/resources/apl/kitchen-sink.apl.yaml` mapping
   `docs/features/kitchen-sink-process.md` 1:1 (webhook → Set Variables gate →
   parallel fork → script ║ event-gateway (FastTrackMessage or 1h timer) →
   parallel join → inclusive fork (path C/D) → Task C/D gates → inclusive join
   → external `kitchen-sink-topic` task → end) and prove it end to end in a new
-  `AplKitchenSinkTest` (script in-transaction, message wins the race, timer
-  fallback, inclusive C and D routes, worker completion, restart recovery).
-  Reconcile the drift between the kitchen-sink doc and the legacy BPMN file -
-  both suites must prove the same shape. Make the APL round trip (APL ↔ BPMN)
-  fidelity of the kitchen-sink document part of the Studio checks.
+  [`AplKitchenSinkTest`](../../engine/src/test/java/com/abada/engine/core/AplKitchenSinkTest.java)
+  (script in-transaction, message wins the race, timer fallback, inclusive C
+  and D routes, worker completion, restart recovery). Reconcile the drift
+  between the kitchen-sink doc and the legacy BPMN file -
+  `kitchen-sink-test.bpmn` now carries the real event-based gateway
+  (FastTrackMessage + PT1H timer) so both suites prove the same shape. The APL
+  round trip (APL ↔ BPMN) fidelity of the kitchen-sink document is a Studio
+  check: `npm run verify:kitchen-sink`
+  (`studio/scripts/kitchen-sink-roundtrip.mts`) runs as part of
+  `npm run build` in `studio/` and proves both directions losslessly.
+- [x] User-facing node reference:
+  [`docs/reference/apl-node-reference.md`](../../docs/reference/apl-node-reference.md)
+  documents every APL node with a plain-language explanation, its properties
+  (the contract for each Studio property panel) and its BPMN equivalent,
+  linked from the APL specification.
 
 ### Runtime integration
 

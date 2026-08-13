@@ -16,7 +16,7 @@ unsupported flow nodes instead of silently treating them as pass-through nodes.
 | Message catch event | Supported | Durable subscription by message name and `correlationKey` variable | [`MessageEventTest`](../../engine/src/test/java/com/abada/engine/core/MessageEventTest.java) |
 | Signal catch event | Supported | Durable broadcast subscription by signal name | [`SignalEventTest`](../../engine/src/test/java/com/abada/engine/core/SignalEventTest.java) |
 | Duration timer catch event | Supported | Durable scheduled job for ISO-8601 durations | [`TimerEventTest`](../../engine/src/test/java/com/abada/engine/core/TimerEventTest.java) |
-| Event-based gateway | Limited | A single outgoing catch event only | [`MessageEventTest`](../../engine/src/test/java/com/abada/engine/core/MessageEventTest.java) |
+| Event-based gateway | Supported | ≥2 competing catch children (message/timer/signal); the first child to fire advances the instance and every sibling wait state is cancelled in the same transaction; pending races survive restart | [`EventGatewayTest`](../../engine/src/test/java/com/abada/engine/core/EventGatewayTest.java) |
 | Business rule task (`abada:decisionTable`) | Supported | Deterministic in-transaction decision table evaluation with `FIRST`/`UNIQUE`/`COLLECT` hit policies, `otherwise` fallback and history audit | [`DecisionTableRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/DecisionTableRuntimeTest.java) |
 
 Not supported in the 1.0 contract: subprocesses, call activities, boundary
@@ -65,6 +65,7 @@ The supported APL construct set maps 1:1 onto the BPMN elements above:
 | `message-catch` | Message intermediate catch event | Durable subscription by message name, correlated against the instance `correlationKey` variable — identical to the BPMN message catch |
 | `timer` | Duration timer intermediate catch event | Durable ISO-8601 duration job; `duration` validated with `Duration.parse` at deployment |
 | `signal` | Signal intermediate catch event | Durable broadcast subscription by signal name |
+| `event-gateway` | Event-based gateway | Inline `events` list of ≥2 competing catch children (message-catch/timer/signal); the first child to fire advances the instance and every sibling subscription/timer/token is cancelled atomically in the same transaction |
 
 APL semantics that close or tighten holes:
 
@@ -80,6 +81,13 @@ APL semantics that close or tighten holes:
   `Duration.parse`-valid ISO-8601 `duration`, `signal` name); `engine`/`agent`
   are executed by external workers through fetch/lock/complete, exactly like
   `camunda:topic` service tasks.
+- `event-gateway` routes exclusively through its inline `events` list (never
+  `next`), requires at least two competing children, and rejects duplicate
+  competing message/signal names, undeclared child targets and invalid
+  ISO-8601 durations at deployment. The first child to fire advances the
+  instance; sibling subscriptions are consumed and sibling timer jobs are
+  cancelled in the same transaction, so a late loser can never produce a
+  duplicate transition (pending races persist and survive restart).
 
 Executable evidence: [`AplParserTest`](../../engine/src/test/java/com/abada/engine/parser/AplParserTest.java)
 (compilation and rejection matrix), [`AplRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/AplRuntimeTest.java)

@@ -2,6 +2,8 @@
 
 The `kitchen-sink-test.bpmn` process is a comprehensive workflow designed to validate all major features of the Abada Engine in a single, end-to-end integration test. It serves as a quality gate for the engine and a living example of how to combine different BPMN elements.
 
+The same shape is authored natively as APL in `engine/src/test/resources/apl/kitchen-sink.apl.yaml` — the APL twin must stay 1:1 with this document (the embedded Java delegate maps to the language-agnostic `script` node). The legacy BPMN file and the APL twin are proven to agree by the [`AplKitchenSinkTest`](../../engine/src/test/java/com/abada/engine/core/AplKitchenSinkTest.java) (PostgreSQL) and the Studio APL↔BPMN round-trip check (`npm run verify:kitchen-sink` in `studio/`).
+
 ---
 
 ### Process Workflow

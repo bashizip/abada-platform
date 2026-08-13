@@ -64,6 +64,10 @@ import java.util.stream.Collectors;
  *   <li>{@code parallel}        → parallel gateway: a fork when it declares
  *       {@code branches} (one token per branch), a join when several upstream
  *       nodes converge on it and it continues via {@code next}</li>
+ *   <li>{@code event-gateway}   → event-based gateway: an inline {@code events}
+ *       list of ≥2 competing catch children (message-catch, timer or signal);
+ *       the first child to fire advances the instance and the engine cancels
+ *       every sibling wait state in the same transaction</li>
  *   <li>{@code message-catch}   → message catch event: durable subscription by
  *       message name, correlated against the instance variable
  *       {@code correlationKey} (identical to BPMN message semantics)</li>
@@ -93,7 +97,7 @@ public final class AplParser {
 
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             "webhook", "end", "agent", "engine-task", "decision-table", "script",
-            "approval-gate", "condition", "inclusive", "parallel",
+            "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
             "message-catch", "timer", "signal");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
@@ -411,6 +415,84 @@ public final class AplParser {
                         }
                     }
                     gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.PARALLEL, null));
+                }
+                case "event-gateway" -> {
+                    if (node.hasNonNull("next")) {
+                        throw validation("event-gateway node '" + nodeId
+                                + "' routes via its 'events', not 'next'");
+                    }
+                    JsonNode eventNodes = node.path("events");
+                    if (!eventNodes.isArray() || eventNodes.size() < 2) {
+                        throw validation("event-gateway node '" + nodeId
+                                + "' requires at least two 'events' catch children");
+                    }
+                    Set<String> competingNames = new HashSet<>();
+                    for (int index = 0; index < eventNodes.size(); index++) {
+                        JsonNode child = eventNodes.get(index);
+                        String childType = child.path("type").asText(null);
+                        String childId = nodeId + "_e" + index;
+                        String childNext = child.path("next").asText(null);
+                        if (childNext == null || childNext.isBlank()) {
+                            throw validation("event '" + (childType == null ? "?" : childType)
+                                    + "' in event-gateway '" + nodeId + "' requires a 'next' target");
+                        }
+                        if (!nodesById.containsKey(childNext)) {
+                            throw validation("event in event-gateway '" + nodeId
+                                    + "' routes to undeclared node '" + childNext + "'");
+                        }
+                        EventMeta childEvent = switch (childType) {
+                            case "message-catch" -> {
+                                String message = child.path("message").asText(null);
+                                if (message == null || message.isBlank()) {
+                                    throw validation("event-gateway '" + nodeId
+                                            + "' message-catch event requires a non-empty 'message' name");
+                                }
+                                if (!competingNames.add("MESSAGE:" + message)) {
+                                    throw validation("event-gateway '" + nodeId
+                                            + "' declares duplicate competing message '" + message + "'");
+                                }
+                                yield new EventMeta(childId, child.path("description").asText(null),
+                                        EventMeta.EventType.MESSAGE, message);
+                            }
+                            case "timer" -> {
+                                String duration = child.path("duration").asText(null);
+                                if (duration == null || duration.isBlank()) {
+                                    throw validation("event-gateway '" + nodeId
+                                            + "' timer event requires a non-empty 'duration'");
+                                }
+                                try {
+                                    Duration.parse(duration);
+                                } catch (Exception exception) {
+                                    throw validation("event-gateway '" + nodeId
+                                            + "' timer event declares invalid ISO-8601 duration '" + duration + "'");
+                                }
+                                yield new EventMeta(childId, child.path("description").asText(null),
+                                        EventMeta.EventType.TIMER, duration);
+                            }
+                            case "signal" -> {
+                                String signal = child.path("signal").asText(null);
+                                if (signal == null || signal.isBlank()) {
+                                    throw validation("event-gateway '" + nodeId
+                                            + "' signal event requires a non-empty 'signal' name");
+                                }
+                                if (!competingNames.add("SIGNAL:" + signal)) {
+                                    throw validation("event-gateway '" + nodeId
+                                            + "' declares duplicate competing signal '" + signal + "'");
+                                }
+                                yield new EventMeta(childId, child.path("description").asText(null),
+                                        EventMeta.EventType.SIGNAL, signal);
+                            }
+                            default -> throw validation("event-gateway '" + nodeId
+                                    + "' declares unsupported event type '" + childType
+                                    + "'; expected message-catch, timer or signal");
+                        };
+                        events.put(childId, childEvent);
+                        flows.add(new SequenceFlow(flowIdFor(nodeId, childId, flowIds),
+                                nodeId, childId, null, null, false));
+                        flows.add(new SequenceFlow(flowIdFor(childId, childNext, flowIds),
+                                childId, childNext, null, null, false));
+                    }
+                    gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.EVENT, null));
                 }
                 case "message-catch" -> {
                     String message = node.path("message").asText(null);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { WorkflowNode, NodeType, AgentConfig, HumanConfig } from '@/types';
+import { WorkflowNode, WorkflowFile, NodeType, AgentConfig, HumanConfig } from '@/types';
 import { DmnRuleInspector } from '@/features/dmn/DmnRuleInspector';
 import { AGENT_MODEL_OPTIONS, DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
 import { 
@@ -22,7 +22,8 @@ import {
   Info,
   Terminal,
   Mail,
-  Radio
+  Radio,
+  GitCompare
 } from 'lucide-react';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 
@@ -31,12 +32,18 @@ interface PropertiesInspectorProps {
   onUpdateNode: (updatedNode: WorkflowNode) => void;
   onRunAgentTest?: (agentConfig: AgentConfig, testInput: string) => Promise<unknown>;
   nodeCount: number;
+  /** Full active workflow — enables the event-gateway competing-events editor. */
+  workflow?: WorkflowFile;
+  /** Mutates the active workflow (nodes + edges) for event-gateway child authoring. */
+  onUpdateWorkflow?: (updater: (wf: WorkflowFile) => WorkflowFile) => void;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   selectedNode,
   onUpdateNode,
   nodeCount,
+  workflow,
+  onUpdateWorkflow,
 }) => {
 
   if (!selectedNode) {
@@ -155,6 +162,92 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     ? AGENT_MODEL_OPTIONS
     : [currentModel, ...AGENT_MODEL_OPTIONS];
 
+  /* ---- Event-gateway authoring: the gateway's competing catch events are
+     materialized canvas nodes (gateway → catch → next edges), so the editor
+     below reads and writes the shared workflow nodes/edges directly. ---- */
+
+  /** Catch-event children currently wired out of the selected event gateway. */
+  const eventGatewayChildren = (): WorkflowNode[] => {
+    if (!workflow) return [];
+    return workflow.edges
+      .filter((e) => e.source === selectedNode.id)
+      .map((e) => workflow.nodes.find((n) => n.id === e.target))
+      .filter((n): n is WorkflowNode => !!n && n.type === 'event'
+        && (n.subtype === 'message' || n.subtype === 'timer' || n.subtype === 'signal'));
+  };
+
+  /** The successor a catch child currently routes to (its outgoing edge). */
+  const childNextTarget = (childId: string): string | undefined =>
+    workflow?.edges.find((e) => e.source === childId)?.target;
+
+  const handleChildEventKindChange = (childId: string, subtype: 'message' | 'timer' | 'signal') => {
+    onUpdateWorkflow?.((wf) => ({
+      ...wf,
+      nodes: wf.nodes.map((n) => n.id === childId
+        ? { ...n, subtype, catchEventConfig: { definitionRef: '' } }
+        : n),
+    }));
+  };
+
+  const handleChildEventDefinitionChange = (childId: string, definitionRef: string) => {
+    onUpdateWorkflow?.((wf) => ({
+      ...wf,
+      nodes: wf.nodes.map((n) => n.id === childId
+        ? { ...n, catchEventConfig: { definitionRef } }
+        : n),
+    }));
+  };
+
+  const handleChildEventNextChange = (childId: string, target: string) => {
+    onUpdateWorkflow?.((wf) => {
+      const existing = wf.edges.find((e) => e.source === childId);
+      if (!target) return { ...wf, edges: wf.edges.filter((e) => e.source !== childId) };
+      if (existing) {
+        return { ...wf, edges: wf.edges.map((e) => (e.id === existing.id ? { ...e, target } : e)) };
+      }
+      return { ...wf, edges: [...wf.edges, { id: `e-${Date.now()}`, source: childId, target, label: 'Next' }] };
+    });
+  };
+
+  const handleAddChildEvent = (subtype: 'message' | 'timer' | 'signal') => {
+    const yOffset = eventGatewayChildren().length * 84;
+    onUpdateWorkflow?.((wf) => {
+      const childId = `${selectedNode.id}_e${Date.now()}`;
+      const child: WorkflowNode = {
+        id: childId,
+        type: 'event',
+        subtype,
+        title: subtype === 'message' ? 'Message Catch' : subtype === 'timer' ? 'Timer Catch' : 'Signal Catch',
+        description: 'Competing catch event of the event gateway',
+        x: selectedNode.x + 260,
+        y: selectedNode.y + yOffset,
+        catchEventConfig: { definitionRef: '' },
+      };
+      return {
+        ...wf,
+        nodes: [...wf.nodes, child],
+        edges: [...wf.edges, { id: `e-${Date.now()}`, source: selectedNode.id, target: childId, label: 'Race' }],
+      };
+    });
+  };
+
+  const handleRemoveChildEvent = (childId: string) => {
+    onUpdateWorkflow?.((wf) => ({
+      ...wf,
+      nodes: wf.nodes.filter((n) => n.id !== childId),
+      edges: wf.edges.filter((e) => e.source !== childId && e.target !== childId),
+    }));
+  };
+
+  const isEventGateway = selectedNode.type === 'gateway' && selectedNode.subtype === 'event';
+  const gatewayChildren = isEventGateway ? eventGatewayChildren() : [];
+  const gatewayChildIds = new Set(gatewayChildren.map((c) => c.id));
+  const gatewayNextOptions = workflow?.nodes
+    .filter((n) => n.id !== selectedNode.id && !gatewayChildIds.has(n.id)) ?? [];
+  const gatewayRoutedCount = gatewayChildren.filter((c) =>
+    (c.catchEventConfig?.definitionRef || '').trim() !== '' && !!childNextTarget(c.id)
+  ).length;
+
   return (
     <TooltipProvider delayDuration={0}>
     <aside className="w-80 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 shrink-0 overflow-y-auto">
@@ -165,9 +258,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           {selectedNode.type === 'human' && <UserCheck className="w-4 h-4 text-[#E76F51]" />}
           {selectedNode.type === 'dmn' && <Table className="w-4 h-4 text-[#2A9D8F]" />}
           {selectedNode.type === 'engine-task' && <Zap className="w-4 h-4 text-[#90A955]" />}
-          {selectedNode.type === 'gateway' && (selectedNode.subtype === 'parallel'
-            ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
-            : <GitFork className="w-4 h-4 text-[#F4A261]" />)}
+          {selectedNode.type === 'gateway' && (selectedNode.subtype === 'event'
+            ? <GitCompare className="w-4 h-4 text-[#F4A261]" />
+            : selectedNode.subtype === 'parallel'
+              ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
+              : <GitFork className="w-4 h-4 text-[#F4A261]" />)}
           {selectedNode.type === 'event'
             && (selectedNode.subtype === 'message'
               ? <Mail className="w-4 h-4 text-[#F4A261]" />
@@ -503,7 +598,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         )}
 
         {/* Gateway Configuration */}
-        {selectedNode.type === 'gateway' && (
+        {selectedNode.type === 'gateway' && selectedNode.subtype !== 'event' && (
           <div className="space-y-4 pt-4 border-t border-[#3A322E]">
             <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block">
               Gateway Configuration
@@ -519,6 +614,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <option value="exclusive">Exclusive — one matching branch (&gt;1 outgoing edge routes via conditions)</option>
                 <option value="parallel">Parallel — unconditional fork / join</option>
                 <option value="inclusive">Inclusive — every matching branch fires</option>
+                <option value="event">Event — competing catch events, first to fire wins</option>
               </select>
               <p className="text-[10px] text-[#A89F91] leading-relaxed">
                 {selectedNode.subtype === 'parallel'
@@ -527,6 +623,116 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     ? 'Fork: every outgoing edge whose condition matches fires (zero matches need an else/fallback edge, or the run fails loudly). Join: upstream nodes converge back here and it continues along its single outgoing edge.'
                     : 'Conditional flows evaluate in order; the last flow becomes the default branch.'}
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Event Gateway Configuration — inline competing catch events */}
+        {isEventGateway && workflow && onUpdateWorkflow && (
+          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase flex items-center gap-1.5">
+                <GitCompare className="w-3.5 h-3.5" />
+                Competing Events
+              </span>
+              <span className="text-[10px] font-mono text-[#A89F91] bg-[#1A1614] px-2 py-0.5 rounded border border-[#3A322E]">
+                {gatewayChildren.length} catch(es)
+              </span>
+            </div>
+
+            <p className="text-[10px] text-[#A89F91] leading-relaxed">
+              The instance waits on every catch below; the first to fire advances
+              and the engine cancels every sibling wait state in the same
+              transaction. Each catch needs a name and a successor.
+            </p>
+
+            {gatewayChildren.length === 0 && (
+              <div className="text-[11px] text-[#A89F91] leading-relaxed p-3 bg-[#1A1614] rounded-xl border border-dashed border-[#3A322E]">
+                No competing events yet. Add at least two below (or drag catch events
+                onto the canvas and connect them to this gateway).
+              </div>
+            )}
+
+            {gatewayChildren.map((child) => (
+              <div key={child.id} className="p-3 bg-[#1A1614] rounded-xl border border-[#3A322E] space-y-2">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={child.subtype}
+                    onChange={(e) => handleChildEventKindChange(child.id, e.target.value as 'message' | 'timer' | 'signal')}
+                    className="flex-1 bg-[#1A1614] border border-[#3A322E] rounded-lg px-2 py-1.5 text-[11px] text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+                  >
+                    <option value="message">Message catch</option>
+                    <option value="timer">Timer</option>
+                    <option value="signal">Signal</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveChildEvent(child.id)}
+                    className="p-1.5 rounded-lg border border-[#E76F51]/30 text-[#E76F51] hover:bg-[#E76F51]/15 transition-colors shrink-0"
+                    title="Remove this competing event (deletes its canvas node and flows)"
+                    aria-label="Remove competing event"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#A89F91] block">
+                    {child.subtype === 'message'
+                      ? 'Message Name'
+                      : child.subtype === 'timer'
+                        ? 'Duration (ISO-8601)'
+                        : 'Signal Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={child.catchEventConfig?.definitionRef || ''}
+                    onChange={(e) => handleChildEventDefinitionChange(child.id, e.target.value)}
+                    className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2.5 py-1.5 text-[11px] text-[#EAE3D9] font-mono focus:outline-none focus:border-[#F4A261]"
+                    placeholder={child.subtype === 'timer' ? 'PT1H' : child.subtype === 'message' ? 'MyMessage' : 'MySignal'}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-[#A89F91] block">Continues To</label>
+                  <select
+                    value={childNextTarget(child.id) || ''}
+                    onChange={(e) => handleChildEventNextChange(child.id, e.target.value)}
+                    className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2.5 py-1.5 text-[11px] text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+                  >
+                    <option value="">— select successor (required) —</option>
+                    {gatewayNextOptions.map((n) => (
+                      <option key={n.id} value={n.id}>{n.title || n.id}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              {(['message', 'timer', 'signal'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => handleAddChildEvent(kind)}
+                  className="flex-1 py-1.5 rounded-lg border border-[#F4A261]/30 bg-[#F4A261]/10 text-[11px] font-semibold text-[#F4A261] hover:bg-[#F4A261]/20 transition-colors flex items-center justify-center gap-1"
+                >
+                  {kind === 'message'
+                    ? <Mail className="w-3 h-3" />
+                    : kind === 'timer'
+                      ? <Clock className="w-3 h-3" />
+                      : <Radio className="w-3 h-3" />}
+                  Add {kind === 'message' ? 'Message' : kind === 'timer' ? 'Timer' : 'Signal'}
+                </button>
+              ))}
+            </div>
+
+            <div className={`p-2.5 rounded-lg border text-[10px] leading-relaxed ${
+              gatewayRoutedCount >= 2
+                ? 'border-[#90A955]/30 bg-[#90A955]/10 text-[#90A955]'
+                : 'border-[#E76F51]/30 bg-[#E76F51]/10 text-[#E76F51]'
+            }`}>
+              {gatewayRoutedCount >= 2
+                ? `Ready: ${gatewayChildren.length} competing event(s) with a name and a successor. First to fire wins.`
+                : `Only ${gatewayRoutedCount} of ${gatewayChildren.length} event(s) are fully routed (need a name and a successor). The engine requires at least two competing events.`}
             </div>
           </div>
         )}

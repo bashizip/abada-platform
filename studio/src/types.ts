@@ -1,7 +1,7 @@
 export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script';
 
 export type EventSubtype = 'start' | 'end' | 'timer' | 'message' | 'signal';
-export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive';
+export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive' | 'event';
 
 export interface AgentConfig {
   profileVersion?: 'abada.agent/v1';

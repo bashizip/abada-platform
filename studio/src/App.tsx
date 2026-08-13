@@ -199,7 +199,10 @@ export default function App() {
       && !currentWorkflow.nodes.some((node) => node.type === 'event' && node.subtype === 'start');
     const defaultTitles: Record<NodeType, string> = {
       agent: 'AI Validation Agent', human: 'Executive Review Task', dmn: 'Risk Matrix Policy',
-      gateway: subtype === 'parallel' ? 'Parallel Gateway' : 'Branching Gateway',
+      gateway: subtype === 'parallel' ? 'Parallel Gateway'
+        : subtype === 'inclusive' ? 'Inclusive Gateway'
+        : subtype === 'event' ? 'Event Gateway'
+        : 'Branching Gateway',
       event: isFirstEvent ? 'Start Process' : 'End Process', 'engine-task': 'Engine Service Task',
       script: 'Script Step',
     };
@@ -210,7 +213,9 @@ export default function App() {
           ? (subtype as EventSubtype) : isFirstEvent ? 'start' : 'end')
         : type === 'gateway' ? subtype : undefined,
       title: defaultTitles[type],
-      description: `Newly instantiated ${type} node`,
+      description: type === 'gateway' && subtype === 'event'
+        ? 'Competing catch events — the first to fire advances the instance and the engine cancels every sibling wait state'
+        : `Newly instantiated ${type} node`,
       x: 120 + currentWorkflow.nodes.length * 260, y: 220,
       agentConfig: type === 'agent' ? { model: DEFAULT_AGENT_MODEL, systemPrompt: 'Evaluate incoming data and perform risk verification.', confidenceThreshold: 85, temperature: 0.2, tools: ['Database Query'] } : undefined,
       dmnConfig: type === 'dmn' ? { decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`, hitPolicy: 'FIRST', inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }], outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }], rules: [{ id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } }, { id: 'r2', otherwise: true, then: { AllowPass: false } }] } : undefined,
@@ -554,6 +559,8 @@ export default function App() {
                   <PropertiesInspector
                     selectedNode={selectedNode}
                     onUpdateNode={handleUpdateNode}
+                    onUpdateWorkflow={updateActiveWorkflow}
+                    workflow={currentWorkflow}
                     nodeCount={currentWorkflow.nodes.length}
                   />
 

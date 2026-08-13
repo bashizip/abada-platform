@@ -37,4 +37,14 @@ public interface EventSubscriptionRepository extends JpaRepository<EventSubscrip
             + "WHERE i.id = s.processInstanceId AND i.projectId = :projectId) ORDER BY s.id")
     List<EventSubscriptionEntity> findProjectSignals(@Param("projectId") String projectId,
             @Param("type") EventSubscriptionEntity.Type type, @Param("eventName") String eventName);
+
+    /** Unconsumed subscriptions of an instance's events — the losers of an
+     *  event-gateway race. Locked so cancellation is atomic with the winning
+     *  event's advancement. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM EventSubscriptionEntity s WHERE s.processInstanceId = :processInstanceId "
+            + "AND s.activityId IN :activityIds AND s.consumedAt IS NULL")
+    List<EventSubscriptionEntity> findByProcessInstanceIdAndActivityIdInAndConsumedAtIsNull(
+            @Param("processInstanceId") String processInstanceId,
+            @Param("activityIds") java.util.Collection<String> activityIds);
 }

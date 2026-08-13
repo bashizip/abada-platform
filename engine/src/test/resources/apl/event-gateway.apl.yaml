@@ -1,0 +1,23 @@
+version: abada.io/v1
+metadata:
+  name: Event Gateway Race
+flow:
+  entry: apply
+  nodes:
+    - id: apply
+      type: webhook
+      next: race
+    - id: race
+      type: event-gateway
+      description: FastTrack message or one-second timeout
+      events:
+        - type: message-catch
+          description: Fast-track the review
+          message: FastTrackMessage
+          next: done
+        - type: timer
+          description: Escalate after a second
+          duration: PT1S
+          next: done
+    - id: done
+      type: end

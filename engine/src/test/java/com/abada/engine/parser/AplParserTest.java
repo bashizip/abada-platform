@@ -279,6 +279,98 @@ class AplParserTest {
     }
 
     @Test
+    void compilesEventGatewayNodeIntoCompetingCatchChildren() throws IOException {
+        ParsedProcessDefinition definition = parse("/apl/event-gateway.apl.yaml");
+
+        assertThat(definition.isEventGateway("race")).isTrue();
+        assertThat(definition.getGateways().get("race").type()).isEqualTo(GatewayMeta.Type.EVENT);
+        // The two competing children are generated catch events with the
+        // gateway wiring each child to its declared successor.
+        assertThat(definition.getEventGatewayChildren("race")).containsExactly("race_e0", "race_e1");
+        assertThat(definition.getEventGatewayOf("race_e0")).isEqualTo("race");
+        assertThat(definition.getEventGatewayOf("race_e1")).isEqualTo("race");
+        assertThat(definition.getEvents().get("race_e0").type()).isEqualTo(EventMeta.EventType.MESSAGE);
+        assertThat(definition.getEvents().get("race_e0").definitionRef()).isEqualTo("FastTrackMessage");
+        assertThat(definition.getEvents().get("race_e1").type()).isEqualTo(EventMeta.EventType.TIMER);
+        assertThat(definition.getEvents().get("race_e1").definitionRef()).isEqualTo("PT1S");
+        assertThat(definition.getOutgoing("race")).hasSize(2);
+        assertThat(definition.getNextActivity("race_e0")).isEqualTo("done");
+        assertThat(definition.getNextActivity("race_e1")).isEqualTo("done");
+        // One logical stream per event gateway, so a downstream join counts
+        // the gateway once no matter how many children converge on it.
+        assertThat(definition.logicalIncomingCount("done")).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsInvalidEventGatewayDeclarations() {
+        // Routes via next instead of events.
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: race\n      type: event-gateway\n      next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("routes via its 'events'");
+
+        // Fewer than two competing children.
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: race\n      type: event-gateway\n"
+                        + "      events:\n"
+                        + "        - type: timer\n          duration: PT1H\n          next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("at least two 'events'");
+
+        // Child without a next target.
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: race\n      type: event-gateway\n"
+                        + "      events:\n"
+                        + "        - type: timer\n          duration: PT1H\n"
+                        + "        - type: timer\n          duration: PT2H\n          next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("requires a 'next' target");
+
+        // Child routing to an undeclared node.
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: race\n      type: event-gateway\n"
+                        + "      events:\n"
+                        + "        - type: timer\n          duration: PT1H\n          next: phantom\n"
+                        + "        - type: timer\n          duration: PT2H\n          next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("undeclared node");
+
+        // Duplicate competing messages are ambiguous and rejected.
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: race\n      type: event-gateway\n"
+                        + "      events:\n"
+                        + "        - type: message-catch\n          message: FastTrackMessage\n          next: end\n"
+                        + "        - type: message-catch\n          message: FastTrackMessage\n          next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("duplicate competing message");
+
+        // Invalid timer duration.
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: race\n      type: event-gateway\n"
+                        + "      events:\n"
+                        + "        - type: timer\n          duration: 1 hour\n          next: end\n"
+                        + "        - type: timer\n          duration: PT2H\n          next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("invalid ISO-8601 duration");
+
+        // Unsupported competing event type.
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: race\n      type: event-gateway\n"
+                        + "      events:\n"
+                        + "        - type: condition\n          next: end\n"
+                        + "        - type: timer\n          duration: PT2H\n          next: end\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("unsupported event type");
+    }
+
+    @Test
     void rejectsUnknownNodeType() {
         assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
                 "    - id: secret\n      type: ai-dreamer\n      next: end\n").getBytes(StandardCharsets.UTF_8)))

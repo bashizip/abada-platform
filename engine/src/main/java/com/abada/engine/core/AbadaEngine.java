@@ -17,11 +17,15 @@ import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.parser.AplParser;
 import com.abada.engine.parser.BpmnParser;
 import com.abada.engine.persistence.PersistenceService;
+import com.abada.engine.persistence.entity.EventSubscriptionEntity;
 import com.abada.engine.persistence.entity.ExternalTaskEntity;
+import com.abada.engine.persistence.entity.JobEntity;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
 import com.abada.engine.persistence.entity.ProcessInstanceEntity;
 import com.abada.engine.persistence.entity.TaskEntity;
+import com.abada.engine.persistence.repository.EventSubscriptionRepository;
 import com.abada.engine.persistence.repository.ExternalTaskRepository;
+import com.abada.engine.persistence.repository.JobRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,6 +71,8 @@ public class AbadaEngine {
     private final EventManager eventManager;
     private final JobScheduler jobScheduler;
     private final ExternalTaskRepository externalTaskRepository;
+    private final EventSubscriptionRepository eventSubscriptionRepository;
+    private final JobRepository jobRepository;
     private final ObjectMapper om;
     private final EngineMetrics engineMetrics;
     private final Tracer tracer;
@@ -76,7 +82,8 @@ public class AbadaEngine {
 
     @Autowired
     public AbadaEngine(PersistenceService persistenceService, TaskManager taskManager, @Lazy EventManager eventManager,
-            @Lazy JobScheduler jobScheduler, ExternalTaskRepository externalTaskRepository, ObjectMapper om,
+            @Lazy JobScheduler jobScheduler, ExternalTaskRepository externalTaskRepository,
+            EventSubscriptionRepository eventSubscriptionRepository, JobRepository jobRepository, ObjectMapper om,
             EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
             InsightFactWriter insightFactWriter,
             @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
@@ -87,6 +94,8 @@ public class AbadaEngine {
         this.eventManager = eventManager;
         this.jobScheduler = jobScheduler;
         this.externalTaskRepository = externalTaskRepository;
+        this.eventSubscriptionRepository = eventSubscriptionRepository;
+        this.jobRepository = jobRepository;
         this.om = om;
         this.engineMetrics = engineMetrics;
         this.tracer = tracer;
@@ -457,6 +466,11 @@ public class AbadaEngine {
             instance.putAllVariables(variables);
         }
 
+        // The losing siblings of an event-gateway race leave the active set
+        // before the winner advances: advance() must see the final token set
+        // so an event gateway whose children lead straight to an end event
+        // marks the instance COMPLETED in the same transaction.
+        cancelEventGatewaySiblings(instance, eventId);
         List<UserTaskPayload> nextTasks = instance.advance(eventId);
         recordDecisionTableAudits(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -472,6 +486,49 @@ public class AbadaEngine {
         eventManager.registerWaitStates(instance);
         scheduleWaitingTimerEvents(instance);
         createExternalTaskJobs(instance);
+    }
+
+    /**
+     * Cancels the competing wait states of an event gateway in the same
+     * transaction as the winning event's advancement: the losing sibling
+     * tokens leave the active set, sibling message/signal subscriptions are
+     * consumed and sibling timer jobs are cancelled so they can never fire a
+     * duplicate transition. Standalone events (no owning gateway) are a no-op.
+     */
+    private void cancelEventGatewaySiblings(ProcessInstance instance, String eventId) {
+        ParsedProcessDefinition definition = instance.getDefinition();
+        String gatewayId = definition.getEventGatewayOf(eventId);
+        if (gatewayId == null) {
+            return;
+        }
+        List<String> siblings = definition.getEventGatewayChildren(gatewayId).stream()
+                .filter(child -> !child.equals(eventId))
+                .toList();
+        if (siblings.isEmpty()) {
+            return;
+        }
+
+        List<String> remainingTokens = new ArrayList<>(instance.getActiveTokens());
+        remainingTokens.removeAll(siblings);
+        instance.setActiveTokens(remainingTokens);
+
+        List<EventSubscriptionEntity> subscriptions = eventSubscriptionRepository
+                .findByProcessInstanceIdAndActivityIdInAndConsumedAtIsNull(instance.getId(), siblings);
+        Instant now = Instant.now();
+        subscriptions.forEach(subscription -> subscription.setConsumedAt(now));
+        eventSubscriptionRepository.saveAll(subscriptions);
+
+        List<JobEntity> jobs = jobRepository.findByProcessInstanceIdAndEventIdInAndStatusIn(instance.getId(),
+                siblings, List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED));
+        jobs.forEach(job -> {
+            job.setStatus(JobEntity.Status.CANCELLED);
+            job.setLeaseOwner(null);
+            job.setLeaseExpiresAt(null);
+        });
+        jobRepository.saveAll(jobs);
+        log.info("Event gateway {} of instance {} resolved by {}; cancelled {} sibling wait state(s) "
+                        + "({} subscription(s), {} timer job(s))",
+                gatewayId, instance.getId(), eventId, siblings.size(), subscriptions.size(), jobs.size());
     }
 
     private ProcessInstance requireActiveProcessForTask(TaskInstance task) {

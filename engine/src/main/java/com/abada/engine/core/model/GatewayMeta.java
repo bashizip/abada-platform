@@ -9,7 +9,8 @@ public record GatewayMeta(String id,
     public enum Type {
         EXCLUSIVE,
         PARALLEL,
-        INCLUSIVE
+        INCLUSIVE,
+        EVENT
     }
 
 }

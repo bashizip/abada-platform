@@ -12,7 +12,7 @@ export interface APLDocument {
   };
 }
 
-export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'inclusive' | 'parallel' | 'message-catch' | 'timer' | 'signal' | 'end';
+export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'inclusive' | 'parallel' | 'event-gateway' | 'message-catch' | 'timer' | 'signal' | 'end';
 
 export interface APLBaseNode {
   id: string;
@@ -142,6 +142,28 @@ export interface APLSignalNode extends APLBaseNode {
   signal: string;
 }
 
+/** One competing catch child of an event-gateway node. */
+export type APLEventGatewayChild = {
+  type: 'message-catch' | 'timer' | 'signal';
+  /** Description shown on the compiled BPMN catch event. */
+  description?: string;
+  /** Message name (message-catch), ISO-8601 duration (timer) or signal name (signal). */
+  message?: string;
+  duration?: string;
+  signal?: string;
+  /** Sole successor after this child wins the race. */
+  next: string;
+};
+
+export interface APLEventGatewayNode extends APLBaseNode {
+  type: 'event-gateway';
+  /** ≥2 competing catch children; the first to fire wins and the engine
+   *  cancels every sibling wait state in the same transaction. Routes via
+   *  `events`, never `next`. */
+  events: APLEventGatewayChild[];
+  next?: never;
+}
+
 export interface APLEndNode extends APLBaseNode {
   type: 'end';
 }
@@ -159,4 +181,5 @@ export type APLNode =
   | APLMessageCatchNode
   | APLTimerNode
   | APLSignalNode
+  | APLEventGatewayNode
   | APLEndNode;

@@ -15,7 +15,8 @@ import {
   Radio,
   CheckCircle2,
   XCircle,
-  Loader2
+  Loader2,
+  GitCompare
 } from 'lucide-react';
 import { WorkflowNode, NodeType } from '@/types';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
@@ -98,6 +99,7 @@ const getNodeIcon = (type: NodeType, subtype?: WorkflowNode['subtype']) => {
     case 'dmn':
       return <Table className="w-4 h-4 text-[#2A9D8F]" />;
     case 'gateway':
+      if (subtype === 'event') return <GitCompare className="w-4 h-4 text-[#F4A261]" />;
       return subtype === 'parallel'
         ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
         : <GitFork className="w-4 h-4 text-[#F4A261]" />;

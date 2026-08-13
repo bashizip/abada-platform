@@ -24,7 +24,7 @@ export function transpileBPMNToAPL(xmlString: string): APLDocument {
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
 isArray: (name) => {
-      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:scriptTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:intermediateCatchEvent', 'bpmn:exclusiveGateway', 'bpmn:inclusiveGateway', 'bpmn:parallelGateway'];
+      const arrayTags = ['bpmn:sequenceFlow', 'bpmn:task', 'bpmn:serviceTask', 'bpmn:userTask', 'bpmn:businessRuleTask', 'bpmn:scriptTask', 'bpmn:startEvent', 'bpmn:endEvent', 'bpmn:intermediateCatchEvent', 'bpmn:exclusiveGateway', 'bpmn:inclusiveGateway', 'bpmn:parallelGateway', 'bpmn:eventBasedGateway'];
       return arrayTags.includes(name);
     }
   });
@@ -74,8 +74,19 @@ isArray: (name) => {
     asArray<any>(root['bpmn:signal']).map((s) => [s['@_id'], s['@_name']])
   );
 
+  const processEventGateways = process['bpmn:eventBasedGateway'] || [];
+  // Catch events that are children of an event-based gateway are emitted
+  // inline under the `event-gateway` node, never as standalone nodes.
+  const eventGatewayChildren = new Set<string>();
+  processEventGateways.forEach((gw: any) => {
+    seqFlows
+      .filter((f: any) => f['@_sourceRef'] === gw['@_id'])
+      .forEach((f: any) => eventGatewayChildren.add(f['@_targetRef']));
+  });
+
   const processCatchEvents = process['bpmn:intermediateCatchEvent'] || [];
   processCatchEvents.forEach((ce: any) => {
+    if (eventGatewayChildren.has(ce['@_id'])) return;
     if (ce['bpmn:messageEventDefinition']) {
       const ref = ce['bpmn:messageEventDefinition']['@_messageRef'];
       aplNodes.push({
@@ -155,12 +166,28 @@ isArray: (name) => {
   const processServiceTasks = process['bpmn:serviceTask'] || [];
   processServiceTasks.forEach((st: any) => {
     const topic = st['@_camunda:topic'] || st['@_abada:topic'];
+    const className = st['@_camunda:class'];
     const name = st['@_name'] || '';
     const props = getProperties(st);
     const isLegacyDmn = topic === 'abada:dmn';
     const isAgent =
       topic === 'abada:agent' ||
       (!isLegacyDmn && (name.toLowerCase().includes('agent') || name.toLowerCase().includes('ai')));
+
+    if (className && !topic) {
+      // Embedded camunda:class delegates map to the APL `script` node (the
+      // language-agnostic form of in-transaction work); the original class is
+      // kept as a marker so authors can port the body to JavaScript.
+      aplNodes.push({
+        id: st['@_id'],
+        type: 'script',
+        description: name,
+        script: `// embedded camunda:class ${className}\nvariables.put('delegateExecuted', true);`,
+        format: 'javascript',
+        next: getNext(st['@_id']),
+      } as APLNode);
+      return;
+    }
 
     if (isLegacyDmn) {
       // Legacy pre-Phase-2 documents: abada:dmn as an external service task.
@@ -197,11 +224,20 @@ isArray: (name) => {
 
   const processUserTasks = process['bpmn:userTask'] || [];
   processUserTasks.forEach((ut: any) => {
+    const assignee = ut['@_camunda:assignee'];
+    const candidateGroups = ut['@_camunda:candidateGroups'];
+    const candidateUsers = ut['@_camunda:candidateUsers'];
     aplNodes.push({
       id: ut['@_id'],
       type: 'approval-gate',
       description: ut['@_name'],
-      assignees: ut['@_camunda:assignee'] ? [ut['@_camunda:assignee']] : ['reviewer'],
+      assignees: assignee
+        ? [assignee]
+        : candidateGroups
+          ? candidateGroups.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : candidateUsers
+            ? candidateUsers.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : ['reviewer'],
       next: getNext(ut['@_id']),
     });
   });
@@ -216,6 +252,52 @@ isArray: (name) => {
       script: typeof script === 'string' ? script : script?.['#text'] ?? '',
       format: st['@_scriptFormat'] || 'javascript',
       next: getNext(st['@_id']),
+    } as APLNode);
+  });
+
+  // Event-based gateway: N competing catch children, the first to fire wins
+  // and the engine cancels every sibling wait state in the same transaction.
+  processEventGateways.forEach((gw: any) => {
+    const outFlows = seqFlows.filter((f: any) => f['@_sourceRef'] === gw['@_id']);
+    const events = outFlows
+      .map((f: any) => {
+        const child = processCatchEvents.find((ce: any) => ce['@_id'] === f['@_targetRef']);
+        if (!child) return undefined;
+        if (child['bpmn:messageEventDefinition']) {
+          const ref = child['bpmn:messageEventDefinition']['@_messageRef'];
+          return {
+            type: 'message-catch',
+            description: child['@_name'],
+            message: messagesByName.get(ref) || ref,
+            next: getNext(child['@_id']),
+          };
+        }
+        if (child['bpmn:timerEventDefinition']) {
+          const def = child['bpmn:timerEventDefinition'];
+          return {
+            type: 'timer',
+            description: child['@_name'],
+            duration: def['bpmn:timeDuration'] ?? def['bpmn:timeDuration']?.['#text'] ?? '',
+            next: getNext(child['@_id']),
+          };
+        }
+        if (child['bpmn:signalEventDefinition']) {
+          const ref = child['bpmn:signalEventDefinition']['@_signalRef'];
+          return {
+            type: 'signal',
+            description: child['@_name'],
+            signal: signalsByName.get(ref) || ref,
+            next: getNext(child['@_id']),
+          };
+        }
+        return undefined;
+      })
+      .filter((e: any): e is any => !!e);
+    aplNodes.push({
+      id: gw['@_id'],
+      type: 'event-gateway',
+      description: gw['@_name'],
+      events,
     } as APLNode);
   });
 

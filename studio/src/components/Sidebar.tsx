@@ -19,7 +19,8 @@ import {
   Clock,
   Radio,
   Activity,
-  RotateCcw
+  RotateCcw,
+  GitCompare
 } from 'lucide-react';
 import { WorkflowFile, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { EngineAPI, ProcessDefinitionDTO, ProcessInstanceDTO } from '@/api/engine';
@@ -238,6 +239,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Inclusive Gateway',
       description: 'Fork every matching branch, zero-matches need an else flow',
       icon: GitMerge,
+      color: '#F4A261',
+      bgColor: 'bg-[#F4A261]/10',
+      borderColor: 'border-[#F4A261]/40',
+    },
+    {
+      type: 'gateway',
+      subtype: 'event',
+      group: 'Decisions & Routing',
+      title: 'Event Gateway',
+      description: 'Competing catch events — the first to fire wins, siblings are cancelled',
+      icon: GitCompare,
       color: '#F4A261',
       bgColor: 'bg-[#F4A261]/10',
       borderColor: 'border-[#F4A261]/40',

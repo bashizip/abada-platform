@@ -39,9 +39,11 @@ neither a definition version nor a partial compatibility report.
 
 The 1.0 contract focuses on none start/end events, user tasks, embedded and
 external service tasks, script tasks, business rule tasks carrying a native
-`abada:decisionTable`, exclusive/inclusive/parallel gateways, and
-message/signal/duration-timer catch events. Event-based gateways are limited
-to one outgoing catch event.
+`abada:decisionTable`, exclusive/inclusive/parallel/event-based gateways, and
+message/signal/duration-timer catch events. An event-based gateway requires at
+least two competing catch children: the first child to fire advances the
+instance and every sibling wait state (subscription, timer job and token) is
+cancelled atomically in the same transaction.
 
 Unsupported constructs—such as subprocesses, boundary events,
 multi-instance activities, compensation, complex gateways, cyclic timers,

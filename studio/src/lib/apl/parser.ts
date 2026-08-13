@@ -5,6 +5,8 @@ import {
   APLDecisionTableInput,
   APLDecisionTableNode,
   APLDecisionTableRule,
+  APLEventGatewayChild,
+  APLEventGatewayNode,
   APLNode,
   APLValue,
 } from './types';
@@ -297,6 +299,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           })),
         };
         break;
+      case 'event-gateway':
+        wNode.type = 'gateway';
+        wNode.subtype = 'event';
+        break;
       case 'decision-table': {
         const table = aplNode as APLDecisionTableNode;
         wNode.type = 'dmn';
@@ -325,6 +331,26 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           target: r.then,
           label: r.if ? `if ${r.if}` : 'else',
         });
+      });
+    } else if (aplNode.type === 'event-gateway') {
+      // Materialize each competing catch child as its own catch-event node so
+      // the canvas shows the wait states; the gateway wires each child to it.
+      (aplNode as APLEventGatewayNode).events.forEach((child, index) => {
+        const childId = `${aplNode.id}_e${index}`;
+        nodes.push({
+          id: childId,
+          type: 'event',
+          subtype: child.type === 'message-catch' ? 'message' : child.type === 'timer' ? 'timer' : 'signal',
+          title: child.description || childId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+          description: child.description || '',
+          x: 0,
+          y: 0,
+          catchEventConfig: {
+            definitionRef: child.message || child.duration || child.signal || '',
+          },
+        });
+        edges.push({ id: `e_${aplNode.id}_${childId}`, source: aplNode.id, target: childId });
+        edges.push({ id: `e_${childId}_${child.next}`, source: childId, target: child.next });
       });
     } else if (aplNode.type === 'parallel' && aplNode.branches) {
       aplNode.branches.forEach((branch) => {
@@ -389,12 +415,23 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
     return outEdges.length > 0 ? outEdges[0].target : undefined;
   };
 
+  // Event-gateway children are materialized canvas nodes; they must not be
+  // re-emitted as standalone catch events when serializing back to APL.
+  const eventGatewayChildIds = new Set<string>();
+  wf.nodes
+    .filter((n) => n.type === 'gateway' && n.subtype === 'event')
+    .forEach((gw) => {
+      wf.edges.filter((e) => e.source === gw.id).forEach((e) => eventGatewayChildIds.add(e.target));
+    });
+
   wf.nodes.forEach(node => {
     const baseNode = {
       id: node.id,
       description: node.description || undefined,
       ui: { x: Math.round(node.x), y: Math.round(node.y) },
     };
+
+    if (eventGatewayChildIds.has(node.id)) return;
 
     if (node.type === 'event') {
       if (node.subtype === 'start') {
@@ -448,7 +485,33 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
       } as APLNode);
     } else if (node.type === 'gateway') {
       const outEdges = wf.edges.filter(e => e.source === node.id);
-      if (node.subtype === 'parallel') {
+      if (node.subtype === 'event') {
+        // Event gateway: collapse the child catch-event nodes back into the
+        // inline `events` list the engine compiles into competing wait states.
+        aplNodes.push({
+          ...baseNode,
+          type: 'event-gateway',
+          events: outEdges
+            .map((e): APLEventGatewayChild | undefined => {
+              const childNode = wf.nodes.find((n) => n.id === e.target);
+              if (!childNode || childNode.type !== 'event') return undefined;
+              const ref = childNode.catchEventConfig?.definitionRef || '';
+              const next = getNextNode(childNode.id, childNode.type);
+              if (!next) return undefined;
+              if (childNode.subtype === 'message') {
+                return { type: 'message-catch', description: childNode.description || undefined, message: ref, next };
+              }
+              if (childNode.subtype === 'timer') {
+                return { type: 'timer', description: childNode.description || undefined, duration: ref, next };
+              }
+              if (childNode.subtype === 'signal') {
+                return { type: 'signal', description: childNode.description || undefined, signal: ref, next };
+              }
+              return undefined;
+            })
+            .filter((e): e is APLEventGatewayChild => !!e),
+        } as APLNode);
+      } else if (node.subtype === 'parallel') {
         // Parallel gateway: fork via `branches` (≥2 outgoing), join via the
         // single `next` successor; upstream nodes converge on the gateway.
         if (outEdges.length >= 2) {

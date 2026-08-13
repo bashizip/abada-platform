@@ -4,7 +4,9 @@ import com.abada.engine.AbadaEngineApplication;
 import com.abada.engine.context.UserContextProvider;
 import com.abada.engine.dto.FetchAndLockRequest;
 import com.abada.engine.dto.LockedExternalTask;
+import com.abada.engine.persistence.entity.JobEntity;
 import com.abada.engine.persistence.repository.ExternalTaskRepository;
+import com.abada.engine.persistence.repository.JobRepository;
 import com.abada.engine.util.BpmnTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +21,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.InputStream;
 import java.util.List;
@@ -45,6 +48,12 @@ public class KitchenSinkTest {
 
     @Autowired
     private ExternalTaskRepository externalTaskRepository;
+
+    @Autowired
+    private JobRepository jobRepository;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -79,15 +88,22 @@ public class KitchenSinkTest {
         );
 
         // 2. Assert that the parallel fork worked.
-        // The embedded service task on Path A should execute instantly.
-        // The process should now be waiting only on Path B at the message event.
+        // The embedded service task on Path A executes instantly; Path B waits
+        // at the event-based gateway with two competing catch children
+        // (FastTrackMessage and the one-hour timer), matching the doc.
         ProcessInstance piAfterFork = abadaEngine.getProcessInstanceById(pi.getId());
         assertEquals(true, piAfterFork.getVariable("delegateExecuted"), "Embedded delegate should have executed");
-        assertEquals(1, piAfterFork.getActiveTokens().size(), "Should only be waiting on one path");
-        assertEquals("MessageCatch", piAfterFork.getActiveTokens().get(0), "Should be waiting for the message");
+        assertEquals(2, piAfterFork.getActiveTokens().size(), "Event gateway forks one wait state per catch child");
+        assertTrue(piAfterFork.getActiveTokens().containsAll(List.of("MessageCatch", "TimerCatch")),
+                "Should be waiting on both competing catch events");
 
-        // 3. Trigger the message event to advance the second parallel path
+        // 3. Trigger the message event to win the race: the instance advances
+        // and the losing one-hour timer job is cancelled atomically.
         eventManager.correlateMessage("FastTrackMessage", correlationKey, Map.of());
+        assertEquals(0, transactionTemplate.execute(status -> jobRepository
+                .findByProcessInstanceIdAndEventIdInAndStatusIn(pi.getId(), List.of("TimerCatch"),
+                        List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED))).size(),
+                "The losing timer job must be cancelled");
 
         // 4. Assert that the parallel join has occurred and the inclusive gateway has routed to Task C
         ProcessInstance piAfterJoin = abadaEngine.getProcessInstanceById(pi.getId());

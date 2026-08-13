@@ -20,6 +20,11 @@ language. It is the canonical, human-readable representation of a workflow in
 engine parses it natively and stores the immutable source in PostgreSQL. BPMN
 can be imported and converted to APL; legacy BPMN deployments remain runnable.
 
+> **Plain-language guide:** for a node-by-node walkthrough with simple
+explanations, every property, and the BPMN equivalent of each node, see
+[APL Node Reference](apl-node-reference.md). It is the companion to this
+specification and the contract for the Studio property panel.
+
 ### 1.1 Why YAML
 
 - **Human-readable configuration-as-code.** A workflow is a plain text file a
@@ -142,7 +147,7 @@ AI-generated and Studio-authored APL converge on one shape.
 The current APL node vocabulary (Studio `lib/apl/types.ts`):
 
 ```
-webhook | agent | engine-task | script | condition | approval-gate | decision-table | inclusive | parallel | message-catch | timer | signal | end
+webhook | agent | engine-task | script | condition | approval-gate | decision-table | inclusive | parallel | event-gateway | message-catch | timer | signal | end
 ```
 
 ### 3.1 `webhook` — trigger node
@@ -384,7 +389,50 @@ persists with the instance and survives restart. Studio draws the fork's
 branches as plain outgoing edges; conditions are never attached to parallel
 flows.
 
-### 3.9 `inclusive` — inclusive fork / join gateway
+### 3.9 `event-gateway` — competing-event gateway
+
+Compiles to the runtime event-based gateway. An `event-gateway` node declares
+an inline `events` list of **≥2 competing catch children** (message-catch,
+timer or signal). The gateway forks one durable wait state per child; the
+**first child to fire wins** and the engine cancels every sibling wait state
+(subscription, timer job and token) in the same transaction, so a late loser
+can never produce a duplicate transition. Pending races persist and survive
+restart. `next` must not be set — the gateway routes exclusively through its
+`events`.
+
+```yaml
+- id: eventRace
+  type: event-gateway
+  description: FastTrack or timeout
+  events:
+    - type: message-catch
+      description: Fast-track the review
+      message: FastTrackMessage
+      next: rejoin
+    - type: timer
+      description: Escalate after an hour
+      duration: PT1H
+      next: rejoin
+```
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `events[]` | array | yes | ≥2 competing catch children |
+| `events[].type` | `message-catch` \| `timer` \| `signal` | yes | the competing wait type |
+| `events[].message` | string | message-catch | message name, correlated against `correlationKey` |
+| `events[].duration` | string | timer | ISO-8601 duration; validated with `Duration.parse` at deploy |
+| `events[].signal` | string | signal | broadcast signal name |
+| `events[].next` | nodeId | yes | sole successor when this child wins |
+
+Engine semantics: each child compiles to an intermediate catch event wired from
+an `eventBasedGateway`; all children are active wait tokens until one fires.
+The winning child's `next` advances the instance and the losing wait states are
+cancelled atomically with that advancement (sibling message/signal
+subscriptions are consumed, sibling timer jobs become `CANCELLED` and sibling
+tokens leave the active set). A downstream join counts an event gateway as one
+logical stream no matter how many of its children converge on the join.
+
+### 3.10 `inclusive` — inclusive fork / join gateway
 
 Compiles to the runtime inclusive gateway. An `inclusive` node is a **fork**
 when it declares `rules`: **every** matching `if` rule fires (zero or more
@@ -420,7 +468,7 @@ actually spawned (`chooseInclusive`), not for every upstream edge — partial
 matches join correctly. Join token bookkeeping persists with the instance and
 survives restart.
 
-### 3.10 `message-catch` — message subscription node
+### 3.11 `message-catch` — message subscription node
 
 Compiles to a message intermediate catch event. The instance suspends on a
 durable subscription and resumes only when a message with this name is
@@ -446,7 +494,7 @@ transaction as the waiting token (restart-safe); correlation resumes the
 instance inside the mutating command transaction and any failure rolls the
 instance back to waiting.
 
-### 3.11 `timer` — duration timer node
+### 3.12 `timer` — duration timer node
 
 Compiles to a timer intermediate catch event with a duration definition. The
 instance suspends and the durable job scheduler resumes it once the ISO-8601
@@ -469,7 +517,7 @@ Engine semantics: the timer is scheduled as a durable job in the same
 transaction as the suspension; on expiry the job command advances the process
 with the usual optimistic-lock and rollback guarantees.
 
-### 3.12 `signal` — broadcast signal node
+### 3.13 `signal` — broadcast signal node
 
 Compiles to a signal intermediate catch event. The instance suspends on a
 durable subscription and resumes when a signal with this name is broadcast —
@@ -488,7 +536,7 @@ one broadcast resumes every waiting instance subscribed to that name.
 | `signal` | string | yes | signal name the runtime matches during broadcast |
 | `next` | nodeId | yes | sole successor after the signal fires |
 
-### 3.13 `end` — terminal node
+### 3.14 `end` — terminal node
 
 Compiles to the runtime end-event primitive. Completes the instance when the last token
 arrives.
@@ -841,8 +889,19 @@ expressions):
 
 ### 7.2 Round-trip verification
 
-Requires a Studio install (`cd studio && npm ci`). The script must live
-**inside `studio/`** so the relative `./src/...` imports resolve:
+The **kitchen-sink gate** is a committed Studio check
+(`studio/scripts/kitchen-sink-roundtrip.mts`, run by `npm run verify:kitchen-sink`
+as part of `npm run build` in `studio/`): the kitchen-sink document
+(`docs/features/kitchen-sink-process.md`) must survive both directions — the
+hand-authored APL fixture (`engine/src/test/resources/apl/kitchen-sink.apl.yaml`)
+compiles to BPMN and transpiles back losslessly (entry, node ids, types and
+routing), and the legacy BPMN fixture transpiles to APL with the same shape
+(event gateway children inline, `camunda:class` delegate as a script node,
+inclusive C/D routes, external `kitchen-sink-topic` task).
+
+Ad-hoc verification of another document requires a Studio install
+(`cd studio && npm ci`). The script must live **inside `studio/`** so the
+relative `./src/...` imports resolve:
 
 ```bash
 cd studio

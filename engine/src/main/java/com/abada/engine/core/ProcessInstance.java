@@ -261,7 +261,7 @@ public class ProcessInstance {
                     }
                     String joinGatewayId = definition.findJoinGateway(pointer, GatewayMeta.Type.PARALLEL);
                     if (joinGatewayId != null) {
-                        joinExpectedTokens.put(joinGatewayId, definition.getIncoming(joinGatewayId).size());
+                        joinExpectedTokens.put(joinGatewayId, definition.logicalIncomingCount(joinGatewayId));
                         joinArrivedTokens.put(joinGatewayId, new HashSet<>());
                     }
                     current = null;
@@ -281,9 +281,18 @@ public class ProcessInstance {
                         joinArrivedTokens.put(joinGatewayId, new HashSet<>());
                     }
                     current = null;
+                } else if (definition.isEventGateway(pointer)) {
+                    // Event gateway: a competing wait point, never a pass-through.
+                    // Every catch child becomes an active wait token; the first
+                    // child to fire advances the instance and the engine cancels
+                    // the sibling wait states in the same transaction.
+                    for (String child : definition.getEventGatewayChildren(pointer)) {
+                        queue.add(child);
+                    }
+                    current = null;
                 } else if ((definition.isParallelGateway(pointer) || definition.isInclusiveGateway(pointer))
                         && definition.getIncoming(pointer).size() > 1) {
-                    int expected = joinExpectedTokens.getOrDefault(pointer, definition.getIncoming(pointer).size());
+                    int expected = joinExpectedTokens.getOrDefault(pointer, definition.logicalIncomingCount(pointer));
                     Set<String> arrived = joinArrivedTokens.computeIfAbsent(pointer, k -> new HashSet<>());
                     arrived.add(previousPointer);
 

@@ -30,8 +30,16 @@ public final class SupportedBpmnValidator {
             }
         }
         for (EventBasedGateway gateway : model.getModelElementsByType(EventBasedGateway.class)) {
-            if (gateway.getOutgoing().size() != 1) {
-                unsupported.add("eventBasedGateway(" + gateway.getId() + "): only a single outgoing catch event is supported");
+            if (gateway.getOutgoing().size() < 2) {
+                unsupported.add("eventBasedGateway(" + gateway.getId()
+                        + "): at least two outgoing catch events are required");
+            }
+            for (SequenceFlow flow : gateway.getOutgoing()) {
+                FlowNode target = flow.getTarget();
+                if (!(target instanceof IntermediateCatchEvent) || !isSupported(target)) {
+                    unsupported.add("eventBasedGateway(" + gateway.getId()
+                            + "): every outgoing flow must end at a supported catch event");
+                }
             }
         }
         if (!unsupported.isEmpty()) {

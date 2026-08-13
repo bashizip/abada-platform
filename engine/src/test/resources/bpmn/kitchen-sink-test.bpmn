@@ -12,20 +12,33 @@
     <bpmn:parallelGateway id="ParallelFork">
       <bpmn:incoming>Flow_to_ParallelFork</bpmn:incoming>
       <bpmn:outgoing>Flow_to_ServiceA</bpmn:outgoing>
-      <bpmn:outgoing>Flow_to_MessageCatch</bpmn:outgoing>
+      <bpmn:outgoing>Flow_to_EventGateway</bpmn:outgoing>
     </bpmn:parallelGateway>
     <bpmn:serviceTask id="ServiceA" name="Embedded Delegate" camunda:class="com.abada.engine.delegates.TestDelegate">
       <bpmn:incoming>Flow_to_ServiceA</bpmn:incoming>
       <bpmn:outgoing>Flow_A_to_Join</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:intermediateCatchEvent id="MessageCatch">
+    <bpmn:eventBasedGateway id="EventGateway" name="FastTrack or Timeout">
+      <bpmn:incoming>Flow_to_EventGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_to_MessageCatch</bpmn:outgoing>
+      <bpmn:outgoing>Flow_to_TimerCatch</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="MessageCatch" name="FastTrack Message">
       <bpmn:incoming>Flow_to_MessageCatch</bpmn:incoming>
       <bpmn:outgoing>Flow_B_to_Join</bpmn:outgoing>
       <bpmn:messageEventDefinition id="MessageEventDefinition_1" messageRef="Message_FastTrack" />
     </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="TimerCatch" name="One Hour Timeout">
+      <bpmn:incoming>Flow_to_TimerCatch</bpmn:incoming>
+      <bpmn:outgoing>Flow_B2_to_Join</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_1">
+        <bpmn:timeDuration>PT1H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
     <bpmn:parallelGateway id="ParallelJoin">
       <bpmn:incoming>Flow_A_to_Join</bpmn:incoming>
       <bpmn:incoming>Flow_B_to_Join</bpmn:incoming>
+      <bpmn:incoming>Flow_B2_to_Join</bpmn:incoming>
       <bpmn:outgoing>Flow_to_InclusiveFork</bpmn:outgoing>
     </bpmn:parallelGateway>
     <bpmn:inclusiveGateway id="InclusiveFork">
@@ -56,9 +69,12 @@
     <bpmn:sequenceFlow id="Flow_to_InitialTask" sourceRef="StartEvent_1" targetRef="InitialTask" />
     <bpmn:sequenceFlow id="Flow_to_ParallelFork" sourceRef="InitialTask" targetRef="ParallelFork" />
     <bpmn:sequenceFlow id="Flow_to_ServiceA" sourceRef="ParallelFork" targetRef="ServiceA" />
-    <bpmn:sequenceFlow id="Flow_to_MessageCatch" sourceRef="ParallelFork" targetRef="MessageCatch" />
+    <bpmn:sequenceFlow id="Flow_to_EventGateway" sourceRef="ParallelFork" targetRef="EventGateway" />
+    <bpmn:sequenceFlow id="Flow_to_MessageCatch" sourceRef="EventGateway" targetRef="MessageCatch" />
+    <bpmn:sequenceFlow id="Flow_to_TimerCatch" sourceRef="EventGateway" targetRef="TimerCatch" />
     <bpmn:sequenceFlow id="Flow_A_to_Join" sourceRef="ServiceA" targetRef="ParallelJoin" />
     <bpmn:sequenceFlow id="Flow_B_to_Join" sourceRef="MessageCatch" targetRef="ParallelJoin" />
+    <bpmn:sequenceFlow id="Flow_B2_to_Join" sourceRef="TimerCatch" targetRef="ParallelJoin" />
     <bpmn:sequenceFlow id="Flow_to_InclusiveFork" sourceRef="ParallelJoin" targetRef="InclusiveFork" />
     <bpmn:sequenceFlow id="Flow_to_TaskC" sourceRef="InclusiveFork" targetRef="TaskC">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${path=='C'}</bpmn:conditionExpression>
@@ -85,29 +101,35 @@
       <bpmndi:BPMNShape id="ServiceA_di" bpmnElement="ServiceA">
         <dc:Bounds x="510" y="150" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EventGateway_di" bpmnElement="EventGateway">
+        <dc:Bounds x="542" y="332" width="50" height="50" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="MessageCatch_di" bpmnElement="MessageCatch">
-        <dc:Bounds x="542" y="332" width="36" height="36" />
+        <dc:Bounds x="640" y="340" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TimerCatch_di" bpmnElement="TimerCatch">
+        <dc:Bounds x="640" y="420" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ParallelJoin_di" bpmnElement="ParallelJoin">
-        <dc:Bounds x="675" y="245" width="50" height="50" />
+        <dc:Bounds x="760" y="245" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="InclusiveFork_di" bpmnElement="InclusiveFork">
-        <dc:Bounds x="785" y="245" width="50" height="50" />
+        <dc:Bounds x="870" y="245" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="TaskC_di" bpmnElement="TaskC">
-        <dc:Bounds x="890" y="150" width="100" height="80" />
+        <dc:Bounds x="975" y="150" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="TaskD_di" bpmnElement="TaskD">
-        <dc:Bounds x="890" y="310" width="100" height="80" />
+        <dc:Bounds x="975" y="310" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="InclusiveJoin_di" bpmnElement="InclusiveJoin">
-        <dc:Bounds x="1055" y="245" width="50" height="50" />
+        <dc:Bounds x="1140" y="245" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ExternalTask_di" bpmnElement="ExternalTask">
-        <dc:Bounds x="1160" y="230" width="100" height="80" />
+        <dc:Bounds x="1245" y="230" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
-        <dc:Bounds x="1322" y="252" width="36" height="36" />
+        <dc:Bounds x="1407" y="252" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_to_InitialTask_di" bpmnElement="Flow_to_InitialTask">
         <di:waypoint x="188" y="270" />
@@ -122,52 +144,66 @@
         <di:waypoint x="430" y="190" />
         <di:waypoint x="510" y="190" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_to_MessageCatch_di" bpmnElement="Flow_to_MessageCatch">
+      <bpmndi:BPMNEdge id="Flow_to_EventGateway_di" bpmnElement="Flow_to_EventGateway">
         <di:waypoint x="430" y="295" />
-        <di:waypoint x="430" y="350" />
-        <di:waypoint x="542" y="350" />
+        <di:waypoint x="430" y="357" />
+        <di:waypoint x="542" y="357" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_MessageCatch_di" bpmnElement="Flow_to_MessageCatch">
+        <di:waypoint x="592" y="357" />
+        <di:waypoint x="640" y="357" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_to_TimerCatch_di" bpmnElement="Flow_to_TimerCatch">
+        <di:waypoint x="567" y="382" />
+        <di:waypoint x="567" y="438" />
+        <di:waypoint x="640" y="438" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_A_to_Join_di" bpmnElement="Flow_A_to_Join">
         <di:waypoint x="610" y="190" />
-        <di:waypoint x="700" y="190" />
-        <di:waypoint x="700" y="245" />
+        <di:waypoint x="785" y="190" />
+        <di:waypoint x="785" y="245" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_B_to_Join_di" bpmnElement="Flow_B_to_Join">
-        <di:waypoint x="578" y="350" />
-        <di:waypoint x="700" y="350" />
-        <di:waypoint x="700" y="295" />
+        <di:waypoint x="676" y="357" />
+        <di:waypoint x="785" y="357" />
+        <di:waypoint x="785" y="295" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B2_to_Join_di" bpmnElement="Flow_B2_to_Join">
+        <di:waypoint x="676" y="438" />
+        <di:waypoint x="760" y="438" />
+        <di:waypoint x="760" y="295" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_to_InclusiveFork_di" bpmnElement="Flow_to_InclusiveFork">
-        <di:waypoint x="725" y="270" />
-        <di:waypoint x="785" y="270" />
+        <di:waypoint x="810" y="270" />
+        <di:waypoint x="870" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_to_TaskC_di" bpmnElement="Flow_to_TaskC">
-        <di:waypoint x="810" y="245" />
-        <di:waypoint x="810" y="190" />
-        <di:waypoint x="890" y="190" />
+        <di:waypoint x="895" y="245" />
+        <di:waypoint x="895" y="190" />
+        <di:waypoint x="975" y="190" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_to_TaskD_di" bpmnElement="Flow_to_TaskD">
-        <di:waypoint x="810" y="295" />
-        <di:waypoint x="810" y="350" />
-        <di:waypoint x="890" y="350" />
+        <di:waypoint x="895" y="295" />
+        <di:waypoint x="895" y="350" />
+        <di:waypoint x="975" y="350" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_C_to_InclusiveJoin_di" bpmnElement="Flow_C_to_InclusiveJoin">
-        <di:waypoint x="990" y="190" />
-        <di:waypoint x="1080" y="190" />
-        <di:waypoint x="1080" y="245" />
+        <di:waypoint x="1075" y="190" />
+        <di:waypoint x="1165" y="190" />
+        <di:waypoint x="1165" y="245" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_D_to_InclusiveJoin_di" bpmnElement="Flow_D_to_InclusiveJoin">
-        <di:waypoint x="990" y="350" />
-        <di:waypoint x="1080" y="350" />
-        <di:waypoint x="1080" y="295" />
+        <di:waypoint x="1075" y="350" />
+        <di:waypoint x="1165" y="350" />
+        <di:waypoint x="1165" y="295" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_to_ExternalTask_di" bpmnElement="Flow_to_ExternalTask">
-        <di:waypoint x="1105" y="270" />
-        <di:waypoint x="1160" y="270" />
+        <di:waypoint x="1190" y="270" />
+        <di:waypoint x="1245" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_to_End_di" bpmnElement="Flow_to_End">
-        <di:waypoint x="1260" y="270" />
-        <di:waypoint x="1322" y="270" />
+        <di:waypoint x="1345" y="270" />
+        <di:waypoint x="1407" y="270" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

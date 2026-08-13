@@ -33,7 +33,9 @@ public class JobEntity {
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
 
-    public enum Status { AVAILABLE, LEASED, COMPLETED, FAILED }
+    /** CANCELLED marks a job that lost a competing-event race: the sibling
+     *  wait state fired first and the job must never advance the instance. */
+    public enum Status { AVAILABLE, LEASED, COMPLETED, FAILED, CANCELLED }
 
     public JobEntity() {
         this.id = UUID.randomUUID().toString();
