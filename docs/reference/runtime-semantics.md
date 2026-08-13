@@ -130,6 +130,16 @@ should use external tasks and an idempotent worker operation.
   the task `FAILED`; otherwise it becomes immediately open or waits until its
   retry timeout expires.
 - An operator retry clears the old lease and returns the task to `OPEN`.
+- Worker death mid-task is served by lease expiry: an expired `LOCKED` task is
+  re-acquired with `SKIP LOCKED`, so another worker retries it without the
+  engine re-creating work or advancing state twice. Restarting the engine does
+  not dispatch a task whose lease is still live.
+- Completion after suspension or cancellation is rejected atomically after
+  locking the task row: task lease, variables and history roll back together,
+  the instance stays `SUSPENDED`/terminal, and no completion history event is
+  written. Resuming re-admits the same worker completion; a cancelled instance
+  can never advance, even after its lease passes to another worker. Evidence:
+  [`AgentWorkerResilienceTest`](../../engine/src/test/java/com/abada/engine/core/AgentWorkerResilienceTest.java).
 
 ## History and lifecycle delivery
 

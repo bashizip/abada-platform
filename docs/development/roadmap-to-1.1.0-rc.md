@@ -62,8 +62,14 @@ locally, while every live execution is an explicit, durable engine action.
   project at creation and through an idempotent startup sweep, removing the
   manual per-project binding step for the platform's own agent. Evidence:
   [`FirstPartyWorkerBindingTest`](../../engine/src/test/java/com/abada/engine/project/FirstPartyWorkerBindingTest.java).
-- [ ] Add restart/retry/cancellation evidence for the worker, then surface
-  model/tool metadata in the same live instance view.
+- [x] Provide durable restart/retry/cancellation evidence for the worker:
+  lease expiry re-acquires dead-worker work without duplicate transitions,
+  transient failures return tasks to the pool with reported attempt metadata,
+  suspension/cancellation reject late completion atomically, and a live lease
+  survives an engine restart without duplicate dispatch. Evidence:
+  [`AgentWorkerResilienceTest`](../../engine/src/test/java/com/abada/engine/core/AgentWorkerResilienceTest.java).
+- [ ] Surface model/tool metadata from the persisted agent attempt record in
+  the same live instance view.
 - [ ] Only after the runnable agentic loop is proven, resume multi-role
   hardening, administrator UI and `ADMIN_ROOT` bootstrap work below.
 
