@@ -1,0 +1,16 @@
+version: abada.io/v1
+metadata:
+  name: Timer Catch
+flow:
+  entry: apply
+  nodes:
+    - id: apply
+      type: webhook
+      next: catchTimeout
+    - id: catchTimeout
+      type: timer
+      description: Wait one second
+      duration: PT1S
+      next: done
+    - id: done
+      type: end

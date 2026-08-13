@@ -1,0 +1,16 @@
+version: abada.io/v1
+metadata:
+  name: Message Catch
+flow:
+  entry: apply
+  nodes:
+    - id: apply
+      type: webhook
+      next: catchFastTrack
+    - id: catchFastTrack
+      type: message-catch
+      description: Wait for the fast-track message
+      message: FastTrackMessage
+      next: done
+    - id: done
+      type: end

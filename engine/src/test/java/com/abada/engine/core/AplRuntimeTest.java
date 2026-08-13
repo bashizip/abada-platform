@@ -137,6 +137,40 @@ class AplRuntimeTest {
     }
 
     @Test
+    void awaitsMessageTimerAndSignalCatchEventsThroughTheDurableRuntime() throws Exception {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            EventManager eventManager = context.getBean(EventManager.class);
+            JobScheduler jobScheduler = context.getBean(JobScheduler.class);
+
+            deploy(engine, "/apl/message-catch.apl.yaml");
+            var messageInstance = engine.startProcess("message_catch", "alice",
+                    Map.of("correlationKey", "fast-1"));
+            var waiting = engine.getProcessInstanceById(messageInstance.getId());
+            assertThat(waiting.isCompleted()).isFalse();
+            assertThat(waiting.getActiveTokens()).containsExactly("catchFastTrack");
+            eventManager.correlateMessage("FastTrackMessage", "fast-1", Map.of("paymentStatus", "PAID"));
+            assertThat(engine.getProcessInstanceById(messageInstance.getId()).isCompleted()).isTrue();
+
+            deploy(engine, "/apl/timer-catch.apl.yaml");
+            var timerInstance = engine.startProcess("timer_catch", "bob", Map.of());
+            var waitingTimer = engine.getProcessInstanceById(timerInstance.getId());
+            assertThat(waitingTimer.getActiveTokens()).containsExactly("catchTimeout");
+            Thread.sleep(1100);
+            jobScheduler.executeDueJobs();
+            assertThat(engine.getProcessInstanceById(timerInstance.getId()).isCompleted()).isTrue();
+
+            deploy(engine, "/apl/signal-catch.apl.yaml");
+            var signalInstance = engine.startProcess("signal_catch", "carol", Map.of());
+            assertThat(engine.getProcessInstanceById(signalInstance.getId()).getActiveTokens())
+                    .containsExactly("catchGo");
+            eventManager.broadcastSignal("proceed", Map.of("go", true));
+            assertThat(engine.getProcessInstanceById(signalInstance.getId()).isCompleted()).isTrue();
+        }
+    }
+
+    @Test
     void persistsAgentAttemptMetadataThroughWorkerAndHistoryContracts() {
         try (ConfigurableApplicationContext context = startApplication()) {
             context.getBean(DatabaseTestHelper.class).cleanup();

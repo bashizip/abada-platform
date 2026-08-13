@@ -10,6 +10,7 @@ import com.abada.engine.bpmn.compatibility.ValidationSeverity;
 import com.abada.engine.core.model.DecisionTableMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
 import com.abada.engine.core.model.GatewayMeta;
+import com.abada.engine.core.model.EventMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.SequenceFlow;
 import com.abada.engine.core.model.ScriptTaskMeta;
@@ -19,6 +20,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -62,6 +64,13 @@ import java.util.stream.Collectors;
  *   <li>{@code parallel}        → parallel gateway: a fork when it declares
  *       {@code branches} (one token per branch), a join when several upstream
  *       nodes converge on it and it continues via {@code next}</li>
+ *   <li>{@code message-catch}   → message catch event: durable subscription by
+ *       message name, correlated against the instance variable
+ *       {@code correlationKey} (identical to BPMN message semantics)</li>
+ *   <li>{@code timer}            → duration timer catch event: durable ISO-8601
+ *       job scheduled for {@code duration}</li>
+ *   <li>{@code signal}           → signal catch event: durable broadcast
+ *       subscription by signal name</li>
  * </ul>
  *
  * <p>Unsupported or ambiguous constructs are rejected at deployment: the
@@ -84,7 +93,8 @@ public final class AplParser {
 
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             "webhook", "end", "agent", "engine-task", "decision-table", "script",
-            "approval-gate", "condition", "inclusive", "parallel");
+            "approval-gate", "condition", "inclusive", "parallel",
+            "message-catch", "timer", "signal");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -211,6 +221,7 @@ public final class AplParser {
         Map<String, ServiceTaskMeta> serviceTasks = new LinkedHashMap<>();
         Map<String, ScriptTaskMeta> scriptTasks = new LinkedHashMap<>();
         Map<String, DecisionTableMeta> decisionTables = new LinkedHashMap<>();
+        Map<String, EventMeta> events = new LinkedHashMap<>();
         Map<String, GatewayMeta> gateways = new LinkedHashMap<>();
         Map<String, Object> endEvents = new LinkedHashMap<>();
 
@@ -401,6 +412,33 @@ public final class AplParser {
                     }
                     gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.PARALLEL, null));
                 }
+                case "message-catch" -> {
+                    String message = node.path("message").asText(null);
+                    if (message == null || message.isBlank()) {
+                        throw validation("message-catch node '" + nodeId + "' requires a non-empty 'message' name");
+                    }
+                    events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.MESSAGE, message));
+                }
+                case "timer" -> {
+                    String duration = node.path("duration").asText(null);
+                    if (duration == null || duration.isBlank()) {
+                        throw validation("timer node '" + nodeId + "' requires a non-empty 'duration'");
+                    }
+                    try {
+                        Duration.parse(duration);
+                    } catch (Exception exception) {
+                        throw validation("timer node '" + nodeId
+                                + "' declares invalid ISO-8601 duration '" + duration + "'");
+                    }
+                    events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.TIMER, duration));
+                }
+                case "signal" -> {
+                    String signal = node.path("signal").asText(null);
+                    if (signal == null || signal.isBlank()) {
+                        throw validation("signal node '" + nodeId + "' requires a non-empty 'signal' name");
+                    }
+                    events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.SIGNAL, signal));
+                }
                 default -> throw validation("unsupported node type '" + type + "' for node '" + nodeId
                         + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
             }
@@ -424,7 +462,7 @@ public final class AplParser {
         return new BpmnParseResult(
                 new ParsedProcessDefinition(definitionId, name, null, entry,
                         userTasks, serviceTasks, scriptTasks, decisionTables,
-                        flows, gateways, Map.of(), endEvents,
+                        flows, gateways, events, endEvents,
                         rawSource, null, null),
                 new CompatibilityReport(Set.of(CompatibilityProfiles.ABADA_NATIVE),
                         List.of(new CompatibilityMapping("abada.io/v1 APL source",

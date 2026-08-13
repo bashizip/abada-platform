@@ -4,6 +4,7 @@ import com.abada.engine.bpmn.compatibility.BpmnParseResult;
 import com.abada.engine.bpmn.compatibility.BpmnValidationException;
 import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.core.model.GatewayMeta;
+import com.abada.engine.core.model.EventMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.SequenceFlow;
 import com.abada.engine.core.model.ServiceTaskMeta;
@@ -232,6 +233,49 @@ class AplParserTest {
                 "    - id: route\n      type: inclusive\n").getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(BpmnValidationException.class)
                 .hasMessageContaining("must declare either 'rules' (fork) or 'next' (join)");
+    }
+
+    @Test
+    void compilesCatchEventNodesIntoRuntimeEventMetadata() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: catchFastTrack\n"
+                        + "      type: message-catch\n"
+                        + "      message: FastTrackMessage\n"
+                        + "      next: end\n"
+                        + "    - id: catchTimeout\n"
+                        + "      type: timer\n"
+                        + "      duration: PT1H\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+
+        assertThat(definition.isCatchEvent("catchFastTrack")).isTrue();
+        assertThat(definition.getEvents().get("catchFastTrack").type()).isEqualTo(EventMeta.EventType.MESSAGE);
+        assertThat(definition.getEvents().get("catchFastTrack").definitionRef()).isEqualTo("FastTrackMessage");
+        assertThat(definition.isCatchEvent("catchTimeout")).isTrue();
+        assertThat(definition.getEvents().get("catchTimeout").type()).isEqualTo(EventMeta.EventType.TIMER);
+        assertThat(definition.getSequenceFlows()).extracting(SequenceFlow::getSourceRef)
+                .containsExactly("catchFastTrack", "catchTimeout");
+    }
+
+    @Test
+    void compilesSignalCatchNodeAndRejectsInvalidEventDeclarations() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: catchGo\n"
+                        + "      type: signal\n"
+                        + "      signal: proceed\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+        assertThat(definition.getEvents().get("catchGo").type()).isEqualTo(EventMeta.EventType.SIGNAL);
+        assertThat(definition.getEvents().get("catchGo").definitionRef()).isEqualTo("proceed");
+
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: catchTimeout\n      type: timer\n      duration: 1 hour\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("invalid ISO-8601 duration");
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: catchFastTrack\n      type: message-catch\n")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("non-empty 'message' name");
     }
 
     @Test

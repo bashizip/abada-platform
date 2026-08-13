@@ -1,0 +1,16 @@
+version: abada.io/v1
+metadata:
+  name: Signal Catch
+flow:
+  entry: apply
+  nodes:
+    - id: apply
+      type: webhook
+      next: catchGo
+    - id: catchGo
+      type: signal
+      description: Wait for the go signal
+      signal: proceed
+      next: done
+    - id: done
+      type: end
