@@ -1,0 +1,35 @@
+version: abada.io/v1
+metadata:
+  name: Inclusive Router
+flow:
+  entry: apply
+  nodes:
+    - id: apply
+      type: webhook
+      next: route
+    - id: route
+      type: inclusive
+      description: Route by path
+      rules:
+        - if: "${path == 'C' || path == 'CD'}"
+          then: taskC
+        - if: "${path == 'D' || path == 'CD'}"
+          then: taskD
+    - id: taskC
+      type: script
+      description: C branch
+      script: |
+        variables.put('branchC', true);
+      next: rejoin
+    - id: taskD
+      type: script
+      description: D branch
+      script: |
+        variables.put('branchD', true);
+      next: rejoin
+    - id: rejoin
+      type: inclusive
+      description: Merge branches
+      next: done
+    - id: done
+      type: end

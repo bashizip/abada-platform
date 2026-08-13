@@ -166,6 +166,75 @@ class AplParserTest {
     }
 
     @Test
+    void compilesInclusiveForkAndJoinGateways() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: route\n"
+                        + "      type: inclusive\n"
+                        + "      rules:\n"
+                        + "        - if: \"${path == 'C'}\"\n"
+                        + "          then: taskC\n"
+                        + "        - if: \"${path == 'D'}\"\n"
+                        + "          then: taskD\n"
+                        + "    - id: taskC\n"
+                        + "      type: engine-task\n"
+                        + "      service: branch.c\n"
+                        + "      next: rejoin\n"
+                        + "    - id: taskD\n"
+                        + "      type: engine-task\n"
+                        + "      service: branch.d\n"
+                        + "      next: rejoin\n"
+                        + "    - id: rejoin\n"
+                        + "      type: inclusive\n"
+                        + "      description: Merge branches\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+
+        assertThat(definition.isInclusiveGateway("route")).isTrue();
+        assertThat(definition.getGateways().get("route").defaultFlowId()).isNull();
+        assertThat(definition.getIncoming("rejoin")).hasSize(2);
+        assertThat(definition.getSequenceFlows()).extracting(SequenceFlow::getSourceRef)
+                .containsExactly("route", "route", "taskC", "taskD", "rejoin");
+    }
+
+    @Test
+    void compilesInclusiveDefaultRuleAndRejectsRulePlusNext() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: route\n"
+                        + "      type: inclusive\n"
+                        + "      rules:\n"
+                        + "        - if: \"${path == 'C'}\"\n"
+                        + "          then: taskC\n"
+                        + "        - else: taskD\n"
+                        + "          then: taskD\n"
+                        + "    - id: taskC\n"
+                        + "      type: engine-task\n"
+                        + "      service: branch.c\n"
+                        + "      next: end\n"
+                        + "    - id: taskD\n"
+                        + "      type: engine-task\n"
+                        + "      service: branch.d\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+        assertThat(definition.getGateways().get("route").defaultFlowId()).isNotNull();
+
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: route\n"
+                        + "      type: inclusive\n"
+                        + "      rules:\n"
+                        + "        - if: \"${path == 'C'}\"\n"
+                        + "          then: taskC\n"
+                        + "      next: taskC\n").getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("must not combine 'rules' and 'next'");
+    }
+
+    @Test
+    void rejectsInclusiveNodeWithoutRulesOrNext() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: route\n      type: inclusive\n").getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("must declare either 'rules' (fork) or 'next' (join)");
+    }
+
+    @Test
     void rejectsUnknownNodeType() {
         assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
                 "    - id: secret\n      type: ai-dreamer\n      next: end\n").getBytes(StandardCharsets.UTF_8)))

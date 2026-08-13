@@ -54,6 +54,11 @@ import java.util.stream.Collectors;
  *   <li>{@code condition}       → exclusive gateway; {@code if} rules become
  *       conditional flows and the {@code else} rule (or the last rule when no
  *       {@code else} is declared) becomes the default flow</li>
+ *   <li>{@code inclusive}       → inclusive gateway: a fork when it declares
+ *       {@code rules} (every matching {@code if} rule fires; an explicit
+ *       {@code else} rule is the only default — zero matches without one fail
+ *       loudly), a join when several upstream nodes converge on it and it
+ *       continues via {@code next}</li>
  *   <li>{@code parallel}        → parallel gateway: a fork when it declares
  *       {@code branches} (one token per branch), a join when several upstream
  *       nodes converge on it and it continues via {@code next}</li>
@@ -79,7 +84,7 @@ public final class AplParser {
 
     private static final Set<String> SUPPORTED_TYPES = Set.of(
             "webhook", "end", "agent", "engine-task", "decision-table", "script",
-            "approval-gate", "condition", "parallel");
+            "approval-gate", "condition", "inclusive", "parallel");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -315,6 +320,55 @@ public final class AplParser {
                                 lastFlow.getTargetRef(), null, lastFlow.getConditionExpression(), true));
                     }
                     gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.EXCLUSIVE, defaultFlowId));
+                }
+                case "inclusive" -> {
+                    JsonNode rules = node.path("rules");
+                    if (!rules.isMissingNode()) {
+                        if (node.hasNonNull("next")) {
+                            throw validation("inclusive fork node '" + nodeId
+                                    + "' must not combine 'rules' and 'next'");
+                        }
+                        if (!rules.isArray() || rules.isEmpty()) {
+                            throw validation("inclusive fork node '" + nodeId
+                                    + "' requires a non-empty rules list");
+                        }
+                        String defaultFlowId = null;
+                        for (JsonNode rule : rules) {
+                            boolean isElseRule = rule.path("else").asBoolean(false)
+                                    || rule.path("else").isTextual();
+                            String target = rule.path("then").asText(rule.path("else").asText(null));
+                            if (target == null || target.isBlank() || "true".equals(target)) {
+                                throw validation("inclusive fork node '" + nodeId
+                                        + "' rule must declare a 'then' target");
+                            }
+                            if (!nodesById.containsKey(target)) {
+                                throw validation("inclusive fork node '" + nodeId
+                                        + "' routes to undeclared node '" + target + "'");
+                            }
+                            String condition = rule.path("if").asText(null);
+                            if (!isElseRule && (condition == null || condition.isBlank())) {
+                                throw validation("inclusive fork node '" + nodeId
+                                        + "' rule must declare an 'if' condition unless it is the else rule");
+                            }
+                            String flowId = flowIdFor(nodeId, target, flowIds);
+                            if (isElseRule) {
+                                if (defaultFlowId != null) {
+                                    throw validation("inclusive fork node '" + nodeId
+                                            + "' declares more than one else/default rule");
+                                }
+                                defaultFlowId = flowId;
+                            }
+                            flows.add(new SequenceFlow(flowId, nodeId, target, null, condition, isElseRule));
+                        }
+                        gateways.put(nodeId,
+                                new GatewayMeta(nodeId, GatewayMeta.Type.INCLUSIVE, defaultFlowId));
+                    } else {
+                        if (!node.hasNonNull("next")) {
+                            throw validation("inclusive node '" + nodeId
+                                    + "' must declare either 'rules' (fork) or 'next' (join)");
+                        }
+                        gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.INCLUSIVE, null));
+                    }
                 }
                 case "parallel" -> {
                     JsonNode branches = node.path("branches");

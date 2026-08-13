@@ -114,6 +114,29 @@ class AplRuntimeTest {
     }
 
     @Test
+    void executesInclusiveForkAndJoinRoutingEveryMatchingBranch() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/inclusive-router.apl.yaml");
+
+            var single = engine.startProcess("inclusive_router", "alice", Map.of("path", "C"));
+            ProcessInstance singleDone = engine.getProcessInstanceById(single.getId());
+            assertThat(singleDone.isCompleted()).isTrue();
+            assertThat(singleDone.getVariables())
+                    .containsEntry("branchC", true)
+                    .doesNotContainKey("branchD");
+
+            var both = engine.startProcess("inclusive_router", "bob", Map.of("path", "CD"));
+            ProcessInstance bothDone = engine.getProcessInstanceById(both.getId());
+            assertThat(bothDone.isCompleted()).isTrue();
+            assertThat(bothDone.getVariables())
+                    .containsEntry("branchC", true)
+                    .containsEntry("branchD", true);
+        }
+    }
+
+    @Test
     void persistsAgentAttemptMetadataThroughWorkerAndHistoryContracts() {
         try (ConfigurableApplicationContext context = startApplication()) {
             context.getBean(DatabaseTestHelper.class).cleanup();
