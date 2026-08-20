@@ -9,5 +9,6 @@ public record UserTaskPayload(
         String assignee,
         List<String> candidateUsers,
         List<String> candidateGroups,
+        String formKey,
         AssignmentStrategy assignmentStrategy
 ) {}

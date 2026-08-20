@@ -36,6 +36,23 @@ public interface ExternalTaskRepository extends JpaRepository<ExternalTaskEntity
         return findAvailableForUpdate(topic, now).stream().findFirst();
     }
 
+    /**
+     * Global acquisition limited to tasks the worker's model capabilities can
+     * serve: tasks without a required model always match; agent tasks match
+     * when the worker supports the required model.
+     */
+    @Query(value = "select * from external_tasks where topic_name = :topic "
+            + "and (status = 'OPEN' or (status = 'LOCKED' and lock_expiration_time <= :now)) "
+            + "and (required_model is null or required_model in :models) "
+            + "order by id limit 1 for update skip locked", nativeQuery = true)
+    List<ExternalTaskEntity> findAvailableForModelsForUpdate(@Param("topic") String topic,
+            @Param("now") Instant now, @Param("models") List<String> models);
+
+    default Optional<ExternalTaskEntity> findFirstAvailableForModelsForUpdate(
+            String topic, Instant now, List<String> models) {
+        return findAvailableForModelsForUpdate(topic, now, models).stream().findFirst();
+    }
+
     @Query(value = "select task.* from external_tasks task "
             + "join process_instances instance on instance.id = task.process_instance_id "
             + "where instance.project_id = :projectId and task.topic_name = :topic "

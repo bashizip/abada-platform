@@ -3,17 +3,22 @@ package com.abada.engine.project;
 import com.abada.engine.dto.WorkerHealthDTO;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
 import com.abada.engine.persistence.entity.ProjectWorkerBindingEntity;
+import com.abada.engine.persistence.entity.WorkerCapabilityEntity;
 import com.abada.engine.persistence.entity.WorkerHealthEntity;
 import com.abada.engine.persistence.repository.PrincipalRepository;
 import com.abada.engine.persistence.repository.ProjectWorkerBindingRepository;
+import com.abada.engine.persistence.repository.WorkerCapabilityRepository;
 import com.abada.engine.persistence.repository.WorkerHealthRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -42,14 +47,17 @@ public class WorkerHealthService {
 
     private final WorkerHealthRepository health;
     private final ProjectWorkerBindingRepository bindings;
+    private final WorkerCapabilityRepository capabilityRepository;
     private final PrincipalRepository principals;
     private final ProjectAccessService access;
 
     public WorkerHealthService(WorkerHealthRepository health,
-            ProjectWorkerBindingRepository bindings, PrincipalRepository principals,
+            ProjectWorkerBindingRepository bindings, WorkerCapabilityRepository capabilityRepository,
+            PrincipalRepository principals,
             ProjectAccessService access) {
         this.health = health;
         this.bindings = bindings;
+        this.capabilityRepository = capabilityRepository;
         this.principals = principals;
         this.access = access;
     }
@@ -57,10 +65,10 @@ public class WorkerHealthService {
     @Transactional
     public void noteFetchSuccess(String projectId, String principalId, String workerId,
             List<String> topics, boolean anyLocked) {
-        if (projectId == null || principalId == null) return;
+        if (principalId == null) return;
         Instant now = Instant.now();
         for (String topic : normalizedTopics(topics)) {
-            var row = health.findByProjectIdAndPrincipalIdAndTopic(projectId, principalId, topic)
+            var row = healthRow(projectId, principalId, topic)
                     .orElseGet(WorkerHealthEntity::new);
             if (row.getLastSeenAt() != null && row.getLastErrorAt() == null
                     && row.getLastSeenAt().isAfter(now.minus(HEARTBEAT_DEBOUNCE))) {
@@ -83,10 +91,10 @@ public class WorkerHealthService {
     @Transactional
     public void noteFetchFailure(String projectId, String principalId, String workerId,
             List<String> topics, String message) {
-        if (projectId == null || principalId == null) return;
+        if (principalId == null) return;
         Instant now = Instant.now();
         for (String topic : normalizedTopics(topics)) {
-            var row = health.findByProjectIdAndPrincipalIdAndTopic(projectId, principalId, topic)
+            var row = healthRow(projectId, principalId, topic)
                     .orElseGet(WorkerHealthEntity::new);
             row.setProjectId(projectId);
             row.setPrincipalId(principalId);
@@ -101,6 +109,45 @@ public class WorkerHealthService {
         }
     }
 
+    /**
+     * Global (project-agnostic) worker health: every registered capability
+     * row plus the recent health rows written by global fetches.
+     */
+    @Transactional(readOnly = true)
+    public List<WorkerHealthDTO> globalHealth() {
+        List<WorkerCapabilityEntity> capabilities = capabilityRepository.findAll();
+        Map<String, WorkerHealthEntity> healthByPrincipalTopic = health.findByProjectIdIsNull().stream()
+                .filter(this::recent)
+                .collect(Collectors.toMap(
+                        row -> key(row.getPrincipalId(), row.getTopic()),
+                        Function.identity(),
+                        (left, right) -> left));
+
+        List<WorkerHealthDTO> result = new ArrayList<>();
+        capabilities.forEach(capability -> result.add(toDto(null, capability.getPrincipalId(),
+                capability.getTopic(), true,
+                healthByPrincipalTopic.get(key(capability.getPrincipalId(), capability.getTopic())))));
+        healthByPrincipalTopic.forEach((key, row) -> {
+            boolean registered = capabilities.stream().anyMatch(capability ->
+                    capability.getPrincipalId().equals(row.getPrincipalId())
+                            && capability.getTopic().equals(row.getTopic()));
+            if (!registered) {
+                result.add(toDto(null, row.getPrincipalId(), row.getTopic(), false, row));
+            }
+        });
+        result.sort(Comparator
+                .comparing(WorkerHealthDTO::principalUsername, Comparator.nullsLast(String::compareTo))
+                .thenComparing(WorkerHealthDTO::topic));
+        return result;
+    }
+
+    private java.util.Optional<WorkerHealthEntity> healthRow(String projectId, String principalId,
+            String topic) {
+        return projectId == null
+                ? health.findByPrincipalIdAndTopicAndProjectIdIsNull(principalId, topic)
+                : health.findByProjectIdAndPrincipalIdAndTopic(projectId, principalId, topic);
+    }
+
     @Transactional(readOnly = true)
     public List<WorkerHealthDTO> healthForProject(String projectId) {
         access.require(projectId, Role.VIEWER, Role.OPERATOR, Role.OWNER);
@@ -108,29 +155,52 @@ public class WorkerHealthService {
                 .findByProjectId(projectId).stream()
                 .collect(Collectors.toMap(
                         ProjectWorkerBindingEntity::getPrincipalId,
-binding -> normalizedTopics(List.of(binding.getTopics().split(","))).stream()
-                        .collect(Collectors.toMap(topic -> topic, topic -> binding)),
+                        binding -> normalizedTopics(List.of(binding.getTopics().split(","))).stream()
+                                .collect(Collectors.toMap(topic -> topic, topic -> binding)),
                         (left, right) -> left));
-        List<WorkerHealthEntity> recent = health.findByProjectIdOrderByTopicAsc(projectId).stream()
-                .filter(row -> recent(row))
-                .toList();
 
-        Map<String, WorkerHealthEntity> healthByPrincipalTopic = recent.stream()
+        Map<String, WorkerHealthEntity> projectHealthByKey = health.findByProjectIdOrderByTopicAsc(projectId)
+                .stream()
+                .filter(this::recent)
                 .collect(Collectors.toMap(
                         row -> key(row.getPrincipalId(), row.getTopic()),
                         Function.identity(),
                         (left, right) -> left));
 
+        Map<String, WorkerHealthEntity> globalHealthByKey = health.findByProjectIdIsNull().stream()
+                .filter(this::recent)
+                .collect(Collectors.toMap(
+                        row -> key(row.getPrincipalId(), row.getTopic()),
+                        Function.identity(),
+                        (left, right) -> left));
+
+        // A global heartbeat is authoritative for its principal+topic and
+        // supersedes any stale project-scoped row for the same worker.
+        Map<String, WorkerHealthEntity> healthByKey = new HashMap<>(projectHealthByKey);
+        globalHealthByKey.forEach(healthByKey::put);
+
+        Set<String> coveredKeys = new HashSet<>();
         List<WorkerHealthDTO> result = new ArrayList<>();
+        // Global capabilities are bound in every project.
+        capabilityRepository.findAll().forEach(capability -> {
+            String capabilityKey = key(capability.getPrincipalId(), capability.getTopic());
+            coveredKeys.add(capabilityKey);
+            result.add(toDto(projectId, capability.getPrincipalId(), capability.getTopic(), true,
+                    healthByKey.get(capabilityKey)));
+        });
         bindingByPrincipalTopic.forEach((principalId, byTopic) ->
-                byTopic.forEach((topic, binding) ->
+                byTopic.forEach((topic, binding) -> {
+                    String bindingKey = key(principalId, topic);
+                    if (coveredKeys.add(bindingKey)) {
                         result.add(toDto(projectId, principalId, topic, true,
-                                healthByPrincipalTopic.get(key(principalId, topic))))));
-        recent.stream()
-                .filter(row -> !bindingByPrincipalTopic.containsKey(row.getPrincipalId())
-                        || !bindingByPrincipalTopic.get(row.getPrincipalId()).containsKey(row.getTopic()))
-                .forEach(row -> result.add(toDto(projectId, row.getPrincipalId(), row.getTopic(),
-                        false, row)));
+                                healthByKey.get(bindingKey)));
+                    }
+                }));
+        projectHealthByKey.forEach((healthKey, row) -> {
+            if (!coveredKeys.contains(healthKey)) {
+                result.add(toDto(projectId, row.getPrincipalId(), row.getTopic(), false, row));
+            }
+        });
 
         result.sort(Comparator
                 .comparing(WorkerHealthDTO::principalUsername, Comparator.nullsLast(String::compareTo))

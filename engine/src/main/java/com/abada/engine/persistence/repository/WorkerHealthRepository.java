@@ -9,5 +9,10 @@ public interface WorkerHealthRepository extends JpaRepository<WorkerHealthEntity
     Optional<WorkerHealthEntity> findByProjectIdAndPrincipalIdAndTopic(
             String projectId, String principalId, String topic);
 
+    Optional<WorkerHealthEntity> findByPrincipalIdAndTopicAndProjectIdIsNull(
+            String principalId, String topic);
+
     List<WorkerHealthEntity> findByProjectIdOrderByTopicAsc(String projectId);
+
+    List<WorkerHealthEntity> findByProjectIdIsNull();
 }

@@ -86,7 +86,7 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_operations:read", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
                 .requestMatchers("/v1/jobs/**", "/v1/process-instances/**")
                         .hasAnyAuthority("SCOPE_operations:write", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
-                .requestMatchers("/v1/external-tasks/**")
+                .requestMatchers("/v1/external-tasks/**", "/v1/workers/**")
                         .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.GET, "/v1/insight/config/**", "/v1/insight/proposals/**",
                         "/v1/insight/policies/**")

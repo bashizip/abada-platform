@@ -23,6 +23,7 @@ public class TaskInstance {
     private List<String> candidateUsers = new ArrayList<>();
     private List<String> candidateGroups = new ArrayList<>();
     private AssignmentStrategy assignmentStrategy = AssignmentStrategy.CLAIM;
+    private String formKey;
     private long entityVersion;
     
     @JsonIgnore
@@ -112,6 +113,9 @@ public class TaskInstance {
     public void setAssignmentStrategy(AssignmentStrategy assignmentStrategy) {
         this.assignmentStrategy = assignmentStrategy == null ? AssignmentStrategy.CLAIM : assignmentStrategy;
     }
+
+    public String getFormKey() { return formKey; }
+    public void setFormKey(String formKey) { this.formKey = formKey; }
 
     public List<String> getCandidateGroups() {
         return candidateGroups;

@@ -61,6 +61,7 @@ public class TaskManager {
             String assignee,
             List<String> candidateUsers,
             List<String> candidateGroups,
+            String formKey,
             AssignmentStrategy assignmentStrategy) {
 
         Timer.Sample waitingTimeSample = engineMetrics.startTaskWaitingTimer();
@@ -74,6 +75,7 @@ public class TaskManager {
             task.setProcessInstanceId(processInstanceId);
             task.setAssignee(assignee);
             task.setAssignmentStrategy(assignmentStrategy);
+            task.setFormKey(formKey);
             task.setStartDate(Instant.now());
             task.setStatus(assignee == null || assignee.isEmpty()
                     ? TaskStatus.AVAILABLE
@@ -308,6 +310,7 @@ public class TaskManager {
         task.setStartDate(entity.getStartDate());
         task.setEndDate(entity.getEndDate());
         task.setEntityVersion(entity.getEntityVersion());
+        task.setFormKey(entity.getFormKey());
         return task;
     }
 

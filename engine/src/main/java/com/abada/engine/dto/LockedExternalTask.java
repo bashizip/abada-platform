@@ -11,6 +11,9 @@ import com.abada.engine.core.model.AgentWorkDescriptor;
  * @param id The unique ID of the external task.
  * @param topicName The topic of the task.
  * @param variables The process variables available to the task.
+ * @param projectId The project the task belongs to; present on global
+ *        (project-agnostic) acquisitions so the worker can scope its work
+ *        and downstream API calls.
  */
 public record LockedExternalTask(
         String id,
@@ -22,9 +25,10 @@ public record LockedExternalTask(
         Instant lockExpirationTime,
         String traceParent,
         String protocolVersion,
-        AgentWorkDescriptor agentWork) {
+        AgentWorkDescriptor agentWork,
+        String projectId) {
 
     public LockedExternalTask(String id, String topicName, Map<String, Object> variables) {
-        this(id, topicName, variables, null, null, null, null, null, "1", null);
+        this(id, topicName, variables, null, null, null, null, null, "1", null, null);
     }
 }

@@ -211,7 +211,7 @@ public class ProcessInstance {
                             TaskMeta ut = definition.getUserTask(pointer);
                             var resolved = new AssignmentEvaluator().evaluate(ut.getAssignment(), variables);
                             newUserTasks.add(new UserTaskPayload(ut.getId(), ut.getName(), resolved.assignee(),
-                                    resolved.candidateUsers(), resolved.candidateGroups(), resolved.strategy()));
+                                    resolved.candidateUsers(), resolved.candidateGroups(), ut.getFormKey(), resolved.strategy()));
                         }
                         current = null;
                     }

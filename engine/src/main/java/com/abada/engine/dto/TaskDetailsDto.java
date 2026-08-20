@@ -49,6 +49,11 @@ public record TaskDetailsDto(
     )
     List<String> candidateGroups,
     @Schema(
+        description = "Form key referencing the form file (e.g., forms/leads.json)",
+        example = "forms/lead-form.json"
+    )
+    String formKey,
+    @Schema(
         description = "ID of the process instance containing this task",
         example = "process-instance-456"
     )
@@ -89,6 +94,11 @@ public record TaskDetailsDto(
         example = "review-order"
     )
     String currentActivityId,
+    @Schema(
+        description = "Project ID that owns this task",
+        example = "project-123"
+    )
+    String projectId,
     @Schema(description = "All process variables visible to this task")
     Map<String, Object> variables
 ) {
@@ -134,6 +144,7 @@ public record TaskDetailsDto(
             task.getEndDate(),
             task.getCandidateUsers(),
             task.getCandidateGroups(),
+            task.getFormKey(),
             task.getProcessInstanceId(),
             processDefinitionId,
             processDefinitionName,
@@ -142,6 +153,7 @@ public record TaskDetailsDto(
             processStartDate,
             processEndDate,
             currentActivityId,
+            processInstance != null ? processInstance.getProjectId() : null,
             variables
         );
     }

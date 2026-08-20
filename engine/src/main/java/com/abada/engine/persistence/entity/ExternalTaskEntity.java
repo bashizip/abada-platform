@@ -49,6 +49,10 @@ public class ExternalTaskEntity {
     @Column(name = "agent_metadata", columnDefinition = "TEXT")
     private String agentMetadataJson;
 
+    /** Required model for agent tasks, matched against worker capabilities. */
+    @Column(name = "required_model")
+    private String requiredModel;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -166,6 +170,9 @@ public class ExternalTaskEntity {
 
     public String getAgentMetadataJson() { return agentMetadataJson; }
     public void setAgentMetadataJson(String value) { agentMetadataJson = value; }
+
+    public String getRequiredModel() { return requiredModel; }
+    public void setRequiredModel(String value) { requiredModel = value; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant value) { createdAt = value; }

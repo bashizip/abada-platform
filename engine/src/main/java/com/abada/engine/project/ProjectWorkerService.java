@@ -22,46 +22,22 @@ public class ProjectWorkerService {
     private final ProjectAccessService access;
     private final ExternalTaskRepository externalTasks;
     private final ProcessInstanceRepository processInstances;
-    private final List<FirstPartyWorkersProperties.FirstPartyWorker> firstPartyWorkers;
 
     public ProjectWorkerService(ProjectWorkerBindingRepository bindings, PrincipalRepository principals,
             ProjectAccessService access, ExternalTaskRepository externalTasks,
-            ProcessInstanceRepository processInstances, FirstPartyWorkersProperties workerProperties) {
+            ProcessInstanceRepository processInstances) {
         this.bindings = bindings;
         this.principals = principals;
         this.access = access;
         this.externalTasks = externalTasks;
         this.processInstances = processInstances;
-        this.firstPartyWorkers = workerProperties.getFirstParty();
     }
 
     /**
-     * Binds every configured first-party worker to the given project. Idempotent
-     * and safe to run on project creation and on engine startup.
+     * Binds a service principal to a project's topics. Used for third-party
+     * workers that opt into a single project namespace; first-party global
+     * workers register capabilities instead.
      */
-    @Transactional
-    public void ensureFirstPartyBindings(String projectId) {
-        for (FirstPartyWorkersProperties.FirstPartyWorker worker : firstPartyWorkers) {
-            principals.findFirstByUsernameIgnoreCase(worker.username()).ifPresent(principal ->
-                    bindings.findByProjectIdAndPrincipalId(projectId, principal.getId())
-                            .orElseGet(() -> {
-                                ProjectWorkerBindingEntity binding = new ProjectWorkerBindingEntity();
-                                binding.setProjectId(projectId);
-                                binding.setPrincipalId(principal.getId());
-                                binding.setTopics(String.join(",", normalize(worker.topics())));
-                                binding.setCreatedAt(Instant.now());
-                                binding.setCreatedBy(principal.getUsername());
-                                return bindings.save(binding);
-                            }));
-        }
-    }
-
-    @Transactional(readOnly = true)
-    public List<ProjectWorkerBindingEntity> list(String projectId) {
-        access.require(projectId, Role.OWNER);
-        return bindings.findByProjectId(projectId);
-    }
-
     @Transactional
     public ProjectWorkerBindingEntity put(String projectId, String principalId, List<String> topics) {
         access.requireActive(projectId, Role.OWNER);
@@ -80,6 +56,12 @@ public class ProjectWorkerService {
         if (binding.getCreatedAt() == null) binding.setCreatedAt(Instant.now());
         if (binding.getCreatedBy() == null) binding.setCreatedBy(access.identity().username());
         return bindings.save(binding);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectWorkerBindingEntity> list(String projectId) {
+        access.require(projectId, Role.OWNER);
+        return bindings.findByProjectId(projectId);
     }
 
     public void requireCurrentWorker(String projectId, List<String> topics) {

@@ -672,6 +672,7 @@ public class AbadaEngine {
                 task.assignee(),
                 task.candidateUsers(),
                 task.candidateGroups(),
+                task.formKey(),
                 task.assignmentStrategy());
         persistTask(createdTask);
         historyService.record("TASK_CREATED", instance, task.taskDefinitionKey(),
@@ -715,8 +716,14 @@ public class AbadaEngine {
                             serviceTaskMeta.topicName());
                     externalTask.setActivityId(tokenId);
                     externalTask.setCreatedAt(Instant.now());
-                    if (serviceTaskMeta.agentWork() != null && serviceTaskMeta.agentWork().maxAttempts() != null) {
-                        externalTask.setRetries(serviceTaskMeta.agentWork().maxAttempts());
+                    if (serviceTaskMeta.agentWork() != null) {
+                        if (serviceTaskMeta.agentWork().maxAttempts() != null) {
+                            externalTask.setRetries(serviceTaskMeta.agentWork().maxAttempts());
+                        }
+                        String requiredModel = serviceTaskMeta.agentWork().model();
+                        if (requiredModel != null && !requiredModel.isBlank()) {
+                            externalTask.setRequiredModel(requiredModel);
+                        }
                     }
                     var spanContext = io.opentelemetry.api.trace.Span.current().getSpanContext();
                     if (spanContext.isValid()) {

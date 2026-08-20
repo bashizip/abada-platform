@@ -8,10 +8,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Per-project, per-principal, per-topic liveness and incident record for
- * external workers. Written on every worker fetch (debounced) and on every
- * rejected fetch, so operators can see at a glance whether a worker is
- * reachable, healthy, or failing with a stored error message.
+ * Per-project (or global when null), per-principal, per-topic liveness and
+ * incident record for external workers. Written on every worker fetch
+ * (debounced) and on every rejected fetch, so operators can see at a glance
+ * whether a worker is reachable, healthy, or failing with a stored error
+ * message.
  *
  * This is operational metadata, not workflow state: concurrent replicas may
  * overwrite the same row and last-writer-wins is acceptable.
@@ -21,7 +22,7 @@ import java.util.UUID;
 public class WorkerHealthEntity {
     @Id
     private String id = UUID.randomUUID().toString();
-    @Column(name = "project_id", nullable = false)
+    @Column(name = "project_id")
     private String projectId;
     @Column(name = "principal_id", nullable = false)
     private String principalId;

@@ -56,6 +56,7 @@ abada:
       - username: ${ABADA_FIRST_PARTY_AGENT_USERNAME:service-account-abada-agent-worker}
         topics:
           - ${ABADA_FIRST_PARTY_AGENT_TOPICS:abada:agent}
+        models: ${ABADA_FIRST_PARTY_AGENT_MODELS:}
 
 # SpringDoc OpenAPI / Swagger UI
 springdoc:

@@ -1,5 +1,6 @@
 package com.abada.engine.core;
 
+import com.abada.engine.api.ApiException;
 import com.abada.engine.core.exception.ProcessEngineException;
 import com.abada.engine.core.model.AgentAttemptMetadata;
 import com.abada.engine.dto.ExtendLockRequest;
@@ -20,6 +21,8 @@ import java.util.Map;
 import java.util.ArrayList;
 import com.abada.engine.dto.ExternalTaskBpmnErrorRequest;
 import com.abada.engine.insight.InsightFactWriter;
+import com.abada.engine.project.ProjectAccessService;
+import com.abada.engine.project.WorkerCapabilityService;
 
 @Service
 public class ExternalTaskCommandService {
@@ -28,14 +31,19 @@ public class ExternalTaskCommandService {
     private final ActivityHistoryService history;
     private final InsightFactWriter insightFactWriter;
     private final ObjectMapper objectMapper;
+    private final WorkerCapabilityService workerCapabilities;
+    private final ProjectAccessService access;
 
     public ExternalTaskCommandService(ExternalTaskRepository repository, AbadaEngine engine,
-            ActivityHistoryService history, InsightFactWriter insightFactWriter, ObjectMapper objectMapper) {
+            ActivityHistoryService history, InsightFactWriter insightFactWriter, ObjectMapper objectMapper,
+            WorkerCapabilityService workerCapabilities, ProjectAccessService access) {
         this.repository = repository;
         this.engine = engine;
         this.history = history;
         this.insightFactWriter = insightFactWriter;
         this.objectMapper = objectMapper;
+        this.workerCapabilities = workerCapabilities;
+        this.access = access;
     }
 
     @AtomicRuntimeCommand
@@ -47,7 +55,7 @@ public class ExternalTaskCommandService {
             boolean acquired = false;
             for (String topic : request.topics()) {
                 var available = request.projectId() == null
-                        ? repository.findFirstAvailableForUpdate(topic, now)
+                        ? findAvailable(request, topic, now)
                         : repository.findFirstAvailableForProjectForUpdate(request.projectId(), topic, now);
                 if (available.isEmpty()) continue;
 
@@ -64,13 +72,31 @@ public class ExternalTaskCommandService {
                 locked.add(new LockedExternalTask(task.getId(), task.getTopicName(), instance.getVariables(),
                         task.getProcessInstanceId(), task.getActivityId(), task.getRetries(),
                         task.getLockExpirationTime(), task.getTraceParent(), "1",
-                        serviceTask == null ? null : serviceTask.agentWork()));
+                        serviceTask == null ? null : serviceTask.agentWork(),
+                        instance.getProjectId()));
                 acquired = true;
                 if (locked.size() >= request.effectiveMaxTasks()) break;
             }
             if (!acquired) break;
         }
         return List.copyOf(locked);
+    }
+
+    /**
+     * Global (project-agnostic) acquisition: when the worker's capability for
+     * the topic lists models, only tasks whose required model is supported are
+     * acquired; an empty model list means the worker serves all models.
+     */
+    private java.util.Optional<ExternalTaskEntity> findAvailable(FetchAndLockRequest request,
+            String topic, Instant now) {
+        List<String> models = List.of();
+        try {
+            models = workerCapabilities.modelsFor(access.identity().principalId(), topic);
+        } catch (ApiException ignored) {
+            // Unauthenticated acquisition (disabled security mode) is unrestricted.
+        }
+        if (models.isEmpty()) return repository.findFirstAvailableForUpdate(topic, now);
+        return repository.findFirstAvailableForModelsForUpdate(topic, now, models);
     }
 
     @AtomicRuntimeCommand

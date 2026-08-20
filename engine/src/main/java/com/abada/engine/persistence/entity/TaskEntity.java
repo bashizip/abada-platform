@@ -53,6 +53,9 @@ public class TaskEntity {
     @Column(name = "assignment_strategy", nullable = false)
     private AssignmentStrategy assignmentStrategy = AssignmentStrategy.CLAIM;
 
+    @Column(name = "form_key")
+    private String formKey;
+
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
@@ -142,4 +145,7 @@ public class TaskEntity {
     public void setEntityVersion(long entityVersion) { this.entityVersion = entityVersion; }
     public AssignmentStrategy getAssignmentStrategy() { return assignmentStrategy; }
     public void setAssignmentStrategy(AssignmentStrategy value) { this.assignmentStrategy = value; }
+
+    public String getFormKey() { return formKey; }
+    public void setFormKey(String formKey) { this.formKey = formKey; }
 }
