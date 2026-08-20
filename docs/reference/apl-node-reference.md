@@ -293,12 +293,13 @@ entry: approving a loan, reviewing a claim, filling in a missing field.
 
 **Properties.**
 
-| Property | Type | Required | What it does |
-| --- | --- | --- | --- |
-| `assignees` | string[] | yes | The groups (or users) who may claim the task, e.g. `[risk-officers]`. At least one is required. |
-| `mode` | `serial` \| `parallel` | no | Authoring hint. `parallel` with more than one assignee implies a double sign-off. |
-| `sla_hours` | number | no | Service-level target for monitoring (e.g. 24 = resolve within 24 h). |
-| `next` | nodeId | yes | The step that runs after the task is completed. |
+ | Property | Type | Required | What it does |
+ | --- | --- | --- | --- |
+ | `assignees` | string[] | yes | The groups (or users) who may claim the task, e.g. `[risk-officers]`. At least one is required. |
+ | `mode` | `serial` \| `parallel` | no | Authoring hint. `parallel` with more than one assignee implies a double sign-off. |
+ | `sla_hours` | number | no | Service-level target for monitoring (e.g. 24 = resolve within 24 h). |
+ | `formId` | string | no | Optional form key for task-form rendering (BPMN `camunda:formKey`). |
+ | `next` | nodeId | yes | The step that runs after the task is completed. |
 
 **Example.**
 

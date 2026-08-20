@@ -79,9 +79,16 @@ is rendered against the declared threshold.
   durable engine retries with a bounded retry delay; zero retries creates the
   normal incident. Agent-task retries are seeded from the APL `max_attempts`
   so the durable retry budget matches the descriptor.
-- Completion and failure use the external task ID and attempt ordinal as their
-  idempotency key, so re-sent reports of the same attempt deduplicate while
-  retried attempts use fresh keys.
+- The sidecar image forces IPv4 resolution
+  (`-Djava.net.preferIPv4Stack=true`). Container runtimes without an IPv6
+  route (for example Docker Desktop NAT) otherwise intermittently resolve the
+  IPv6 address of LLM endpoints first and fail with a fast
+  `ConnectException` instead of falling back to IPv4.
+- Completion and failure use the external task ID, attempt ordinal and
+  operation (complete vs failure) as their idempotency key, so re-sent reports
+  of the same attempt deduplicate, retried attempts use fresh keys, and a
+  stored failure record for an attempt never shadows a later completion of the
+  same attempt ordinal (for example after an operator bumps retries).
 - Model and other external effects are at-least-once. Providers and future
   tool adapters must support their own stable deduplication keys.
 - Logs contain task/activity IDs and counters, not tokens, prompts, variables,
@@ -128,15 +135,22 @@ engines, configure either a short-lived
 `ABADA_ENGINE_TOKEN` or the preferred OIDC client-credentials settings:
 `ABADA_AGENT_OIDC_TOKEN_URL`, `ABADA_AGENT_OIDC_CLIENT_ID`, and
 `ABADA_AGENT_OIDC_CLIENT_SECRET`. The token is cached only until shortly
-before expiry. A secured worker also sets `ABADA_AGENT_PROJECT_ID`; its OIDC
-service principal must have the global worker authority. First-party engine
-workers are bound to every project automatically
+before expiry. A secured worker authenticates as a global worker with the
+Abada worker role; it self-registers its capabilities once at startup
+(`PUT /v1/workers/me`) and then polls project-agnostically. First-party
+engine workers are registered automatically by the startup sweep
 (`abada.workers.first-party` in the Engine configuration), so no per-project
-binding is needed to poll. The engine rejects an unscoped secured fetch or a
-topic outside the binding; third-party workers still require an Owner-created
-binding for the project and every topic they poll.
+binding is needed. A secured global fetch is rejected when the calling
+principal holds no capability for a requested topic; third-party workers
+that poll with an explicit `projectId` still require an Owner-created
+binding for the project and every topic they poll. The locked-task payload
+carries the owning `projectId`, so a global worker can scope its work and
+downstream calls per task.
 
-The Compose service is opt-in through the `agent` profile. Build locally by
+The Compose service is opt-in through the `agent` profile. It registers
+`abada:agent` as a global capability, optionally restricted to the
+comma-separated `ABADA_AGENT_MODELS` list (empty means all models in the
+engine allow-list). Build locally by
 installing `sdk/java` and packaging `agent-worker` with the Java 21 Maven
 wrapper under `engine/`.
 
@@ -156,25 +170,28 @@ targeted suite with:
 #    ABADA_AGENT_OIDC_CLIENT_SECRET=<long random value>
 
 # 3. One-time Keycloak + binding provisioning (idempotent)
+#    Re-run after `./scripts/dev/clean.sh` since the client secret is not
+#    part of the realm import. Requires jq, curl, and a healthy stack.
 ./scripts/dev/provision-agent-worker.sh
 
 # 4. After any worker or SDK change, rebuild the local image and redeploy
 ./scripts/dev/build-agent-worker.sh
 ```
 
-For a single command that rebuilds the Engine, Studio and Agent worker from
-the local working tree and starts the whole dev stack with the agent profile:
+For a single command that rebuilds the Engine and Studio from the local
+working tree, then starts the whole dev stack with the agent profile:
 
 ```bash
-./scripts/dev/rebuild-all-dev.sh
+./scripts/dev/rebuild.sh
+./scripts/dev/up.sh --agent
 ```
 
 Provisioning creates the `abada-agent-worker` confidential client with the
 engine audience and groups mappers and puts its service account in the
-`abada-worker` group. The Engine's startup sweep then binds the observed
-first-party principal to every active project's `abada:agent` topic. The
-worker runs with `ABADA_AGENT_PROJECT_ID` pointing at the project whose tasks
-it polls (for example the Default project). Deploy an APL definition with an
-`agent` node (for example `examples/lead-triage-demo.apl.yaml`) from Studio;
+`abada-worker` group. The worker (or the provisioning script on its behalf)
+registers the global `abada:agent` capability, so it polls without a project
+and receives the owning project in each locked-task payload. Deploy an APL
+definition with an `agent` node (for example
+`examples/lead-triage-demo.apl.yaml`) from Studio;
 completion and failure attempt metadata is visible on the external-task row
 and in activity history.

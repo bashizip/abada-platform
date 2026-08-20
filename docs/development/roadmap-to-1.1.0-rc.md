@@ -57,11 +57,15 @@ locally, while every live execution is an explicit, durable engine action.
   and shown in the Studio operations view (Online/Error/Offline, last
   heartbeat, last rejection, consecutive failures). Evidence:
   [`WorkerHealthServiceTest`](../../engine/src/test/java/com/abada/engine/project/WorkerHealthServiceTest.java).
-- [x] Auto-bind first-party engine workers (the `service-account-abada-agent-worker`
-  principal on topic `abada:agent`, via `abada.workers.first-party`) to every
-  project at creation and through an idempotent startup sweep, removing the
-  manual per-project binding step for the platform's own agent. Evidence:
-  [`FirstPartyWorkerBindingTest`](../../engine/src/test/java/com/abada/engine/project/FirstPartyWorkerBindingTest.java).
+- [x] Make the first-party agent worker a global, project-agnostic resource:
+  it self-registers capabilities (topics plus optional model identifiers) via
+  `PUT /api/v1/workers/me`, polls fetch-and-lock without a projectId, and
+  receives the owning project in each locked-task payload. The startup sweep
+  registers the configured `abada.workers.first-party` principals; per-project
+  bindings remain only for third-party project-scoped workers. Evidence:
+  [`FirstPartyWorkerCapabilityTest`](../../engine/src/test/java/com/abada/engine/project/FirstPartyWorkerCapabilityTest.java)
+  and the global-fetch authorization tests in
+  [`SecurityAuthorizationContractTest`](../../engine/src/test/java/com/abada/engine/security/SecurityAuthorizationContractTest.java).
 - [x] Provide durable restart/retry/cancellation evidence for the worker:
   lease expiry re-acquires dead-worker work without duplicate transitions,
   transient failures return tasks to the pool with reported attempt metadata,

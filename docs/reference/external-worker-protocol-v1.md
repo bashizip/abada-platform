@@ -26,6 +26,16 @@ variables, retries, lock expiry, stored W3C `traceParent`, and protocol version.
 Requests may carry `traceparent` and `tracestate`; HTTP instrumentation joins
 the incoming trace. The Java SDK exposes these headers through `RequestOptions`.
 
+Fetch requests may omit `projectId`. A project-agnostic fetch is authorized
+against the calling worker's global capabilities (topics, and optional model
+identifiers restricting which agent tasks it can acquire) and may claim tasks
+from any project; the locked-task payload then carries the owning `projectId`,
+which a worker must not treat as a namespace it needs to pre-configure. A
+project-scoped fetch with `projectId` keeps the legacy per-project binding
+semantics for third-party workers. Global workers self-register once via
+`PUT /v1/workers/me` (see the [Agent worker](agent-worker.md) reference) and
+operations can inspect `GET /v1/workers/me` and `GET /v1/workers/health`.
+
 The additive optional `agentWork` object carries the versioned
 `abada.agent/v1` descriptor for native APL `agent` nodes. It is `null` for
 ordinary service tasks. Protocol-v1 workers that ignore unknown JSON fields
