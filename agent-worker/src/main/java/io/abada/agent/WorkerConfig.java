@@ -19,7 +19,7 @@ public record WorkerConfig(
         String openAiApiKey,
         String defaultModel,
         String workerId,
-        String projectId,
+        Set<String> allowedModels,
         Duration pollInterval,
         Duration lockDuration,
         int maxTasks,
@@ -33,7 +33,7 @@ public record WorkerConfig(
             Duration lockDuration, int maxTasks, Set<String> allowedTools) {
         this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
                 llmBaseUrl, llmApiKey, openAiBaseUrl, openAiApiKey,
-                defaultModel, workerId, "", pollInterval, lockDuration, maxTasks, allowedTools);
+                defaultModel, workerId, Set.of(), pollInterval, lockDuration, maxTasks, allowedTools);
     }
 
     public static WorkerConfig fromEnvironment() {
@@ -42,17 +42,14 @@ public record WorkerConfig(
         Endpoints endpoints = resolveEndpoints(env);
         Set<String> tools = Arrays.stream(env.getOrDefault("ABADA_AGENT_ALLOWED_TOOLS", "").split(","))
                 .map(String::strip).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
+        Set<String> models = Arrays.stream(env.getOrDefault("ABADA_AGENT_MODELS", "").split(","))
+                .map(String::strip).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
         String tokenUrl = env.getOrDefault("ABADA_AGENT_OIDC_TOKEN_URL", "");
         String clientId = env.getOrDefault("ABADA_AGENT_OIDC_CLIENT_ID", "");
         String clientSecret = env.getOrDefault("ABADA_AGENT_OIDC_CLIENT_SECRET", "");
         String staticToken = env.getOrDefault("ABADA_ENGINE_TOKEN", "");
         if (!tokenUrl.isBlank() && (clientId.isBlank() || clientSecret.isBlank())) {
             throw new IllegalArgumentException("OIDC client id and secret are required with the token URL");
-        }
-        String projectId = env.getOrDefault("ABADA_AGENT_PROJECT_ID", "").strip();
-        String environment = env.getOrDefault("ABADA_ENVIRONMENT", "development").strip();
-        if ("production".equalsIgnoreCase(environment) && projectId.isBlank()) {
-            throw new IllegalArgumentException("ABADA_AGENT_PROJECT_ID is required when running in production environment");
         }
         return new WorkerConfig(
                 URI.create(baseUrl),
@@ -66,7 +63,7 @@ public record WorkerConfig(
                 endpoints.openAiKey(),
                 env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gemini-3.6-flash"),
                 env.getOrDefault("ABADA_AGENT_WORKER_ID", "abada-agent-worker"),
-                projectId,
+                models,
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_POLL_INTERVAL_MS", 1_000, 100, 60_000)),
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_LOCK_DURATION_MS", 120_000, 1_000, 3_600_000)),
                 (int) longValue(env, "ABADA_AGENT_MAX_TASKS", 4, 1, 50),

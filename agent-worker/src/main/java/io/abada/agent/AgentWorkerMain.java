@@ -30,12 +30,14 @@ public final class AgentWorkerMain {
                 : new ClientCredentialsTokenSupplier(config);
         AbadaWorkerClient engine = new AbadaWorkerClient(config.engineUrl(), tokens);
         AgentGatewayFactory gateways = new AgentGatewayFactory(config);
+        engine.registerCapabilities(List.of("abada:agent"), List.copyOf(config.allowedModels()));
         LOG.log(System.Logger.Level.INFO,
-                "agent_worker_started worker_id={0} project_id={1} topic=abada:agent",
-                config.workerId(), config.projectId().isBlank() ? "(global)" : config.projectId());
+                "agent_worker_started worker_id={0} topic=abada:agent models={1}",
+                config.workerId(),
+                config.allowedModels().isEmpty() ? "(all)" : String.join(",", config.allowedModels()));
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                List<LockedExternalTask> tasks = engine.fetchAndLock(config.projectId(), config.workerId(),
+                List<LockedExternalTask> tasks = engine.fetchAndLock(config.workerId(),
                         List.of("abada:agent"),
                         config.lockDuration(), config.maxTasks(), RequestOptions.defaults());
                 for (LockedExternalTask task : tasks) process(engine, gateways, config, task);
@@ -61,8 +63,6 @@ public final class AgentWorkerMain {
         int configuredAttempts = work == null || work.maxAttempts() == null ? 3 : work.maxAttempts();
         int currentRetries = task.retries() == null ? configuredAttempts : task.retries();
         int attempt = Math.max(1, configuredAttempts - Math.min(currentRetries, configuredAttempts) + 1);
-        RequestOptions options = new RequestOptions("agent-" + task.id() + "-attempt-" + attempt,
-                task.traceParent(), null);
         try {
             if (work == null || !"abada.agent/v1".equals(work.profileVersion())) {
                 throw new IllegalArgumentException("Missing or unsupported abada.agent/v1 descriptor");
@@ -82,7 +82,7 @@ public final class AgentWorkerMain {
                     new AgentAttemptMetadata(model, gateway.provider(), attempt, durationMs,
                             List.copyOf(requestedTools), resultVariable, promptHash(work.prompt()), null,
                             result.confidence()),
-                    options);
+                    taskOptions(task.id(), attempt, "complete", task.traceParent()));
             long completed = COMPLETED.incrementAndGet();
             LOG.log(System.Logger.Level.INFO,
                     "agent_task_completed task_id={0} activity_id={1} model={2} attempt={3} completed_total={4} failed_total={5}",
@@ -98,7 +98,7 @@ public final class AgentWorkerMain {
                     remaining, Duration.ofMillis(backoff),
                     new AgentAttemptMetadata(model, provider, attempt, null, List.of(), null, null,
                             exception.getClass().getSimpleName(), achieved),
-                    options);
+                    taskOptions(task.id(), attempt, "failure", task.traceParent()));
             long failed = FAILED.incrementAndGet();
             LOG.log(System.Logger.Level.WARNING,
                     "agent_task_failed task_id={0} activity_id={1} model={2} attempt={3} retries_remaining={4} completed_total={5} failed_total={6}",
@@ -110,6 +110,12 @@ public final class AgentWorkerMain {
         String value = exception.getMessage();
         if (value == null || value.isBlank()) return "Agent execution failed";
         return value.length() > 300 ? value.substring(0, 300) : value;
+    }
+
+    private static RequestOptions taskOptions(String taskId, int attempt, String operation,
+            String traceParent) {
+        return new RequestOptions("agent-" + taskId + "-attempt-" + attempt + "-" + operation,
+                traceParent, null);
     }
 
     private static String blankToDefault(String value, String fallback) {
