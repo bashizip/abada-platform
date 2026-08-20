@@ -23,11 +23,11 @@ tags.
 
 | Script | What it does |
 | --- | --- |
-| `scripts/dev/up.sh` | Start the full dev stack with local Engine + Studio images (`--agent`, `--telemetry` flags). |
+| `scripts/dev/up.sh` | Start the full dev stack with local Engine + Studio images (`--agent`, `--telemetry` flags). With `--agent` it also builds and runs the local `abada-agent-worker:local` image via Compose's auto-build; pass `--agent-image <ref>` to pin a different tag. |
 | `scripts/dev/rebuild.sh` | Build Engine + Studio from the working tree and restart just those two services (`--no-cache`). |
 | `scripts/dev/clean.sh` | Stop everything and wipe all volumes (`-y` to skip confirmation). |
 | `scripts/dev/logs.sh` | Tail logs for all services or specific ones: `./scripts/dev/logs.sh abada-engine`. |
-| `scripts/dev/build-agent-worker.sh` | Build the first-party agent worker and restart only that service. |
+| `scripts/dev/build-agent-worker.sh` | Stand-alone rebuild of the first-party agent worker (e.g. `--no-cache`). Not needed on the happy path — `up.sh --agent` already builds and provisions it. |
 | `scripts/dev/provision-agent-worker.sh` | Provision the Keycloak client, group membership, and global capability registration for the agent worker. |
 
 ## Agent worker provisioning
@@ -35,19 +35,18 @@ tags.
 The agent-worker client is **not** part of the Keycloak realm import because it
 needs a per-deployment OIDC client secret stored in `.env.dev`. After `clean.sh`
 wipes the Keycloak volume, that client and its engine-side capability
-registration are
-lost. Re-provision after a full clean:
+registration are lost. The happy path is still one command:
 
 ```bash
 ./scripts/dev/up.sh --agent
-./scripts/dev/provision-agent-worker.sh   # recreates the client + capabilities
 ```
 
-`up.sh --agent` already runs this step once the stack is healthy; run it again
-manually if the engine or Keycloak were wiped afterwards. The step is separate
-because it requires `jq`/`curl` on the
-host, a non-empty `ABADA_AGENT_OIDC_CLIENT_SECRET` in `.env.dev`, and a healthy
-Keycloak + Engine.
+`up.sh --agent` starts the base stack, provisions the Keycloak client and
+engine-side worker capabilities, removes any stale profile-gated worker
+container, and then starts the worker. Run `provision-agent-worker.sh` manually
+only if the engine or Keycloak were wiped while the base stack stayed running.
+The provisioning step requires `jq`/`curl` on the host, a non-empty
+`ABADA_AGENT_OIDC_CLIENT_SECRET` in `.env.dev`, and a healthy Keycloak + Engine.
 
 Alice's admin group membership comes directly from the bundled Keycloak realm
 import (`docker/keycloak/import/realm-dev.json`); no separate provisioning

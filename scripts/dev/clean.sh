@@ -31,4 +31,5 @@ fi
 exec docker compose --env-file "$ENV_FILE" \
   -f "$ROOT_DIR/compose.yaml" \
   -f "$ROOT_DIR/compose.dev.yaml" \
+  --profile agent \
   down -v --remove-orphans

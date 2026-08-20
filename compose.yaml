@@ -137,7 +137,10 @@ services:
 
   abada-agent-worker:
     profiles: ["agent"]
-    image: ${ABADA_AGENT_WORKER_IMAGE:-ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.2}
+    image: ${ABADA_AGENT_WORKER_IMAGE:-abada-agent-worker:local}
+    build:
+      context: .
+      dockerfile: agent-worker/Dockerfile
     environment:
       ABADA_ENGINE_URL: http://abada-engine:5601/api
       ABADA_ENGINE_TOKEN: ${ABADA_AGENT_ENGINE_TOKEN:-}

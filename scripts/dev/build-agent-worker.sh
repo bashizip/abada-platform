@@ -16,8 +16,11 @@ agent Compose service and wait until it is healthy. The image build installs
 the local SDK snapshot (sdk/java) and packages the worker from source, so it
 always reflects the current working tree.
 
-The agent service is behind the `agent` Compose profile, so it must be running
-first with:  ./release/abada-platform up dev --agent
+NOTE: `./scripts/dev/up.sh --agent` now does this automatically as part of
+the single-command workflow (it relies on Docker Compose's `build:` directive
+on the `abada-agent-worker` service in `compose.yaml`). Use this script only
+when you need an explicit rebuild outside of `up.sh`, for example with
+`--no-cache` after changing the base image or to publish a developer build.
 
 Optional environment variables:
   ABADA_LOCAL_AGENT_WORKER_IMAGE          Agent worker image tag
