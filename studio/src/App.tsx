@@ -14,6 +14,8 @@ import { AIDiffModal } from '@/features/designer/AIDiffModal';
 import { InsightReviewDialog } from '@/features/designer/InsightReviewDialog';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProjectAdmin } from '@/features/admin/ProjectAdmin';
+import { AdministrationView } from '@/features/admin/AdministrationView';
+import { InsightPanel } from '@/features/insight/InsightPanel';
 import { Activity } from 'lucide-react';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
 import { InstanceOverviewBar } from '@/features/operations/InstanceOverviewBar';
@@ -40,7 +42,7 @@ import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
 
-type StudioView = 'designer' | 'inbox' | 'operations' | 'instance' | 'administration';
+type StudioView = 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
 type DesignerMode = 'diagram' | 'apl';
 
 export default function App() {
@@ -634,7 +636,8 @@ export default function App() {
           </>
         )}
         {currentView === 'inbox' && <TaskInbox projectId={activeProject?.id} />}
-        {currentView === 'administration' && activeProject && <ProjectAdmin project={activeProject} />}
+        {currentView === 'administration' && <AdministrationView activeProject={activeProject} />}
+        {currentView === 'insight' && <InsightPanel />}
         {currentView === 'operations' && (
           <ProcessOperations
             projectId={activeProject?.id}

@@ -80,4 +80,12 @@ export function getUserFromToken(
   };
 }
 
+export function getGroupsFromToken(): string[] {
+  const parsed = keycloak.tokenParsed as Record<string, unknown> | undefined;
+  if (!parsed) return [];
+  const groups = parsed.groups;
+  if (Array.isArray(groups)) return groups as string[];
+  return [];
+}
+
 export { keycloak };

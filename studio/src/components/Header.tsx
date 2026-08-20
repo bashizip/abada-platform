@@ -11,10 +11,12 @@ import {
   FileText,
   Settings,
   FolderKanban,
+  Sparkles,
 } from 'lucide-react';
 import { Project } from '@/api/projects';
 import { WorkflowFile } from '@/types';
 import { keycloak } from '@/auth/keycloakClient';
+import { getGroupsFromToken } from '@/auth/keycloakClient';
 import { IconButton, TooltipProvider, UITooltip } from '@/components/ui';
 
 interface HeaderProps {
@@ -31,8 +33,8 @@ interface HeaderProps {
   onOpenProcessDetails?: () => void;
   onOpenSettings?: () => void;
   nodeCount: number;
-  currentView?: 'designer' | 'inbox' | 'operations' | 'instance' | 'administration';
-  onViewChange?: (view: 'designer' | 'inbox' | 'operations' | 'administration') => void;
+  currentView?: 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
+  onViewChange?: (view: 'designer' | 'inbox' | 'operations' | 'administration' | 'insight') => void;
   activeProject?: Project;
   onOpenProjects?: () => void;
   readOnlyInstance?: boolean;
@@ -102,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Global View Navigation (isolated, always centered) */}
         <div className="flex-1 flex items-center justify-center min-w-0">
           <div className="flex items-center bg-[#1A1614] rounded-xl border border-[#3A322E] p-1 shrink-0">
-            {(['designer', 'inbox', 'operations'] as const).map(view => (
+            {(['designer', 'inbox', 'operations', 'insight'] as const).map(view => (
               <button
                 key={view}
                 onClick={() => onViewChange?.(view)}
@@ -112,10 +114,13 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-[#A89F91] hover:text-[#EAE3D9] border border-transparent'
                 }`}
               >
-                {view === 'designer' ? 'Canvas' : view === 'inbox' ? 'Task Inbox' : 'Operations'}
+                {view === 'designer' ? 'Canvas'
+                  : view === 'inbox' ? 'Task Inbox'
+                  : view === 'operations' ? 'Operations'
+                  : <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />Insight</span>}
               </button>
             ))}
-            {(activeProject?.currentUserRoles?.includes('OWNER') || activeProject?.currentUserRoles?.includes('MAINTAINER')) && (
+            {getGroupsFromToken().includes('abada-admin') && (
               <button
                 key="administration"
                 onClick={() => onViewChange?.('administration')}

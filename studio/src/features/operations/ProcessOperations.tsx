@@ -146,7 +146,7 @@ export const ProcessOperations: React.FC<{
   /* ---- API calls ---- */
 
   const fetchPage = useCallback(async (
-    project: string,
+    project: string | undefined,
     requestedPage: number,
     replace: boolean,
     preferFresh = false,
@@ -180,7 +180,7 @@ export const ProcessOperations: React.FC<{
     }
   }, [statusFilter, definitionFilter]);
 
-  const fetchKpis = useCallback(async (project: string) => {
+  const fetchKpis = useCallback(async (project: string | undefined) => {
     try {
       const [running, failed, completed] = await Promise.all([
         EngineAPI.getInstances(project, { status: 'RUNNING', size: 1 }),
@@ -207,7 +207,6 @@ export const ProcessOperations: React.FC<{
   }, []);
 
   const refreshAll = useCallback(async () => {
-    if (!projectId) return;
     await Promise.all([fetchPage(projectId, 0, true), fetchKpis(projectId)]);
   }, [projectId, fetchPage, fetchKpis]);
 
@@ -233,7 +232,6 @@ export const ProcessOperations: React.FC<{
   /* ---- Initial load + filter-driven reloads ---- */
 
   useEffect(() => {
-    if (!projectId) return;
     setInstances([]);
     setPage(0);
     setTotal(0);
@@ -244,7 +242,7 @@ export const ProcessOperations: React.FC<{
   /* ---- Auto refresh (live KPI + first page merge) ---- */
 
   useEffect(() => {
-    if (!projectId || !autoRefresh) return;
+    if (!autoRefresh) return;
     const timer = window.setInterval(() => {
       void fetchKpis(projectId);
       void fetchPage(projectId, 0, false, true);
@@ -288,7 +286,7 @@ export const ProcessOperations: React.FC<{
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
-    if (!sentinel || !projectId || !hasMore || loading || loadingMore) return;
+    if (!sentinel || !hasMore || loading || loadingMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loadingMore) {
