@@ -15,6 +15,12 @@
       },
       {
         "name": "orun-admin"
+      },
+      {
+        "name": "manage-users"
+      },
+      {
+        "name": "manage-groups"
       }
     ]
   },
@@ -94,6 +100,30 @@
       ]
     },
     {
+      "clientId": "abada-admin-api",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "abada-dev-admin-api-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "abada-frontend",
       "enabled": true,
       "publicClient": true,
@@ -147,6 +177,12 @@
       "enabled": true,
       "serviceAccountClientId": "abada-agent-worker",
       "groups": ["abada-worker"]
+    },
+    {
+      "username": "service-account-abada-admin-api",
+      "enabled": true,
+      "serviceAccountClientId": "abada-admin-api",
+      "realmRoles": ["manage-users", "manage-groups"]
     },
     {
       "username": "alice",

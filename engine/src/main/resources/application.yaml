@@ -57,6 +57,12 @@ abada:
         topics:
           - ${ABADA_FIRST_PARTY_AGENT_TOPICS:abada:agent}
         models: ${ABADA_FIRST_PARTY_AGENT_MODELS:}
+  identity:
+    admin:
+      url: ${ABADA_KEYCLOAK_URL:}
+      realm: ${ABADA_KEYCLOAK_REALM:}
+      client-id: ${ABADA_KEYCLOAK_ADMIN_CLIENT_ID:}
+      client-secret: ${ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET:}
 
 # SpringDoc OpenAPI / Swagger UI
 springdoc:

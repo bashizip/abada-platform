@@ -96,6 +96,8 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_insight:review", AbadaRoles.INSIGHT_REVIEWER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.PUT, "/v1/insight/policies/**")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
+                .requestMatchers("/v1/admin/**")
+                        .hasAnyAuthority(AbadaRoles.ADMIN)
                 .anyRequest().denyAll());
     }
 
