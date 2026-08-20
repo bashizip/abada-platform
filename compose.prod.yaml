@@ -67,6 +67,23 @@ services:
       traefik.http.routers.orun-prod.tls.certresolver: letsencrypt
       traefik.http.services.orun-prod.loadbalancer.server.port: "5603"
 
+  abada-studio:
+    image: ${ABADA_REGISTRY:-ghcr.io/bashizip}/abada-studio:${ABADA_VERSION:?Set ABADA_VERSION in the production environment file}
+    environment:
+      ABADA_API_URL: https://${ABADA_API_HOST:?Set ABADA_API_HOST}/api
+      ABADA_OIDC_URL: ${ABADA_OIDC_URL:?Set ABADA_OIDC_URL for the frontend}
+      ABADA_OIDC_REALM: ${ABADA_OIDC_REALM:?Set ABADA_OIDC_REALM for the frontend}
+      ABADA_OIDC_CLIENT_ID: ${ABADA_OIDC_CLIENT_ID:?Set ABADA_OIDC_CLIENT_ID for the frontend}
+      ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
+    restart: always
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.studio-prod.rule: Host(`${ABADA_STUDIO_HOST:?Set ABADA_STUDIO_HOST}`)
+      traefik.http.routers.studio-prod.entrypoints: websecure
+      traefik.http.routers.studio-prod.tls: "true"
+      traefik.http.routers.studio-prod.tls.certresolver: letsencrypt
+      traefik.http.services.studio-prod.loadbalancer.server.port: "5604"
+
   traefik:
     image: traefik:v3.6.2
     command:
