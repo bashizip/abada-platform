@@ -229,7 +229,7 @@ isArray: (name) => {
     const candidateUsers = ut['@_camunda:candidateUsers'];
     aplNodes.push({
       id: ut['@_id'],
-      type: 'approval-gate',
+      type: 'human-input',
       description: ut['@_name'],
       assignees: assignee
         ? [assignee]
@@ -238,6 +238,7 @@ isArray: (name) => {
           : candidateUsers
             ? candidateUsers.split(',').map((s: string) => s.trim()).filter(Boolean)
             : ['reviewer'],
+      formId: ut['@_camunda:formKey'],
       next: getNext(ut['@_id']),
     });
   });

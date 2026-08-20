@@ -51,8 +51,10 @@ export interface DMNConfig {
 }
 
 export interface HumanConfig {
-  assigneeRole: string;
+  assignees: string[];
   slaHours: number;
+  /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
+  formId?: string;
   escalationRole?: string;
   formFields: string[];
   requireDoubleSignOff?: boolean;

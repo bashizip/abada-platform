@@ -12,7 +12,7 @@ export interface APLDocument {
   };
 }
 
-export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'decision-table' | 'script' | 'inclusive' | 'parallel' | 'event-gateway' | 'message-catch' | 'timer' | 'signal' | 'end';
+export type APLNodeType = 'webhook' | 'agent' | 'engine-task' | 'condition' | 'approval-gate' | 'human-input' | 'decision-table' | 'script' | 'inclusive' | 'parallel' | 'event-gateway' | 'message-catch' | 'timer' | 'signal' | 'end';
 
 export interface APLBaseNode {
   id: string;
@@ -122,6 +122,17 @@ export interface APLApprovalGateNode extends APLBaseNode {
   assignees: string[];
   mode?: 'parallel' | 'serial';
   sla_hours?: number;
+  /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
+  formId?: string;
+}
+
+export interface APLHumanInputNode extends APLBaseNode {
+  type: 'human-input';
+  assignees: string[];
+  mode?: 'parallel' | 'serial';
+  sla_hours?: number;
+  /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
+  formId?: string;
 }
 
 export interface APLMessageCatchNode extends APLBaseNode {
@@ -177,6 +188,7 @@ export type APLNode =
   | APLParallelNode
   | APLDecisionTableNode
   | APLApprovalGateNode
+  | APLHumanInputNode
   | APLScriptNode
   | APLMessageCatchNode
   | APLTimerNode

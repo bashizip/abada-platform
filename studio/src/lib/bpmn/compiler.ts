@@ -156,11 +156,13 @@ export function compileAPLToBPMN(apl: APLDocument): string {
         };
       }
       case 'approval-gate':
+    case 'human-input':
         return {
           'bpmn:userTask': {
             '@_id': node.id,
-            '@_name': node.description || 'Human Approval',
-            '@_camunda:candidateGroups': node.assignees.join(',')
+            '@_name': node.description || 'Human Input',
+            '@_camunda:candidateGroups': node.assignees.join(','),
+            ...(node.formId ? { '@_camunda:formKey': node.formId } : {}),
           }
         };
       case 'condition': {

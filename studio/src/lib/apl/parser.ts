@@ -240,10 +240,12 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         };
         break;
       case 'approval-gate':
+    case 'human-input':
         wNode.type = 'human';
         wNode.humanConfig = {
-          assigneeRole: aplNode.assignees?.join(', ') || 'Reviewer',
+          assignees: aplNode.assignees || ['Reviewer'],
           slaHours: aplNode.sla_hours || 24,
+          formId: aplNode.formId,
           formFields: [],
           requireDoubleSignOff: aplNode.mode === 'parallel' && (aplNode.assignees?.length || 0) > 1,
         };
@@ -477,10 +479,11 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
     } else if (node.type === 'human') {
       aplNodes.push({
         ...baseNode,
-        type: 'approval-gate',
-        assignees: node.humanConfig?.assigneeRole.split(',').map(s => s.trim()) || [],
+        type: 'human-input',
+        assignees: node.humanConfig?.assignees || [],
         mode: node.humanConfig?.requireDoubleSignOff ? 'parallel' : 'serial',
         sla_hours: node.humanConfig?.slaHours,
+        formId: node.humanConfig?.formId,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'gateway') {
