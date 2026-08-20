@@ -66,3 +66,37 @@ Java SDK under `sdk/java` is the executable reference client.
 4. Update the OpenAPI compatibility manifest.
 5. Update Tenda, Orun or the Java SDK if they consume the contract.
 6. Update the API or worker protocol reference in the same change.
+
+## Platform administration endpoints (`/api/v1/admin/**`)
+
+The engine proxies the Keycloak Admin API under `/api/v1/admin/**`. These are
+**additive** to API v1 and do not change the worker protocol. They are
+governed by the same compatibility policy but with an extra rule:
+
+- The proxy is keyed off `abada.identity.admin.*` configuration. When those
+  are absent, `GET /api/v1/admin/status` reports `configured: false` and every
+  other admin endpoint returns `503` with an empty body. Engine startup is
+  unaffected.
+
+Endpoints, payload shapes and idempotency notes live in
+[`/docs/reference/api-v1.md`](../../../../../docs/reference/api-v1.md#platform-administration).
+
+### Authorization
+
+The `SecurityConfig` restricts `/api/v1/admin/**` to users whose JWT carries
+the `abada-admin` authority (mapped from the `abada-admin` group via the JWT
+`groups` claim, or from the `X-Auth-Request-Groups` header in trusted-proxy
+mode). Negative tests for missing or wrong group are part of
+`SecurityAuthorizationContractTest`.
+
+### Why a separate confidential client
+
+The Keycloak Admin API is service-account-only. The engine authenticates with
+a dedicated confidential client (`abada-admin-api`) holding the
+`manage-users`, `manage-groups`, `query-users`, `view-users`, `query-groups`,
+`view-groups`, `manage-realm` and `view-realm` realm roles. The same engine
+shares an audience validator across user JWTs and service-account JWTs, so
+the service account's audience claim must equal `OIDC_AUDIENCE` (or
+`abada-admin-api` if the audience mapper is installed — see
+[`/docs/reference/security-and-rbac.md`](../../../../../docs/reference/security-and-rbac.md#platform-administration-client-abada-admin-api)).
+

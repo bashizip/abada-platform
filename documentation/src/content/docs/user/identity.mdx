@@ -33,3 +33,54 @@ explicit deployment mode and is not part of this Compose production profile.
 Before go-live, verify an invalid, expired, wrong-issuer and wrong-audience JWT
 are rejected, and verify each deployer, task user, operator and worker role at
 the backend API—not only in the frontend.
+
+## Manage users and groups from Studio (not Keycloak)
+
+For development and self-hosted pilots, the engine ships an IdP proxy under
+`/api/v1/admin/**` and Studio exposes it from the **Administration** tab. You do
+not need to open the Keycloak console to invite a colleague, assign them to
+the worker or task-user group, or create a new business group.
+
+The Administration tab is shown only when the signed-in user's JWT carries an
+`abada-admin` entry in the `groups` claim. Membership is governed in Keycloak,
+but the management surface itself lives in Studio.
+
+### Group-membership requirements for Studio sign-in
+
+A user can reach the Studio shell, but cannot call any `/api/v1/**` endpoint,
+unless their JWT carries the **group** entry below — not just a realm role
+with the same name. The realm import only maps groups into the `groups`
+claim; realm roles are mapped to `realm_access.roles`, which Spring Security
+does not inspect.
+
+| Studio capability | Required group membership |
+| --- | --- |
+| Open Studio and load any panel | `abada-worker` |
+| Read or act on tasks | `abada-worker` plus project membership |
+| Reach the Operations panel and read instance/task data | `abada-worker` |
+| Reach the Administration tab (users, groups, projects) | `abada-admin` in addition to `abada-worker` |
+| Reach the Insight tab | `abada-worker` (proposal review additionally requires `abada-insight-reviewer` on the project under review) |
+| Call the external-worker protocol | `abada-worker` plus project membership on the bound topic |
+
+### Adding a new user from Studio
+
+1. As an existing `abada-admin`, open **Administration → Users → Create user**.
+2. Fill in `username`, optional `email`, `firstName`, `lastName`, optional
+   initial `password` (the user can also reset on first login).
+3. Assign at least the `abada-worker` group, and `abada-admin` if they should
+   be a platform administrator.
+4. Hand the credentials to the new user.
+
+The new user becomes searchable in the **Projects → Members** dialog only
+after they have signed in to Studio at least once. That sign-in lazily
+populates the engine's `PrincipalEntity` cache. Until then, only the IdP
+list endpoint under `/v1/admin/users/{id}` returns them.
+
+### Production caveat
+
+In production with an external OIDC provider, you still configure the IdP
+manually (or via your provider's own admin UI) because the proxy presumes
+the engine can reach the Admin API. Self-hosted pilots using the bundled
+Keycloak realm should rely on Studio instead of the Keycloak console; both
+are valid but Studio is the supported UI surface for 1.0.
+

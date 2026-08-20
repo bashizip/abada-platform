@@ -46,6 +46,8 @@ export default defineConfig({
             { label: 'Development deployment', slug: 'user/development' },
             { label: 'Production deployment', slug: 'user/production' },
             { label: 'Production identity', slug: 'user/identity' },
+            { label: 'Studio administration', slug: 'user/studio-administration' },
+            { label: 'Studio insight', slug: 'user/studio-insight' },
             { label: 'Telemetry', slug: 'user/telemetry' },
             { label: 'Scaling', slug: 'user/scaling' },
             { label: 'Backup and upgrades', slug: 'user/backup-upgrade' },

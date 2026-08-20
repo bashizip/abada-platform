@@ -552,3 +552,68 @@ constructs and proven live in-transaction, while probabilistic agents remain
 bounded, external work. The 2026-08 phases took Studio from a mockup to a
 real execution authority, and this specification records both the operations
 and the honest boundaries that keep that claim true.
+
+## 1.0 pitch additions
+
+The 1.0 pitch cycle (end of August 2026) expanded Studio from an authoring
+shell into the platform's consolidated operator UI. The following decisions
+were taken together; treating them as a single unit keeps the user guide,
+operations doc and CodeBuddy handoff internally consistent.
+
+### Decision: Studio is the only operator UI in default deployments
+
+- Tenda and Orun remain in the repository for reference and migration, but
+  the supported Compose profiles (`compose.yaml` + `compose.dev.yaml` /
+  `compose.prod.yaml`) start only the engine and Studio.
+- Studio's shell now contains four panels: **TaskInbox**, **Operations**,
+  **Administration**, **Insight**. The header exposes each as a tab and the
+  Administration tab is gated on the `abada-admin` JWT group.
+
+### Decision: external IdP operations are proxied, not bypassed
+
+- A new `com.abada.engine.identity` package wraps the Keycloak Admin API.
+- All mutations live under `/api/v1/admin/**` (see
+  [`/docs/reference/api-v1.md`](../reference/api-v1.md#platform-administration)).
+- A dedicated confidential client `abada-admin-api` authenticates the engine
+  to Keycloak via the client-credentials grant; the engine holds the secret
+  in the environment, never in the realm import on shared machines.
+- The service-account token is cached for 30 s less than its declared
+  lifetime; a `401` from Keycloak forces a refresh on the next call.
+
+### Decision: principal membership search uses a lazy cache
+
+- The Projects → Members dialog searches the engine's `PrincipalEntity`
+  cache, not the IdP directly.
+- The cache is populated by `IdentityContextInterceptor` on each
+  authenticated request. A freshly created Keycloak user therefore becomes
+  project-searchable only after they have signed in at least once.
+- This is intentional: it keeps the engine's read path consistent with its
+  durable state and avoids polling the IdP for every member search. The
+  trade-off is documented in the user-guide page
+  [`/documentation/.../user/identity.mdx`](../../documentation/src/content/docs/user/identity.mdx).
+
+### Decision: Operations accepts an optional projectId
+
+- `ProcessOperations` fetches KPIs, tasks and incidents without a
+  `projectId` when one is not provided. The panel auto-selects an active
+  project and surfaces a project picker.
+- Internal `!projectId` guards have been removed; the bounded filter and
+  the auto-refresh interval both run unconditionally.
+
+### Decision: Studio Insight tab exposes `InsightAPI.reviewProposal`
+
+- The Insight tab lists pending proposals with `InsightProposalSummary`
+  cards, opens a `InsightProposalDetail` with a `proposedSource` diff, and
+  routes approve / reject through `InsightAPI.reviewProposal` with the
+  `expectedUpdatedAt` optimistic-locking token.
+
+### Deferred (post-pitch)
+
+- A dedicated Audit tab in Studio. Engine audit trail rows already capture
+  every admin mutation with actor + trace ID + timestamp, but the UI table
+  is not part of this release.
+- Bulk user import (CSV / SCIM). The IdP proxy supports it via
+  `POST /v1/admin/users` in a loop; the Studio UI does not yet expose a
+  bulk form.
+- Multi-tenant project picker polish (server-side search, pagination on
+  the project dropdown).

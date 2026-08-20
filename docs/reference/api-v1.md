@@ -96,3 +96,52 @@ are bound to every project automatically: on project creation, and through an
 idempotent startup sweep that backfills projects created before the principal
 first appeared. Manual `PUT .../workers/{principalId}` bindings are still
 supported for third-party workers.
+
+## Platform administration
+
+The Keycloak Admin API is proxied under `/api/v1/admin/**` so operators do
+not need access to the IdP console. Every endpoint requires the `abada-admin`
+authority (mapped from the `abada-admin` group via the JWT `groups` claim,
+or directly in trusted-proxy mode). When the proxy is not configured
+(`ABADA_KEYCLOAK_*` env vars missing), the endpoints return `503` with an
+empty body and the `/status` endpoint reports `configured: false`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/admin/status` | Reports whether the identity proxy is configured and which realm it targets. Safe to poll. |
+| `GET` | `/api/v1/admin/users?query=<term>` | Lists Keycloak users; `query` is a substring over `username`, `email`, `firstName`, `lastName` and is forwarded as-is to Keycloak. |
+| `GET` | `/api/v1/admin/users/{id}` | Returns a single user with their group memberships. |
+| `POST` | `/api/v1/admin/users` | Creates a user. Body is `CreateUserRequest` (`username`, `email`, `firstName`, `lastName`, optional initial `password`, optional `enabled`, optional `groupIds`). Returns the created user with Keycloak-assigned `id`. |
+| `PUT` | `/api/v1/admin/users/{id}` | Updates mutable profile fields and the `enabled` flag. Group membership is changed through the dedicated endpoints below. |
+| `PUT` | `/api/v1/admin/users/{userId}/groups/{groupId}` | Adds the user to a Keycloak group. Idempotent: a duplicate call returns `204`. |
+| `DELETE` | `/api/v1/admin/users/{userId}/groups/{groupId}` | Removes the user from a Keycloak group. Idempotent. |
+| `GET` | `/api/v1/admin/groups` | Lists Keycloak groups with member counts. |
+| `POST` | `/api/v1/admin/groups?name=<group>` | Creates a top-level Keycloak group. |
+
+### Constraints
+
+- These endpoints **mutate IdP state**. They are not part of the engine
+  persistence model; a successful call is not transactional with the engine
+  database.
+- The engine never returns the service-account `clientSecret`, the user's
+  `password`, or any other IdP-managed credential to the browser.
+- Mutations are not idempotent at the engine layer (Keycloak does not echo an
+  `Idempotency-Key` back); clients must rely on UI-level guards or knowledge
+  of the realm.
+- The principal cache (`PrincipalEntity`) is populated lazily on first
+  authenticated request, so a freshly created user becomes project-searchable
+  only after their first sign-in to the engine — see
+  [`docs/operations/studio-administration.md`](../operations/studio-administration.md).
+- Audit history for these mutations is logged in the engine audit trail but
+  not yet exposed as a UI; see
+  [`studio-app-spec.md`](../development/studio-app-spec.md) for the deferred
+  audit-tab work.
+
+### Error envelope
+
+The proxy maps Keycloak errors into the standard v1 `ErrorResponse` envelope.
+A `409` from Keycloak (for example, duplicate `username` or `email`) is
+returned as-is with `code: ENGINE_COMMAND_REJECTED`. A misconfigured
+`abada-admin-api` client returns `503` with an empty body and
+`configured: false` from `/status`.
+

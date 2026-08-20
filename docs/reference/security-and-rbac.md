@@ -41,3 +41,39 @@ task scope; claim, unclaim and completion retain assignee/candidate checks.
 
 Executable negative coverage is in `SecurityAuthorizationContractTest`,
 `AudienceValidatorTest` and `ProxyHeaderAuthenticationFilterTest`.
+
+## Platform administration client (`abada-admin-api`)
+
+The Keycloak Admin API is **never** exposed to operators directly. The engine
+proxies user and group management under `/v1/admin/**` (see
+[`api-v1.md`](api-v1.md)) using a dedicated **confidential** Keycloak client:
+
+- Client ID: `abada-admin-api`
+- Flow: `service_accounts` only (no public login, no user impersonation)
+- Secret: stored in the engine environment (`ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET`),
+  not in the realm import on shared machines
+- Service-account realm roles: `manage-users`, `manage-groups`,
+  `query-users`, `view-users`, `query-groups`, `view-groups`,
+  `manage-realm`, `view-realm`
+- Audience mapper: emits `abada-admin-api` so the engine can reject tokens
+  issued for other clients
+
+A successful service-account token is cached in-process for 30 s less than its
+declared lifetime. A `401` from the cache forces a refresh on next call.
+Operators do not see this client; they call `/v1/admin/**` through Studio, which
+holds the user's JWT — not the service-account secret.
+
+The Studio tab that surfaces these endpoints is gated on the **JWT `groups`
+claim** containing the `abada-admin` group (mapped from the Keycloak group, not
+a realm role). Membership of `abada-admin` in Keycloak is the bootstrap
+mechanism for who can invite or remove other users; it is intentionally
+separate from the `abada-admin-api` service-account identity.
+
+### Failure modes
+
+| Symptom in Studio | Root cause | Operator action |
+| --- | --- | --- |
+| Studio Administration tab missing | Caller JWT lacks `abada-admin` group | Add user to the `abada-admin` group in Keycloak (not as a realm role) |
+| Administration tab visible but `GET /v1/admin/status` returns `configured: false` | Engine missing `ABADA_KEYCLOAK_*` env vars | Set them in `compose.yaml` / `.env.dev` and restart the engine |
+| `503` on `/v1/admin/**` with `configured: false` in body | Identity proxy disabled by config | See [`studio-administration.md`](../operations/studio-administration.md) |
+| `502` / `504` from `/v1/admin/**` | Keycloak Admin API unreachable | Verify the network path and that `ABADA_KEYCLOAK_URL` resolves from the engine container |
