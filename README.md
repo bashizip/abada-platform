@@ -250,31 +250,38 @@ natively on both supported architectures.
 
 # Development
 
-Build and launch the complete stack.
+Build the local Engine and Studio images, then start the full stack with local
+images (no pulls from GHCR):
 
 ```bash
-./scripts/dev/build-and-run-dev.sh
+./scripts/dev/rebuild.sh           # build + restart engine + studio
+./scripts/dev/up.sh                # start the full dev stack
 ```
 
-Start previously built images.
+Start the stack with the first-party agent worker enabled:
 
 ```bash
-./scripts/dev/start-dev.sh
+./scripts/dev/up.sh --agent
 ```
 
-Validate the deployment without starting it.
+Validate the deployment without starting it:
 
 ```bash
 ./release/abada-platform doctor dev
 ```
 
-Rebuild the engine and Studio images, and provision the agent worker, with the
-component helpers under [`scripts/dev/`](scripts/dev/):
+Stop and wipe all data:
 
 ```bash
-./scripts/dev/rebuild-all-dev.sh
-./scripts/dev/provision-agent-worker.sh
+./scripts/dev/clean.sh
 ```
+
+The development scripts under [`scripts/dev/`](scripts/dev/) cover:
+- `up.sh` — start the dev stack (flags: `--agent`, `--telemetry`)
+- `rebuild.sh` — rebuild and restart Engine + Studio (`--no-cache`)
+- `clean.sh` — stop and remove all volumes (`-y`)
+- `logs.sh` — tail logs for services
+- `build-agent-worker.sh`, `provision-agent-worker.sh`
 
 ---
 
@@ -382,7 +389,7 @@ Current capabilities include:
 - Durable PostgreSQL runtime state
 - Cluster-safe timer/external-task acquisition and durable event subscriptions
 - Deterministic mutation replay through `Idempotency-Key`
-- Project-scoped worker binding: secured workers hold a global authority and an explicit project/topic binding
+- Global worker capabilities: secured workers register engine-wide topics (and model capabilities) and poll project-agnostically
 - Traefik load balancing
 - PostgreSQL persistence
 - Connection pooling

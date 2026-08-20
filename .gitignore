@@ -86,3 +86,7 @@ semaflow-ui/
 .claude
 .codex
 .qwen
+
+# Prevent nested project contamination
+agent-worker/**/munganga/
+website/prompt.md
