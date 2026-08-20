@@ -169,6 +169,36 @@ class SecurityAuthorizationContractTest {
     }
 
     @Test
+    void workerCanRegisterGlobalCapabilitiesAndFetchWithoutProject() throws Exception {
+        mvc.perform(put("/v1/workers/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topics\":[\"global-topic\"],\"models\":[]}")
+                        .header("Authorization", "Bearer worker"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.capabilities[0].topic").value("global-topic"));
+
+        mvc.perform(post("/v1/external-tasks/fetch-and-lock").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"workerId\":\"w\",\"topics\":[\"global-topic\"],\"lockDuration\":1000}")
+                        .header("Authorization", "Bearer worker"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Abada-Worker-Protocol-Version", "1"));
+
+        mvc.perform(get("/v1/workers/health")
+                        .header("Authorization", "Bearer worker"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].topic").value("global-topic"))
+                .andExpect(jsonPath("$[0].bound").value(true));
+    }
+
+    @Test
+    void globalFetchRequiresARegisteredCapabilityAndWorkerRole() throws Exception {
+        assertForbidden(post("/v1/external-tasks/fetch-and-lock").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"workerId\":\"w\",\"topics\":[\"unregistered-topic\"],\"lockDuration\":1000}"),
+                "worker");
+        assertForbidden(put("/v1/workers/me").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"topics\":[\"t\"],\"models\":[]}"), "operator");
+    }
+
+    @Test
     void restrictsCorsToConfiguredOrigins() throws Exception {
         mvc.perform(options("/v1/tasks").header("Origin", "https://tenda.example")
                         .header("Access-Control-Request-Method", "GET"))

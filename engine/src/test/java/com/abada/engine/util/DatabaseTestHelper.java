@@ -22,6 +22,8 @@ import com.abada.engine.persistence.repository.ProjectResourceRepository;
 import com.abada.engine.persistence.repository.ProjectProcessDocumentRepository;
 import com.abada.engine.persistence.repository.ProjectRepository;
 import com.abada.engine.persistence.repository.ProjectWorkerBindingRepository;
+import com.abada.engine.persistence.repository.WorkerCapabilityRepository;
+import com.abada.engine.persistence.repository.WorkerHealthRepository;
 import com.abada.engine.project.ProjectConstants;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +50,8 @@ public class DatabaseTestHelper {
     private final ProjectFolderRepository projectFolderRepository;
     private final ProjectResourceRepository projectResourceRepository;
     private final ProjectWorkerBindingRepository projectWorkerBindingRepository;
+    private final WorkerCapabilityRepository workerCapabilityRepository;
+    private final WorkerHealthRepository workerHealthRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final PrincipalRepository principalRepository;
     private final ProjectRepository projectRepository;
@@ -69,6 +73,8 @@ public class DatabaseTestHelper {
             ProjectFolderRepository projectFolderRepository,
             ProjectResourceRepository projectResourceRepository,
             ProjectWorkerBindingRepository projectWorkerBindingRepository,
+            WorkerCapabilityRepository workerCapabilityRepository,
+            WorkerHealthRepository workerHealthRepository,
             ProjectMemberRepository projectMemberRepository, PrincipalRepository principalRepository,
             ProjectRepository projectRepository) {
         this.externalTaskRepository = externalTaskRepository;
@@ -90,6 +96,8 @@ public class DatabaseTestHelper {
         this.projectFolderRepository = projectFolderRepository;
         this.projectResourceRepository = projectResourceRepository;
         this.projectWorkerBindingRepository = projectWorkerBindingRepository;
+        this.workerCapabilityRepository = workerCapabilityRepository;
+        this.workerHealthRepository = workerHealthRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.principalRepository = principalRepository;
         this.projectRepository = projectRepository;
@@ -114,6 +122,8 @@ public class DatabaseTestHelper {
         processInstanceRepository.deleteAll();
         processDefinitionRepository.deleteAll();
         projectWorkerBindingRepository.deleteAll();
+        workerCapabilityRepository.deleteAll();
+        workerHealthRepository.deleteAll();
         projectMemberRepository.deleteAll();
         principalRepository.deleteAll();
         projectResourceRepository.deleteAll();

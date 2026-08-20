@@ -60,7 +60,7 @@ class TaskManagerTest {
 
         TaskInstance task = taskManager.createTaskSnapshot(
                 "approveTask", "Approve Request", processInstanceId,
-                null, List.of("user1"), List.of("group1"), AssignmentStrategy.CLAIM);
+                null, List.of("user1"), List.of("group1"), null, AssignmentStrategy.CLAIM);
 
         assertThat(task.getTaskDefinitionKey()).isEqualTo("approveTask");
         assertThat(task.getProcessInstanceId()).isEqualTo(processInstanceId);

@@ -27,6 +27,8 @@ class WorkerHealthServiceTest {
     @Autowired ProjectService projects;
     @Autowired ProjectWorkerService workerBindings;
     @Autowired WorkerHealthService health;
+    @Autowired WorkerCapabilityService workerCapabilities;
+    @Autowired FirstPartyWorkerCapabilitySweep sweep;
     @Autowired PrincipalRepository principals;
     @Autowired DatabaseTestHelper database;
 
@@ -63,10 +65,8 @@ class WorkerHealthServiceTest {
                 List.of("abada:agent"), "Worker is not bound to this project");
 
         List<WorkerHealthDTO> rows = health.healthForProject(project.getId());
-        assertThat(rows).hasSize(2);
-        WorkerHealthDTO row = rows.stream()
-                .filter(candidate -> candidate.principalId().equals(external.getId()))
-                .findFirst().orElseThrow();
+        assertThat(rows).hasSize(1);
+        WorkerHealthDTO row = rows.get(0);
         assertThat(row.principalUsername()).isEqualTo("service-account-external-worker");
         assertThat(row.topic()).isEqualTo("abada:agent");
         assertThat(row.bound()).isFalse();
@@ -77,17 +77,45 @@ class WorkerHealthServiceTest {
     }
 
     @Test
-    void firstPartyWorkerIsAutoBoundToCreatedProject() {
-        var project = projects.create("p1b", "Project Auto", "desc");
+    void firstPartyWorkerWithGlobalCapabilityAndHeartbeatIsOnlineInGlobalHealth() {
+        sweep.run(new org.springframework.boot.DefaultApplicationArguments());
+        health.noteFetchSuccess(null, agent.getId(), "agent-worker-1",
+                List.of("abada:agent"), false);
 
-        List<WorkerHealthDTO> rows = health.healthForProject(project.getId());
-        assertThat(rows).hasSize(1);
-        WorkerHealthDTO row = rows.get(0);
-        assertThat(row.principalId()).isEqualTo(agent.getId());
+        List<WorkerHealthDTO> rows = health.globalHealth();
+        WorkerHealthDTO row = rows.stream()
+                .filter(candidate -> candidate.principalId().equals(agent.getId()))
+                .findFirst().orElseThrow();
         assertThat(row.principalUsername()).isEqualTo("service-account-abada-agent-worker");
         assertThat(row.topic()).isEqualTo("abada:agent");
+        assertThat(row.projectId()).isNull();
+        assertThat(row.bound()).isTrue();
+        assertThat(row.status()).isEqualTo("ONLINE");
+        assertThat(row.lastSeenAt()).isNotNull();
+    }
+
+    @Test
+    void globalCapabilityWithoutHeartbeatIsOfflineButBound() {
+        sweep.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        List<WorkerHealthDTO> rows = health.globalHealth();
+        WorkerHealthDTO row = rows.stream()
+                .filter(candidate -> candidate.principalId().equals(agent.getId()))
+                .findFirst().orElseThrow();
         assertThat(row.bound()).isTrue();
         assertThat(row.status()).isEqualTo("OFFLINE");
+        assertThat(row.lastSeenAt()).isNull();
+    }
+
+    @Test
+    void selfRegisteredWorkerCanBeRevokedByUnregistering() {
+        IdentityContext.set(new Identity(agent.getId(), agent.getUsername(), List.of()));
+        workerCapabilities.register(List.of("abada:agent"), List.of());
+        assertThat(workerCapabilities.capabilitiesForCurrentWorker()).hasSize(1);
+
+        workerCapabilities.unregister(List.of("abada:agent"));
+        assertThat(workerCapabilities.capabilitiesForCurrentWorker()).isEmpty();
+        IdentityContext.set(new Identity(owner.getId(), owner.getUsername(), List.of()));
     }
 
     @Test
@@ -131,6 +159,41 @@ class WorkerHealthServiceTest {
         }
         List<WorkerHealthDTO> rows = health.healthForProject(project.getId());
         assertThat(rows.get(0).consecutiveFailures()).isEqualTo(3);
+    }
+
+    @Test
+    void globalCapabilityWorkerAppearsBoundInEveryProjectHealthView() {
+        sweep.run(new org.springframework.boot.DefaultApplicationArguments());
+        health.noteFetchSuccess(null, agent.getId(), "agent-worker-1",
+                List.of("abada:agent"), false);
+        var project = projects.create("p6", "Project Six", "desc");
+
+        List<WorkerHealthDTO> rows = health.healthForProject(project.getId());
+        WorkerHealthDTO row = rows.stream()
+                .filter(candidate -> candidate.principalId().equals(agent.getId()))
+                .findFirst().orElseThrow();
+        assertThat(row.topic()).isEqualTo("abada:agent");
+        assertThat(row.bound()).isTrue();
+        assertThat(row.status()).isEqualTo("ONLINE");
+        assertThat(row.lastSeenAt()).isNotNull();
+    }
+
+    @Test
+    void globalHeartbeatSupersedesStaleProjectScopedRowForSameWorker() {
+        sweep.run(new org.springframework.boot.DefaultApplicationArguments());
+        var project = projects.create("p7", "Project Seven", "desc");
+        health.noteFetchSuccess(project.getId(), agent.getId(), "agent-worker-1",
+                List.of("abada:agent"), false);
+        health.noteFetchSuccess(null, agent.getId(), "agent-worker-1",
+                List.of("abada:agent"), false);
+
+        List<WorkerHealthDTO> rows = health.healthForProject(project.getId());
+        assertThat(rows).hasSize(1);
+        WorkerHealthDTO row = rows.get(0);
+        assertThat(row.principalId()).isEqualTo(agent.getId());
+        assertThat(row.bound()).isTrue();
+        assertThat(row.status()).isEqualTo("ONLINE");
+        assertThat(row.lastSeenAt()).isNotNull();
     }
 
     @Test
