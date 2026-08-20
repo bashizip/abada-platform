@@ -18,6 +18,7 @@ import java.util.function.Supplier;
 public final class AbadaWorkerClient {
     public static final String PROTOCOL_VERSION = "1";
     private final URI apiBase;
+    private final URI engineBase;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Supplier<String> bearerToken;
@@ -31,6 +32,7 @@ public final class AbadaWorkerClient {
     AbadaWorkerClient(URI engineBaseUri, Supplier<String> bearerToken, HttpClient httpClient,
             ObjectMapper objectMapper) {
         String base = engineBaseUri.toString().replaceAll("/+$", "");
+        this.engineBase = URI.create(base);
         this.apiBase = URI.create(base + "/v1/external-tasks");
         this.bearerToken = bearerToken;
         this.httpClient = httpClient;
@@ -113,13 +115,66 @@ public final class AbadaWorkerClient {
                         "variables", variables == null ? Map.of() : variables), options);
     }
 
+    /**
+     * Registers the worker's global capabilities (topics and optional model
+     * identifiers) with the engine. Idempotent; call once at startup. An
+     * empty models list registers the topics with no model restriction.
+     */
+    public void registerCapabilities(List<String> topics, List<String> models) {
+        java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("topics", topics == null ? List.of() : topics);
+        body.put("models", models == null ? List.of() : models);
+        sendEngine("/v1/workers/me", "PUT", body);
+    }
+
+    /** Returns the worker's registered global capabilities. */
+    public String capabilities() {
+        return sendEngine("/v1/workers/me", "GET", null).body();
+    }
+
+    private HttpResponse<String> sendEngine(String path, String method, Object body) {
+        RequestOptions options = RequestOptions.defaults();
+        try {
+            HttpRequest.Builder request = HttpRequest.newBuilder(engineBase.resolve(engineBase.getPath() + path))
+                    .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
+                    .header("Accept", "application/json");
+            if ("GET".equals(method)) {
+                request.GET();
+            } else {
+                request.method(method, HttpRequest.BodyPublishers.ofString(
+                        body == null ? "{}" : objectMapper.writeValueAsString(body)));
+            }
+            String token = bearerToken == null ? null : bearerToken.get();
+            if (token != null && !token.isBlank()) request.header("Authorization", "Bearer " + token);
+            HttpResponse<String> response = httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) throw protocolError(response);
+            return response;
+        } catch (WorkerProtocolException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw new WorkerProtocolException(0, "NETWORK_ERROR", exception.getMessage());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new WorkerProtocolException(0, "INTERRUPTED", "Worker request was interrupted");
+        }
+    }
+
     private HttpResponse<String> send(String path, Object body, RequestOptions suppliedOptions) {
+        return send(path, "POST", body, suppliedOptions);
+    }
+
+    private HttpResponse<String> send(String path, String method, Object body, RequestOptions suppliedOptions) {
         RequestOptions options = suppliedOptions == null ? RequestOptions.defaults() : suppliedOptions;
         try {
             HttpRequest.Builder request = HttpRequest.newBuilder(apiBase.resolve(apiBase.getPath() + path))
                     .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
-                    .header("Accept", "application/json").header("X-Abada-Worker-Protocol-Version", PROTOCOL_VERSION)
-                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)));
+                    .header("Accept", "application/json").header("X-Abada-Worker-Protocol-Version", PROTOCOL_VERSION);
+            if ("GET".equals(method)) {
+                request.GET();
+            } else {
+                request.method(method, HttpRequest.BodyPublishers.ofString(
+                        body == null ? "{}" : objectMapper.writeValueAsString(body)));
+            }
             String token = bearerToken == null ? null : bearerToken.get();
             if (token != null && !token.isBlank()) request.header("Authorization", "Bearer " + token);
             if (options.idempotencyKey() != null) request.header("Idempotency-Key", options.idempotencyKey());

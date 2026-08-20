@@ -13,5 +13,6 @@ public record LockedExternalTask(
         Instant lockExpirationTime,
         String traceParent,
         String protocolVersion,
-        AgentWorkDescriptor agentWork) {
+        AgentWorkDescriptor agentWork,
+        String projectId) {
 }
