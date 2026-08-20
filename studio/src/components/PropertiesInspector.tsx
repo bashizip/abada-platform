@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { WorkflowNode, WorkflowFile, NodeType, AgentConfig, HumanConfig } from '@/types';
-import { DmnRuleInspector } from '@/features/dmn/DmnRuleInspector';
+import React from 'react';
+import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig } from '@/types';
 import { AGENT_MODEL_OPTIONS, DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
 import { 
   Bot, 
@@ -9,13 +8,10 @@ import {
   GitFork, 
   GitMerge,
   Circle, 
-  SlidersHorizontal, 
-  Play, 
   Plus, 
   Trash2, 
   ShieldAlert, 
   Sparkles, 
-  CheckCircle2, 
   Clock, 
   Zap, 
   Sliders, 
@@ -132,7 +128,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
   // Numeric agent settings round-trip into the node APL; an empty field is
   // written back as undefined so the YAML omits the key (engine default wins).
-  const handleAgentNumber = (field: 'maxTokens' | 'maxAttempts', raw: string) => {
+  const handleAgentNumber = (field: 'maxTokens' | 'maxAttempts' | 'timeoutMs' | 'retryBackoffMs', raw: string) => {
     if (raw.trim() === '') {
       handleAgentChange(field, undefined);
       return;
@@ -157,6 +153,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   // is always joined by the current model when it is not among the options, so
   // the dropdown can never render an empty/ghost selection.
   const agentConfig = selectedNode.agentConfig;
+  const humanConfig = selectedNode.humanConfig;
   const currentModel = agentConfig?.model || DEFAULT_AGENT_MODEL;
   const modelOptions = AGENT_MODEL_OPTIONS.includes(currentModel)
     ? AGENT_MODEL_OPTIONS
@@ -427,6 +424,131 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             </div>
 
+            {/* Profile — read-only badge (abada.agent/v1 is currently the only
+                supported value per the APL node reference) */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">Worker Profile</label>
+              <div className="flex items-center gap-2 w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs">
+                <span className="font-mono text-[#EAE3D9]">{agentConfig?.profileVersion || 'abada.agent/v1'}</span>
+                <span className="text-[10px] text-[#A89F91] bg-[#9D4EDD]/10 px-1.5 py-0.5 rounded">Default &amp; only supported</span>
+              </div>
+            </div>
+
+            {/* Input Variable Bindings */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">Prompt Inputs (bindings)</label>
+              <p className="text-[10px] text-[#A89F91]">Named variable expressions (e.g. <span className="font-mono text-[#9D4EDD]">${'{'}{'payload'}{'}'}</span>) bound into the prompt scope.</p>
+              <div className="rounded-lg border border-[#3A322E] divide-y divide-[#3A322E] bg-[#1A1614] overflow-hidden">
+                {Object.entries(agentConfig?.inputs || {}).map(([name, expr]) => (
+                  <div key={name} className="group flex items-center gap-1.5 px-2 py-1.5">
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => {
+                        const next: Record<string, string> = { ...agentConfig?.inputs };
+                        const oldExpr = next[name];
+                        delete next[name];
+                        next[e.target.value] = oldExpr;
+                        handleAgentChange('inputs', next);
+                      }}
+                      className="w-28 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                    />
+                    <input
+                      type="text"
+                      value={expr}
+                      onChange={(e) => handleAgentChange('inputs', { ...agentConfig?.inputs, [name]: e.target.value })}
+                      className="flex-1 min-w-0 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD]"
+                      placeholder='${payload}'
+                    />
+                    <button
+                      onClick={() => {
+                        const next: Record<string, string> = { ...agentConfig?.inputs };
+                        delete next[name];
+                        handleAgentChange('inputs', next);
+                      }}
+                      className="text-red-400 hover:text-red-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Remove input binding"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const next: Record<string, string> = { ...agentConfig?.inputs, input_1: '${payload}' };
+                    handleAgentChange('inputs', next);
+                  }}
+                  className="w-full text-left text-xs text-[#9D4EDD] hover:text-[#b56ef2] flex items-center gap-1 font-medium px-3 py-2"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Input Binding</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Result Variable + Output Schema */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#A89F91] block">Result Variable</label>
+                <input
+                  type="text"
+                  placeholder={selectedNode.id + '_result'}
+                  value={agentConfig?.resultVariable ?? ''}
+                  onChange={(e) => handleAgentChange('resultVariable', e.target.value || undefined)}
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                />
+                <p className="text-[10px] text-[#A89F91]">Where the agent output is written. Empty = engine default.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#A89F91] block">Output Schema (JSON)</label>
+                <textarea
+                  rows={3}
+                  value={JSON.stringify(agentConfig?.outputSchema ?? {}, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const parsed = e.target.value.trim() ? JSON.parse(e.target.value) : {};
+                      handleAgentChange('outputSchema', parsed);
+                    } catch {
+                      handleAgentChange('outputSchema', undefined);
+                    }
+                  }}
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-[10px] font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD] resize-y"
+                  placeholder='{"approved": true}'
+                />
+                <p className="text-[10px] text-[#A89F91]">Expected JSON shape; the worker validates against it.</p>
+              </div>
+            </div>
+
+            {/* Timeout & Retry Backoff */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#A89F91] block">Timeout (ms)</label>
+                <input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  placeholder="60000"
+                  value={agentConfig?.timeoutMs ?? ''}
+                  onChange={(e) => handleAgentNumber('timeoutMs', e.target.value)}
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD]"
+                />
+                <p className="text-[10px] text-[#A89F91]">Worker call timeout. Empty = engine default (60 000).</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#A89F91] block">Retry Backoff (ms)</label>
+                <input
+                  type="number"
+                  min="100"
+                  step="100"
+                  placeholder="2000"
+                  value={agentConfig?.retryBackoffMs ?? ''}
+                  onChange={(e) => handleAgentNumber('retryBackoffMs', e.target.value)}
+                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD]"
+                />
+                <p className="text-[10px] text-[#A89F91]">Pause between durable retries. Empty = engine default (2 000).</p>
+              </div>
+            </div>
+
             {/* Tools Checklist */}
             <div className="space-y-1.5">
               <label className="text-xs text-[#A89F91] block">Bound Tool APIs</label>
@@ -477,41 +599,31 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 </button>
               </UITooltip>
             </div>
-          </div>
-        )}
 
-        {/* DMN Decision Table Configuration (native decision-table block) */}
-        {selectedNode.type === 'dmn' && selectedNode.dmnConfig && (
-          <DmnRuleInspector node={selectedNode} onUpdateNode={onUpdateNode} />
-        )}
-
-        {/* Engine Task Configuration (external service topic) */}
-        {selectedNode.type === 'engine-task' && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-wider text-[#90A955] uppercase flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5" />
-                Engine Task Configuration
-              </span>
-            </div>
-
+            {/* Error Flow Routing (on_error) */}
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">External Service Topic</label>
-              <input
-                type="text"
-                value={selectedNode.engineTaskConfig?.service || ''}
+              <label className="text-xs text-[#A89F91] block">Error Route (on_error)</label>
+              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                When the engine task fails, the instance routes here instead of the normal successor. Drawn as an error edge.
+              </p>
+              <select
+                value={selectedNode.engineTaskConfig?.onError || ''}
                 onChange={(e) => onUpdateNode({
                   ...selectedNode,
                   engineTaskConfig: {
-                    ...(selectedNode.engineTaskConfig || {}),
-                    service: e.target.value,
+                    service: selectedNode.engineTaskConfig?.service || 'abada:service',
+                    onError: e.target.value || undefined,
                   },
                 })}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] font-mono focus:outline-none focus:border-[#90A955]"
-              />
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                Workers subscribe to this topic to fetch the durable job (e.g. <span className="font-mono text-[#90A955]">abada:credit-check</span>).
-              </p>
+                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
+              >
+                <option value="">— no error route —</option>
+                {workflow?.nodes
+                  .filter((n) => n.id !== selectedNode.id)
+                  .map((n) => (
+                    <option key={n.id} value={n.id}>{n.title || n.id}</option>
+                  ))}
+              </select>
             </div>
           </div>
         )}
@@ -544,6 +656,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 variables are bound by name plus the <span className="font-mono text-[#2A9D8F]">variables</span>
                 map — the APL form of an embedded Java delegate.
               </p>
+            </div>
+
+            {/* Script Format */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-[#A89F91] block">Script Engine</label>
+              <select
+                value={selectedNode.scriptConfig?.format || 'javascript'}
+                onChange={(e) => onUpdateNode({
+                  ...selectedNode,
+                  scriptConfig: {
+                    script: selectedNode.scriptConfig?.script || '',
+                    format: e.target.value,
+                  },
+                })}
+                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#2A9D8F] focus:outline-none focus:border-[#2A9D8F]"
+              >
+                <option value="javascript">JavaScript (ECMAScript)</option>
+              </select>
+              <p className="text-[10px] text-[#A89F91]">Engine script engine name — defaults to <span className="font-mono text-[#2A9D8F]">javascript</span>.</p>
             </div>
           </div>
         )}
@@ -737,28 +868,73 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
         )}
 
-        {/* Human Task Configuration */}
-        {selectedNode.type === 'human' && selectedNode.humanConfig && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-            <span className="text-[11px] font-semibold tracking-wider text-[#E76F51] uppercase block">
-              Human Escalation Review
-            </span>
+        {/* Human Input Configuration */}
+         {selectedNode.type === 'human' && humanConfig && (
+           <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+             <span className="text-[11px] font-semibold tracking-wider text-[#E76F51] uppercase block flex items-center gap-1.5">
+               <UserCheck className="w-3.5 h-3.5" />
+               Human Input
+             </span>
 
-            <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Assignee Role</label>
-              <input
-                type="text"
-                value={selectedNode.humanConfig.assigneeRole}
-                onChange={(e) => handleHumanChange('assigneeRole', e.target.value)}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
-              />
+             <div className="space-y-1.5">
+               <label className="text-xs text-[#A89F91] block">Form ID</label>
+               <input
+                 type="text"
+                 value={humanConfig.formId || ''}
+                 onChange={(e) => handleHumanChange('formId', e.target.value || undefined)}
+                 className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
+                 placeholder="e.g. loan-approval-form"
+               />
+               <p className="text-[10px] text-[#A89F91]">Optional form key for task-form rendering. Empty = engine default.</p>
+             </div>
+
+             <div className="space-y-1.5">
+               <label className="text-xs text-[#A89F91] block">Assignee Groups / Users</label>
+               <p className="text-[10px] text-[#A89F91]">At least one required. These groups may claim the task.</p>
+               <div className="rounded-lg border border-[#3A322E] divide-y divide-[#3A322E] bg-[#1A1614] overflow-hidden">
+                 {humanConfig.assignees.map((assignee, idx) => (
+                  <div key={idx} className="group flex items-center gap-1.5 px-2 py-1.5">
+                    <input
+                      type="text"
+                      value={assignee}
+                      placeholder="risk-officers"
+                      onChange={(e) => {
+                        const assignees = [...humanConfig.assignees];
+                        assignees[idx] = e.target.value;
+                        handleHumanChange('assignees', assignees);
+                      }}
+                      className="flex-1 min-w-0 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
+                    />
+                    <button
+                      onClick={() => {
+                        const assignees = humanConfig.assignees.filter((_, i) => i !== idx);
+                        handleHumanChange('assignees', assignees);
+                      }}
+                      className="text-red-400 hover:text-red-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Remove assignee"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                    onClick={() => {
+                      const assignees = [...humanConfig.assignees, ''];
+                      handleHumanChange('assignees', assignees);
+                    }}
+                  className="w-full text-left text-xs text-[#E76F51] hover:text-[#F4A261] flex items-center gap-1 font-medium px-3 py-2"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Assignee</span>
+                </button>
+              </div>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs text-[#A89F91] block">SLA Timer (Hours)</label>
               <input
                 type="number"
-                value={selectedNode.humanConfig.slaHours}
+                value={humanConfig.slaHours}
                 onChange={(e) => handleHumanChange('slaHours', Number(e.target.value))}
                 className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
               />
@@ -769,7 +945,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <span>Require Dual Manager Sign-off</span>
                 <input
                   type="checkbox"
-                  checked={selectedNode.humanConfig.requireDoubleSignOff || false}
+                  checked={humanConfig.requireDoubleSignOff || false}
                   onChange={(e) => handleHumanChange('requireDoubleSignOff', e.target.checked)}
                   className="accent-[#E76F51] rounded"
                 />

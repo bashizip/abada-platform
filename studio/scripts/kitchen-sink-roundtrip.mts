@@ -9,6 +9,10 @@
  *   2. engine/src/test/resources/bpmn/kitchen-sink-test.bpmn → APL → BPMN
  *
  * Run with `npm run verify:kitchen-sink` from studio/ (needs `tsx`).
+ *
+ * When the engine test fixtures are not present (e.g. inside a Docker build
+ * whose context is the studio/ directory only), the check is skipped with a
+ * warning so the production image can still be built.
  */
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +23,24 @@ import { transpileBPMNToAPL } from '../src/lib/bpmn/transpiler';
 import { APLDocument, APLNode } from '../src/lib/apl/types';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const engineFixturePath = resolve(here, '../../engine/src/test/resources');
+
+const fixtureExists = (rel: string): boolean => {
+  try {
+    return fs.existsSync(resolve(engineFixturePath, rel));
+  } catch {
+    return false;
+  }
+};
+
+if (!fixtureExists('apl/kitchen-sink.apl.yaml') || !fixtureExists('bpmn/kitchen-sink-test.bpmn')) {
+  console.warn('Kitchen-sink fixtures not found at', engineFixturePath + '.');
+  console.warn('Skipping round-trip verification (expected when building inside Docker).');
+  process.exit(0);
+}
+
 const engineFixture = (rel: string): string =>
-  fs.readFileSync(resolve(here, '../../engine/src/test/resources', rel), 'utf8');
+  fs.readFileSync(resolve(engineFixturePath, rel), 'utf8');
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: unknown) => {

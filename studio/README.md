@@ -1,32 +1,60 @@
-# React + TypeScript + Vite
+# Abada Studio
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Visual workflow designer for the Abada BPMN orchestration platform.
 
-Currently, two official plugins are available:
+## Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Abada Studio is a React-based authoring environment for building, editing, and deploying BPMN process definitions. It supports:
 
-## React Compiler
+- **Visual flow editing** with drag-and-drop nodes and auto-layout
+- **APL (Abada Process Language)** — a native YAML DSL that compiles to BPMN 2.0
+- **BPMN round-trip** — import existing BPMN files, edit visually, export back to BPMN
+- **Form binding** — attach Camunda forms to user tasks
+- **Decision tables** — model DMN rules inline
+- **Agent tasks** — configure AI agent executions with profiles, models, and tools
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Technology Stack
 
-## Expanding the Oxlint configuration
+- React 19.2 + TypeScript 6
+- Vite 8
+- Tailwind CSS 4
+- React Flow (@xyflow/react) for the canvas
+- fast-xml-parser for BPMN XML handling
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Development
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+# Install dependencies
+npm ci
+
+# Start the dev server
+npm run dev
+
+# Run the linter
+npm run lint
+
+# Run tests
+npm run test
+
+# Build for production
+npm run build
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The build includes a kitchen-sink round-trip test that verifies APL → BPMN → APL correctness.
+
+## Project Structure
+
+```
+src/
+  components/          # React UI components (canvas, sidebar, inspectors)
+  features/           # Domain features (DMN inspector)
+  lib/
+    apl/              # APL parser and type system
+    bpmn/             # BPMN compiler (APL → BPMN) and transpiler (BPMN → APL)
+    autoLayout.ts     # Dagre-based node layout
+  types.ts            # Studio domain types
+```
+
+## Versioning
+
+This package is version-locked with the Abada Engine. See the root `engine/pom.xml` for the canonical version.
