@@ -37,8 +37,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * End-to-end execution of native {@code abada.io/v1} APL definitions under the
  * PostgreSQL authority: polymorphic persistence, decision-table inline
- * execution, approval-gate user tasks, agent external tasks, condition
- * routing, schema coexistence with BPMN definitions, and restart recovery.
+ * execution, human-input user tasks (approval-gate is a deprecated alias),
+ * agent external tasks, condition routing, schema coexistence with BPMN
+ * definitions, and restart recovery.
  */
 @Testcontainers
 class AplRuntimeTest {

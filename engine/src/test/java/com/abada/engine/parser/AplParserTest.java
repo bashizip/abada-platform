@@ -643,6 +643,57 @@ class AplParserTest {
         }
     }
 
+    @Test
+    void compilesHumanInputNodeWithFormKeyAndOptionalFields() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: review\n"
+                        + "      type: human-input\n"
+                        + "      description: Review application\n"
+                        + "      assignees: [managers, hr]\n"
+                        + "      formId: onboarding-form-v2\n"
+                        + "      slaHours: 48\n"
+                        + "      requireDoubleSignOff: true\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+
+        assertThat(definition.getUserTasks()).containsOnlyKeys("review");
+        assertThat(definition.getUserTask("review")).satisfies(task -> {
+            assertThat(task.getName()).isEqualTo("Review application");
+            assertThat(task.getFormKey()).isEqualTo("onboarding-form-v2");
+            assertThat(task.getCandidateGroups()).containsExactly("managers", "hr");
+            assertThat(task.getAssignee()).isNull();
+        });
+    }
+
+    @Test
+    void approvalGateAliasIsBackwardCompatible() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: gate\n"
+                        + "      type: approval-gate\n"
+                        + "      assignees: [reviewers]\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+
+        assertThat(definition.getUserTasks()).containsOnlyKeys("gate");
+        assertThat(definition.getUserTask("gate").getCandidateGroups()).containsExactly("reviewers");
+    }
+
+    @Test
+    void rejectsHumanInputWithEmptyOrMissingAssignees() {
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: gate\n      type: human-input\n      next: end\n").getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("requires a non-empty 'assignees' list");
+
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: gate\n      type: human-input\n      assignees: []\n      next: end\n").getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("requires a non-empty 'assignees' list");
+
+        assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
+                "    - id: gate\n      type: human-input\n      assignees: [\"\", valid]\n      next: end\n").getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("has an empty assignee");
+    }
+
     private ParsedProcessDefinition parse(String resource) throws IOException {
         return parser.parseDetailed(read(resource)).definition();
     }

@@ -95,10 +95,15 @@ public final class AplParser {
 
     public static final int MAX_DEPLOYMENT_BYTES = 10 * 1024 * 1024;
 
+    /**
+     * Canonical node types recognised by the APL parser.
+     * {@code human-input} is the canonical type for human tasks; {@code approval-gate}
+     * is retained as a deprecated alias for backward compatibility.
+     */
     private static final Set<String> SUPPORTED_TYPES = Set.of(
-            "webhook", "end", "agent", "engine-task", "decision-table", "script",
-            "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
-            "message-catch", "timer", "signal");
+             "webhook", "end", "agent", "engine-task", "decision-table", "script",
+             "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
+             "message-catch", "timer", "signal", "human-input");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -520,6 +525,29 @@ public final class AplParser {
                         throw validation("signal node '" + nodeId + "' requires a non-empty 'signal' name");
                     }
                     events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.SIGNAL, signal));
+                }
+                case "human-input" -> {
+                    JsonNode formIdNode = node.path("formId");
+                    String formId = formIdNode == null || formIdNode.isMissingNode() ? null : formIdNode.asText(null);
+                    JsonNode assignees = node.path("assignees");
+                    if (!assignees.isArray() || assignees.isEmpty()) {
+                        throw validation("human-input node '" + nodeId + "' requires a non-empty 'assignees' list");
+                    }
+                    List<String> groups = new ArrayList<>();
+                    for (JsonNode assignee : assignees) {
+                        String group = assignee.asText(null);
+                        if (group == null || group.isBlank()) {
+                            throw validation("human-input node '" + nodeId + "' has an empty assignee");
+                        }
+                        groups.add(group);
+                    }
+                    // Parse optional fields
+                    JsonNode slaHoursNode = node.path("slaHours");
+                    Long slaHours = slaHoursNode.isNumber() ? slaHoursNode.asLong() : null;
+                    JsonNode requireDoubleSignOffNode = node.path("requireDoubleSignOff");
+                    Boolean requireDoubleSignOff = requireDoubleSignOffNode.isBoolean() ? requireDoubleSignOffNode.asBoolean() : null;
+                    userTasks.put(nodeId,
+                            new TaskMeta(nodeId, nodeName, null, List.of(), groups, formId, null, null, null, null));
                 }
                 default -> throw validation("unsupported node type '" + type + "' for node '" + nodeId
                         + "'; supported: " + String.join(", ", SUPPORTED_TYPES));

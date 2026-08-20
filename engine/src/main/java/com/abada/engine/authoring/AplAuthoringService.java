@@ -29,8 +29,8 @@ public class AplAuthoringService {
     private static final String SYSTEM_PROMPT = """
             You are Abada Studio's APL authoring engine. Emit only one complete YAML document.
             The document must use version abada.io/v1 and compile without a BPMN/XML round-trip.
-            Supported node types are webhook, agent, engine-task, decision-table, approval-gate,
-            condition, and end. flow.entry must reference the single webhook node. Every next,
+            Supported node types are webhook, agent, engine-task, decision-table, human-input
+            (approval-gate is a deprecated alias), condition, and end. flow.entry must reference the single webhook node. Every next,
             condition target, and error target must reference an existing node. Use stable,
             descriptive node ids matching [a-zA-Z][a-zA-Z0-9_-]*. Never emit markdown fences or
             prose outside the YAML. Keep agents probabilistic and business rules deterministic.

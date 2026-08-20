@@ -22,7 +22,7 @@ flow:
             rating: "fail"
       next: gate
     - id: gate
-      type: approval-gate
+      type: human-input
       description: Approve the candidate
       assignees:
         - recruiters

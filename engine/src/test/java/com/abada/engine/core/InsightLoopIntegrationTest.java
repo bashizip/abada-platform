@@ -195,7 +195,7 @@ class InsightLoopIntegrationTest {
                 + "      hitPolicy: FIRST\n      inputs:\n        - name: score\n      rules:\n"
                 + "        - when: score >= 75\n          then:\n            rating: pass\n"
                 + "        - otherwise: true\n          then:\n            rating: fail\n      next: gate\n"
-                + "    - id: gate\n      type: approval-gate\n      assignees: [recruiters]\n      next: notify\n"
+                + "    - id: gate\n      type: human-input\n      assignees: [recruiters]\n      next: notify\n"
                 + "    - id: notify\n      type: agent\n      next: end\n"
                 + "    - id: end\n      type: end\n";
         FakeLlm server = new FakeLlm(List.of(rewrite));

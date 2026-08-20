@@ -2,3 +2,17 @@ version: abada.io/v1
 metadata:
   name: Script Transform
 flow:
+  entry: apply
+  nodes:
+    - id: apply
+      type: webhook
+      next: compute
+    - id: compute
+      type: script
+      description: Derive the shipping tier
+      format: javascript
+      script: |
+        variables.put('shippingTier', variables.orderValue >= 100 ? 'premium' : 'standard');
+      next: done
+    - id: done
+      type: end

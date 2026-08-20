@@ -9,7 +9,7 @@ flow:
       description: Start
       next: initialTask
     - id: initialTask
-      type: approval-gate
+      type: human-input
       description: Set Variables
       assignees: [test-user]
       next: parallelFork
@@ -50,12 +50,12 @@ flow:
         - if: "${path == 'D'}"
           then: taskD
     - id: taskC
-      type: approval-gate
+      type: human-input
       description: Task C
       assignees: [test-user]
       next: rejoinInclusive
     - id: taskD
-      type: approval-gate
+      type: human-input
       description: Task D
       assignees: [test-user]
       next: rejoinInclusive
