@@ -23,7 +23,7 @@ import {
   GitCompare
 } from 'lucide-react';
 import { WorkflowFile, NodeType, EventSubtype, GatewaySubtype } from '@/types';
-import { EngineAPI, ProcessDefinitionDTO, ProcessInstanceDTO } from '@/api/engine';
+import { EngineAPI, ProcessDefinitionDTO, ProcessInstanceDTO, EngineInfoResponse } from '@/api/engine';
 import { ProjectExplorer } from '@/components/ProjectExplorer';
 
 interface SidebarProps {
@@ -63,6 +63,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isLoadingInstances, setIsLoadingInstances] = useState<boolean>(false);
   const [definitions, setDefinitions] = useState<ProcessDefinitionDTO[]>([]);
   const [processFilter, setProcessFilter] = useState<string>('ALL');
+  const [engineInfo, setEngineInfo] = useState<EngineInfoResponse | null>(null);
+  const [engineInfoError, setEngineInfoError] = useState<boolean>(false);
 
   React.useEffect(() => {
     if (activeTab !== 'instances') return;
@@ -87,6 +89,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       })
       .catch(() => setDefinitions([]));
   }, [activeTab, instancesRefreshKey, projectId]);
+
+  React.useEffect(() => {
+    EngineAPI.getInfo()
+      .then(info => {
+        setEngineInfo(info);
+        setEngineInfoError(false);
+      })
+      .catch(() => setEngineInfoError(true));
+  }, []);
 
   const visibleInstances = processFilter === 'ALL'
     ? instances
@@ -193,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       type: 'human',
       group: 'Activities',
-      title: 'Approval Gate',
+      title: 'Human Input',
       description: 'Human review, escalation & SLA timer',
       icon: UserCheck,
       color: '#E76F51',
@@ -317,22 +328,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="pt-3 border-t border-[#3A322E]">
             <span className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase block mb-2">
-              Process Governance
+              Engine Info
             </span>
-            <div className="p-3 bg-[#1A1614] rounded-xl border border-[#3A322E] space-y-2 text-xs">
-              <div className="flex justify-between text-[#A89F91]">
-                <span>Global Engine</span>
-                <span className="text-[#90A955]">v3.6-BPMN</span>
+            {engineInfoError ? (
+              <div className="p-3 bg-[#1A1614] rounded-xl border border-[#3A322E] text-xs text-[#E76F51]">
+                Engine unreachable
               </div>
-              <div className="flex justify-between text-[#A89F91]">
-                <span>DMN Parser</span>
-                <span className="text-[#2A9D8F]">Strict Hit Mode</span>
+            ) : engineInfo ? (
+              <div className="p-3 bg-[#1A1614] rounded-xl border border-[#3A322E] space-y-2 text-xs">
+                <div className="flex justify-between text-[#A89F91]">
+                  <span>Version</span>
+                  <span className="text-[#90A955]">{engineInfo.version}</span>
+                </div>
+                <div className="flex justify-between text-[#A89F91]">
+                  <span>Standard</span>
+                  <span className="text-[#2A9D8F]">{engineInfo.engine.standard}</span>
+                </div>
+                <div className="flex justify-between text-[#A89F91]">
+                  <span>Persistence</span>
+                  <span className="text-[#9D4EDD]">{engineInfo.engine.persistence}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-[#A89F91]">
-                <span>Human SLA Alert</span>
-                <span className="text-[#E76F51]">Enabled</span>
+            ) : (
+              <div className="p-3 bg-[#1A1614] rounded-xl border border-[#3A322E] text-xs text-[#A89F91]">
+                Loading engine info...
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

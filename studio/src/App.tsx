@@ -197,19 +197,23 @@ export default function App() {
     const id = `${type}-${Date.now()}`;
     const isFirstEvent = type === 'event'
       && !currentWorkflow.nodes.some((node) => node.type === 'event' && node.subtype === 'start');
+    const eventTitle = subtype === 'timer' ? 'Timer Catch'
+      : subtype === 'message' ? 'Message Catch'
+      : subtype === 'signal' ? 'Signal Catch'
+      : isFirstEvent ? 'Start Process' : 'End Process';
     const defaultTitles: Record<NodeType, string> = {
       agent: 'AI Validation Agent', human: 'Executive Review Task', dmn: 'Risk Matrix Policy',
       gateway: subtype === 'parallel' ? 'Parallel Gateway'
         : subtype === 'inclusive' ? 'Inclusive Gateway'
         : subtype === 'event' ? 'Event Gateway'
         : 'Branching Gateway',
-      event: isFirstEvent ? 'Start Process' : 'End Process', 'engine-task': 'Engine Service Task',
+      event: eventTitle, 'engine-task': 'Engine Service Task',
       script: 'Script Step',
     };
     const newNode: WorkflowNode = {
       id, type,
       subtype: type === 'event'
-        ? (subtype && ((subtype as EventSubtype) === 'start' || (subtype as EventSubtype) === 'end')
+        ? (subtype && ['start', 'end', 'timer', 'message', 'signal'].includes(subtype as EventSubtype)
           ? (subtype as EventSubtype) : isFirstEvent ? 'start' : 'end')
         : type === 'gateway' ? subtype : undefined,
       title: defaultTitles[type],
@@ -219,7 +223,7 @@ export default function App() {
       x: 120 + currentWorkflow.nodes.length * 260, y: 220,
       agentConfig: type === 'agent' ? { model: DEFAULT_AGENT_MODEL, systemPrompt: 'Evaluate incoming data and perform risk verification.', confidenceThreshold: 85, temperature: 0.2, tools: ['Database Query'] } : undefined,
       dmnConfig: type === 'dmn' ? { decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`, hitPolicy: 'FIRST', inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }], outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }], rules: [{ id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } }, { id: 'r2', otherwise: true, then: { AllowPass: false } }] } : undefined,
-      humanConfig: type === 'human' ? { assigneeRole: 'Operations Analyst', slaHours: 24, formFields: ['Review Notes', 'Approval Signature'] } : undefined,
+      humanConfig: type === 'human' ? { assignees: ['Operations Analyst'], slaHours: 24, formId: '', formFields: ['Review Notes', 'Approval Signature'] } : undefined,
       engineTaskConfig: type === 'engine-task' ? { service: 'abada:service' } : undefined,
       scriptConfig: type === 'script' ? { script: '', format: 'javascript' } : undefined,
     };

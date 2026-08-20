@@ -206,7 +206,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
 
         {data.type === 'human' && data.humanConfig && (
           <div className="pt-2 border-t border-[#3A322E] flex items-center justify-between text-[10px] text-[#E76F51]">
-            <span className="truncate">{data.humanConfig.assigneeRole}</span>
+            <span className="truncate">{data.humanConfig.assignees.join(', ')}</span>
             <span className="bg-[#E76F51]/20 px-1.5 py-0.5 rounded shrink-0">
               SLA {data.humanConfig.slaHours}h
             </span>

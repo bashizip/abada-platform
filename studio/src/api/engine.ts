@@ -120,6 +120,27 @@ export interface ProcessDefinitionDTO {
   createdAt?: string;
 }
 
+export interface EngineInfoResponse {
+  name: string;
+  service: string;
+  description: string;
+  version: string;
+  api: {
+    version: string;
+    openApi: string;
+    swaggerUi: string;
+  };
+  engine: {
+    standard: string;
+    supportLevel: string;
+    persistence: string;
+  };
+  health: {
+    liveness: string;
+    readiness: string;
+  };
+}
+
 /** Liveness and incident record for one external worker topic in a project. */
 export interface WorkerHealthDTO {
   projectId: string;
@@ -145,6 +166,19 @@ export class EngineAPI {
       headers['Content-Type'] = 'application/json';
     }
     return headers;
+  }
+
+  /**
+   * Retrieves public service metadata and discovery links from the engine.
+   */
+  static async getInfo(): Promise<EngineInfoResponse> {
+    const res = await authenticatedFetch(`${this.BASE_URL}/info`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch engine info: ${res.statusText}`);
+    }
+    return res.json();
   }
 
   /**

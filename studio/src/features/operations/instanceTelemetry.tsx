@@ -398,7 +398,7 @@ export const NodeTelemetry: React.FC<{
               <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#E76F51]">
                 <UserCheck className="h-3.5 w-3.5" /> Human task
               </div>
-              <InfoRow label="Assignee role">{node.humanConfig.assigneeRole}</InfoRow>
+              <InfoRow label="Assignees">{node.humanConfig.assignees.join(', ')}</InfoRow>
               <InfoRow label="SLA">{node.humanConfig.slaHours}h</InfoRow>
               {node.humanConfig.escalationRole && <InfoRow label="Escalation">{node.humanConfig.escalationRole}</InfoRow>}
             </div>
