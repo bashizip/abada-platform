@@ -143,7 +143,7 @@ If the login page doesn't redirect to Keycloak or you encounter CORS errors, ens
 
 1. The full Abada Platform stack is running:
    ```bash
-   ./scripts/build-and-run-dev.sh
+    ./scripts/dev/up.sh
    ```
 
 2. The development Keycloak service is accessible at `http://keycloak.localhost`

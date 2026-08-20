@@ -40,9 +40,11 @@ export interface TaskDetailsDto {
   startDate?: string;
   endDate?: string;
   candidateUsers?: string[];
-  candidateGroups?: string[];
-  processInstanceId: string;
-  processDefinitionId: string;
+candidateGroups?: string[];
+formKey?: string;
+    processInstanceId: string;
+    projectId?: string;
+    processDefinitionId: string;
   processDefinitionName: string;
   processStatus: ProcessStatus;
   processSuspended: boolean;
@@ -346,10 +348,28 @@ class ApiClient {
     });
   }
 
-  // User stats endpoint
+// User stats endpoint
   async getUserStats(): Promise<ApiResponse<UserStatsDto>> {
     return this.request("/v1/tasks/user-stats");
   }
-}
+
+  async listForms(projectId: string): Promise<ApiResponse<ProjectResourceContentDTO[]>> {
+    return this.request(`/v1/projects/${encodeURIComponent(projectId)}/resources?folder=forms`);
+  }
+
+export interface ProjectResourceContentDTO {
+    id: string;
+    projectId: string;
+    folderId: string;
+    name: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
+    kind: string;
+    revision: number;
+    createdAt: string;
+    updatedAt: string;
+    contentBase64: string;
+  }
 
 export const apiClient = new ApiClient();

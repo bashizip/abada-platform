@@ -4,8 +4,8 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Star, CheckCircle, XCircle } from "lucide-react";
-import { apiClient, TaskDetailsDto, TaskStatus } from "@/lib/api";
+import { ArrowLeft, Star, CheckCircle, XCircle, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { apiClient, TaskDetailsDto, TaskStatus, ProjectResourceContentDTO } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, getTaskStatusColors } from "@/lib/utils";
 import {
@@ -24,6 +24,7 @@ import {
   TaskVariableRow,
   TaskVariableType,
 } from "@/components/TaskVariableEditor";
+import { FormViewer } from "@/components/FormViewer";
 
 const VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -74,6 +75,10 @@ export default function TaskDetail() {
   const [jsonDraft, setJsonDraft] = useState("{}");
   const [jsonRequiresValidation, setJsonRequiresValidation] = useState(false);
   const [jsonEditorError, setJsonEditorError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<ProjectResourceContentDTO | null>(null);
+  const [formLoading, setFormLoading] = useState(false);
+  const [formList, setFormList] = useState<ProjectResourceContentDTO[]>([]);
+  const [formListLoading, setFormListLoading] = useState(false);
   const { toast } = useToast();
 
   const buildVariablesFromRows = (rows: TaskVariableRow[]) => {
@@ -135,6 +140,18 @@ export default function TaskDetail() {
     };
   };
 
+  const fetchForm = useCallback(
+    async (projectId: string, resourceId: string) => {
+      setFormLoading(true);
+      const response = await apiClient.getResource(projectId, resourceId);
+      setFormLoading(false);
+      if (response.data) {
+        setFormData(response.data);
+      }
+    },
+    [],
+  );
+
   const fetchTask = useCallback(
     async (taskId: string) => {
       setLoading(true);
@@ -142,6 +159,20 @@ export default function TaskDetail() {
       setLoading(false);
       if (response.data) {
         setTask(response.data);
+        // Fetch form if task has a formKey and projectId
+        if (response.data.formKey && response.data.projectId) {
+          fetchForm(response.data.projectId, response.data.formKey);
+          // Fetch form list
+          setFormListLoading(true);
+          apiClient.listForms(response.data.projectId).then((resp) => {
+            setFormListLoading(false);
+            if (resp.data) {
+              setFormList(resp.data);
+            }
+          }).catch(() => {
+            setFormListLoading(false);
+          });
+        }
       } else {
         toast(
           ApiErrorToast({
@@ -151,7 +182,7 @@ export default function TaskDetail() {
         );
       }
     },
-    [toast],
+    [toast, fetchForm, apiClient, setFormList],
   );
 
   useEffect(() => {
@@ -526,6 +557,52 @@ export default function TaskDetail() {
               </pre>
             </div>
           </div>
+
+          {/* Form */}
+          {task.formKey && (
+            <div>
+              <h2 className="text-xl font-semibold text-foreground mb-4">
+                Form
+              </h2>
+              {formListLoading ? (
+                <div className="bg-muted p-4 rounded-lg text-center">
+                  <p className="text-muted-foreground">Loading forms...</p>
+                </div>
+              ) : formList.length > 0 ? (
+                <div className="bg-slate-800 p-4 rounded-lg">
+                  <select
+                    onChange={(e) => {
+                      const selectedForm = formList.find((f) => f.name === e.target.value);
+                      if (selectedForm) {
+        fetchForm(selectedForm.projectId, selectedForm.id);
+        setFormData(selectedForm);
+      }
+                    }}
+                    className="bg-slate-950/60 border-slate-800 text-slate-200 rounded p-2 cursor-pointer w-full mb-2">
+                    <option disabled>Select a form...</option>
+                    {formList.map((f) => (
+                      <option key={f.id} value={f.name}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="bg-muted p-4 rounded-lg text-center">
+                  <p className="text-muted-foreground">
+                    Form not found: {task.formKey}
+                  </p>
+                </div>
+              )}
+              {formData && !formListLoading && (
+                <div className="bg-slate-800 p-4 rounded-lg">
+                  <FormViewer formData={formData} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
 
           {/* Actions */}
           <div className="flex justify-end space-x-3 pt-4">
