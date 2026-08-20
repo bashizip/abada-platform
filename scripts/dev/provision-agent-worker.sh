@@ -4,11 +4,12 @@
 #      with the engine audience + groups mappers and the .env.dev secret,
 #   2. put its service-account user into the abada-worker group,
 #   3. let the engine observe the service principal, then
-#   4. bind the principal to the Default project's abada:agent topic.
+#   4. register the worker's global capabilities (topic abada:agent) via
+#      PUT /v1/workers/me so it can poll project-agnostically.
 #
 # The engine runs in OIDC mode in dev, so a static ABADA_AGENT_ENGINE_TOKEN
 # is not accepted; the worker authenticates with client credentials instead.
-# Alice is the temporary global administrator and performs the binding.
+# Registration is global and idempotent; no project binding is needed.
 
 set -euo pipefail
 
@@ -18,7 +19,6 @@ CLIENT_ID="abada-agent-worker"
 WORKER_USER="service-account-abada-agent-worker"
 REALM="${ABADA_KEYCLOAK_REALM:-abada-dev}"
 GROUP_NAME="abada-worker"
-DEFAULT_PROJECT_ID="00000000-0000-0000-0000-000000000001"
 TOPIC="abada:agent"
 API_URL="${ABADA_PROVISION_API_URL:-http://api.localhost/api}"
 OIDC_URL="${ABADA_PROVISION_OIDC_URL:-http://keycloak.localhost}"
@@ -114,67 +114,33 @@ fi
 echo "Assigning $WORKER_USER to $GROUP_NAME..."
 kc update "users/$WORKER_USER_ID/groups/$GROUP_ID" -r "$REALM" -n >/dev/null
 
-# --- 3. Obtain tokens: worker client credentials + Alice (admin) ------------
-client_credentials_token() {
-  curl --fail --silent --show-error \
-    -X POST "$OIDC_URL/realms/$REALM/protocol/openid-connect/token" \
-    -H 'Content-Type: application/x-www-form-urlencoded' \
-    --data-urlencode 'client_id=abada-agent-worker' \
-    --data-urlencode "client_secret=$CLIENT_SECRET" \
-    --data-urlencode 'grant_type=client_credentials' \
-    | jq -er '.access_token'
-}
-
-password_token() {
-  local username="$1" password="$2"
-  curl --fail --silent --show-error \
-    -X POST "$OIDC_URL/realms/$REALM/protocol/openid-connect/token" \
-    -H 'Content-Type: application/x-www-form-urlencoded' \
-    --data-urlencode 'client_id=abada-frontend' \
-    --data-urlencode "username=$username" \
-    --data-urlencode "password=$password" \
-    --data-urlencode 'grant_type=password' \
-    | jq -er '.access_token'
-}
+# --- 3. Worker token, then global capability registration --------------------
+WORKER_TOKEN="$(curl --fail --silent --show-error \
+  -X POST "$OIDC_URL/realms/$REALM/protocol/openid-connect/token" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode "client_id=$CLIENT_ID" \
+  --data-urlencode "client_secret=$CLIENT_SECRET" \
+  --data-urlencode 'grant_type=client_credentials' \
+  | jq -er '.access_token')"
 
 echo "Triggering engine principal observation for $WORKER_USER..."
-WORKER_TOKEN="$(client_credentials_token)"
-# The identity interceptor observes the service principal before the worker
-# binding check runs, so even an unbound fetch (403) registers it. The running
-# worker polls every second and also triggers this on its own. Any HTTP status
-# is acceptable here; a missing principal is caught by the wait loop below.
+# The identity interceptor observes the service principal on first
+# authenticated call; registration below both observes and registers.
 curl --silent --show-error -o /dev/null \
-  -X POST "$API_URL/v1/external-tasks/fetch-and-lock" \
+  -X PUT "$API_URL/v1/workers/me" \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H 'Content-Type: application/json' \
-  --data "{\"workerId\":\"abada-agent-worker\",\"topics\":[\"$TOPIC\"],\"lockDuration\":120000,\"maxTasks\":1,\"projectId\":\"$DEFAULT_PROJECT_ID\"}" \
+  --data "{\"topics\":[\"$TOPIC\"],\"models\":[]}" \
   || true
 
-echo "Authenticating Alice as the temporary global administrator..."
-ALICE_TOKEN="$(password_token "alice" "alice")"
-
-# --- 4. Bind the observed principal to the Default project's agent topic ----
-PRINCIPAL_ID=""
-for _ in $(seq 1 30); do
-  PRINCIPAL_ID="$(curl --fail --silent --show-error \
-    -H "Authorization: Bearer $ALICE_TOKEN" \
-    "$API_URL/v1/projects/$DEFAULT_PROJECT_ID/principals?query=$WORKER_USER&size=50" \
-    | jq -er --arg user "$WORKER_USER" '[.[] | select(.username == $user)][0].id // empty' 2>/dev/null || true)"
-  [[ -n "$PRINCIPAL_ID" ]] && break
-  sleep 2
-done
-if [[ -z "$PRINCIPAL_ID" ]]; then
-  echo "Error: engine did not observe the $WORKER_USER principal within 60s" >&2
+echo "Verifying global registration of $WORKER_USER..."
+REGISTERED="$(curl --fail --silent --show-error \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  "$API_URL/v1/workers/me")"
+if ! jq -e --arg topic "$TOPIC" '.capabilities[] | select(.topic == $topic)' >/dev/null <<<"$REGISTERED"; then
+  echo "Error: $WORKER_USER is not registered for topic $TOPIC" >&2
   echo "Is the stack up and the agent worker running? (./release/abada-platform up dev --agent)" >&2
   exit 1
 fi
 
-echo "Binding $WORKER_USER to project $DEFAULT_PROJECT_ID topic $TOPIC..."
-curl --fail --silent --show-error \
-  -X PUT \
-  -H "Authorization: Bearer $ALICE_TOKEN" \
-  -H 'Content-Type: application/json' \
-  --data "{\"topics\":[\"$TOPIC\"]}" \
-  "$API_URL/v1/projects/$DEFAULT_PROJECT_ID/workers/$PRINCIPAL_ID" >/dev/null
-
-echo "Agent worker provisioned: client=$CLIENT_ID group=$GROUP_NAME project=$DEFAULT_PROJECT_ID topic=$TOPIC"
+echo "Agent worker provisioned: client=$CLIENT_ID group=$GROUP_NAME topic=$TOPIC (global)"
