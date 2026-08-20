@@ -1,6 +1,10 @@
 target/*
 !target/abada-engine-*.jar
+**/node_modules/
+**/dist/
+**/target/
 .git/
+.codebuddy/
 build/
 .idea/
 .github/

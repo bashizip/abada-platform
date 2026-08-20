@@ -1,16 +1,33 @@
-# Production Dockerfile for Abada Studio
+# Production Dockerfile for Abada Studio.
+#
+# The build context for this Dockerfile is the project root (`./`), not
+# `studio/`, because `npm run build` invokes the apl-parity check which
+# reads `../../engine/src/main/java/com/abada/engine/parser/AplParser.java`
+# relative to its own location. Inside the container the script lives at
+# `/app/scripts/check-apl-parity.mts`, so that path resolves to
+# `/engine/src/main/java/com/abada/engine/parser/AplParser.java`; we COPY
+# the engine parser source below so the parity guard can read it.
+#
+# See `scripts/dev/rebuild.sh` for the matching build invocation.
 FROM node:24.18.0-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json ./
+# Copy package files for dependency installation (npm ci uses cache layers
+# keyed off these files; putting them ahead of the source gives fast
+# incremental rebuilds).
+COPY studio/package.json studio/package-lock.json ./
 
 # Install dependencies
 RUN npm ci --production=false
 
-# Copy the rest of the application source code
-COPY . .
+# Copy the studio source (excludes node_modules and dist via
+# studio/.dockerignore).
+COPY studio/ ./
+
+# Make the engine AplParser visible to the apl-parity check (see comment
+# at the top of this file).
+COPY engine/src/main/java/com/abada/engine/parser/AplParser.java /engine/src/main/java/com/abada/engine/parser/AplParser.java
 
 # Build the production bundle
 RUN npm run build
@@ -19,11 +36,11 @@ RUN npm run build
 FROM nginx:1.28.0-alpine
 
 # Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY studio/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY docker-entrypoint.sh /usr/local/bin/abada-studio-entrypoint
+COPY studio/docker-entrypoint.sh /usr/local/bin/abada-studio-entrypoint
 RUN chmod +x /usr/local/bin/abada-studio-entrypoint
 
 # Expose port 5605

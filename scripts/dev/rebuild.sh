@@ -50,7 +50,7 @@ echo "Building $ENGINE_IMAGE..."
 docker build "${build_flags[@]+"${build_flags[@]}"}" -f "$ROOT_DIR/engine/Dockerfile.prod.engine" -t "$ENGINE_IMAGE" "$ROOT_DIR/engine"
 
 echo "Building $STUDIO_IMAGE..."
-docker build "${build_flags[@]+"${build_flags[@]}"}" -f "$ROOT_DIR/studio/Dockerfile.prod" -t "$STUDIO_IMAGE" "$ROOT_DIR/studio"
+docker build "${build_flags[@]+"${build_flags[@]}"}" -f "$ROOT_DIR/studio/Dockerfile.prod" -t "$STUDIO_IMAGE" "$ROOT_DIR"
 
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.dev.yaml")
 
