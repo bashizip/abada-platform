@@ -650,7 +650,7 @@ class AplParserTest {
                         + "      type: human-input\n"
                         + "      description: Review application\n"
                         + "      assignees: [managers, hr]\n"
-                        + "      formId: onboarding-form-v2\n"
+                        + "      formKey: onboarding-form-v2\n"
                         + "      slaHours: 48\n"
                         + "      requireDoubleSignOff: true\n"
                         + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
@@ -662,6 +662,19 @@ class AplParserTest {
             assertThat(task.getCandidateGroups()).containsExactly("managers", "hr");
             assertThat(task.getAssignee()).isNull();
         });
+    }
+
+    @Test
+    void formIdAliasIsBackwardCompatible() {
+        ParsedProcessDefinition definition = parser.parseDetailed(standardFlow(
+                "    - id: review\n"
+                        + "      type: human-input\n"
+                        + "      description: Review application\n"
+                        + "      assignees: [managers]\n"
+                        + "      formId: legacy-form\n"
+                        + "      next: end\n").getBytes(StandardCharsets.UTF_8)).definition();
+
+        assertThat(definition.getUserTask("review").getFormKey()).isEqualTo("legacy-form");
     }
 
     @Test

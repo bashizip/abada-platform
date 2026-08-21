@@ -527,8 +527,9 @@ public final class AplParser {
                     events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.SIGNAL, signal));
                 }
                 case "human-input" -> {
-                    JsonNode formIdNode = node.path("formId");
-                    String formId = formIdNode == null || formIdNode.isMissingNode() ? null : formIdNode.asText(null);
+                    // Canonical APL field is `formKey`; `formId` remains a
+                    // deprecated alias so existing documents keep deploying.
+                    String formKey = textField(node, "formKey", "formId");
                     JsonNode assignees = node.path("assignees");
                     if (!assignees.isArray() || assignees.isEmpty()) {
                         throw validation("human-input node '" + nodeId + "' requires a non-empty 'assignees' list");
@@ -547,7 +548,7 @@ public final class AplParser {
                     JsonNode requireDoubleSignOffNode = node.path("requireDoubleSignOff");
                     Boolean requireDoubleSignOff = requireDoubleSignOffNode.isBoolean() ? requireDoubleSignOffNode.asBoolean() : null;
                     userTasks.put(nodeId,
-                            new TaskMeta(nodeId, nodeName, null, List.of(), groups, formId, null, null, null, null));
+                            new TaskMeta(nodeId, nodeName, null, List.of(), groups, formKey, null, null, null, null));
                 }
                 default -> throw validation("unsupported node type '" + type + "' for node '" + nodeId
                         + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
@@ -744,5 +745,14 @@ public final class AplParser {
                 work.pop();
             }
         }
+    }
+
+    /** Reads a text field by its canonical name, falling back to a legacy alias. */
+    private static String textField(JsonNode node, String canonical, String legacy) {
+        JsonNode value = node.path(canonical);
+        if (value.isMissingNode() || value.isNull()) {
+            value = node.path(legacy);
+        }
+        return value.isMissingNode() || value.isNull() ? null : value.asText(null);
     }
 }
