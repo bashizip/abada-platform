@@ -42,12 +42,11 @@ flow:
           then: standard-workflow
 
     - id: senior-sales-review
-      type: approval-gate
+      type: human-input
       description: Senior sales director review
+      formKey: lead-triage-review
       assignees:
         - sales-director
-      mode: serial
-      sla_hours: 24
       next: end
 
     - id: standard-workflow
