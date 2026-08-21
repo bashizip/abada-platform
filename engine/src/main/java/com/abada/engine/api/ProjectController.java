@@ -7,6 +7,7 @@ import com.abada.engine.persistence.entity.ProjectEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
 import com.abada.engine.persistence.repository.PrincipalRepository;
+import com.abada.engine.project.PrincipalDiscoveryService;
 import com.abada.engine.project.ProjectAccessService;
 import com.abada.engine.project.ProjectService;
 import com.abada.engine.project.ProjectWorkerService;
@@ -39,13 +40,16 @@ public class ProjectController {
     private final ProjectAccessService access;
     private final PrincipalRepository principals;
     private final ProjectWorkerService workers;
+    private final PrincipalDiscoveryService principalDiscovery;
 
     public ProjectController(ProjectService service, ProjectAccessService access,
-            PrincipalRepository principals, ProjectWorkerService workers) {
+            PrincipalRepository principals, ProjectWorkerService workers,
+            PrincipalDiscoveryService principalDiscovery) {
         this.service = service;
         this.access = access;
         this.principals = principals;
         this.workers = workers;
+        this.principalDiscovery = principalDiscovery;
     }
 
     @PostMapping
@@ -104,7 +108,7 @@ public class ProjectController {
         access.require(projectId, Role.OWNER);
         var pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100),
                 Sort.by("username").ascending());
-        return ResponseEntity.ok(service.searchPrincipals(query, pageable).stream()
+        return ResponseEntity.ok(principalDiscovery.search(query, pageable).stream()
                 .map(PrincipalDTO::from).toList());
     }
 

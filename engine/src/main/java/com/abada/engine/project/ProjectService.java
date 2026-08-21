@@ -19,8 +19,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -179,13 +177,6 @@ public class ProjectService {
         if (member.getRoles().contains(Role.OWNER)
                 && members.countByProjectIdAndRole(projectId, Role.OWNER) <= 1) throw lastOwner();
         members.delete(member);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<PrincipalEntity> searchPrincipals(String query, Pageable pageable) {
-        String value = query == null ? "" : query.strip();
-        return value.isBlank() ? principals.findAll(pageable)
-                : principals.findByUsernameContainingIgnoreCase(value, pageable);
     }
 
     public long processCount(String projectId) { return documents.countByProjectId(projectId); }
