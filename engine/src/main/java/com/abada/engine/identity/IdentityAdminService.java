@@ -29,11 +29,38 @@ public class IdentityAdminService {
 
     public List<AdminUserDTO> listUsers(String query) {
         List<JsonNode> kcUsers = keycloakClient.listUsers(query);
+        Map<String, List<String>> groupsByUserId = collectGroupsByUser();
         List<AdminUserDTO> result = new ArrayList<>(kcUsers.size());
         for (JsonNode u : kcUsers) {
-            result.add(toUserDTO(u, null));
+            String id = u.hasNonNull("id") ? u.get("id").asText() : null;
+            result.add(toUserDTO(u, id == null ? List.of() : groupsByUserId.getOrDefault(id, List.of())));
         }
         return result;
+    }
+
+    /**
+     * Keycloak's user-list representation never embeds group membership, so
+     * invert the groups' member lists into a user-id → group-names map.
+     */
+    private Map<String, List<String>> collectGroupsByUser() {
+        Map<String, List<String>> byUser = new HashMap<>();
+        for (JsonNode g : keycloakClient.listGroups()) {
+            String groupId = g.hasNonNull("id") ? g.get("id").asText() : null;
+            String groupName = g.hasNonNull("name") ? g.get("name").asText() : null;
+            if (groupId == null || groupName == null) {
+                continue;
+            }
+            try {
+                for (JsonNode member : keycloakClient.getGroupMembers(groupId)) {
+                    if (member.hasNonNull("id")) {
+                        byUser.computeIfAbsent(member.get("id").asText(), k -> new ArrayList<>()).add(groupName);
+                    }
+                }
+            } catch (Exception ignored) {
+                // Non-fatal: a group whose members cannot be listed contributes nothing
+            }
+        }
+        return byUser;
     }
 
     public AdminUserDTO getUser(String userId) {
@@ -41,8 +68,13 @@ public class IdentityAdminService {
         if (kcUser == null) {
             return null;
         }
-        List<JsonNode> groups = keycloakClient.getUserGroups(userId);
-        return toUserDTO(kcUser, groups);
+        List<String> names = new ArrayList<>();
+        for (JsonNode g : keycloakClient.getUserGroups(userId)) {
+            if (g.hasNonNull("name")) {
+                names.add(g.get("name").asText());
+            }
+        }
+        return toUserDTO(kcUser, names);
     }
 
     public AdminUserDTO createUser(CreateUserRequest request) {
@@ -167,15 +199,9 @@ public class IdentityAdminService {
 
     // ── Mapping ──
 
-    private AdminUserDTO toUserDTO(JsonNode u, List<JsonNode> groups) {
-        List<String> groupNames = new ArrayList<>();
-        if (groups != null) {
-            for (JsonNode g : groups) {
-                if (g.has("name")) {
-                    groupNames.add(g.get("name").asText());
-                }
-            }
-        }
+    private AdminUserDTO toUserDTO(JsonNode u, List<String> groupNames) {
+        List<String> sorted = new ArrayList<>(groupNames == null ? List.of() : groupNames);
+        sorted.sort(null);
         return new AdminUserDTO(
                 u.has("id") ? u.get("id").asText() : null,
                 u.has("username") ? u.get("username").asText() : null,
@@ -183,7 +209,7 @@ public class IdentityAdminService {
                 u.has("firstName") ? u.get("firstName").asText() : null,
                 u.has("lastName") ? u.get("lastName").asText() : null,
                 u.has("enabled") && u.get("enabled").asBoolean(),
-                groupNames,
+                sorted,
                 u.has("createdTimestamp") ? u.get("createdTimestamp").asLong() : 0);
     }
 
