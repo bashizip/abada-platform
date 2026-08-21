@@ -54,7 +54,7 @@ export interface HumanConfig {
   assignees: string[];
   slaHours: number;
   /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
-  formId?: string;
+  formKey?: string;
   escalationRole?: string;
   formFields: string[];
   requireDoubleSignOff?: boolean;

@@ -245,7 +245,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.humanConfig = {
           assignees: aplNode.assignees || ['Reviewer'],
           slaHours: aplNode.sla_hours || 24,
-          formId: aplNode.formId,
+          formKey: aplNode.formKey,
           formFields: [],
           requireDoubleSignOff: aplNode.mode === 'parallel' && (aplNode.assignees?.length || 0) > 1,
         };
@@ -483,7 +483,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         assignees: node.humanConfig?.assignees || [],
         mode: node.humanConfig?.requireDoubleSignOff ? 'parallel' : 'serial',
         sla_hours: node.humanConfig?.slaHours,
-        formId: node.humanConfig?.formId,
+        formKey: node.humanConfig?.formKey,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'gateway') {

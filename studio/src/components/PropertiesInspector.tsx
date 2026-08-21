@@ -880,8 +880,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                <label className="text-xs text-[#A89F91] block">Form ID</label>
                <input
                  type="text"
-                 value={humanConfig.formId || ''}
-                 onChange={(e) => handleHumanChange('formId', e.target.value || undefined)}
+                 value={humanConfig.formKey || ''}
+                 onChange={(e) => handleHumanChange('formKey', e.target.value || undefined)}
                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
                  placeholder="e.g. loan-approval-form"
                />

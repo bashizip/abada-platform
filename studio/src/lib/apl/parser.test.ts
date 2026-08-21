@@ -16,7 +16,7 @@ describe('aplToWorkflow', () => {
             type: 'human-input',
             description: 'Review',
             assignees: ['managers'],
-            formId: 'form-v1',
+            formKey: 'form-v1',
             next: 'end',
           },
           { id: 'end', type: 'end' },
@@ -30,7 +30,7 @@ describe('aplToWorkflow', () => {
     expect(reviewNode!.type).toBe('human');
     expect(reviewNode!.humanConfig).toMatchObject({
       assignees: ['managers'],
-      formId: 'form-v1',
+      formKey: 'form-v1',
     });
   });
 
@@ -83,7 +83,7 @@ describe('workflowToAPL', () => {
           y: 0,
           humanConfig: {
             assignees: ['managers'],
-            formId: 'form-v1',
+            formKey: 'form-v1',
             slaHours: 24,
             requireDoubleSignOff: false,
             formFields: [],
@@ -98,6 +98,6 @@ describe('workflowToAPL', () => {
     expect(reviewNode).toBeDefined();
     expect(reviewNode!.type).toBe('human-input');
     expect((reviewNode as any).assignees).toEqual(['managers']);
-    expect((reviewNode as any).formId).toBe('form-v1');
+    expect((reviewNode as any).formKey).toBe('form-v1');
   });
 });

@@ -19,7 +19,7 @@ describe('compileAPLToBPMN', () => {
             type: 'human-input',
             description: 'Review application',
             assignees: ['managers'],
-            formId: 'onboarding-form-v2',
+            formKey: 'onboarding-form-v2',
             next: 'end',
           },
           { id: 'end', type: 'end' },

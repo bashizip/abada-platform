@@ -1,21 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Type, Hash, ToggleLeft, ListOrdered, Save, Trash2, ArrowUp, ArrowDown, LayoutTemplate, Settings2, X, Plus } from 'lucide-react';
+import { Type, Hash, ToggleLeft, ListOrdered, Save, Trash2, ArrowUp, ArrowDown, LayoutTemplate, Settings2, X, Plus, AlignLeft, Calendar } from 'lucide-react';
 import { IconButton } from '@/components/ui';
+import { FormField, FormFieldType, FormSchema } from '@/features/inbox/formSchema';
 
-export type FormFieldType = 'string' | 'number' | 'boolean' | 'select';
-
-export interface FormField {
-  id: string;
-  type: FormFieldType;
-  label: string;
-  required: boolean;
-  options?: string[]; // For select type
-}
-
-export interface FormSchema {
-  title: string;
-  fields: FormField[];
-}
+export type { FormFieldType, FormField, FormSchema } from '@/features/inbox/formSchema';
 
 interface FormEditorProps {
   initialSchema: FormSchema;
@@ -143,6 +131,14 @@ export const FormEditor: React.FC<FormEditorProps> = ({ initialSchema, onSave, o
               <ListOrdered className="w-5 h-5 text-[#A89F91] group-hover:text-[#2A9D8F]" />
               <span className="text-xs font-semibold text-[#EAE3D9]">Select</span>
             </button>
+            <button onClick={() => addField('textarea')} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-[#3A322E] bg-[#1A1614] hover:border-[#2A9D8F]/50 hover:bg-[#2A9D8F]/10 transition-colors group">
+              <AlignLeft className="w-5 h-5 text-[#A89F91] group-hover:text-[#2A9D8F]" />
+              <span className="text-xs font-semibold text-[#EAE3D9]">Textarea</span>
+            </button>
+            <button onClick={() => addField('date')} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-[#3A322E] bg-[#1A1614] hover:border-[#2A9D8F]/50 hover:bg-[#2A9D8F]/10 transition-colors group">
+              <Calendar className="w-5 h-5 text-[#A89F91] group-hover:text-[#2A9D8F]" />
+              <span className="text-xs font-semibold text-[#EAE3D9]">Date</span>
+            </button>
           </div>
         </div>
 
@@ -191,6 +187,12 @@ export const FormEditor: React.FC<FormEditorProps> = ({ initialSchema, onSave, o
                           <ArrowDown className="w-3 h-3 text-[#A89F91]" />
                         </div>
                       )}
+                      {field.type === 'textarea' && (
+                        <div className="h-16 border border-[#3A322E] bg-[#25201D] rounded-lg w-full p-3 text-[#A89F91] text-sm">Multi-line text input...</div>
+                      )}
+                      {field.type === 'date' && (
+                        <div className="h-10 border border-[#3A322E] bg-[#25201D] rounded-lg w-full flex items-center px-3 text-[#A89F91] text-sm">YYYY-MM-DD</div>
+                      )}
                     </div>
                   ))
                 )}
@@ -238,6 +240,53 @@ export const FormEditor: React.FC<FormEditorProps> = ({ initialSchema, onSave, o
                 />
                 <span className="text-sm font-semibold text-[#EAE3D9]">Required Field</span>
               </label>
+
+              {selectedField.type !== 'boolean' && (
+                <div className="space-y-1.5 pt-3 border-t border-[#3A322E]">
+                  <label className="text-xs font-semibold text-[#A89F91]">Default Value</label>
+                  {selectedField.type === 'textarea' ? (
+                    <textarea
+                      rows={2}
+                      value={selectedField.defaultValue === undefined ? '' : String(selectedField.defaultValue)}
+                      onChange={(e) => updateSelectedField({ defaultValue: e.target.value })}
+                      className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-3 py-2 text-sm text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F] resize-y"
+                    />
+                  ) : selectedField.type === 'number' ? (
+                    <input
+                      type="number"
+                      value={selectedField.defaultValue === undefined ? '' : String(selectedField.defaultValue)}
+                      onChange={(e) => updateSelectedField({ defaultValue: e.target.value === '' ? undefined : Number(e.target.value) })}
+                      className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-3 py-2 text-sm text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
+                    />
+                  ) : selectedField.type === 'date' ? (
+                    <input
+                      type="date"
+                      value={selectedField.defaultValue === undefined ? '' : String(selectedField.defaultValue)}
+                      onChange={(e) => updateSelectedField({ defaultValue: e.target.value || undefined })}
+                      className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-3 py-2 text-sm text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={selectedField.defaultValue === undefined ? '' : String(selectedField.defaultValue)}
+                      onChange={(e) => updateSelectedField({ defaultValue: e.target.value })}
+                      className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-3 py-2 text-sm text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
+                    />
+                  )}
+                </div>
+              )}
+
+              {(selectedField.type === 'string' || selectedField.type === 'textarea' || selectedField.type === 'number') && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#A89F91]">Placeholder</label>
+                  <input
+                    type="text"
+                    value={selectedField.placeholder || ''}
+                    onChange={(e) => updateSelectedField({ placeholder: e.target.value })}
+                    className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-3 py-2 text-sm text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
+                  />
+                </div>
+              )}
 
               {selectedField.type === 'select' && (
                 <div className="space-y-3 pt-4 border-t border-[#3A322E]">

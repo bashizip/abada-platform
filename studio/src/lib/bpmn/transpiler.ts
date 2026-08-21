@@ -238,7 +238,7 @@ isArray: (name) => {
           : candidateUsers
             ? candidateUsers.split(',').map((s: string) => s.trim()).filter(Boolean)
             : ['reviewer'],
-      formId: ut['@_camunda:formKey'],
+      formKey: ut['@_camunda:formKey'],
       next: getNext(ut['@_id']),
     });
   });

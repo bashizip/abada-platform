@@ -225,7 +225,7 @@ export default function App() {
       x: 120 + currentWorkflow.nodes.length * 260, y: 220,
       agentConfig: type === 'agent' ? { model: DEFAULT_AGENT_MODEL, systemPrompt: 'Evaluate incoming data and perform risk verification.', confidenceThreshold: 85, temperature: 0.2, tools: ['Database Query'] } : undefined,
       dmnConfig: type === 'dmn' ? { decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`, hitPolicy: 'FIRST', inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }], outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }], rules: [{ id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } }, { id: 'r2', otherwise: true, then: { AllowPass: false } }] } : undefined,
-      humanConfig: type === 'human' ? { assignees: ['Operations Analyst'], slaHours: 24, formId: '', formFields: ['Review Notes', 'Approval Signature'] } : undefined,
+      humanConfig: type === 'human' ? { assignees: ['Operations Analyst'], slaHours: 24, formKey: '', formFields: ['Review Notes', 'Approval Signature'] } : undefined,
       engineTaskConfig: type === 'engine-task' ? { service: 'abada:service' } : undefined,
       scriptConfig: type === 'script' ? { script: '', format: 'javascript' } : undefined,
     };

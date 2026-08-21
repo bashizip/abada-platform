@@ -9,7 +9,8 @@ import {
   ResourceKind, flattenTreeFolders,
 } from '@/api/projects';
 import { WorkflowFile } from '@/types';
-import { FormEditor, FormSchema } from '@/features/designer/FormEditor';
+import { FormEditor } from '@/features/designer/FormEditor';
+import { FormSchema } from '@/features/inbox/formSchema';
 
 interface ProjectExplorerProps {
   projectId: string;

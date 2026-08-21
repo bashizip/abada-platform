@@ -123,7 +123,7 @@ export interface APLApprovalGateNode extends APLBaseNode {
   mode?: 'parallel' | 'serial';
   sla_hours?: number;
   /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
-  formId?: string;
+  formKey?: string;
 }
 
 export interface APLHumanInputNode extends APLBaseNode {
@@ -132,7 +132,7 @@ export interface APLHumanInputNode extends APLBaseNode {
   mode?: 'parallel' | 'serial';
   sla_hours?: number;
   /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
-  formId?: string;
+  formKey?: string;
 }
 
 export interface APLMessageCatchNode extends APLBaseNode {
