@@ -10,7 +10,6 @@ import {
   Lock,
   Plus,
   Search,
-  Settings,
   Shield,
   ShieldAlert,
   UserCheck,
@@ -122,7 +121,7 @@ export const AdministrationView: React.FC<AdministrationViewProps> = ({ activePr
 
   if (loadingStatus) {
     return (
-      <div className="flex-1 flex items-center justify-center h-full bg-[#1A1614]">
+      <div className="flex-1 w-full flex items-center justify-center h-full bg-[#1A1614]">
         <Loader2 className="w-8 h-8 animate-spin text-[#9D4EDD]" />
       </div>
     );
@@ -130,7 +129,7 @@ export const AdministrationView: React.FC<AdministrationViewProps> = ({ activePr
 
   if (!status?.configured) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center h-full text-[#A89F91] bg-[#1A1614] px-8">
+      <div className="flex-1 w-full flex flex-col items-center justify-center h-full text-[#A89F91] bg-[#1A1614] px-8">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#E76F51]/40 bg-[#E76F51]/10 glow-amethyst-subtle animate-rise">
           <ShieldAlert className="w-8 h-8 text-[#E76F51]" />
         </div>
@@ -154,33 +153,30 @@ abada.identity.admin:
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="flex flex-col h-full bg-[#1A1614] overflow-hidden">
+      <div className="flex flex-col h-full w-full bg-[#1A1614] overflow-hidden">
       {/* Main Header */}
       <div className="flex items-center justify-between px-8 py-5 border-b border-[#3A322E] bg-[#25201D] shrink-0">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#9D4EDD] to-[#25201D] border border-[#9D4EDD]/40 glow-amethyst-subtle">
-            <Settings className="w-5 h-5 text-[#EAE3D9]" />
-          </div>
+        <div className="w-full flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-bold text-[#EAE3D9] leading-tight">Platform Administration</h1>
+            <h1 className="text-lg font-bold text-[#EAE3D9] leading-tight">Admin</h1>
             <p className="text-xs text-[#A89F91]">Manage global platform users, groups, and audit trails.</p>
           </div>
-        </div>
-        <div className="flex items-center gap-2 rounded-full border border-[#2A9D8F]/30 bg-[#2A9D8F]/10 px-3.5 py-1.5">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 bg-[#2A9D8F]" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2A9D8F]" />
-          </span>
-          <span className="text-xs font-medium text-[#2A9D8F] flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5" />
-            Keycloak · {status.realm}
-          </span>
+          <div className="flex items-center gap-2 rounded-full border border-[#2A9D8F]/30 bg-[#2A9D8F]/10 px-3.5 py-1.5 shrink-0">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 bg-[#2A9D8F]" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2A9D8F]" />
+            </span>
+            <span className="text-xs font-medium text-[#2A9D8F] flex items-center gap-1.5">
+              <KeyRound className="w-3.5 h-3.5" />
+              Keycloak · {status.realm}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Sub-tab bar */}
-      <div className="flex items-center gap-1 px-8 pt-4 pb-3 border-b border-[#3A322E] bg-[#25201D] shrink-0">
-        <div className="flex items-center bg-[#1A1614] rounded-full border border-[#3A322E] p-1 gap-1">
+      <div className="flex items-center px-8 pt-4 pb-3 border-b border-[#3A322E] bg-[#25201D] shrink-0">
+        <div className="w-full flex items-center bg-[#1A1614] rounded-full border border-[#3A322E] p-1 gap-1">
           {tabs.map(tab => (
             <button
               key={tab.key}
@@ -198,12 +194,17 @@ abada.identity.admin:
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-8 space-y-5 animate-rise">
-        {activeTab === 'users' && <AdminUsersPanel />}
-        {activeTab === 'groups' && <AdminGroupsPanel />}
-        {activeTab === 'projects' && <AdminProjectsPanel activeProject={activeProject} />}
-        {activeTab === 'audit' && <AdminAuditPlaceholder />}
+      {/* Content — root panel spans full width; children stay compact and centered.
+          No animated transform here: a persisted transform would create a
+          containing block + stacking context that traps fixed overlays (modals)
+          below the header and clips them to this box. */}
+      <div className="flex-1 overflow-y-auto w-full">
+        <div className="w-full px-8 py-8 space-y-5">
+          {activeTab === 'users' && <AdminUsersPanel />}
+          {activeTab === 'groups' && <AdminGroupsPanel />}
+          {activeTab === 'projects' && <AdminProjectsPanel activeProject={activeProject} />}
+          {activeTab === 'audit' && <AdminAuditPlaceholder />}
+        </div>
       </div>
       </div>
     </TooltipProvider>
@@ -754,7 +755,7 @@ const AdminProjectsPanel: React.FC<{ activeProject?: Project | null }> = ({ acti
         count={activeProject ? 1 : undefined}
       />
       {activeProject ? (
-        <div className="overflow-hidden rounded-2xl border border-[#3A322E] bg-[#25201D] shadow-warm-md animate-rise">
+        <div className="overflow-hidden rounded-2xl border border-[#3A322E] bg-[#25201D] shadow-warm-md">
           <ProjectAdmin project={activeProject} />
         </div>
       ) : (

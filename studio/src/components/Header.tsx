@@ -130,7 +130,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-[#A89F91] hover:text-[#EAE3D9] border border-transparent'
                 }`}
               >
-                Administration
+                Admin
               </button>
             )}
           </div>
