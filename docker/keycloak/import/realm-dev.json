@@ -15,12 +15,6 @@
       },
       {
         "name": "orun-admin"
-      },
-      {
-        "name": "manage-users"
-      },
-      {
-        "name": "manage-groups"
       }
     ]
   },
@@ -182,7 +176,9 @@
       "username": "service-account-abada-admin-api",
       "enabled": true,
       "serviceAccountClientId": "abada-admin-api",
-      "realmRoles": ["manage-users", "manage-groups"]
+      "clientRoles": {
+        "realm-management": ["manage-users", "query-users", "view-users", "query-groups", "view-groups", "manage-groups", "view-realm"]
+      }
     },
     {
       "username": "alice",
