@@ -92,9 +92,12 @@ mode). Negative tests for missing or wrong group are part of
 ### Why a separate confidential client
 
 The Keycloak Admin API is service-account-only. The engine authenticates with
-a dedicated confidential client (`abada-admin-api`) holding the
+a dedicated confidential client (`abada-admin-api`) whose service account
+holds the `realm-management` client roles
 `manage-users`, `manage-groups`, `query-users`, `view-users`, `query-groups`,
-`view-groups`, `manage-realm` and `view-realm` realm roles. The same engine
+`view-groups`, `manage-realm` and `view-realm`. These must be granted as
+`clientRoles` of the `realm-management` client — realm roles with those names
+do not authorize the Admin REST API and result in 403 responses. The same engine
 shares an audience validator across user JWTs and service-account JWTs, so
 the service account's audience claim must equal `OIDC_AUDIENCE` (or
 `abada-admin-api` if the audience mapper is installed — see

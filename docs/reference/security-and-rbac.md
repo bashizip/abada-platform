@@ -52,7 +52,9 @@ proxies user and group management under `/v1/admin/**` (see
 - Flow: `service_accounts` only (no public login, no user impersonation)
 - Secret: stored in the engine environment (`ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET`),
   not in the realm import on shared machines
-- Service-account realm roles: `manage-users`, `manage-groups`,
+- Service-account roles (granted as `realm-management` client roles on
+  `service-account-abada-admin-api` — plain realm roles with these names
+  grant nothing): `manage-users`, `manage-groups`,
   `query-users`, `view-users`, `query-groups`, `view-groups`,
   `manage-realm`, `view-realm`
 - Audience mapper: emits `abada-admin-api` so the engine can reject tokens

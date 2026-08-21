@@ -71,8 +71,9 @@ seed the following resources **before** the engine starts:
    - Service accounts: **on**
    - Valid redirect URIs: empty
    - Web origins: empty
-2. Assign these realm roles to the service-account user
-   `service-account-abada-admin-api`:
+2. Assign these `realm-management` **client** roles to the service-account user
+   `service-account-abada-admin-api` (do not create realm roles with these
+   names — the Admin REST API only honors the `realm-management` client roles):
    `manage-users`, `manage-groups`, `query-users`, `view-users`,
    `query-groups`, `view-groups`, `manage-realm`, `view-realm`.
 3. Add an audience mapper on the `abada-admin-api` client that emits the
