@@ -197,6 +197,13 @@ export class ProjectAPI {
       .then(checked<ProjectFormDTO[]>);
   }
 
+  /** Resolves a task form by its bare-slug formKey to its schema content. */
+  static resolveForm(projectId: string, formKey: string): Promise<ProjectResourceContent> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/forms/${encodeURIComponent(formKey)}`,
+      { headers: headers() })
+      .then(checked<ProjectResourceContent>);
+  }
+
   static replaceResource(projectId: string, resourceId: string, contentType: string,
     contentBase64: string, expectedRevision: number): Promise<ProjectResource> {
     return authenticatedFetch(`${this.BASE}/${projectId}/resources/${resourceId}`, {

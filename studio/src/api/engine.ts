@@ -62,15 +62,20 @@ export interface ProcessInstanceDTO {
 
 export interface EngineUserTaskDTO {
   id: string;
+  taskDefinitionKey?: string;
   name?: string;
   assignee?: string;
-  created?: string;
-  createTime?: string;
+  status?: 'AVAILABLE' | 'CLAIMED' | 'COMPLETED' | 'FAILED';
+  startDate?: string;
+  endDate?: string;
   dueDate?: string;
+  candidateUsers?: string[];
+  candidateGroups?: string[];
+  formKey?: string;
   processInstanceId?: string;
   processDefinitionId?: string;
-  taskDefinitionKey?: string;
-  status?: string;
+  processDefinitionName?: string;
+  projectId?: string;
   variables?: Record<string, unknown>;
 }
 
@@ -411,13 +416,51 @@ export class EngineAPI {
   }
 
   /**
-   * Retrieves tasks, optionally filtered by status
+   * Retrieves tasks, optionally filtered by status. With a projectId the
+   * project-scoped list is used; without one all tasks visible to the current
+   * user across projects are returned.
    */
   static async getTasks(status?: string, projectId?: string): Promise<EngineUserTaskDTO[]> {
-    const base = projectId ? `${this.BASE_URL}/projects/${projectId}/tasks` : `${this.BASE_URL}/tasks`;
+    const base = projectId ? `${this.BASE_URL}/projects/${projectId}/tasks` : `${this.BASE_URL}/tasks/mine`;
     const url = status && status !== 'all' ? `${base}?status=${encodeURIComponent(status)}` : base;
     const res = await authenticatedFetch(url, { headers: this.getHeaders() });
     if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.statusText}`);
+    return res.json();
+  }
+
+  static async getTaskDetail(taskId: string, projectId: string): Promise<EngineUserTaskDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch task: ${res.statusText}`);
+    return res.json();
+  }
+
+  static async claimTask(taskId: string, projectId: string): Promise<TaskOperationResultDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/claim`,
+      { method: 'POST', headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to claim task: ${res.statusText}`);
+    return res.json();
+  }
+
+  static async unclaimTask(taskId: string, projectId: string): Promise<TaskOperationResultDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/unclaim`,
+      { method: 'POST', headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to unclaim task: ${res.statusText}`);
+    return res.json();
+  }
+
+  static async failTask(taskId: string, projectId: string): Promise<TaskOperationResultDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/fail`,
+      { method: 'POST', headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fail task: ${res.statusText}`);
     return res.json();
   }
 
