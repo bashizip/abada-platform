@@ -22,6 +22,7 @@ import {
   GitCompare
 } from 'lucide-react';
 import { TooltipProvider, UITooltip } from '@/components/ui';
+import { FormPicker } from '@/components/FormPicker';
 
 interface PropertiesInspectorProps {
   selectedNode: WorkflowNode | null;
@@ -32,6 +33,8 @@ interface PropertiesInspectorProps {
   workflow?: WorkflowFile;
   /** Mutates the active workflow (nodes + edges) for event-gateway child authoring. */
   onUpdateWorkflow?: (updater: (wf: WorkflowFile) => WorkflowFile) => void;
+  /** Owning project — enables the human-node form picker. */
+  projectId?: string;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
@@ -40,6 +43,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   nodeCount,
   workflow,
   onUpdateWorkflow,
+  projectId,
 }) => {
 
   if (!selectedNode) {
@@ -877,15 +881,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
              </span>
 
              <div className="space-y-1.5">
-               <label className="text-xs text-[#A89F91] block">Form ID</label>
-               <input
-                 type="text"
-                 value={humanConfig.formKey || ''}
-                 onChange={(e) => handleHumanChange('formKey', e.target.value || undefined)}
-                 className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
-                 placeholder="e.g. loan-approval-form"
+               <label className="text-xs text-[#A89F91] block">Form</label>
+               <FormPicker
+                 projectId={projectId}
+                 value={humanConfig.formKey}
+                 onChange={(key) => handleHumanChange('formKey', key)}
                />
-               <p className="text-[10px] text-[#A89F91]">Optional form key for task-form rendering. Empty = engine default.</p>
              </div>
 
              <div className="space-y-1.5">

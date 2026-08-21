@@ -568,6 +568,7 @@ export default function App() {
                     onUpdateWorkflow={updateActiveWorkflow}
                     workflow={currentWorkflow}
                     nodeCount={currentWorkflow.nodes.length}
+                    projectId={activeProject?.id}
                   />
 
                   <NLInputBar

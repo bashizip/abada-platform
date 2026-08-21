@@ -75,6 +75,21 @@ export interface ProjectResourceContent extends ProjectResource {
   contentBase64: string;
 }
 
+/** A task form: a FORM-kind project resource listed by the engine. */
+export interface ProjectFormDTO {
+  id: string;
+  projectId: string;
+  folderId: string | null;
+  name: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  kind: ResourceKind;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ProjectTreeNodeKind = 'FOLDER' | 'DOCUMENT' | 'RESOURCE';
 
 export interface ProjectTreeNode {
@@ -174,6 +189,12 @@ export class ProjectAPI {
   static getResource(projectId: string, resourceId: string): Promise<ProjectResourceContent> {
     return authenticatedFetch(`${this.BASE}/${projectId}/resources/${resourceId}`, { headers: headers() })
       .then(checked<ProjectResourceContent>);
+  }
+
+  /** Lists the project's task forms (FORM-kind resources). */
+  static listForms(projectId: string): Promise<ProjectFormDTO[]> {
+    return authenticatedFetch(`${this.BASE}/${projectId}/forms`, { headers: headers() })
+      .then(checked<ProjectFormDTO[]>);
   }
 
   static replaceResource(projectId: string, resourceId: string, contentType: string,
