@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -361,6 +362,56 @@ public class ProjectTreeService {
         return resources.findByIdAndProjectId(resourceId, projectId).orElseThrow(() ->
                 new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                         "Project resource not found"));
+    }
+
+    /**
+     * Lists the project's task forms (resources of kind {@code FORM}), ordered
+     * by name. Forms are live project resources: the caller decides whether to
+     * include content via {@link #getResource}.
+     */
+    @Transactional(readOnly = true)
+    public List<ProjectResourceEntity> listForms(String projectId) {
+        access.requireVisible(projectId);
+        return resources.findByProjectIdAndKindOrderByNameAsc(projectId,
+                ProjectResourceEntity.Kind.FORM);
+    }
+
+    /**
+     * Resolves a task form by its logical key (a bare slug such as
+     * {@code loan-approval}) to the matching FORM resource inside the forms
+     * root folder. The slug may omit the {@code .json} suffix. Returns empty
+     * when no form matches, so deploy validation can downgrade an unresolved
+     * key to a warning.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ProjectResourceEntity> findFormByKey(String projectId, String formKey) {
+        access.requireVisible(projectId);
+        if (formKey == null || formKey.isBlank()) {
+            return Optional.empty();
+        }
+        ProjectFolderEntity formsRoot = folders.findByProjectIdOrderByNameAsc(projectId).stream()
+                .filter(folder -> "forms".equals(folder.getName())
+                        && folder.isSystemFolder() && folder.getParentId() == null)
+                .findFirst().orElse(null);
+        if (formsRoot == null) {
+            return Optional.empty();
+        }
+        for (String candidate : formNameCandidates(formKey)) {
+            Optional<ProjectResourceEntity> hit = resources
+                    .findByProjectIdAndFolderIdAndName(projectId, formsRoot.getId(), candidate);
+            if (hit.isPresent()) {
+                return hit;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private List<String> formNameCandidates(String formKey) {
+        String key = formKey.strip();
+        if (key.toLowerCase(java.util.Locale.ROOT).endsWith(".json")) {
+            return List.of(key);
+        }
+        return List.of(key + ".json", key);
     }
 
     /**

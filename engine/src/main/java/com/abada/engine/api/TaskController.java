@@ -53,6 +53,40 @@ public class TaskController {
     }
 
     /**
+     * Retrieves every user task visible to the current user across all
+     * projects (direct assignment or candidate groups), with the owning
+     * project's id so clients can act on each task through its project-scoped
+     * endpoints. Used by the Studio Task Inbox in cross-project mode.
+     */
+    @GetMapping("/mine")
+    public ResponseEntity<List<TaskDetailsDto>> myTasks(
+        @RequestParam(required = false) TaskStatus status,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = Pagination.DEFAULT_PAGE_SIZE) int size
+    ) {
+        String user = context.getUsername();
+        List<String> groups = context.getGroups();
+        Pageable pageable = Pagination.request(page, size,
+                Sort.by("startDate").ascending().and(Sort.by("id").ascending()));
+        Page<TaskInstance> visible = engine.getTaskManager()
+                .getVisibleTasksForUser(user, groups, status, pageable);
+
+        Set<String> processInstanceIds = visible.stream()
+                .map(TaskInstance::getProcessInstanceId)
+                .collect(Collectors.toSet());
+        Map<String, ProcessInstance> processInstances = engine.getProcessInstancesByIds(processInstanceIds);
+
+        List<TaskDetailsDto> taskDetailsDtos = visible.getContent()
+            .stream()
+            .map(task -> TaskDetailsDto.from(task, processInstances.get(task.getProcessInstanceId())))
+            .collect(Collectors.toList());
+
+        return ResponseEntity.ok()
+                .headers(Pagination.headers(visible))
+                .body(taskDetailsDtos);
+    }
+
+    /**
      * Retrieves a bounded page of tasks visible to the current user, with optional filtering by status.
      * <p>
      * A task is considered visible if it is directly assigned to the user, or if it is unassigned

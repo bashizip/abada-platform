@@ -18,12 +18,19 @@ class BpmnDirectiveValidatorTest {
                         .extracting(BpmnValidationIssue::code).contains(BpmnErrorCodes.UNSUPPORTED_EXTENSION));
     }
 
-    @Test void reportsMetadataDirectiveAsWarningInCompatibilityModeAndErrorInStrictMode() {
+    @Test void acceptsFormKeyAsSupportedMetadataDirective() {
         var result = parse("camunda:formKey=\"approval\"", BpmnParseOptions.defaults());
-        assertThat(result.report().issues()).extracting(BpmnValidationIssue::severity)
-                .containsExactly(ValidationSeverity.WARNING);
+        assertThat(result.report().issues()).isEmpty();
 
-        assertThatThrownBy(() -> parse("camunda:formKey=\"approval\"",
+        // Strict mode must no longer reject the form key: it maps to the
+        // canonical task formKey used by the Studio and task clients.
+        var strict = parse("camunda:formKey=\"approval\"",
+                new BpmnParseOptions(List.of(CompatibilityProfiles.STANDARD, CompatibilityProfiles.CAMUNDA_7), true, true));
+        assertThat(strict.report().issues()).isEmpty();
+    }
+
+    @Test void stillRejectsUnknownExecutionRelevantCamundaDirectiveInStrictMode() {
+        assertThatThrownBy(() -> parse("camunda:asyncBefore=\"true\"",
                 new BpmnParseOptions(List.of(CompatibilityProfiles.STANDARD, CompatibilityProfiles.CAMUNDA_7), true, true)))
                 .isInstanceOf(BpmnValidationException.class);
     }

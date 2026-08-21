@@ -10,5 +10,9 @@ public interface ProjectResourceRepository extends JpaRepository<ProjectResource
     Optional<ProjectResourceEntity> findByIdAndProjectId(String id, String projectId);
     List<ProjectResourceEntity> findByProjectIdOrderByNameAsc(String projectId);
     List<ProjectResourceEntity> findByFolderIdIn(Collection<String> folderIds);
+    List<ProjectResourceEntity> findByProjectIdAndKindOrderByNameAsc(String projectId,
+            ProjectResourceEntity.Kind kind);
+    Optional<ProjectResourceEntity> findByProjectIdAndFolderIdAndName(String projectId,
+            String folderId, String name);
     boolean existsByProjectIdAndFolderIdAndName(String projectId, String folderId, String name);
 }

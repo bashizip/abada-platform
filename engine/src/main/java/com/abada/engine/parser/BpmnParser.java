@@ -103,6 +103,7 @@ public class BpmnParser {
                 meta.setId(userTask.getId());
                 meta.setName(userTask.getName());
                 meta.setAssignment(assignmentParsers.parse(userTask, assignmentXml, activeProfiles));
+                meta.setFormKey(blankToNull(userTask.getCamundaFormKey()));
                 userTasks.put(userTask.getId(), meta);
             }
 
@@ -236,5 +237,9 @@ public class BpmnParser {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse BPMN", e);
         }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 }

@@ -12,7 +12,7 @@ import java.util.Set;
 /** Classifies known dialect directives and rejects unknown execution semantics. */
 public final class BpmnDirectiveValidator {
     private static final Set<String> CAMUNDA_SUPPORTED = Set.of(
-            "assignee", "candidateUsers", "candidateGroups", "class", "topic",
+            "assignee", "candidateUsers", "candidateGroups", "class", "topic", "formKey",
             "candidateStarterGroups", "candidateStarterUsers");
     private static final Set<String> CAMUNDA_EXECUTION_RELEVANT = Set.of(
             "delegateExpression", "expression", "type", "resultVariable", "asyncBefore", "asyncAfter",

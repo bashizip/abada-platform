@@ -69,6 +69,7 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_insight:review", AbadaRoles.INSIGHT_REVIEWER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.PUT, "/v1/projects/*/insight/policies/**")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.GET, "/v1/projects/*/forms/**").authenticated()
                 .requestMatchers("/v1/projects/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/v1/processes/deploy")
                         .hasAnyAuthority("SCOPE_process:deploy", AbadaRoles.DEPLOYER, AbadaRoles.ADMIN)

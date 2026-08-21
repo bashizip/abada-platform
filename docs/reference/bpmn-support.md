@@ -36,6 +36,11 @@ transitions are protected against duplicate engine advancement, but applications
 must make those side effects idempotent. External tasks are the recommended
 boundary for remote or retryable work.
 
+A user task's `camunda:formKey` is a supported metadata directive: it maps to
+the canonical task `formKey` (a project-unique logical key resolving to a FORM
+project resource, see [runtime-semantics.md](runtime-semantics.md#forms)). An
+unresolvable `formKey` never blocks deployment; it is reported as a warning.
+
 ## Native APL documents (`abada.io/v1`)
 
 Definitions can also be deployed as native APL YAML. The engine sniffs the

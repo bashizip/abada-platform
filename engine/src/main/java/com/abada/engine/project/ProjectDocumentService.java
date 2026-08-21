@@ -23,19 +23,27 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProjectDocumentService {
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(ProjectDocumentService.class);
+    private static final java.util.regex.Pattern FORM_KEY_ATTR =
+            java.util.regex.Pattern.compile("formKey\\s*=\\s*\"([^\"]+)\"");
+
     private final ProjectProcessDocumentRepository documents;
     private final ProjectFolderRepository folders;
     private final ProjectAccessService access;
     private final AbadaEngine engine;
+    private final ProjectTreeService trees;
     private final AplParser aplParser;
 
     public ProjectDocumentService(ProjectProcessDocumentRepository documents,
             ProjectFolderRepository folders, ProjectAccessService access, AbadaEngine engine,
+            ProjectTreeService trees,
             @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
         this.documents = documents;
         this.folders = folders;
         this.access = access;
         this.engine = engine;
+        this.trees = trees;
         this.aplParser = new AplParser(allowedAgentModels);
     }
 
@@ -166,11 +174,35 @@ public class ProjectDocumentService {
         if (!document.getProcessKey().equals(deployed.getProcessKey())) {
             throw new IllegalStateException("Compiled process key differs from its project document");
         }
+        warnUnresolvedFormKeys(projectId, deployed.getBpmnXml());
         document.setLastDeploymentId(deployed.getDeploymentId());
         document.setLastDeployedChecksum(deployed.getChecksum());
         document.setUpdatedAt(Instant.now());
         documents.save(document);
         return deployed;
+    }
+
+    /**
+     * Soft validation: a human node may reference a form key that does not
+     * (yet) resolve to a FORM resource. Forms are live project resources, so
+     * this is a warning, never a deployment blocker.
+     */
+    private void warnUnresolvedFormKeys(String projectId, String bpmnXml) {
+        if (bpmnXml == null) {
+            return;
+        }
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        java.util.regex.Matcher matcher = FORM_KEY_ATTR.matcher(bpmnXml);
+        while (matcher.find()) {
+            String formKey = matcher.group(1).strip();
+            if (formKey.isEmpty() || !seen.add(formKey)) {
+                continue;
+            }
+            if (trees.findFormByKey(projectId, formKey).isEmpty()) {
+                log.warn("Deployed process references form key '{}' that does not resolve "
+                        + "to a project form (project {})", formKey, projectId);
+            }
+        }
     }
 
     private com.abada.engine.core.model.ParsedProcessDefinition parse(String source) {

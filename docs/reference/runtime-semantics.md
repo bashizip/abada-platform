@@ -45,6 +45,22 @@ should use external tasks and an idempotent worker operation.
 - Claim, unclaim, completion and failure reject suspended or terminal process
   instances after locking both task and process state.
 
+## Forms
+
+- A user task may carry a `formKey`: a project-unique logical key that resolves
+  to a FORM project resource by bare slug (e.g. `loan-approval` →
+  `forms/loan-approval.json`). The key is copied verbatim onto the created task
+  and exposed as `TaskDetailsDto.formKey` alongside the owning `projectId`.
+- Forms are live project resources: task clients resolve the current revision
+  at render time, so editing a form affects tasks already in flight.
+- `GET /v1/projects/{projectId}/forms` lists FORM resources (id, name, kind,
+  revision, updatedAt); `GET /v1/projects/{projectId}/forms/{formKey}`
+  resolves a key to its decoded schema JSON. Both require project visibility.
+- Deployment never fails on an unresolvable form key; it is logged as a
+  warning so authors can add the form after publishing the process.
+- `camunda:formKey` in BPMN maps to the canonical `formKey` (see
+  [bpmn-support.md](bpmn-support.md)).
+
 ## Process control
 
 - Cancellation changes a non-terminal instance to `CANCELLED`, records its end

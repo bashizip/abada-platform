@@ -788,6 +788,7 @@ public class AbadaEngine {
 
         entity.setCandidateUsers(new ArrayList<>(taskInstance.getCandidateUsers()));
         entity.setCandidateGroups(new ArrayList<>(taskInstance.getCandidateGroups()));
+        entity.setFormKey(taskInstance.getFormKey());
         entity.setEntityVersion(taskInstance.getEntityVersion());
 
         return entity;
