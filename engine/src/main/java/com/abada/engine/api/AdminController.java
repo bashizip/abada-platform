@@ -134,9 +134,16 @@ public class AdminController {
 
     @GetMapping("/status")
     public ResponseEntity<AdminStatusDTO> status() {
-        return ResponseEntity.ok(new AdminStatusDTO(
-                identityProperties.isConfigured(),
-                identityProperties.isConfigured() ? identityProperties.realm() : null));
+        if (!identityProperties.isConfigured()) {
+            return ResponseEntity.ok(new AdminStatusDTO(false, null));
+        }
+        try {
+            // Verify connectivity
+            identityAdmin.listGroups();
+            return ResponseEntity.ok(new AdminStatusDTO(true, identityProperties.realm()));
+        } catch (Exception e) {
+            return ResponseEntity.ok(new AdminStatusDTO(false, null));
+        }
     }
 
     public record AdminStatusDTO(boolean configured, String realm) {

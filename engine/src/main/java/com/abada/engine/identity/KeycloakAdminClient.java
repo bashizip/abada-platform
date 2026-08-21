@@ -1,10 +1,12 @@
 package com.abada.engine.identity;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -26,7 +28,15 @@ public class KeycloakAdminClient {
         this.tokenSupplier = tokenSupplier;
         this.restClient = RestClient.builder()
                 .baseUrl(properties.url())
+                .requestFactory(requestFactory())
                 .build();
+    }
+
+    private static SimpleClientHttpRequestFactory requestFactory() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(3));
+        factory.setReadTimeout(Duration.ofSeconds(10));
+        return factory;
     }
 
     private String adminBase() {

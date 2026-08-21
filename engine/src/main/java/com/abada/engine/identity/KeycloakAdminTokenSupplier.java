@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -24,7 +25,15 @@ public class KeycloakAdminTokenSupplier {
         this.properties = properties;
         this.restClient = RestClient.builder()
                 .baseUrl(properties.url())
+                .requestFactory(requestFactory())
                 .build();
+    }
+
+    private static SimpleClientHttpRequestFactory requestFactory() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(3));
+        factory.setReadTimeout(Duration.ofSeconds(10));
+        return factory;
     }
 
     /**
