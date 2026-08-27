@@ -37,6 +37,13 @@ should use external tasks and an idempotent worker operation.
 - A task with an explicit assignee is created claimed by that assignee.
 - An unassigned candidate task is `AVAILABLE`. A listed candidate user or a
   member of a listed candidate group may claim it.
+- Effective candidate groups are the union of the caller's identity groups
+  (JWT `groups` claim / proxy `X-Groups` header) and their project-scoped
+  task groups (`project_member_task_groups`, managed per project member).
+  The union is resolved against the project that owns the task at claim,
+  completion and visibility time; a task group held in one project grants
+  nothing in another. A user with no project membership is evaluated on
+  identity groups alone.
 - Claiming locks the task row; one concurrent claimant wins.
 - Completion requires the assignee, or an authorized candidate when the task
   is still available. Completion locks both task and process rows.

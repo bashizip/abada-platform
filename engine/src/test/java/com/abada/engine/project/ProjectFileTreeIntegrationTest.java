@@ -256,7 +256,7 @@ class ProjectFileTreeIntegrationTest {
     void enforcesProjectMembershipAndRequiresMaintainer() {
         var project = projects.create("permissions", "Permissions", null);
         PrincipalEntity viewer = principal("viewer", "viewer-subject");
-        projects.putMember(project.getId(), viewer.getId(), null, Set.of(Role.VIEWER), Set.of());
+        projects.putMember(project.getId(), viewer.getId(), null, Set.of(Role.VIEWER), Set.of(), Set.of());
 
         IdentityContext.set(new Identity(viewer.getId(), viewer.getUsername(), List.of()));
         assertThatThrownBy(() -> trees.createFolder(project.getId(), null, "blocked"))

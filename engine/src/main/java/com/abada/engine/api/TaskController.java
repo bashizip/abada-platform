@@ -10,6 +10,7 @@ import com.abada.engine.core.model.TaskStatus;
 import com.abada.engine.dto.TaskDetailsDto;
 import com.abada.engine.dto.TaskActionResponse;
 import com.abada.engine.dto.UserStatsDto;
+import com.abada.engine.project.TaskGroupResolver;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.List;
 import java.util.Map;
@@ -39,17 +40,20 @@ public class TaskController {
     private final UserContextProvider context;
     private final UserStatsService userStatsService;
     private final IdempotencyService idempotencyService;
+    private final TaskGroupResolver taskGroupResolver;
 
     public TaskController(
         AbadaEngine engine,
         UserContextProvider context,
         UserStatsService userStatsService,
-        IdempotencyService idempotencyService
+        IdempotencyService idempotencyService,
+        TaskGroupResolver taskGroupResolver
     ) {
         this.engine = engine;
         this.context = context;
         this.userStatsService = userStatsService;
         this.idempotencyService = idempotencyService;
+        this.taskGroupResolver = taskGroupResolver;
     }
 
     /**
@@ -65,11 +69,12 @@ public class TaskController {
         @RequestParam(defaultValue = Pagination.DEFAULT_PAGE_SIZE) int size
     ) {
         String user = context.getUsername();
+        String principalId = context.getPrincipalId();
         List<String> groups = context.getGroups();
         Pageable pageable = Pagination.request(page, size,
                 Sort.by("startDate").ascending().and(Sort.by("id").ascending()));
         Page<TaskInstance> visible = engine.getTaskManager()
-                .getVisibleTasksForUser(user, groups, status, pageable);
+                .getVisibleTasksAcrossProjects(user, principalId, groups, status, pageable);
 
         Set<String> processInstanceIds = visible.stream()
                 .map(TaskInstance::getProcessInstanceId)
@@ -262,9 +267,11 @@ public class TaskController {
         requireDefaultProject(task.getId());
         String user = context.getUsername();
         List<String> groups = context.getGroups();
+        java.util.List<String> effective = taskGroupResolver.effectiveGroups(
+                ProjectConstants.DEFAULT_PROJECT_ID, context.getPrincipalId(), groups);
         boolean assigned = user.equals(task.getAssignee());
         boolean candidate = task.getAssignee() == null && (task.getCandidateUsers().contains(user)
-                || groups.stream().anyMatch(task.getCandidateGroups()::contains));
+                || effective.stream().anyMatch(task.getCandidateGroups()::contains));
         if (!assigned && !candidate) {
             throw new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
                     "User is not authorized to access task " + task.getId());

@@ -93,6 +93,15 @@ public class ProjectAccessService {
         return lane;
     }
 
+    public String normalizeTaskGroup(String value) {
+        String group = value == null ? "" : value.strip();
+        if (group.isBlank() || group.length() > 128) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST,
+                    "Task group must contain 1 to 128 non-blank characters");
+        }
+        return group;
+    }
+
     private ApiException notFound() {
         return new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                 "Project resource not found");

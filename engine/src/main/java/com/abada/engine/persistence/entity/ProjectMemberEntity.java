@@ -46,6 +46,11 @@ public class ProjectMemberEntity {
     @Column(name = "lane_name")
     private Set<String> reviewLanes = new LinkedHashSet<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "project_member_task_groups", joinColumns = @JoinColumn(name = "member_id"))
+    @Column(name = "task_group")
+    private Set<String> taskGroups = new LinkedHashSet<>();
+
     public String getId() { return id; }
     public void setId(String value) { id = value; }
     public String getProjectId() { return projectId; }
@@ -61,4 +66,6 @@ public class ProjectMemberEntity {
     public void setRoles(Set<Role> value) { roles = new LinkedHashSet<>(value); }
     public Set<String> getReviewLanes() { return reviewLanes; }
     public void setReviewLanes(Set<String> value) { reviewLanes = new LinkedHashSet<>(value); }
+    public Set<String> getTaskGroups() { return taskGroups; }
+    public void setTaskGroups(Set<String> value) { taskGroups = new LinkedHashSet<>(value); }
 }

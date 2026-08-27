@@ -133,7 +133,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectMemberEntity putMember(String projectId, String principalId, Long expectedVersion,
-            Set<Role> roles, Set<String> reviewLanes) {
+            Set<Role> roles, Set<String> reviewLanes, Set<String> taskGroups) {
         access.requireActive(projectId, Role.OWNER);
         PrincipalEntity principal = principals.findById(principalId).orElseThrow(() ->
                 new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST,
@@ -165,6 +165,9 @@ public class ProjectService {
         }
         member.setRoles(EnumSet.copyOf(roles));
         member.setReviewLanes(lanes);
+        Set<String> groups = new LinkedHashSet<>();
+        if (taskGroups != null) taskGroups.forEach(g -> groups.add(access.normalizeTaskGroup(g)));
+        member.setTaskGroups(groups);
         return members.save(member);
     }
 

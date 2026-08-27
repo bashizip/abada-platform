@@ -29,6 +29,11 @@ OIDC scopes become `SCOPE_*` authorities. Groups named above become
 Task authorization is also enforced against durable task assignment. A user
 cannot inspect or fail another user's task merely because they possess general
 task scope; claim, unclaim and completion retain assignee/candidate checks.
+Candidate eligibility uses the union of identity groups and the member's
+project-scoped task groups (see
+[`runtime-semantics.md`](runtime-semantics.md#user-tasks)); project membership
+and task groups are managed by project owners and never widen engine-scope
+permissions.
 
 ## HTTP controls
 

@@ -57,6 +57,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import com.abada.engine.project.ProjectConstants;
+import com.abada.engine.project.TaskGroupResolver;
+import com.abada.engine.security.Identity;
+import com.abada.engine.security.IdentityContext;
 
 @Component
 public class AbadaEngine {
@@ -78,6 +81,7 @@ public class AbadaEngine {
     private final Tracer tracer;
     private final ActivityHistoryService historyService;
     private final InsightFactWriter insightFactWriter;
+    private final TaskGroupResolver taskGroupResolver;
     private final Map<String, ParsedProcessDefinition> definitionsByDeploymentId = new ConcurrentHashMap<>();
 
     @Autowired
@@ -86,6 +90,7 @@ public class AbadaEngine {
             EventSubscriptionRepository eventSubscriptionRepository, JobRepository jobRepository, ObjectMapper om,
             EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
             InsightFactWriter insightFactWriter,
+            TaskGroupResolver taskGroupResolver,
             @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
@@ -101,6 +106,7 @@ public class AbadaEngine {
         this.tracer = tracer;
         this.historyService = historyService;
         this.insightFactWriter = insightFactWriter;
+        this.taskGroupResolver = taskGroupResolver;
     }
 
     @PostConstruct
@@ -299,10 +305,13 @@ public class AbadaEngine {
     @AtomicRuntimeCommand
     public void claim(String taskId, String user, List<String> groups) {
         TaskInstance task = loadTaskForUpdate(taskId);
-        requireActiveProcessForTask(task);
-        taskManager.claimTask(task, user, groups);
+        ProcessInstance instance = requireActiveProcessForTask(task);
+        String principalId = IdentityContext.get().map(Identity::principalId).orElse(null);
+        List<String> effective = taskGroupResolver.effectiveGroups(
+                instance.getProjectId(), principalId, groups);
+        taskManager.claimTask(task, user, effective);
         persistTask(task);
-        historyService.record("TASK_CLAIMED", loadProcessInstance(task.getProcessInstanceId()),
+        historyService.record("TASK_CLAIMED", instance,
                 task.getTaskDefinitionKey(), Map.of("assignee", user));
     }
 
@@ -320,18 +329,21 @@ public class AbadaEngine {
     public void completeTask(String taskId, String user, List<String> groups, Map<String, Object> variables) {
         log.info("Completing task {} with variables: {}", taskId, variables);
         TaskInstance currentTask = loadTaskForUpdate(taskId);
-        taskManager.checkCanComplete(currentTask, user, groups);
 
         String processInstanceId = currentTask.getProcessInstanceId();
         ProcessInstanceEntity authoritativeInstance =
                 persistenceService.findProcessInstanceByIdForUpdate(processInstanceId);
         if (authoritativeInstance == null) {
-            // This is an internal consistency error, not a client error.
             throw new IllegalStateException("No process instance found for id=" + processInstanceId);
         }
         ProcessInstance instance = materializeProcessInstance(authoritativeInstance);
 
         requireActive(instance);
+
+        String principalId = IdentityContext.get().map(Identity::principalId).orElse(null);
+        List<String> effective = taskGroupResolver.effectiveGroups(
+                instance.getProjectId(), principalId, groups);
+        taskManager.checkCanComplete(currentTask, user, effective);
 
         if (variables != null && !variables.isEmpty()) {
             instance.putAllVariables(variables);

@@ -185,8 +185,7 @@ class SecurityAuthorizationContractTest {
         mvc.perform(get("/v1/workers/health")
                         .header("Authorization", "Bearer worker"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].topic").value("global-topic"))
-                .andExpect(jsonPath("$[0].bound").value(true));
+                .andExpect(jsonPath("$[?(@.topic == 'global-topic' && @.bound == true)]").isNotEmpty());
     }
 
     @Test

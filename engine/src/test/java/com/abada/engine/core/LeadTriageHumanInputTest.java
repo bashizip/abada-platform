@@ -142,10 +142,52 @@ class LeadTriageHumanInputTest {
             assertThat(new String(form.getContent(), StandardCharsets.UTF_8))
                     .contains("\"decision\"");
 
-            // 7. Claim and complete the task with form values.
-            taskManager.claimTask(task, "sales-director", List.of("sales-director"));
-            engine.completeTask(task.getId(), "sales-director", List.of("sales-director"),
-                    Map.of("decision", "approve", "notes", "High-value enterprise deal"));
+            // 7. Claim and complete the task via engine.claim — exercise the
+            //    full TaskGroupResolver path.  Bob is a member with task group
+            //    SALES_DIRECTOR, but his identity groups (abada-task-user) do
+            //    NOT contain "sales-director".  The task-group merge makes the
+            //    claim succeed.
+            PrincipalEntity bob = new PrincipalEntity();
+            bob.setId("bob-id");
+            bob.setIssuer("test");
+            bob.setSubjectId("bob-id");
+            bob.setUsername("bob");
+            bob.setFirstSeenAt(Instant.now());
+            bob.setLastSeenAt(Instant.now());
+            principals.save(bob);
+
+            String bobFormsFolderId = projectTree.tree(projectId).stream()
+                    .filter(n -> "FOLDER".equals(n.kind()) && "forms".equals(n.name()))
+                    .findFirst().orElseThrow().id();
+            // Reuse projectTree.createResource — already used above.
+            // Add bob as member with task group SALES_DIRECTOR.
+            var projectMembers = context.getBean(
+                    com.abada.engine.persistence.repository.ProjectMemberRepository.class);
+            var tx = context.getBean(org.springframework.transaction.support.TransactionTemplate.class);
+            tx.executeWithoutResult(s -> {
+                var member = new com.abada.engine.persistence.entity.ProjectMemberEntity();
+                member.setProjectId(projectId);
+                member.setPrincipalId("bob-id");
+                member.setRoles(java.util.Set.of(
+                        com.abada.engine.persistence.entity.ProjectMemberEntity.Role.VIEWER,
+                        com.abada.engine.persistence.entity.ProjectMemberEntity.Role.OPERATOR));
+                member.setTaskGroups(java.util.Set.of("sales-director"));
+                member.setCreatedAt(Instant.now());
+                member.setCreatedBy("alice");
+                projectMembers.save(member);
+            });
+
+            // Set IdentityContext for bob — groups do NOT include sales-director.
+            IdentityContext.set(new Identity("bob-id", "bob", List.of("abada-task-user")));
+            try {
+                engine.claim(task.getId(), "bob", List.of("abada-task-user"));
+
+                // 8. Complete as bob.
+                engine.completeTask(task.getId(), "bob", List.of("abada-task-user"),
+                        Map.of("decision", "approve", "notes", "High-value enterprise deal"));
+            } finally {
+                IdentityContext.clear();
+            }
 
             // 8. The process completed; all variables are present.
             ProcessInstance completed = engine.getProcessInstanceById(instance.getId());

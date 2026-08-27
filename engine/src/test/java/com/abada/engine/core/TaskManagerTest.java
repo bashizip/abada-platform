@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -115,7 +116,7 @@ class TaskManagerTest {
                 "validateInvoice", "Validate Invoice", TaskStatus.AVAILABLE,
                 null, List.of("user4"), List.of("group4"));
         when(taskRepository.findVisibleTasks(
-                eq("user4"), eq(List.of("group4")), eq(true), anyCollection(), any(Pageable.class)))
+                eq("user4"), isNull(), eq(List.of("group4")), eq(true), anyCollection(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(entity)));
         when(taskRepository.findById(entity.getId())).thenReturn(Optional.of(entity));
 

@@ -62,6 +62,27 @@ public interface TaskRepository extends JpaRepository<TaskEntity, String> {
                                       AND candidateGroup IN :groups
                                 )
                             )
+                            OR (
+                                :principalId IS NOT NULL
+                                AND EXISTS (
+                                    SELECT m.id
+                                    FROM com.abada.engine.persistence.entity.ProjectMemberEntity m
+                                    JOIN m.taskGroups tg
+                                    WHERE m.principalId = :principalId
+                                      AND m.projectId = (
+                                          SELECT i.projectId
+                                          FROM com.abada.engine.persistence.entity.ProcessInstanceEntity i
+                                          WHERE i.id = t.processInstanceId
+                                      )
+                                      AND EXISTS (
+                                          SELECT candidateTask.id
+                                          FROM TaskEntity candidateTask
+                                          JOIN candidateTask.candidateGroups candidateGroup
+                                          WHERE candidateTask.id = t.id
+                                            AND candidateGroup = tg
+                                      )
+                                )
+                            )
                         )
                     )
                   )
@@ -85,12 +106,34 @@ public interface TaskRepository extends JpaRepository<TaskEntity, String> {
                                       AND candidateGroup IN :groups
                                 )
                             )
+                            OR (
+                                :principalId IS NOT NULL
+                                AND EXISTS (
+                                    SELECT m.id
+                                    FROM com.abada.engine.persistence.entity.ProjectMemberEntity m
+                                    JOIN m.taskGroups tg
+                                    WHERE m.principalId = :principalId
+                                      AND m.projectId = (
+                                          SELECT i.projectId
+                                          FROM com.abada.engine.persistence.entity.ProcessInstanceEntity i
+                                          WHERE i.id = t.processInstanceId
+                                      )
+                                      AND EXISTS (
+                                          SELECT candidateTask.id
+                                          FROM TaskEntity candidateTask
+                                          JOIN candidateTask.candidateGroups candidateGroup
+                                          WHERE candidateTask.id = t.id
+                                            AND candidateGroup = tg
+                                      )
+                                )
+                            )
                         )
                     )
                   )
             """)
     Page<TaskEntity> findVisibleTasks(
             @Param("user") String user,
+            @Param("principalId") String principalId,
             @Param("groups") Collection<String> groups,
             @Param("hasGroups") boolean hasGroups,
             @Param("activeStatuses") Collection<TaskStatus> activeStatuses,

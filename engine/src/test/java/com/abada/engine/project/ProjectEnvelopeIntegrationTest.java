@@ -108,7 +108,7 @@ class ProjectEnvelopeIntegrationTest {
         PrincipalEntity outsider = principal("outsider", "outsider-subject");
 
         assertThatThrownBy(() -> projects.putMember(project.getId(), owner.getId(), null,
-                Set.of(Role.VIEWER), Set.of())).isInstanceOf(ApiException.class)
+                Set.of(Role.VIEWER), Set.of(), Set.of())).isInstanceOf(ApiException.class)
                 .hasMessageContaining("owner");
 
         IdentityContext.set(new Identity(outsider.getId(), outsider.getUsername(), List.of()));
@@ -127,7 +127,7 @@ class ProjectEnvelopeIntegrationTest {
         assertThat(ownerResponse.getBody().provider()).isEqualTo("LOCAL_FALLBACK");
 
         PrincipalEntity viewer = principal("viewer", "viewer-subject");
-        projects.putMember(project.getId(), viewer.getId(), null, Set.of(Role.VIEWER), Set.of());
+        projects.putMember(project.getId(), viewer.getId(), null, Set.of(Role.VIEWER), Set.of(), Set.of());
         IdentityContext.set(new Identity(viewer.getId(), viewer.getUsername(), List.of()));
 
         assertThatThrownBy(() -> authoring.generate(project.getId(),

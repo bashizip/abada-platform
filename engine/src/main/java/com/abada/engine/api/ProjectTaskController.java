@@ -12,6 +12,7 @@ import com.abada.engine.dto.TaskDetailsDto;
 import com.abada.engine.dto.UserStatsDto;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
 import com.abada.engine.project.ProjectAccessService;
+import com.abada.engine.project.TaskGroupResolver;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.List;
 import java.util.Map;
@@ -37,15 +38,17 @@ public class ProjectTaskController {
     private final ProjectAccessService access;
     private final UserStatsService userStats;
     private final IdempotencyService idempotencyService;
+    private final TaskGroupResolver taskGroupResolver;
 
     public ProjectTaskController(AbadaEngine engine, UserContextProvider context,
             ProjectAccessService access, UserStatsService userStats,
-            IdempotencyService idempotencyService) {
+            IdempotencyService idempotencyService, TaskGroupResolver taskGroupResolver) {
         this.engine = engine;
         this.context = context;
         this.access = access;
         this.userStats = userStats;
         this.idempotencyService = idempotencyService;
+        this.taskGroupResolver = taskGroupResolver;
     }
 
     @GetMapping("/user-stats")
@@ -63,8 +66,10 @@ public class ProjectTaskController {
         access.require(projectId, Role.VIEWER, Role.OPERATOR, Role.OWNER);
         var pageable = Pagination.request(page, size,
                 Sort.by("startDate").ascending().and(Sort.by("id").ascending()));
+        List<String> effective = taskGroupResolver.effectiveGroups(
+                projectId, context.getPrincipalId(), context.getGroups());
         var visible = engine.getTaskManager().getVisibleTasksForUser(projectId,
-                context.getUsername(), context.getGroups(), status, pageable);
+                context.getUsername(), effective, status, pageable);
         Set<String> ids = visible.stream().map(TaskInstance::getProcessInstanceId)
                 .collect(Collectors.toSet());
         Map<String, ProcessInstance> instances = engine.getProcessInstancesByIds(ids);
@@ -152,10 +157,11 @@ public class ProjectTaskController {
     private TaskInstance requireVisible(String projectId, String taskId) {
         TaskInstance task = requireInProject(projectId, taskId);
         String user = context.getUsername();
-        List<String> groups = context.getGroups();
+        List<String> effective = taskGroupResolver.effectiveGroups(
+                projectId, context.getPrincipalId(), context.getGroups());
         boolean assigned = user != null && user.equals(task.getAssignee());
         boolean candidate = task.getAssignee() == null && (task.getCandidateUsers().contains(user)
-                || (groups != null && groups.stream().anyMatch(task.getCandidateGroups()::contains)));
+                || (effective != null && effective.stream().anyMatch(task.getCandidateGroups()::contains)));
         if (!assigned && !candidate) {
             throw new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
                     "User is not authorized to access task " + task.getId());

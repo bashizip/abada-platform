@@ -48,7 +48,7 @@ export const ProjectDialog: React.FC<ProjectDialogProps> = ({
   const addViewer = async (principal: Principal) => {
     if (!activeProject) return;
     try {
-      const member = await ProjectAPI.putMember(activeProject.id, principal.id, ['VIEWER'], []);
+      const member = await ProjectAPI.putMember(activeProject.id, principal.id, ['VIEWER'], [], []);
       setMembers((current) => [...current.filter((item) => item.principalId !== member.principalId), member]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };
@@ -59,7 +59,7 @@ export const ProjectDialog: React.FC<ProjectDialogProps> = ({
       ? member.roles.filter((item) => item !== role) : [...member.roles, role];
     try {
       const updated = await ProjectAPI.putMember(activeProject.id, member.principalId, roles,
-        member.reviewLanes, member.version);
+        member.reviewLanes, member.taskGroups, member.version);
       setMembers((current) => current.map((item) => item.principalId === updated.principalId ? updated : item));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };
@@ -69,7 +69,7 @@ export const ProjectDialog: React.FC<ProjectDialogProps> = ({
     const lanes = value.split(',').map((lane) => lane.trim()).filter(Boolean);
     try {
       const updated = await ProjectAPI.putMember(activeProject.id, member.principalId,
-        member.roles, lanes, member.version);
+        member.roles, lanes, member.taskGroups, member.version);
       setMembers((current) => current.map((item) => item.principalId === updated.principalId ? updated : item));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };

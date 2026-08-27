@@ -14,6 +14,12 @@ public class UserContextProvider {
                 .orElseThrow(() -> new IllegalStateException("No user in context"));
     }
 
+    public String getPrincipalId() {
+        return IdentityContext.get()
+                .map(Identity::principalId)
+                .orElse(null);
+    }
+
     public List<String> getGroups() {
         return IdentityContext.get()
                 .map(identity -> List.copyOf(identity.groups()))

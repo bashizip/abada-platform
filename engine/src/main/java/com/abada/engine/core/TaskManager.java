@@ -248,6 +248,22 @@ public class TaskManager {
             List<String> groups,
             TaskStatus status,
             Pageable pageable) {
+        return getVisibleTasksAcrossProjects(user, null, groups, status, pageable);
+    }
+
+    /**
+     * Cross-project task inbox. In addition to identity groups, a task is
+     * visible when the principal holds a project-scoped task group (see
+     * {@code project_member_task_groups}) matching one of the task's candidate
+     * groups in the task's own project.
+     */
+    @Transactional(readOnly = true)
+    public Page<TaskInstance> getVisibleTasksAcrossProjects(
+            String user,
+            String principalId,
+            List<String> groups,
+            TaskStatus status,
+            Pageable pageable) {
         List<String> effectiveGroups = groups == null || groups.isEmpty()
                 ? List.of(EMPTY_GROUP_SENTINEL)
                 : List.copyOf(groups);
@@ -258,7 +274,7 @@ public class TaskManager {
             return Page.empty(pageable);
         }
 
-        return taskRepository.findVisibleTasks(user, effectiveGroups, hasGroups, statuses, pageable)
+        return taskRepository.findVisibleTasks(user, principalId, effectiveGroups, hasGroups, statuses, pageable)
                 .map(this::materialize);
     }
 

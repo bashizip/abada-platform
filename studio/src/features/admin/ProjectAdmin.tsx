@@ -31,6 +31,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
   // Edit Role State (used for both Add and Update)
   const [editingRoles, setEditingRoles] = useState<ProjectRole[]>(['VIEWER']);
   const [editingLanes, setEditingLanes] = useState<string>('');
+  const [editingTaskGroups, setEditingTaskGroups] = useState<string>('');
   const [saving, setSaving] = useState(false);
   
   // Existing member being edited
@@ -74,11 +75,12 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
     if (!selectedPrincipal && !editingMemberId) return;
     const principalId = selectedPrincipal ? selectedPrincipal.id : editingMemberId!;
     const reviewLanesList = editingLanes.split(',').map(l => l.trim()).filter(Boolean);
+    const taskGroupsList = editingTaskGroups.split(',').map(l => l.trim()).filter(Boolean);
 
     setSaving(true);
     try {
       const existing = members.find(m => m.principalId === principalId);
-      await ProjectAPI.putMember(project.id, principalId, editingRoles, reviewLanesList, existing?.version);
+      await ProjectAPI.putMember(project.id, principalId, editingRoles, reviewLanesList, taskGroupsList, existing?.version);
       showToast('success', 'Member roles updated successfully');
       setIsAdding(false);
       setEditingMemberId(null);
@@ -95,6 +97,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
     setEditingMemberId(member.principalId);
     setEditingRoles(member.roles);
     setEditingLanes(member.reviewLanes.join(', '));
+    setEditingTaskGroups(member.taskGroups.join(', '));
   };
 
   if (loading) {
@@ -124,7 +127,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
             <Shield className="w-6 h-6 text-[#9D4EDD]" />
             Administration & Roles
           </h1>
-          <p className="text-sm text-[#A89F91] mt-1">Manage project members, permissions, and human task review lanes.</p>
+          <p className="text-sm text-[#A89F91] mt-1">Manage project members, permissions, review lanes and task groups.</p>
         </div>
         <button
           onClick={() => {
@@ -132,6 +135,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
             setSelectedPrincipal(null);
             setEditingRoles(['VIEWER']);
             setEditingLanes('');
+            setEditingTaskGroups('');
             setSearchQuery('');
           }}
           className="flex items-center gap-2 bg-[#9D4EDD] hover:bg-[#7B2CBF] text-[#EAE3D9] px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
@@ -150,6 +154,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
                 <th className="py-3 px-4 font-semibold border-b border-[#3A322E]">Type</th>
                 <th className="py-3 px-4 font-semibold border-b border-[#3A322E]">Roles</th>
                 <th className="py-3 px-4 font-semibold border-b border-[#3A322E]">Review Lanes</th>
+                <th className="py-3 px-4 font-semibold border-b border-[#3A322E]">Task Groups</th>
                 <th className="py-3 px-4 font-semibold border-b border-[#3A322E] text-right">Actions</th>
               </tr>
             </thead>
@@ -182,6 +187,9 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
                   <td className="py-4 px-4 text-[#A89F91] text-xs">
                     {member.reviewLanes.length > 0 ? member.reviewLanes.join(', ') : <span className="italic text-[#737D69]">None</span>}
                   </td>
+                  <td className="py-4 px-4 text-[#A89F91] text-xs">
+                    {member.taskGroups.length > 0 ? member.taskGroups.join(', ') : <span className="italic text-[#737D69]">None</span>}
+                  </td>
                   <td className="py-4 px-4 text-right">
                     <button
                       onClick={() => openEditModal(member)}
@@ -194,7 +202,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
               ))}
               {members.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-[#A89F91]">
+                  <td colSpan={6} className="py-8 text-center text-[#A89F91]">
                     No members found in this project.
                   </td>
                 </tr>
@@ -302,7 +310,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
 
                   {/* Review Lanes */}
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-[#A89F91]">Human Task Review Lanes (Optional)</label>
+                    <label className="block text-sm font-semibold text-[#A89F91]">Review Lanes (Insight Proposals)</label>
                     <input
                       type="text"
                       value={editingLanes}
@@ -310,7 +318,20 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
                       placeholder="e.g. tier-1-support, finance-approvers"
                       className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg py-2 px-3 text-[#EAE3D9] text-sm focus:outline-none focus:border-[#9D4EDD]"
                     />
-                    <p className="text-[10px] text-[#737D69]">Comma-separated list of lanes this user is permitted to review.</p>
+                    <p className="text-[10px] text-[#737D69]">Comma-separated list of insight review lanes this member is permitted to approve.</p>
+                  </div>
+
+                  {/* Task Groups */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[#A89F91]">Task Groups (Human Tasks)</label>
+                    <input
+                      type="text"
+                      value={editingTaskGroups}
+                      onChange={(e) => setEditingTaskGroups(e.target.value)}
+                      placeholder="e.g. sales-director, tier-1-support"
+                      className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg py-2 px-3 text-[#EAE3D9] text-sm focus:outline-none focus:border-[#9D4EDD]"
+                    />
+                    <p className="text-[10px] text-[#737D69]">Comma-separated candidate groups for human tasks — e.g. add <code>sales-director</code> so this member can claim the senior-sales-review task.</p>
                   </div>
                 </div>
               )}

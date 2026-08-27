@@ -32,7 +32,8 @@ public class ProjectController {
     public record CreateProjectRequest(String slug, String name, String description) {}
     public record UpdateProjectRequest(long expectedVersion, String name, String description) {}
     public record ArchiveProjectRequest(long expectedVersion, boolean archived) {}
-    public record PutMemberRequest(Long expectedVersion, Set<Role> roles, Set<String> reviewLanes) {}
+    public record PutMemberRequest(Long expectedVersion, Set<Role> roles, Set<String> reviewLanes,
+            Set<String> taskGroups) {}
     public record PutWorkerBindingRequest(List<String> topics) {}
     public record WorkerBindingDTO(String principalId, List<String> topics, long version) {}
 
@@ -90,7 +91,7 @@ public class ProjectController {
     public ResponseEntity<ProjectMemberDTO> putMember(@PathVariable String projectId,
             @PathVariable String principalId, @RequestBody PutMemberRequest request) {
         return ResponseEntity.ok(memberDto(service.putMember(projectId, principalId,
-                request.expectedVersion(), request.roles(), request.reviewLanes())));
+                request.expectedVersion(), request.roles(), request.reviewLanes(), request.taskGroups())));
     }
 
     @DeleteMapping("/{projectId}/members/{principalId}")

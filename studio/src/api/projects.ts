@@ -24,6 +24,7 @@ export interface ProjectMember {
   principalType: 'HUMAN' | 'SERVICE';
   roles: ProjectRole[];
   reviewLanes: string[];
+  taskGroups: string[];
   version: number;
 }
 
@@ -301,9 +302,9 @@ export class ProjectAPI {
   }
 
   static putMember(projectId: string, principalId: string, roles: ProjectRole[],
-    reviewLanes: string[], expectedVersion?: number): Promise<ProjectMember> {
+    reviewLanes: string[], taskGroups: string[], expectedVersion?: number): Promise<ProjectMember> {
     return authenticatedFetch(`${this.BASE}/${projectId}/members/${principalId}`, { method: 'PUT', headers: headers(),
-      body: JSON.stringify({ expectedVersion: expectedVersion ?? null, roles, reviewLanes }) })
+      body: JSON.stringify({ expectedVersion: expectedVersion ?? null, roles, reviewLanes, taskGroups }) })
       .then(checked<ProjectMember>);
   }
 
