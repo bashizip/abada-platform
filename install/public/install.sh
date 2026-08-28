@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Abada Platform Installer
-# Usage: curl -fsSL https://install.abadaengine.com | bash
+# Usage: curl -fsSL https://install.abadaplatform.com | bash
 #
 # Downloads the release archive from GitHub, verifies its SHA-256 checksum,
 # extracts it, and starts the development stack.

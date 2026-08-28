@@ -5,7 +5,7 @@ This directory contains the `curl | bash` installer for the Abada Platform.
 ## One-liner
 
 ```bash
-curl -fsSL https://install.abadaengine.com | bash
+curl -fsSL https://install.abadaplatform.com | bash
 ```
 
 ## Deployment
@@ -19,7 +19,7 @@ npx wrangler pages deploy public --project-name abada-install
 
 ### Custom domain
 
-Added via Cloudflare Dashboard → Workers & Pages → abada-install → Settings → Custom domains → `install.abadaengine.com`.
+Added via Cloudflare Dashboard → Workers & Pages → abada-install → Settings → Custom domains → `install.abadaplatform.com`.
 
 ## Files
 
