@@ -82,6 +82,7 @@ semaflow/
 semaflow-ui/
 
 # coding agent configs
+.codegraph
 .kilo
 .claude
 .codex
