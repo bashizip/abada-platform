@@ -54,7 +54,7 @@ Resources for developers building on or contributing to Abada Engine.
 
 - [API Documentation](development/api.md) - REST API reference.
 - [Frontend Guide](development/frontend-guide.md) - Guide for frontend development.
-- [Orun App Specification](development/orun-app-spec.md) - Specifications for the Orun application.
+- [Orun App Specification](development/orun-app-spec.md) - Reference specifications for the Orun application (legacy, not part of supported deployments).
 - [Studio App Specification](development/studio-app-spec.md) - Specifications for the Studio authoring application: APL pipeline, deployment, live Run panel and operations.
 - [Roadmap to 1.0](development/roadmap-to-1.0.md) - Release gates and acceptance evidence.
 - [Roadmap to 1.1 RC](development/roadmap-to-1.1.0-rc.md) - Agentic workflow integration and deferred infrastructure certification.

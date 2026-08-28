@@ -3,21 +3,22 @@ title: Your first workflow
 description: Deploy, start, complete and inspect the bundled approval process.
 ---
 
-1. Start the development profile and open `http://tenda.localhost`.
+1. Start the development profile and open Studio at `http://localhost:5605`
+   (or `http://studio.localhost`).
 2. Sign in as `alice` with password `alice`.
-3. Open **Processes → Upload process** and select
-   `release/samples/approval.bpmn` from the extracted bundle.
-4. Return to **Processes**, choose **Approval quickstart**, and select
-   **Start process**. No variables are required.
-5. Open **Tasks**, select **Review request**, claim it, then complete it.
-6. Open `http://orun.localhost`. If Keycloak reuses Alice's active session,
-   choose **Sign out and switch account**.
-7. Sign in as `orun-admin` with password `orun-admin`, then locate the
-   completed instance. Its activity history must show the start event, user
-   task and end event.
+3. Create a new workflow from the **Import BPMN** option (Upload icon) in the
+   **NewWorkflowModal** and select `release/samples/approval.bpmn` from the
+   extracted bundle. Studio transpiles the BPMN into APL on import.
+4. Use the Header **Deploy & Start** button to open the **DeployDialog**, then
+   deploy and start the **Approval quickstart** process. No variables are
+   required.
+5. Open the **Task Inbox** tab, select **Review request**, claim it, then
+   complete it.
+6. Open the **Operations** tab and locate the completed instance. Its activity
+   history must show the start event, user task and end event.
 
-The workflow has completed when Tenda no longer lists an active task and Orun
-shows the instance as `COMPLETED`.
+The workflow has completed when the **Task Inbox** tab no longer lists an
+active task and the **Operations** tab shows the instance as `COMPLETED`.
 
 Restart recovery check:
 

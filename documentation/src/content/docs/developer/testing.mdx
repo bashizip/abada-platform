@@ -19,18 +19,13 @@ depends on schema, locking, persistence or recovery.
     ./mvnw clean package
     ```
   </TabItem>
-  <TabItem label="Tenda">
+  <TabItem label="Studio">
     ```bash
-    cd tenda
+    cd studio
     npm ci
+    npm audit --audit-level=low
     npm run lint
-    npm run build
-    ```
-  </TabItem>
-  <TabItem label="Orun">
-    ```bash
-    cd orun
-    npm ci
+    npm test
     npm run build
     ```
   </TabItem>
@@ -50,9 +45,6 @@ depends on schema, locking, persistence or recovery.
   </TabItem>
 </Tabs>
 
-Orun currently defines neither lint nor test scripts. Report that limitation
-instead of claiming those checks ran.
-
 ## Evidence matrix
 
 | Change | Required evidence |
@@ -62,8 +54,7 @@ instead of claiming those checks ran.
 | Migration or repository lock | PostgreSQL fresh/upgrade, rollback, restart and concurrency tests |
 | Public API | OpenAPI compatibility test, typed errors and documentation |
 | Authentication or authorization | Positive and negative JWT/proxy/role/resource tests |
-| Tenda | Lint and production build |
-| Orun | Production build |
+| Studio | Lint, tests and production build |
 | Documentation | Dependency audit, Astro check, build and internal-link validation |
 | Release metadata | Backend/frontends/SDK/docs, JAR hash, image and Compose validation |
 

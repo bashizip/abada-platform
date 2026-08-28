@@ -1,6 +1,6 @@
 # Abada architecture overview
 
-Abada is a self-hosted BPMN orchestration platform. Tenda, Orun, external
+Abada is a self-hosted BPMN orchestration platform. Studio, external
 workers and API clients use `/api/v1`; PostgreSQL is authoritative for mutable
 workflow state. Engine replicas load and lock the records required by each
 command, validate and advance the canonical BPMN model, persist state/history
@@ -10,7 +10,7 @@ and outbox events, then commit atomically.
 flowchart LR
   U[Users and API clients] --> T[Traefik]
   T --> E[Engine replicas]
-  T --> UI[Tenda and Orun]
+  T --> UI[Studio]
   I[External OIDC] --> U
   E <--> P[(PostgreSQL)]
   E -. optional OTLP .-> O[Collector]
@@ -19,7 +19,8 @@ flowchart LR
 
 ## Deployment boundary
 
-- `compose.yaml` owns PostgreSQL and the three platform applications.
+- `compose.yaml` owns PostgreSQL, the engine, Studio and the documentation
+  site.
 - `compose.dev.yaml` adds local Keycloak and HTTP Traefik routing.
 - `compose.prod.yaml` adds TLS routing, exact versioned images, required
   secrets and externally managed OIDC.

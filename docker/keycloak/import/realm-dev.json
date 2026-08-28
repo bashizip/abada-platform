@@ -12,9 +12,6 @@
       },
       {
         "name": "cuistos"
-      },
-      {
-        "name": "orun-admin"
       }
     ]
   },
@@ -27,10 +24,6 @@
     },
     {
       "name": "cuistos"
-    },
-    {
-      "name": "orun-admin",
-      "realmRoles": ["orun-admin"]
     },
     {
       "name": "abada-task-user"
@@ -123,17 +116,11 @@
       "publicClient": true,
       "directAccessGrantsEnabled": true,
       "redirectUris": [
-        "http://localhost:5602/*",
-        "http://localhost:5603/*",
         "http://localhost:5605/*",
-        "http://tenda.localhost/*",
-        "http://orun.localhost/*",
         "http://studio.localhost/*"
       ],
       "webOrigins": [
         "http://localhost",
-        "http://tenda.localhost",
-        "http://orun.localhost",
         "http://studio.localhost"
       ],
       "protocol": "openid-connect",
@@ -205,20 +192,6 @@
         }
       ],
       "groups": ["cuistos", "abada-task-user", "abada-process-controller"]
-    },
-    {
-      "username": "orun-admin",
-      "email": "orun-admin@abada.io",
-      "enabled": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "orun-admin",
-          "temporary": false
-        }
-      ],
-      "groups": ["orun-admin", "abada-operator"],
-      "realmRoles": ["orun-admin"]
     }
   ]
 }

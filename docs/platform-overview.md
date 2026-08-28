@@ -1,8 +1,8 @@
 # Abada platform overview
 
-Abada combines a durable PostgreSQL-backed BPMN engine with Studio for
-agentic workflow authoring and live runs, Tenda for human tasks and Orun for
-operational inspection. See the
+Abada combines a durable PostgreSQL-backed BPMN engine with Studio, the single
+operator UI for agentic workflow authoring, human tasks, operational inspection
+and live runs. See the
 [Studio application specification](development/studio-app-spec.md) for the
 authoring pipeline (APL → BPMN → engine) and live Run panel. The supported deployment family is
 defined by `compose.yaml`, a development or production profile, and an
@@ -10,8 +10,8 @@ optional telemetry overlay.
 
 ## Studio as the consolidated UI surface
 
-For the 1.0 pitch cycle, **Studio is the only operator UI shipped in
-default deployments**. The Studio shell bundles four feature panels:
+**Studio is the only operator UI shipped in supported deployments.** The
+Studio shell bundles four feature panels:
 
 - **TaskInbox** — human task list, claim/unclaim/complete, the formerly-Tenda
   capability reachable from the same SPA.
@@ -22,8 +22,9 @@ default deployments**. The Studio shell bundles four feature panels:
   projects), gated on the `abada-admin` JWT group claim.
 - **Insight** — proposal review pipeline (approve, reject, comment).
 
-Tenda and Orun remain in the repository as reference front-ends for migration
-purposes but **are not started by the supported Compose profiles**. See
+Tenda and Orun remain in the repository as reference front-ends only. They are
+**not built, published, or started by any supported Compose profile or release
+image set**. See
 [`studio-app-spec.md`](development/studio-app-spec.md) for the consolidation
 rationale and the deferred surface area (audit trail UI, multi-tenant
 project picker polish).

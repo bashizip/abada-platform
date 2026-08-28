@@ -42,13 +42,7 @@ function Enable-Rc1Arm64Compatibility {
 
   $Version = Get-EnvValue 'ABADA_VERSION'
   $EngineImage = Get-EnvValue 'ABADA_ENGINE_IMAGE'
-  $TendaImage = Get-EnvValue 'ABADA_TENDA_IMAGE'
-  $OrunImage = Get-EnvValue 'ABADA_ORUN_IMAGE'
-  $UsesRc1Images = $Version -eq '1.0.0-rc.1' -or (
-    $EngineImage.EndsWith(':1.0.0-rc.1') -and
-    $TendaImage.EndsWith(':1.0.0-rc.1') -and
-    $OrunImage.EndsWith(':1.0.0-rc.1')
-  )
+  $UsesRc1Images = $Version -eq '1.0.0-rc.1' -or $EngineImage.EndsWith(':1.0.0-rc.1')
   if ($UsesRc1Images -and -not $env:DOCKER_DEFAULT_PLATFORM) {
     $env:DOCKER_DEFAULT_PLATFORM = 'linux/amd64'
     Write-Warning 'Abada 1.0.0-rc.1 images are amd64-only; Docker compatibility mode is enabled on this ARM host.'
@@ -82,17 +76,17 @@ function Assert-ProductionValues {
   $Password = Get-EnvValue 'POSTGRES_PASSWORD'
   $Version = Get-EnvValue 'ABADA_VERSION'
   $ApiHost = Get-EnvValue 'ABADA_API_HOST'
-  $TasksHost = Get-EnvValue 'ABADA_TASKS_HOST'
-  $OpsHost = Get-EnvValue 'ABADA_OPS_HOST'
+  $StudioHost = Get-EnvValue 'ABADA_STUDIO_HOST'
+  $DocsHost = Get-EnvValue 'ABADA_DOCS_HOST'
   if ($Password.Length -lt 16) { throw 'POSTGRES_PASSWORD must contain at least 16 characters' }
   if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?$' -or $Version -eq 'latest') {
     throw 'ABADA_VERSION must be an exact immutable semantic version'
   }
   Assert-Hostname 'ABADA_API_HOST' $ApiHost
-  Assert-Hostname 'ABADA_TASKS_HOST' $TasksHost
-  Assert-Hostname 'ABADA_OPS_HOST' $OpsHost
-  if ((@($ApiHost, $TasksHost, $OpsHost) | Sort-Object -Unique).Count -ne 3) {
-    throw 'API, task and operations hostnames must be distinct'
+  Assert-Hostname 'ABADA_STUDIO_HOST' $StudioHost
+  Assert-Hostname 'ABADA_DOCS_HOST' $DocsHost
+  if ((@($ApiHost, $StudioHost, $DocsHost) | Sort-Object -Unique).Count -ne 3) {
+    throw 'API, Studio and docs hostnames must be distinct'
   }
   if ((Get-EnvValue 'ABADA_ACME_EMAIL') -notmatch '^[^\s@]+@[^\s@]+\.[^\s@]+$') {
     throw 'ABADA_ACME_EMAIL must be a valid email address'
@@ -217,15 +211,14 @@ function Show-SuccessPanel {
 
   Write-Section 'Open Abada'
   if ($Profile -eq 'dev') {
-    Write-Url 'Tenda' 'http://tenda.localhost'
-    Write-Url 'Orun' 'http://orun.localhost'
     Write-Url 'Studio' 'http://studio.localhost'
+    Write-Url 'Docs' 'http://docs.localhost'
     Write-Url 'Engine API' 'http://api.localhost/api/v1/info'
     Write-Url 'Keycloak' 'http://keycloak.localhost'
   }
   else {
-    Write-Url 'Tenda' "https://$(Get-EnvValue 'ABADA_TASKS_HOST')"
-    Write-Url 'Orun' "https://$(Get-EnvValue 'ABADA_OPS_HOST')"
+    Write-Url 'Studio' "https://$(Get-EnvValue 'ABADA_STUDIO_HOST')"
+    Write-Url 'Docs' "https://$(Get-EnvValue 'ABADA_DOCS_HOST')"
     Write-Url 'Engine API' "https://$(Get-EnvValue 'ABADA_API_HOST')/api/v1/info"
     Write-Value 'Identity' 'External OIDC'
   }
@@ -237,14 +230,13 @@ function Show-SuccessPanel {
 
   if ($Profile -eq 'dev') {
     Write-Section 'Development accounts'
-    Write-Value 'Tenda user' 'alice / alice'
-    Write-Value 'Orun admin' 'orun-admin / orun-admin'
+    Write-Value 'Studio user' 'alice / alice'
     Write-Value 'Keycloak' 'admin / admin'
 
     Write-Section 'First run'
-    Write-Host '  1. Complete workflow work in Tenda as alice.'
-    Write-Host '  2. In Orun, choose Sign out and switch account if Alice is active.'
-    Write-Host '  3. Sign in as orun-admin to inspect workflow history and operations.'
+    Write-Host '  1. Open Studio and sign in as alice.'
+    Write-Host '  2. Import and deploy a workflow in the Designer, then start an instance.'
+    Write-Host '  3. Complete work in the Task Inbox and review it under Operations.'
   }
 
   $DefaultEnvFile = Join-Path $Root ".env.$Profile"

@@ -31,7 +31,7 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
    `./release/abada-platform doctor prod --env-file .env.prod`.
 4. Pull the images, then run the explicit production `up` command.
 5. Wait for health, verify Flyway, start and complete a canary workflow, and
-   inspect Orun history before removing the prior archive.
+   inspect the Studio Operations tab history before removing the prior archive.
 
 Never edit a released Flyway migration or downgrade a database without a
 release-specific rollback procedure. Image rollback alone cannot undo a schema

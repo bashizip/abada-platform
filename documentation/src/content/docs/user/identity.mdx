@@ -1,6 +1,6 @@
 ---
 title: Production identity
-description: Configure external OIDC for the engine, Tenda and Orun.
+description: Configure external OIDC for the engine and Studio.
 ---
 
 Production does not start Keycloak. Configure an external Keycloak realm or a
@@ -8,8 +8,8 @@ provider compatible with the frontend Keycloak adapter.
 
 Create a public browser client with Authorization Code + PKCE and set:
 
-- redirect URIs for `https://<tasks-host>/*` and `https://<ops-host>/*`;
-- web origins for those exact origins;
+- redirect URIs for `https://<studio-host>/*`;
+- web origins for that exact origin;
 - access-token audience matching `OIDC_AUDIENCE`;
 - a `groups` claim containing Abada permission groups.
 
@@ -23,7 +23,7 @@ OIDC_JWK_SET_URI=
 ABADA_OIDC_URL=https://identity.example.net
 ABADA_OIDC_REALM=abada
 ABADA_OIDC_CLIENT_ID=abada-frontend
-ABADA_ALLOWED_ORIGINS=https://tasks.example.net,https://ops.example.net
+ABADA_ALLOWED_ORIGINS=https://studio.example.com
 ```
 
 The engine validates JWT signatures and issuer directly. Traefik does not

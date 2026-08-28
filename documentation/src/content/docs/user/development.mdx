@@ -17,17 +17,17 @@ dashboard on 8080. PostgreSQL is not published to the host.
 
 ## Development identities
 
-The bundled realm separates task work from operational access:
+The bundled realm provides accounts for the Studio operator UI:
 
 | Application | Username | Password | Access |
 | --- | --- | --- | --- |
-| Tenda | `alice` | `alice` | Task user, process control and deployment |
-| Orun | `orun-admin` | `orun-admin` | Operations access |
+| Studio | `alice` | `alice` | Task work, operations, process control and deployment |
 | Keycloak administration | `admin` | `admin` | Development realm administration |
 
-Keycloak single sign-on can reuse Alice's session when Orun is opened after
-Tenda. Select **Sign out and switch account** on the Orun access screen, then
-authenticate as `orun-admin`. All three accounts are development-only.
+Studio (`http://studio.localhost`, or `http://localhost:5605`) is the single
+operator UI. Its Header tabs cover Designer, Task Inbox, Operations and
+Insight; the **Administration** button is gated on the `abada-admin` JWT group.
+Both accounts are development-only.
 
 Core Compose equivalent:
 

@@ -8,9 +8,7 @@ This document provides a quick reference for all the accessible service links in
 | :--- | :--- | :--- |
 | **Abada Engine API** | [http://api.localhost/api](http://api.localhost/api) | Core BPMN execution engine API |
 | **Swagger UI** | [http://api.localhost/api/swagger-ui.html](http://api.localhost/api/swagger-ui.html) | Interactive API documentation |
-| **Abada Tenda** | [http://tenda.localhost](http://tenda.localhost) | Task management UI |
-| **Abada Orun** | [http://orun.localhost](http://orun.localhost) | Operations cockpit |
-| **Abada Studio** | [http://studio.localhost](http://studio.localhost) | Visual AI orchestration designer |
+| **Abada Studio** | [http://studio.localhost](http://studio.localhost) | Operator UI (designer, tasks, operations, insight) |
 | **Keycloak Admin** | [http://keycloak.localhost](http://keycloak.localhost) | Development identity provider |
 | **Traefik Dashboard** | [http://127.0.0.1:8080/dashboard/](http://127.0.0.1:8080/dashboard/) | Loopback-only local routing dashboard |
 

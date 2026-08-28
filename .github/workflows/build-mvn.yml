@@ -35,30 +35,29 @@ jobs:
         working-directory: engine
         run: ./mvnw clean verify
 
-  frontends:
+  studio:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        app: [tenda, orun]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+          cache-dependency-path: studio/package-lock.json
       - name: Install dependencies
-        working-directory: ${{ matrix.app }}
+        working-directory: studio
         run: npm ci
       - name: Audit dependencies
-        working-directory: ${{ matrix.app }}
+        working-directory: studio
         run: npm audit --audit-level=low
-      - name: Lint Tenda
-        if: matrix.app == 'tenda'
-        working-directory: tenda
+      - name: Lint Studio
+        working-directory: studio
         run: npm run lint
-      - name: Build
-        working-directory: ${{ matrix.app }}
+      - name: Test Studio
+        working-directory: studio
+        run: npm test
+      - name: Build Studio
+        working-directory: studio
         run: npm run build
 
   java-worker-sdk:
@@ -109,15 +108,15 @@ jobs:
     timeout-minutes: 35
     env:
       ABADA_ENGINE_IMAGE: abada-engine:platform-ci
-      ABADA_TENDA_IMAGE: abada-tenda:platform-ci
-      ABADA_ORUN_IMAGE: abada-orun:platform-ci
+      ABADA_STUDIO_IMAGE: abada-studio:platform-ci
+      ABADA_DOCS_IMAGE: abada-docs:platform-ci
     steps:
       - uses: actions/checkout@v4
       - name: Build immutable platform images
         run: |
           docker build -f engine/Dockerfile.prod.engine -t "$ABADA_ENGINE_IMAGE" engine
-          docker build -f tenda/Dockerfile.prod -t "$ABADA_TENDA_IMAGE" tenda
-          docker build -f orun/Dockerfile.prod -t "$ABADA_ORUN_IMAGE" orun
+          docker build -f studio/Dockerfile.prod -t "$ABADA_STUDIO_IMAGE" .
+          docker build -f documentation/Dockerfile.prod -t "$ABADA_DOCS_IMAGE" documentation
       - name: Start telemetry-disabled development platform
         run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml up -d --wait
       - name: Verify workflow persistence and telemetry-disabled behavior

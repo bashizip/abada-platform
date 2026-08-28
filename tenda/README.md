@@ -1,4 +1,9 @@
-# Tenda 
+# Tenda
+
+> **Reference application.** Tenda is retained as a historical reference
+> front-end only. It is **not built, published, or started by any supported
+> Compose profile or release image set.** For the supported operator UI, see
+> [Studio](../studio/).
 
 A modern web application for business process management (BPM) and workflow automation. This app provides a comprehensive interface for managing tasks and processes, integrated with the Abada engine backend.
 

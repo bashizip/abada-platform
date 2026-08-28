@@ -18,15 +18,13 @@ The current launcher finishes with a success panel that confirms container
 health and groups URLs, starter accounts, first-run guidance and management
 commands. It includes:
 
-- Tenda: `http://tenda.localhost`
-- Orun: `http://orun.localhost`
-- Studio: `http://studio.localhost`
+- Studio: `http://studio.localhost` (dev) / `http://localhost:5605`
 - Engine information: `http://api.localhost/api/v1/info`
 - Keycloak: `http://keycloak.localhost`
 
-Use `alice` / `alice` for Tenda and `orun-admin` / `orun-admin` for Orun. If
-you open Orun after Tenda, Keycloak may reuse Alice's session; choose
-**Sign out and switch account** before signing in as the operator. These
+Use `alice` / `alice` to sign in to Studio. Studio is the single operator UI:
+its Header tabs cover Designer, Task Inbox, Operations and Insight, and the
+**Administration** button is gated on the `abada-admin` JWT group. These
 credentials are local development data and must never be reused in production.
 
 The original immutable `1.0.0-rc.1` archive prints the same URLs in a compact

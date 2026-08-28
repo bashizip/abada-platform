@@ -1,6 +1,12 @@
 
 # Frontend Development Prompt for Tenda & Orun
 
+> **Reference guide.** This guide covers the legacy Tenda and Orun applications,
+> which are retained as historical reference implementations only. They are
+> **not built, published, or started by any supported Compose profile or release
+> image set.** For the supported operator UI, see the
+> [Studio app specification](studio-app-spec.md).
+
 Hello! You are an expert Next.js developer tasked with building the `Tenda` (task list) and `Orun` (monitoring) frontends for the Abada BPMN engine. Your goal is to create a full-featured, desktop-first web application that interacts with the existing Abada backend API.
 
 To begin, you must learn the project's context and API contract. Follow this two-step process:

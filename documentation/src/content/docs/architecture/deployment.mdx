@@ -14,7 +14,7 @@ flowchart LR
   subgraph Host[Docker host]
     subgraph Edge[edge network]
       T[Traefik]
-      UI[Tenda and Orun]
+      UI[Studio]
       E[Engine replica or replicas]
       K[Keycloak - development only]
     end
@@ -49,7 +49,7 @@ flowchart LR
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
-| `compose.yaml` | PostgreSQL, Engine, Tenda, Orun, internal data and edge networks, persistent workflow/log volumes | Identity provider, TLS policy, telemetry backends |
+| `compose.yaml` | PostgreSQL, Engine, Studio, Docs, internal data and edge networks, persistent workflow/log volumes | Identity provider, TLS policy, telemetry backends |
 | `compose.dev.yaml` | Local HTTP routing, bundled Keycloak, safe evaluation credentials | Production identity or certificates |
 | `compose.prod.yaml` | Exact application version, TLS/ACME routing, required external OIDC and CORS values, production restart/resources | Bundled production Keycloak or default secrets |
 | `compose.telemetry.yaml` | Collector, metrics, traces, logs and Grafana | Database authority, engine readiness or workflow transactions |
@@ -60,8 +60,8 @@ same immutable frontend and engine images everywhere.
 
 ## Frontend startup contract
 
-Tenda and Orun do not embed installation-specific URLs during `vite build`.
-Their container entrypoint validates API URL, OIDC URL, realm and client ID,
+Studio does not embed installation-specific URLs during `vite build`.
+Its container entrypoint validates API URL, OIDC URL, realm and client ID,
 escapes them into `/config.js`, and starts Nginx only after validation passes.
 The HTML loads `/config.js` before the application bundle, and Nginx marks that
 file as non-cacheable. This lets one image serve multiple installations while

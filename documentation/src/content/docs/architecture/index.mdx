@@ -12,8 +12,7 @@ workflow truth.
 ```mermaid
 flowchart TB
     subgraph Clients
-      T[Tenda task application]
-      R[Orun operations application]
+      S[Studio operator UI]
       W[External workers and Java SDK]
       A[API clients]
     end
@@ -27,8 +26,7 @@ flowchart TB
     O[OpenTelemetry collector]
     IDP[OIDC identity provider]
 
-    T --> P
-    R --> P
+    S --> P
     W --> P
     A --> P
     P --> E1
@@ -61,7 +59,7 @@ flowchart TB
     tasks, subscriptions, jobs, variables, history and outbox records.
   </Card>
   <Card title="Presentation boundary" icon="laptop">
-    Tenda and Orun consume public DTOs. They do not define authorization or
+    Studio consumes public DTOs. It does not define authorization or
     reconstruct authoritative workflow history.
   </Card>
 </CardGrid>

@@ -69,50 +69,6 @@ services:
       retries: 12
       start_period: 30s
 
-  abada-tenda:
-    image: ${ABADA_TENDA_IMAGE:-ghcr.io/bashizip/abada-tenda:1.0.0-rc.2}
-    environment:
-      ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
-      ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
-      ABADA_OIDC_REALM: ${ABADA_OIDC_REALM:-abada-dev}
-      ABADA_OIDC_CLIENT_ID: ${ABADA_OIDC_CLIENT_ID:-abada-frontend}
-    networks:
-      - edge
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:5602/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-
-  abada-orun:
-    image: ${ABADA_ORUN_IMAGE:-ghcr.io/bashizip/abada-orun:1.0.0-rc.2}
-    environment:
-      ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
-      ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
-      ABADA_OIDC_REALM: ${ABADA_OIDC_REALM:-abada-dev}
-      ABADA_OIDC_CLIENT_ID: ${ABADA_OIDC_CLIENT_ID:-abada-frontend}
-    networks:
-      - edge
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:5603/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-
   abada-studio:
     image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.2}
     environment:

@@ -17,8 +17,8 @@ that must stay honest.
 | --- | --- | --- |
 | **Studio** | Author native APL, Dry Run locally, deploy and inspect live instances | React 19, TypeScript, Vite |
 | **Abada Engine** | BPMN runtime, persistence, REST API, security | Java 21, Spring Boot 3.5 |
-| **Tenda** | End-user task application (human-in-the-loop) | React 18, TypeScript, Vite |
-| **Orun** | Operations and workflow-state inspection | React 19, TypeScript, Vite |
+| **Tenda** | End-user task application (reference only, not deployed) | React 18, TypeScript, Vite |
+| **Orun** | Operations and workflow-state inspection (reference only, not deployed) | React 19, TypeScript, Vite |
 
 Studio is the place where the platform's core doctrine is expressed in a
 graph: **the table is the law, agents are the advice** (see
@@ -60,7 +60,7 @@ Studio joined the supported local Compose family: its own service, a Keycloak
 client (`abada-frontend` redirect for `http://studio.localhost/*`), CORS
 alignment for the engine API, and a local development start script
 (`scripts/start-engine-for-studio.sh`). Result: Studio is reachable at
-`http://studio.localhost` with OIDC login, same as Tenda and Orun.
+`http://studio.localhost` with OIDC login.
 
 ### Phase 1 — Engine: native decision tables (the strategic shift)
 
@@ -337,7 +337,7 @@ user-scoped). Completing a task from here advances the corresponding instance.
 ### 7. Operations view
 
 **Route/view:** `operations` — process instances from the engine with status
-and inspection, complementing Orun inside the Studio context.
+and inspection within the Studio context.
 
 ### 8. Natural-language generation
 

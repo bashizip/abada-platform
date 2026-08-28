@@ -33,7 +33,7 @@ config:
   layout: elk
 ---
 flowchart TB
-    U["User"] --> AA["Abada Apps<br>Tenda, Orun"] & UA["User Apps"]
+    U["User"] --> AA["Abada Apps<br>Studio"] & UA["User Apps"]
     AA --> GW["Traefik Gateway"] & KC["Keycloak"]
     UA --> GW & KC
     GW --> KC & AE["Abada Engine"]
@@ -97,7 +97,7 @@ sequenceDiagram
   * `abada` database: for engine state, tasks, audit.
   * `keycloak` database: for users, groups, roles, sessions.
 
-* **User Applications (Any App including Tenda and Orun)**
+* **User Applications (Any App including Studio)**
 
   * Frontend or backend apps that users interact with.
   * Delegate authentication to Keycloak.

@@ -4,11 +4,8 @@
 echo "Checking Abada Engine Health..."
 curl -s http://localhost:5601/api/actuator/health | jq . || echo "Engine not reachable"
  
- echo -e "\n\nChecking Abada Tenda Health..."
- curl -I -s http://localhost:5602 || echo "Tenda not reachable"
- 
- echo -e "\n\nChecking Abada Orun Health..."
- curl -I -s http://localhost:5603 || echo "Orun not reachable"
+ echo -e "\n\nChecking Abada Studio Health..."
+ curl -I -s http://localhost:5605 || echo "Studio not reachable"
 
 echo -e "\n\nChecking Grafana Health..."
 curl -s http://localhost:3000/api/health | jq . || echo "Grafana not reachable"

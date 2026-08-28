@@ -19,30 +19,29 @@ grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.sh"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.ps1"
 for launcher in "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1"; do
   grep -q 'ABADA PLATFORM' "$launcher"
-  grep -q 'orun-admin / orun-admin' "$launcher"
-  grep -q 'Sign out and switch account' "$launcher"
+  grep -q 'alice / alice' "$launcher"
+  grep -q 'Import and deploy' "$launcher"
 done
-grep -q 'this.request("/v1/processes/deploy"' "$ROOT_DIR/tenda/src/lib/api.ts"
-if grep -q 'this.request("/v1/processes/upload"' "$ROOT_DIR/tenda/src/lib/api.ts"; then
-  echo "Tenda still calls the retired process upload endpoint" >&2
-  exit 1
-fi
-grep -q 'prepareDiagramXml' "$ROOT_DIR/tenda/src/components/BpmnViewer.tsx"
-grep -q 'addSequenceFlowReferences' "$ROOT_DIR/tenda/src/lib/bpmn-diagram.ts"
-if grep -q 'bindTo: window' "$ROOT_DIR/tenda/src/components/BpmnViewer.tsx"; then
-  echo "Tenda still configures the removed diagram-js keyboard binding" >&2
-  exit 1
-fi
 grep -q 'bpmndi:BPMNDiagram' "$ROOT_DIR/release/samples/approval.bpmn"
+# Studio is the sole supported operator UI. The retired Tenda/Orun apps and the
+# orun-admin identity must not be reachable from any supported deployment path.
+if jq -e '(.roles.realm | any(.name == "orun-admin")) or (.users | any(.username == "orun-admin")) or (.groups | any(.name == "orun-admin"))' \
+  "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null; then
+  echo "Retired orun-admin identity is still present in the development realm" >&2
+  exit 1
+fi
 jq -e '
-  (.roles.realm | any(.name == "orun-admin"))
-  and (.users | any(
-    .username == "orun-admin"
-    and (.realmRoles | index("orun-admin") != null)
-    and (.groups | index("abada-operator") != null)
-    and (.credentials | any(.type == "password" and .value == "orun-admin" and .temporary == false))
+  (.users | any(
+    .username == "alice"
+    and (.groups | index("abada-admin") != null)
+    and (.credentials | any(.type == "password" and .value == "alice" and .temporary == false))
   ))
 ' "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null
+if jq -e '.clients[]? | select(.clientId == "abada-frontend") | (.redirectUris + .webOrigins) | any(test("5602|5603|tenda|orun"))' \
+  "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null; then
+  echo "Development realm still trusts retired Tenda/Orun frontend origins" >&2
+  exit 1
+fi
 
 DEV=(docker compose --env-file "$ROOT_DIR/release/.env.dev.example" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.dev.yaml")
 DEV_TELEMETRY=("${DEV[@]}" -f "$ROOT_DIR/compose.telemetry.yaml")
@@ -73,6 +72,15 @@ jq -e '.services.postgres.ports == null and .services["keycloak-db"].ports == nu
 jq -e '[.services[] | has("build")] | any | not' "$TMP_DIR/dev-config.json" >/dev/null
 "${DEV[@]}" config --services > "$TMP_DIR/dev-services"
 "${DEV_TELEMETRY[@]}" config --services > "$TMP_DIR/dev-telemetry-services"
+# Studio is the sole supported operator UI; the retired Tenda/Orun services must
+# not appear in any supported Compose profile, and Studio + Docs must be present.
+if grep -Eq '^(abada-tenda|abada-orun)$' "$TMP_DIR/dev-services"; then
+  echo "Retired Tenda/Orun service leaked into the development profile" >&2
+  exit 1
+fi
+for service in abada-studio abada-docs; do
+  grep -qx "$service" "$TMP_DIR/dev-services" || { echo "Missing supported service: $service" >&2; exit 1; }
+done
 if grep -Eq '^(otel-collector|grafana|prometheus|jaeger-volume-init|jaeger|loki|alloy|telemetry-health)$' "$TMP_DIR/dev-services"; then
   echo "Telemetry service leaked into the disabled development profile" >&2
   exit 1
@@ -102,10 +110,10 @@ ABADA_REGISTRY=ghcr.io/bashizip
 ABADA_VERSION=1.0.0-rc.2-test
 POSTGRES_PASSWORD=test-only-production-password
 ABADA_API_HOST=api.abada.test
-ABADA_TASKS_HOST=tasks.abada.test
-ABADA_OPS_HOST=ops.abada.test
+ABADA_STUDIO_HOST=studio.abada.test
+ABADA_DOCS_HOST=docs.abada.test
 ABADA_ACME_EMAIL=operations@abada.test
-ABADA_ALLOWED_ORIGINS=https://tasks.abada.test,https://ops.abada.test
+ABADA_ALLOWED_ORIGINS=https://studio.abada.test
 OIDC_ISSUER_URI=https://identity.abada.test/realms/abada
 OIDC_AUDIENCE=abada-api
 OIDC_JWK_SET_URI=
@@ -130,6 +138,10 @@ assert_config_clean "${PROD_TELEMETRY[@]}"
 grep -q 'ABADA_API_URL: https://api.abada.test/api' "$TMP_DIR/prod-config"
 jq -e '.services.postgres.ports == null' "$TMP_DIR/prod-config.json" >/dev/null
 jq -e '[.services[] | has("build")] | any | not' "$TMP_DIR/prod-config.json" >/dev/null
+jq -e '(.services | has("abada-tenda") | not) and (.services | has("abada-orun") | not) and (.services | has("abada-studio")) and (.services | has("abada-docs"))' \
+  "$TMP_DIR/prod-config.json" >/dev/null
+jq -e '.services["abada-studio"].labels["traefik.http.services.studio-prod.loadbalancer.server.port"] == "5605"' \
+  "$TMP_DIR/prod-config.json" >/dev/null
 
 if env -i PATH="$PATH" docker compose -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.prod.yaml" config --quiet >"$TMP_DIR/missing.out" 2>&1; then
   echo "Production configuration unexpectedly accepted missing required values" >&2
@@ -158,7 +170,7 @@ sed -i.bak 's|OIDC_ISSUER_URI=https://identity.abada.test|OIDC_ISSUER_URI=http:/
 expect_preflight_failure "$TMP_DIR/invalid-oidc.env" 'OIDC_ISSUER_URI must be an HTTPS URL'
 
 cp "$TMP_DIR/prod.env" "$TMP_DIR/invalid-cors.env"
-sed -i.bak 's|ABADA_ALLOWED_ORIGINS=https://tasks.abada.test,https://ops.abada.test|ABADA_ALLOWED_ORIGINS=*|' "$TMP_DIR/invalid-cors.env"
+sed -i.bak 's|ABADA_ALLOWED_ORIGINS=https://studio.abada.test|ABADA_ALLOWED_ORIGINS=*|' "$TMP_DIR/invalid-cors.env"
 expect_preflight_failure "$TMP_DIR/invalid-cors.env" 'production CORS origin must be an exact HTTPS origin'
 
 cp "$TMP_DIR/prod.env" "$TMP_DIR/missing-grafana-secret.env"
@@ -206,37 +218,27 @@ if grep -En '(^|:)latest([[:space:]]|$)' "$ROOT_DIR"/compose*.yaml >/dev/null; t
   exit 1
 fi
 
-for entrypoint in "$ROOT_DIR/tenda/docker-entrypoint.sh" "$ROOT_DIR/orun/docker-entrypoint.sh"; do
-  if ABADA_CONFIG_PATH="$TMP_DIR/config.js" "$entrypoint" true >"$TMP_DIR/entrypoint.out" 2>&1; then
-    echo "Frontend entrypoint accepted missing runtime configuration: $entrypoint" >&2
-    exit 1
-  fi
-  if ABADA_API_URL=not-a-url \
-    ABADA_OIDC_URL=https://identity.abada.test \
-    ABADA_OIDC_REALM=abada \
-    ABADA_OIDC_CLIENT_ID=abada-frontend \
-    ABADA_CONFIG_PATH="$TMP_DIR/config.js" \
-    "$entrypoint" true >"$TMP_DIR/entrypoint.out" 2>&1; then
-    echo "Frontend entrypoint accepted malformed runtime configuration: $entrypoint" >&2
-    exit 1
-  fi
-  if ABADA_API_URL=https:// \
-    ABADA_OIDC_URL=https://identity.abada.test \
-    ABADA_OIDC_REALM=abada \
-    ABADA_OIDC_CLIENT_ID=abada-frontend \
-    ABADA_CONFIG_PATH="$TMP_DIR/config.js" \
-    "$entrypoint" true >"$TMP_DIR/entrypoint.out" 2>&1; then
-    echo "Frontend entrypoint accepted a URL without a host: $entrypoint" >&2
-    exit 1
-  fi
-  ABADA_API_URL=https://api.abada.test \
+STUDIO_ENTRYPOINT="$ROOT_DIR/studio/docker-entrypoint.sh"
+if ABADA_CONFIG_PATH="$TMP_DIR/config.js" "$STUDIO_ENTRYPOINT" true >"$TMP_DIR/entrypoint.out" 2>&1; then
+  echo "Studio entrypoint accepted missing runtime configuration" >&2
+  exit 1
+fi
+if ABADA_API_URL=not-a-url \
   ABADA_OIDC_URL=https://identity.abada.test \
   ABADA_OIDC_REALM=abada \
   ABADA_OIDC_CLIENT_ID=abada-frontend \
   ABADA_CONFIG_PATH="$TMP_DIR/config.js" \
-  "$entrypoint" true
-  grep -q 'https://api.abada.test' "$TMP_DIR/config.js"
-done
+  "$STUDIO_ENTRYPOINT" true >"$TMP_DIR/entrypoint.out" 2>&1; then
+  echo "Studio entrypoint accepted malformed runtime configuration" >&2
+  exit 1
+fi
+ABADA_API_URL=https://api.abada.test \
+ABADA_OIDC_URL=https://identity.abada.test \
+ABADA_OIDC_REALM=abada \
+ABADA_OIDC_CLIENT_ID=abada-frontend \
+ABADA_CONFIG_PATH="$TMP_DIR/config.js" \
+"$STUDIO_ENTRYPOINT" true
+grep -q 'https://api.abada.test' "$TMP_DIR/config.js"
 
 "$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.2-test >/dev/null
 grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.2-test\.tar\.gz$' \
@@ -247,6 +249,11 @@ test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"
 grep -q 'grafana/alloy:v1.18.0' "$TMP_DIR/compose.telemetry.yaml"
 if grep -Eqi 'promtail' "$TMP_DIR/compose.telemetry.yaml"; then
   echo "The release archive still references the retired Promtail service" >&2
+  exit 1
+fi
+if grep -Eq 'abada-tenda|abada-orun|ABADA_TENDA_IMAGE|ABADA_ORUN_IMAGE' \
+  "$TMP_DIR/compose.yaml" "$TMP_DIR/compose.dev.yaml" "$TMP_DIR/compose.prod.yaml" "$TMP_DIR/release/.env.dev.example"; then
+  echo "The release archive still references the retired Tenda/Orun services" >&2
   exit 1
 fi
 (

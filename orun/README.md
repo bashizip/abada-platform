@@ -1,5 +1,10 @@
 # Abada Orun - Active Operations Cockpit
 
+> **Reference application.** Orun is retained as a historical reference
+> front-end only. It is **not built, published, or started by any supported
+> Compose profile or release image set.** For the supported operator UI, see
+> [Studio](../studio/).
+
 **Orun** is a modern web-based operations cockpit for the Abada BPMN workflow engine. It provides real-time monitoring, troubleshooting, and management capabilities for business process instances, tasks, and jobs.
 
 ![Dark Theme](https://img.shields.io/badge/Theme-Dark-black)

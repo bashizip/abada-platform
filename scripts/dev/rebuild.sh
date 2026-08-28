@@ -2,7 +2,7 @@
 #
 # Build the local Engine and Studio production images from the current working
 # tree and restart only those two Compose services. All other services
-# (PostgreSQL, Keycloak, Tenda, etc.) keep running.
+# (PostgreSQL, Keycloak, Docs, etc.) keep running.
 #
 # Usage:
 #   ./scripts/dev/rebuild.sh           # incremental build

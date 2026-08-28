@@ -18,9 +18,9 @@ Development:
 ```
 
 The success screen prints every local URL and the development-only starter
-accounts. Use `alice` / `alice` in Tenda and `orun-admin` / `orun-admin` in
-Orun. If Keycloak reuses Alice's Tenda session when you open Orun, choose
-**Sign out and switch account** before signing in as the operator.
+account. Sign in to Studio with `alice` / `alice`; Alice can author and deploy
+workflows, complete tasks in the Task Inbox, and review runs under Operations
+and Administration.
 
 Production:
 

@@ -19,12 +19,15 @@ jobs:
           - image: abada-engine
             context: engine
             dockerfile: engine/Dockerfile.prod.engine
-          - image: abada-tenda
-            context: tenda
-            dockerfile: tenda/Dockerfile.prod
-          - image: abada-orun
-            context: orun
-            dockerfile: orun/Dockerfile.prod
+          - image: abada-studio
+            context: .
+            dockerfile: studio/Dockerfile.prod
+          - image: abada-docs
+            context: documentation
+            dockerfile: documentation/Dockerfile.prod
+          - image: abada-agent-worker
+            context: .
+            dockerfile: agent-worker/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3

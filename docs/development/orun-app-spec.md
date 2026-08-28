@@ -1,5 +1,10 @@
 # Orun - Active Operations Cockpit
 
+> **Reference specification.** Orun is retained as a historical reference
+> application only. It is **not built, published, or started by any supported
+> Compose profile or release image set.** For the supported operator UI, see
+> the [Studio app specification](studio-app-spec.md).
+
 **Orun** (Yoruba for "divine realm") is the operations monitoring and management interface for the Abada BPMN Engine. It provides real-time visibility into running processes, failed jobs, and system health, enabling operators to troubleshoot and intervene when processes encounter issues.
 
 ---

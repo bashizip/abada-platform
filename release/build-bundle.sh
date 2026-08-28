@@ -21,8 +21,9 @@ cp -R "$ROOT_DIR/docker/grafana/provisioning" "$ROOT_DIR/docker/grafana/dashboar
 cp "$ROOT_DIR/docker/keycloak/import/realm-dev.json" "$STAGING/docker/keycloak/import/"
 sed \
   -e "s|^ABADA_ENGINE_IMAGE=.*|ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:$VERSION|" \
-  -e "s|^ABADA_TENDA_IMAGE=.*|ABADA_TENDA_IMAGE=ghcr.io/bashizip/abada-tenda:$VERSION|" \
-  -e "s|^ABADA_ORUN_IMAGE=.*|ABADA_ORUN_IMAGE=ghcr.io/bashizip/abada-orun:$VERSION|" \
+  -e "s|^ABADA_STUDIO_IMAGE=.*|ABADA_STUDIO_IMAGE=ghcr.io/bashizip/abada-studio:$VERSION|" \
+  -e "s|^ABADA_DOCS_IMAGE=.*|ABADA_DOCS_IMAGE=ghcr.io/bashizip/abada-docs:$VERSION|" \
+  -e "s|^ABADA_AGENT_WORKER_IMAGE=.*|ABADA_AGENT_WORKER_IMAGE=ghcr.io/bashizip/abada-agent-worker:$VERSION|" \
   "$ROOT_DIR/release/.env.dev.example" >"$STAGING/release/.env.dev.example"
 sed "s|^ABADA_VERSION=.*|ABADA_VERSION=$VERSION|" \
   "$ROOT_DIR/release/.env.prod.example" >"$STAGING/release/.env.prod.example"

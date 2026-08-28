@@ -10,7 +10,7 @@ services:
       OIDC_ISSUER_URI: http://keycloak.localhost/realms/abada-dev
       OIDC_AUDIENCE: abada-frontend
       OIDC_JWK_SET_URI: http://keycloak:8080/realms/abada-dev/protocol/openid-connect/certs
-      ABADA_ALLOWED_ORIGINS: http://tenda.localhost,http://orun.localhost,http://studio.localhost
+      ABADA_ALLOWED_ORIGINS: http://studio.localhost
       ABADA_TELEMETRY_ENABLED: ${ABADA_TELEMETRY_ENABLED:-false}
       ABADA_TELEMETRY_OTLP_ENDPOINT: ${ABADA_TELEMETRY_OTLP_ENDPOINT:-}
       OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
@@ -19,41 +19,9 @@ services:
         condition: service_healthy
     labels:
       traefik.enable: "true"
-      traefik.http.routers.engine-dev.rule: Host(`api.localhost`) || Host(`localhost`) || ((Host(`tenda.localhost`) || Host(`orun.localhost`) || Host(`studio.localhost`)) && PathPrefix(`/api`))
+      traefik.http.routers.engine-dev.rule: Host(`api.localhost`) || Host(`localhost`) || (Host(`studio.localhost`) && PathPrefix(`/api`))
       traefik.http.routers.engine-dev.entrypoints: web
       traefik.http.services.engine-dev.loadbalancer.server.port: "5601"
-
-  abada-tenda:
-    environment:
-      ABADA_API_URL: http://tenda.localhost/api
-      ABADA_OIDC_URL: http://keycloak.localhost
-      ABADA_OIDC_REALM: abada-dev
-      ABADA_OIDC_CLIENT_ID: abada-frontend
-      ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
-    depends_on:
-      keycloak:
-        condition: service_healthy
-    labels:
-      traefik.enable: "true"
-      traefik.http.routers.tenda-dev.rule: Host(`tenda.localhost`)
-      traefik.http.routers.tenda-dev.entrypoints: web
-      traefik.http.services.tenda-dev.loadbalancer.server.port: "5602"
-
-  abada-orun:
-    environment:
-      ABADA_API_URL: http://orun.localhost/api
-      ABADA_OIDC_URL: http://keycloak.localhost
-      ABADA_OIDC_REALM: abada-dev
-      ABADA_OIDC_CLIENT_ID: abada-frontend
-      ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
-    depends_on:
-      keycloak:
-        condition: service_healthy
-    labels:
-      traefik.enable: "true"
-      traefik.http.routers.orun-dev.rule: Host(`orun.localhost`)
-      traefik.http.routers.orun-dev.entrypoints: web
-      traefik.http.services.orun-dev.loadbalancer.server.port: "5603"
 
   abada-studio:
     environment:
@@ -62,6 +30,9 @@ services:
       ABADA_OIDC_REALM: abada-dev
       ABADA_OIDC_CLIENT_ID: abada-frontend
       ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
+    depends_on:
+      keycloak:
+        condition: service_healthy
     labels:
       traefik.enable: "true"
       traefik.http.routers.studio-dev.rule: Host(`studio.localhost`)

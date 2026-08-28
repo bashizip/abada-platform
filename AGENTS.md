@@ -40,8 +40,9 @@ contract and test in the same change.
 | Path | Purpose | Stack |
 | --- | --- | --- |
 | `engine/` | BPMN runtime, persistence, REST API and security | Java 21, Spring Boot 3.5, Maven |
-| `tenda/` | End-user task application | React 18, TypeScript, Vite |
-| `orun/` | Operations and workflow-state application | React 19, TypeScript, Vite |
+| `studio/` | Operator UI (designer, tasks, operations, insight) | React 19, TypeScript, Vite |
+| `tenda/` | End-user task application (reference only) | React 18, TypeScript, Vite |
+| `orun/` | Operations and workflow-state application (reference only) | React 19, TypeScript, Vite |
 | `documentation/` | Curated user, architecture and developer guide | Astro 7, Starlight 0.41, MDX, Mermaid |
 | `docker/` | Traefik, Keycloak and observability configuration | Docker Compose |
 | `scripts/` | Development, production and test helpers | Shell |
@@ -97,24 +98,16 @@ cd engine
 docker build -f Dockerfile.prod.engine -t abada-engine:local .
 ```
 
-### Tenda
+### Studio
 
 ```bash
-cd tenda
+cd studio
 npm ci
+npm audit --audit-level=low
 npm run lint
+npm test
 npm run build
 ```
-
-### Orun
-
-```bash
-cd orun
-npm ci
-npm run build
-```
-
-Orun currently has no lint or test script; do not claim those checks ran.
 
 ### Documentation
 
@@ -241,8 +234,7 @@ Test in proportion to the change:
 | --- | --- |
 | Backend logic/API | Relevant tests plus `./mvnw test` |
 | Persistence/migration/locking | PostgreSQL Testcontainers, fresh migration, supported upgrade paths, rollback/restart tests |
-| Tenda | `npm run lint` and `npm run build` |
-| Orun | `npm run build` |
+| Studio | `npm run lint`, `npm test` and `npm run build` |
 | Documentation | `npm audit --audit-level=low`, `npm run check` and `npm run build` |
 | Docker/Compose | Image build and `docker compose ... config --quiet` |
 | Public contract | API compatibility/OpenAPI checks and documentation update |
