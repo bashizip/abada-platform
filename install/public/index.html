@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Install Abada Platform</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { max-width: 640px; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #fff; }
+    p { color: #888; margin-bottom: 1.5rem; line-height: 1.6; }
+    .install-box { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+    code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9rem; color: #4ade80; user-select: all; }
+    .note { font-size: 0.85rem; color: #666; line-height: 1.5; }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Install Abada Platform</h1>
+    <p>Run this one-liner in your terminal to start the full Abada stack locally:</p>
+    <div class="install-box">
+      <code>curl -fsSL https://install.abadaengine.com/install.sh | bash</code>
+    </div>
+    <p class="note">
+      Requires <a href="https://docs.docker.com/get-docker/">Docker</a> running.
+      The script downloads the release archive, verifies its checksum, and starts the development stack.
+      Default login: <strong>alice / alice</strong>.
+    </p>
+    <p class="note" style="margin-top:1rem">
+      <a href="https://abadaengine.com/docs/user/quickstart">Full documentation</a>
+    </p>
+  </div>
+</body>
+</html>

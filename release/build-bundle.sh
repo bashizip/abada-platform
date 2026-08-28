@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:?Usage: ./release/build-bundle.sh VERSION}"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || {
-  echo "Error: VERSION must be an immutable semantic version, for example 1.0.0-rc.2" >&2
+  echo "Error: VERSION must be an immutable semantic version, for example 1.0.0-rc.3" >&2
   exit 64
 }
 OUTPUT_DIR="$ROOT_DIR/release/dist"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${ABADA_VERSION:-${1:-1.0.0-rc.2}}"
+VERSION="${ABADA_VERSION:-${1:-1.0.0-rc.3}}"
 PROFILE="${ABADA_PROFILE:-dev}"
 REPOSITORY="${ABADA_REPOSITORY:-bashizip/abada-engine}"
 INSTALL_DIR="${ABADA_INSTALL_DIR:-$PWD/abada-platform-$VERSION}"

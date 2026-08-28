@@ -5,7 +5,7 @@
 # Usage:
 #   ./scripts/dev/up.sh               # standard dev stack
 #   ./scripts/dev/up.sh --agent        # build the local agent worker + start + provision it
-#   ./scripts/dev/up.sh --agent --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.2
+#   ./scripts/dev/up.sh --agent --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.3
 #                                      # use a pinned remote agent image instead of the local build
 #   ./scripts/dev/up.sh --telemetry     # also enable the bundled telemetry overlay
 #   ./scripts/dev/up.sh --agent --telemetry

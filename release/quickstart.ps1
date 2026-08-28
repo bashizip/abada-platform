@@ -1,5 +1,5 @@
 param(
-  [string]$Version = $(if ($env:ABADA_VERSION) { $env:ABADA_VERSION } else { "1.0.0-rc.2" }),
+  [string]$Version = $(if ($env:ABADA_VERSION) { $env:ABADA_VERSION } else { "1.0.0-rc.3" }),
   [ValidateSet("dev", "prod")]
   [string]$Profile = $(if ($env:ABADA_PROFILE) { $env:ABADA_PROFILE } else { "dev" }),
   [string]$Repository = $(if ($env:ABADA_REPOSITORY) { $env:ABADA_REPOSITORY } else { "bashizip/abada-engine" }),

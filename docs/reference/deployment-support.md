@@ -15,7 +15,7 @@ An entry becomes certified only when its roadmap evidence is checked. The
 table distinguishes an implemented/configuration-valid profile from a
 release-certified one so documentation never broadens the current guarantee.
 
-`1.0.0-rc.2` is published as an evaluation release candidate with the
+`1.0.0-rc.3` is published as an evaluation release candidate with the
 executable Compose configuration, preflight, archive and
 PostgreSQL/Testcontainers evidence. It does not claim a completed public-cloud
 production certification. Public TLS, external-OIDC reference-host testing,
@@ -28,7 +28,7 @@ The original `1.0.0-rc.1` images are a documented exception: they contain only
 `linux/amd64`. The repository launcher detects those exact images on an ARM64
 Docker host and enables Docker's `amd64` compatibility mode. The tag remains
 immutable; subsequent release-image publication fails unless both native
-platforms are present. `1.0.0-rc.2` is the first release published under that
+platforms are present. `1.0.0-rc.3` is the first release published under that
 multi-architecture gate.
 
 Production uses `ABADA_SECURITY_MODE=oidc` and requires

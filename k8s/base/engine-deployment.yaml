@@ -31,7 +31,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: engine
-          image: ghcr.io/bashizip/abada-engine:1.0.0-rc.2
+          image: ghcr.io/bashizip/abada-engine:1.0.0-rc.3
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

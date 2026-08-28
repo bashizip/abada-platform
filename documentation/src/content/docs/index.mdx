@@ -21,6 +21,10 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
+<div style="text-align:center;margin:-1rem 0 2rem;padding:1rem;background:var(--sl-color-bg-nav);border:1px solid var(--sl-color-gray-5);border-radius:8px;font-family:monospace;font-size:0.95rem;">
+  curl -fsSL https://install.abadaengine.com | bash
+</div>
+
 <CardGrid>
   <Card title="PostgreSQL is authoritative" icon="database">
     Mutable workflow state is reconstructed inside each command. Replica-local
@@ -53,8 +57,8 @@ This site serves three audiences:
 
 ## Current release boundary
 
-These guides describe the `0.11.x` line moving toward the 1.0 release
-candidate. PostgreSQL is the production source of truth, API v1 and worker
-protocol v1 are frozen, and multi-replica execution is certified for the
-documented BPMN subset. Conformance publication, rolling-upgrade evidence,
-security review, benchmarks and runbooks remain 1.0 RC gates.
+These guides describe the `1.0.0-rc.3` evaluation release candidate. PostgreSQL
+is the production source of truth, API v1 and worker protocol v1 are frozen,
+and multi-replica execution is certified for the documented BPMN subset.
+Conformance publication, rolling-upgrade evidence, security review, benchmarks
+and runbooks remain 1.0 RC gates.
