@@ -15,18 +15,24 @@ export interface InstancePath {
   /** Edge ids on the taken execution path (both endpoints touched by events/tokens). */
   activePathEdgeIds: string[];
   /**
-   * Taken edges ordered as a chain from the entry node toward the running
-   * node: edge id → hop index. Feeds the marching token animation; an edge
-   * with no hop (unreachable from the entry or a stale loop) gets no token.
+   * Taken edges whose target is a currently active node — the token arriving
+   * at the current position. One edge per active node (parallel gateways
+   * included); the only edges that get an animated token dot.
    */
-  tokenSteps: Record<string, number>;
+  tokenEdgeIds: string[];
+  /**
+   * Edges leaving a currently active node — the possible next steps. Rendered
+   * with the animated flow dash (dry-run style), without a token dot.
+   */
+  nextEdgeIds: string[];
 }
 
 /**
  * Derives the execution overlay strictly from engine-visible facts: node
  * statuses from history/active tokens, and the taken path as edges whose both
  * endpoints were touched (completed, active or failed). Unchosen branches keep
- * their dimmed default styling.
+ * their dimmed default styling. Token motion is anchored at the current
+ * position only — the taken history stays a static highlight.
  */
 export function deriveInstancePath(
   workflow: WorkflowFile,
@@ -45,29 +51,29 @@ export function deriveInstancePath(
     .filter((edge) => touched.has(edge.source) && touched.has(edge.target))
     .map((edge) => edge.id);
   const takenIds = new Set(activePathEdgeIds);
-  const tokenSteps: Record<string, number> = {};
-  const entry = workflow.nodes.find((node) => node.type === 'event' && node.subtype === 'start');
-  const startId = entry?.id ?? workflow.nodes[0]?.id;
-  if (startId) {
-    const takenEdges = workflow.edges.filter((edge) => takenIds.has(edge.id));
-    const queue: string[] = [startId];
-    const hops = new Map<string, number>([[startId, 0]]);
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      const hop = hops.get(current)!;
-      for (const edge of takenEdges) {
-        if (edge.source !== current || hops.has(edge.target)) continue;
-        hops.set(edge.target, hop + 1);
-        tokenSteps[edge.id] = hop + 1;
-        queue.push(edge.target);
-      }
-    }
-  }
+  const activeIds = new Set(overlay.activeNodeIds);
+  const tokenEdgeIds = overlay.activeNodeIds.flatMap((activeNodeId) => {
+    const incoming = workflow.edges.filter((edge) => edge.target === activeNodeId);
+    const takenIncoming = incoming.filter((edge) => takenIds.has(edge.id));
+    // Gateways may advance synchronously without producing an activity event.
+    // A sole incoming edge is still unambiguous evidence of the arrival path.
+    const tokenEdges = takenIncoming.length > 0
+      ? takenIncoming
+      : incoming.length === 1
+        ? incoming
+        : [];
+    return tokenEdges.map((edge) => edge.id);
+  });
+  const tokenIds = new Set(tokenEdgeIds);
+  const nextEdgeIds = workflow.edges
+    .filter((edge) => activeIds.has(edge.source) && !tokenIds.has(edge.id))
+    .map((edge) => edge.id);
   return {
     statuses: overlay.statuses,
     activeNodeIds: overlay.activeNodeIds,
     activePathEdgeIds,
-    tokenSteps,
+    tokenEdgeIds,
+    nextEdgeIds,
   };
 }
 

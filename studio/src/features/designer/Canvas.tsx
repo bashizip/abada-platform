@@ -35,13 +35,18 @@ interface CanvasProps {
   activeSimulationNodeId: string | null;
   executionStatuses?: Record<string, NodeRunStatus>;
   activeLiveNodeIds?: string[];
-  /** Edge ids along the instance's taken execution path — rendered as glowing flows. */
+  /** Edge ids along the instance's taken execution path — rendered as static purple flows. */
   activePathEdges?: string[];
   /**
-   * Taken edges with their hop index from the entry node (id → hop). Edges
-   * present here get a marching token dot that flows into the running node.
+   * Taken edges entering a currently active node. These get the animated
+   * token dot — the current position of the instance.
    */
-  activeTokenEdges?: Record<string, number>;
+  activeTokenEdges?: string[];
+  /**
+   * Edges leaving a currently active node — the possible next steps, rendered
+   * with the animated flow dash (no token dot), mirroring the dry run.
+   */
+  nextPathEdges?: string[];
   readOnly?: boolean;
 }
 
@@ -62,7 +67,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   executionStatuses = {},
   activeLiveNodeIds = [],
   activePathEdges = [],
-  activeTokenEdges = {},
+  activeTokenEdges = [],
+  nextPathEdges = [],
   readOnly = false,
 }) => {
   const nodeTypes = useMemo(() => ({
@@ -90,19 +96,24 @@ export const Canvas: React.FC<CanvasProps> = ({
   [rawNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, onSelectNode]);
 
   const reactFlowEdges: Edge[] = useMemo(() =>
-    rawEdges.map(edge => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: 'abadaEdge',
-      data: {
-        label: edge.label,
-        isFlowing: activePathEdges.includes(edge.id)
-          || (isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target)),
-        tokenStep: activeTokenEdges[edge.id],
-      },
-      markerEnd: 'url(#arrowhead-saffron)'
-    })), [rawEdges, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges]);
+    rawEdges.map(edge => {
+      const hasToken = activeTokenEdges.includes(edge.id);
+      const isNext = nextPathEdges.includes(edge.id);
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: 'abadaEdge',
+        data: {
+          label: edge.label,
+          isTakenPath: activePathEdges.includes(edge.id),
+          isFlowing: hasToken || isNext
+            || (isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target)),
+          hasToken,
+        },
+        markerEnd: 'url(#arrowhead-saffron)'
+      };
+    }), [rawEdges, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (connection.source && connection.target) {

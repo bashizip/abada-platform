@@ -28,7 +28,8 @@ export function useLiveInstanceOverlay(
   const [liveSelectedNodeId, setLiveSelectedNodeId] = useState<string | null>(null);
   const [executionStatuses, setExecutionStatuses] = useState<Record<string, NodeRunStatus>>({});
   const [activePathEdges, setActivePathEdges] = useState<string[]>([]);
-  const [activeTokenEdges, setActiveTokenEdges] = useState<Record<string, number>>({});
+  const [activeTokenEdges, setActiveTokenEdges] = useState<string[]>([]);
+  const [nextPathEdges, setNextPathEdges] = useState<string[]>([]);
   const [instancesRefreshKey, setInstancesRefreshKey] = useState(0);
   const [instancePanelOpen, setInstancePanelOpen] = useState(true);
   const [detailInstance, setDetailInstance] = useState<ProcessInstanceDTO | null>(null);
@@ -61,7 +62,9 @@ export function useLiveInstanceOverlay(
     const isTerminal = TERMINAL_STATUSES.includes(
       (instance.status || '').toUpperCase(),
     );
-    setActiveTokenEdges(isTerminal || instance.suspended ? {} : path.tokenSteps);
+    const frozen = isTerminal || instance.suspended;
+    setActiveTokenEdges(frozen ? [] : path.tokenEdgeIds);
+    setNextPathEdges(frozen ? [] : path.nextEdgeIds);
   }, []);
 
   const openInstanceDetail = useCallback((instance: ProcessInstanceDTO) => {
@@ -71,7 +74,8 @@ export function useLiveInstanceOverlay(
     setLiveSelectedNodeId(null);
     setExecutionStatuses({});
     setActivePathEdges([]);
-    setActiveTokenEdges({});
+    setActiveTokenEdges([]);
+    setNextPathEdges([]);
     stablePathRef.current = null;
     setInstancePanelOpen(false);
     setDetailInstance(instance);
@@ -157,7 +161,8 @@ export function useLiveInstanceOverlay(
     setLiveSelectedNodeId(null);
     setExecutionStatuses({});
     setActivePathEdges([]);
-    setActiveTokenEdges({});
+    setActiveTokenEdges([]);
+    setNextPathEdges([]);
     stablePathRef.current = null;
   }, []);
 
@@ -170,6 +175,7 @@ export function useLiveInstanceOverlay(
     executionStatuses,
     activePathEdges,
     activeTokenEdges,
+    nextPathEdges,
     setExecutionStatuses,
     instancesRefreshKey,
     setInstancesRefreshKey,

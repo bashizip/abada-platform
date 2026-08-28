@@ -143,16 +143,20 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
     <div
       onClick={() => data.onSelectNode?.(id)}
       className={`abada-node-card relative w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg z-10 group ${
-        isSelected ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]' : ''
+        isSelected && !isLiveCurrent ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]' : ''
       } ${isAgentGlow ? 'glow-amethyst' : ''} ${
         isActiveSim ? 'scale-105 transition-transform' : ''
+      } ${
+        isLiveCurrent
+          ? 'scale-105 transition-transform ring-2 ring-[#9D4EDD] ring-offset-2 ring-offset-[#1A1614] glow-amethyst'
+          : ''
       } ${data.diffKind ? diffRing : ''}`}
       title={data.diffAnnotation || undefined}
     >
       {isLiveCurrent && (
-        <span className="absolute -top-1.5 -right-1.5 z-30 flex h-4 w-4 items-center justify-center" title="Current live activity">
+        <span className="absolute -top-2 -right-2 z-30 flex h-5 w-5 items-center justify-center" title="Current live activity">
           <span className="absolute h-full w-full rounded-full bg-[#9D4EDD]/50 animate-ping" />
-          <span className="relative h-2.5 w-2.5 rounded-full border border-[#EAE3D9] bg-[#9D4EDD]" />
+          <span className="relative h-3.5 w-3.5 rounded-full border-2 border-[#EAE3D9] bg-[#9D4EDD]" />
         </span>
       )}
       <Handle type="target" position={Position.Left} className="opacity-0" />

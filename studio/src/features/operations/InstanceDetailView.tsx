@@ -410,7 +410,8 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               executionStatuses={stablePath.statuses}
               activeLiveNodeIds={stablePath.activeNodeIds}
               activePathEdges={stablePath.activePathEdgeIds}
-              activeTokenEdges={instance.suspended || isTerminal ? undefined : stablePath.tokenSteps}
+              activeTokenEdges={instance.suspended || isTerminal ? undefined : stablePath.tokenEdgeIds}
+              nextPathEdges={instance.suspended || isTerminal ? undefined : stablePath.nextEdgeIds}
               readOnly
             />
           ) : (
@@ -427,7 +428,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#E76F51]" /> Failed</span>
               <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#F4A261]" /> Waiting</span>
               <span className="flex items-center gap-1.5"><span className="h-0.5 w-5 rounded bg-[#9D4EDD]" /> Taken path</span>
-              <span className="flex items-center gap-1.5"><span className="relative h-2 w-2"><span className="absolute inset-0 rounded-full bg-[#9D4EDD]/40" /><span className="relative h-2 w-2 rounded-full bg-[#EAE3D9]" /></span> Token</span>
+              <span className="flex items-center gap-1.5"><span className="relative h-2 w-2"><span className="absolute inset-0 rounded-full bg-[#9D4EDD]/40" /><span className="relative h-2 w-2 rounded-full bg-[#EAE3D9]" /></span> Current token</span>
             </div>
           )}
         </div>

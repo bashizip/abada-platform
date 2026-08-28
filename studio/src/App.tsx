@@ -76,7 +76,7 @@ export default function App() {
 
   const {
     selectedLiveInstance, liveWorkflow, activeLiveNodeIds, liveSelectedNodeId, setLiveSelectedNodeId,
-    executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges,
+    executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges, nextPathEdges,
     instancesRefreshKey, setInstancesRefreshKey,
     instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance,
     livePanelWidth, setLivePanelWidth, livePanelPinned, setLivePanelPinned,
@@ -518,6 +518,7 @@ export default function App() {
                       activeLiveNodeIds={activeLiveNodeIds}
                       activePathEdges={activePathEdges}
                       activeTokenEdges={activeTokenEdges}
+                      nextPathEdges={nextPathEdges}
                       readOnly
                     />
                     {instancePanelOpen && (

@@ -13,17 +13,16 @@ import type { DiffChangeKind } from '@/lib/aiDiff/types';
 
 type AbadaEdgeType = Edge<{
   label?: string;
+  /** Animated flow dash — token edges, next edges, or dry-run-adjacent edges. */
   isFlowing?: boolean;
+  /** Taken execution path — static purple highlight, no animation. */
+  isTakenPath?: boolean;
+  /** Draws the token dot that arrives into the currently active node. */
+  hasToken?: boolean;
   diffKind?: DiffChangeKind | null;
-  /** Hop index along the taken path; presence draws a marching token dot. */
-  tokenStep?: number;
 }, 'abadaEdge'>;
 
-/**
- * One token hop takes TOKEN_DURATION_S; each edge starts its token exactly one
- * hop later than the previous edge, so tokens march back-to-back from the
- * entry node into the currently running node.
- */
+/** Duration of one token pass along the edge into the active node. */
 const TOKEN_DURATION_S = 1.6;
 
 /**
@@ -103,9 +102,9 @@ export const AbadaEdge = memo(({
     targetPosition,
   );
 
-  const isActiveSim = data?.isFlowing;
-  const tokenStep = data?.tokenStep;
-  const tokenMoves = tokenStep !== undefined && isActiveSim;
+  const isFlowing = data?.isFlowing;
+  const isTakenPath = data?.isTakenPath;
+  const hasToken = data?.hasToken;
   const diffStroke = data?.diffKind === 'added'
     ? '#90A955'
     : data?.diffKind === 'modified'
@@ -113,12 +112,13 @@ export const AbadaEdge = memo(({
       : data?.diffKind === 'removed'
         ? '#E76F51'
         : null;
-  const strokeColor = diffStroke ?? (isActiveSim ? '#9D4EDD' : (selected ? '#F4A261' : '#3A322E'));
-  const strokeWidth = isActiveSim || selected || diffStroke ? 3 : 2;
+  const strokeColor = diffStroke
+    ?? (isFlowing || isTakenPath ? '#9D4EDD' : (selected ? '#F4A261' : '#3A322E'));
+  const strokeWidth = isFlowing || isTakenPath || selected || diffStroke ? 3 : 2;
 
   return (
     <>
-      {isActiveSim && (
+      {isFlowing && (
         <path
           d={edgePath}
           fill="none"
@@ -128,31 +128,31 @@ export const AbadaEdge = memo(({
           className="blur-xs"
         />
       )}
-      {tokenMoves && (
+      {hasToken && (
         <g>
           <path id={`abada-token-ref-${id}`} d={edgePath} fill="none" stroke="none" pointerEvents="none" />
           <circle r="7" fill="#9D4EDD" opacity="0.3">
-            <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin={`${tokenStep * TOKEN_DURATION_S}s`}>
+            <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin="0s">
               <mpath href={`#abada-token-ref-${id}`} />
             </animateMotion>
           </circle>
           <circle r="2.5" fill="#EAE3D9">
-            <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin={`${tokenStep * TOKEN_DURATION_S}s`}>
+            <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin="0s">
               <mpath href={`#abada-token-ref-${id}`} />
             </animateMotion>
           </circle>
         </g>
       )}
-      <BaseEdge 
-        path={edgePath} 
-        markerEnd={markerEnd} 
+      <BaseEdge
+        path={edgePath}
+        markerEnd={markerEnd}
         style={{
           ...style,
           stroke: strokeColor,
           strokeWidth,
           strokeDasharray: data?.diffKind === 'removed' ? '6 4' : undefined,
-        }} 
-        className={isActiveSim ? 'animate-flow-dash' : ''} 
+        }}
+        className={isFlowing ? 'animate-flow-dash' : ''}
       />
       
       {data?.diffKind && (
