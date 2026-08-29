@@ -13,10 +13,15 @@ grep -q 'docker/setup-qemu-action@v3' "$ROOT_DIR/.github/workflows/docker-publis
 grep -q 'platforms: linux/amd64,linux/arm64' "$ROOT_DIR/.github/workflows/docker-publish-ghcr.yml"
 grep -q 'verify-image-platforms.sh' "$ROOT_DIR/.github/workflows/docker-publish-ghcr.yml"
 test -x "$ROOT_DIR/scripts/test/verify-image-platforms.sh"
+test -x "$ROOT_DIR/scripts/test/verify-agent-auto-start.sh"
+"$ROOT_DIR/scripts/test/verify-agent-auto-start.sh"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform.ps1"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.sh"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.ps1"
+grep -q '\[\[ "$MODE" == "dev" \]\] && AGENT=true' "$ROOT_DIR/release/abada-platform"
+grep -q -- '--no-agent' "$ROOT_DIR/release/abada-platform"
+grep -q 'AGENT=true' "$ROOT_DIR/scripts/dev/up.sh"
 for launcher in "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1"; do
   grep -q 'ABADA PLATFORM' "$launcher"
   grep -q 'alice / alice' "$launcher"
@@ -241,9 +246,22 @@ ABADA_CONFIG_PATH="$TMP_DIR/config.js" \
 grep -q 'https://api.abada.test' "$TMP_DIR/config.js"
 
 "$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.3-test >/dev/null
+if command -v sha256sum >/dev/null 2>&1; then
+  ARCHIVE_SHA_COMMAND=(sha256sum)
+else
+  ARCHIVE_SHA_COMMAND=(shasum -a 256)
+fi
+FIRST_ARCHIVE_SHA="$("${ARCHIVE_SHA_COMMAND[@]}" "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz" | awk '{ print $1 }')"
+"$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.3-test >/dev/null
+SECOND_ARCHIVE_SHA="$("${ARCHIVE_SHA_COMMAND[@]}" "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz" | awk '{ print $1 }')"
+if [[ "$FIRST_ARCHIVE_SHA" != "$SECOND_ARCHIVE_SHA" ]]; then
+  echo "Release bundle construction is not deterministic" >&2
+  exit 1
+fi
 grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.3-test\.tar\.gz$' \
   "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz.sha256"
 tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
+test -x "$TMP_DIR/scripts/dev/provision-agent-worker.sh"
 test -f "$TMP_DIR/deployment/telemetry/config.alloy"
 test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"
 grep -q 'grafana/alloy:v1.18.0' "$TMP_DIR/compose.telemetry.yaml"

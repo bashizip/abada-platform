@@ -22,7 +22,6 @@ GROUP_NAME="abada-worker"
 TOPIC="abada:agent"
 API_URL="${ABADA_PROVISION_API_URL:-http://api.localhost/api}"
 OIDC_URL="${ABADA_PROVISION_OIDC_URL:-http://keycloak.localhost}"
-KEYCLOAK_CONTAINER="${ABADA_KEYCLOAK_CONTAINER:-abada-keycloak-1}"
 ADMIN_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
 kcadm="/opt/keycloak/bin/kcadm.sh"
@@ -31,10 +30,40 @@ env_value() {
   awk -v key="$1" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
 }
 
+set_env_value() {
+  local key="$1" value="$2" temp_file
+  umask 077
+  temp_file="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
+  awk -v key="$key" -v value="$value" '
+    index($0, key "=") == 1 {
+      if (!updated) print key "=" value
+      updated = 1
+      next
+    }
+    { print }
+    END { if (!updated) print key "=" value }
+  ' "$ENV_FILE" >"$temp_file"
+  mv "$temp_file" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+}
+
+generate_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif [[ -r /dev/urandom ]]; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+  else
+    echo "Error: cannot securely generate ABADA_AGENT_OIDC_CLIENT_SECRET" >&2
+    exit 69
+  fi
+}
+
+[[ -f "$ENV_FILE" ]] || { echo "Error: environment file not found: $ENV_FILE" >&2; exit 66; }
 CLIENT_SECRET="$(env_value ABADA_AGENT_OIDC_CLIENT_SECRET)"
 if [[ -z "$CLIENT_SECRET" ]]; then
-  echo "Error: ABADA_AGENT_OIDC_CLIENT_SECRET is not set in $ENV_FILE" >&2
-  exit 66
+  CLIENT_SECRET="$(generate_secret)"
+  set_env_value ABADA_AGENT_OIDC_CLIENT_SECRET "$CLIENT_SECRET"
+  echo "Generated and stored the agent OIDC client secret in $ENV_FILE."
 fi
 
 require_command() {
@@ -42,9 +71,19 @@ require_command() {
 }
 require_command docker
 require_command curl
-require_command jq
 
 docker info >/dev/null || { echo "Error: Docker is not running" >&2; exit 69; }
+
+if [[ -n "${ABADA_KEYCLOAK_CONTAINER:-}" ]]; then
+  KEYCLOAK_CONTAINER="$ABADA_KEYCLOAK_CONTAINER"
+else
+  COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.dev.yaml")
+  KEYCLOAK_CONTAINER="$("${COMPOSE[@]}" ps -q keycloak)"
+  if [[ -z "$KEYCLOAK_CONTAINER" ]]; then
+    echo "Error: the dev Keycloak container is not running" >&2
+    exit 69
+  fi
+fi
 
 kc() { docker exec "$KEYCLOAK_CONTAINER" "$kcadm" "$@"; }
 
@@ -115,31 +154,35 @@ echo "Assigning $WORKER_USER to $GROUP_NAME..."
 kc update "users/$WORKER_USER_ID/groups/$GROUP_ID" -r "$REALM" -n >/dev/null
 
 # --- 3. Worker token, then global capability registration --------------------
-WORKER_TOKEN="$(curl --fail --silent --show-error \
+TOKEN_RESPONSE="$(curl --fail --silent --show-error \
   -X POST "$OIDC_URL/realms/$REALM/protocol/openid-connect/token" \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   --data-urlencode "client_id=$CLIENT_ID" \
   --data-urlencode "client_secret=$CLIENT_SECRET" \
-  --data-urlencode 'grant_type=client_credentials' \
-  | jq -er '.access_token')"
+  --data-urlencode 'grant_type=client_credentials')"
+WORKER_TOKEN="$(printf '%s' "$TOKEN_RESPONSE" \
+  | sed -n 's/.*"access_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+if [[ -z "$WORKER_TOKEN" ]]; then
+  echo "Error: Keycloak did not return an access token for $CLIENT_ID" >&2
+  exit 1
+fi
 
 echo "Triggering engine principal observation for $WORKER_USER..."
 # The identity interceptor observes the service principal on first
 # authenticated call; registration below both observes and registers.
-curl --silent --show-error -o /dev/null \
+curl --fail --silent --show-error -o /dev/null \
   -X PUT "$API_URL/v1/workers/me" \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H 'Content-Type: application/json' \
-  --data "{\"topics\":[\"$TOPIC\"],\"models\":[]}" \
-  || true
+  --data "{\"topics\":[\"$TOPIC\"],\"models\":[]}"
 
 echo "Verifying global registration of $WORKER_USER..."
 REGISTERED="$(curl --fail --silent --show-error \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   "$API_URL/v1/workers/me")"
-if ! jq -e --arg topic "$TOPIC" '.capabilities[] | select(.topic == $topic)' >/dev/null <<<"$REGISTERED"; then
+if ! printf '%s' "$REGISTERED" | grep -Eq '"topic"[[:space:]]*:[[:space:]]*"abada:agent"'; then
   echo "Error: $WORKER_USER is not registered for topic $TOPIC" >&2
-  echo "Is the stack up and the agent worker running? (./release/abada-platform up dev --agent)" >&2
+  echo "The base stack is running, but the Engine did not retain the global worker capability." >&2
   exit 1
 fi
 

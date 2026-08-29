@@ -13,7 +13,8 @@ Options:
   --telemetry        Add the bundled metrics, traces and logs stack
   --env-file PATH    Use an explicit environment file
   --no-pull          Skip image availability/pull checks during doctor
-  --agent            Also start the first-party abada:agent worker (dev only)
+  --agent            Start the first-party agent worker (default in dev)
+  --no-agent         Skip the agent worker (dev diagnostics only)
 USAGE
   exit 0
 fi
@@ -27,12 +28,14 @@ shift 2 || true
 TELEMETRY=false
 SKIP_PULL=false
 AGENT=false
+[[ "$MODE" == "dev" ]] && AGENT=true
 ENV_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --telemetry) TELEMETRY=true ;;
     --no-pull) SKIP_PULL=true ;;
     --agent) AGENT=true ;;
+    --no-agent) AGENT=false ;;
     --env-file)
       [[ $# -ge 2 ]] || { echo "Error: --env-file requires a path" >&2; exit 64; }
       ENV_FILE="$2"
@@ -62,10 +65,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 66
 fi
 
-COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.$MODE.yaml")
+BASE_COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.$MODE.yaml")
 if [[ "$TELEMETRY" == "true" ]]; then
-  COMPOSE+=(-f "$ROOT_DIR/compose.telemetry.yaml")
+  BASE_COMPOSE+=(-f "$ROOT_DIR/compose.telemetry.yaml")
 fi
+COMPOSE=("${BASE_COMPOSE[@]}")
 if [[ "$AGENT" == "true" ]]; then
   COMPOSE+=(--profile agent)
 fi
@@ -357,7 +361,14 @@ case "$COMMAND" in
   doctor) doctor ;;
   up)
     doctor
-    "${COMPOSE[@]}" up -d --wait
+    if [[ "$AGENT" == "true" ]]; then
+      "${BASE_COMPOSE[@]}" up -d --wait
+      echo "Provisioning the first-party agent worker..."
+      ABADA_ENV_FILE="$ENV_FILE" "$ROOT_DIR/scripts/dev/provision-agent-worker.sh"
+      "${COMPOSE[@]}" up -d --wait abada-agent-worker
+    else
+      "${COMPOSE[@]}" up -d --wait
+    fi
     print_success_panel
     ;;
   down) "${COMPOSE[@]}" down ;;

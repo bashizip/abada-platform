@@ -147,8 +147,9 @@ binding for the project and every topic they poll. The locked-task payload
 carries the owning `projectId`, so a global worker can scope its work and
 downstream calls per task.
 
-The Compose service is opt-in through the `agent` profile. It registers
-`abada:agent` as a global capability, optionally restricted to the
+The Compose service is implemented through the internal `agent` profile, but
+the development launchers enable it automatically. It registers `abada:agent`
+as a global capability, optionally restricted to the
 comma-separated `ABADA_AGENT_MODELS` list (empty means all models in the
 engine allow-list). Build locally by
 installing `sdk/java` and packaging `agent-worker` with the Java 21 Maven
@@ -161,29 +162,29 @@ worker uses OIDC client credentials instead of a static engine token. Run the
 targeted suite with:
 
 ```bash
-# 1. Start the dev stack (creates .env.dev from the safe defaults)
-./release/abada-platform up dev --agent
-
-# 2. Point the worker at an OpenAI-compatible endpoint in .env.dev
+# 1. Configure an OpenAI-compatible endpoint in .env.dev if needed.
+#    The launcher creates this file from safe defaults on first use.
 #    ABADA_AGENT_LLM_BASE_URL / ABADA_AGENT_LLM_API_KEY (or reuse ABADA_LLM_*)
-#    and choose a client secret:
-#    ABADA_AGENT_OIDC_CLIENT_SECRET=<long random value>
 
-# 3. One-time Keycloak + binding provisioning (idempotent)
-#    Re-run after `./scripts/dev/clean.sh` since the client secret is not
-#    part of the realm import. Requires jq, curl, and a healthy stack.
-./scripts/dev/provision-agent-worker.sh
+# 2. Start everything, including provisioning and the agent worker.
+./release/abada-platform up dev
 
-# 4. After any worker or SDK change, rebuild the local image and redeploy
+# 3. In a source checkout, rebuild after a worker or SDK change if required.
 ./scripts/dev/build-agent-worker.sh
 ```
+
+On first startup, the launcher generates `ABADA_AGENT_OIDC_CLIENT_SECRET` in
+the untracked `.env.dev`, provisions Keycloak and the Engine idempotently, and
+only then starts the worker. No agent activation flag or manual provisioning is
+required. `--no-agent` exists only for core-stack diagnostics. A configured LLM
+API key is still required before the worker can complete real agent tasks.
 
 For a single command that rebuilds the Engine and Studio from the local
 working tree, then starts the whole dev stack with the agent profile:
 
 ```bash
 ./scripts/dev/rebuild.sh
-./scripts/dev/up.sh --agent
+./scripts/dev/up.sh
 ```
 
 Provisioning creates the `abada-agent-worker` confidential client with the

@@ -13,7 +13,7 @@ STAGING="$OUTPUT_DIR/$BUNDLE_NAME"
 ARCHIVE="$OUTPUT_DIR/$BUNDLE_NAME.tar.gz"
 
 rm -rf "$STAGING" "$ARCHIVE" "$ARCHIVE.sha256"
-mkdir -p "$STAGING/release" "$STAGING/deployment" "$STAGING/docker/keycloak/import" "$STAGING/docker/grafana"
+mkdir -p "$STAGING/release" "$STAGING/deployment" "$STAGING/docker/keycloak/import" "$STAGING/docker/grafana" "$STAGING/scripts/dev"
 
 cp "$ROOT_DIR/compose.yaml" "$ROOT_DIR/compose.dev.yaml" "$ROOT_DIR/compose.prod.yaml" "$ROOT_DIR/compose.telemetry.yaml" "$STAGING/"
 cp -R "$ROOT_DIR/deployment/telemetry" "$STAGING/deployment/"
@@ -28,6 +28,7 @@ sed \
 sed "s|^ABADA_VERSION=.*|ABADA_VERSION=$VERSION|" \
   "$ROOT_DIR/release/.env.prod.example" >"$STAGING/release/.env.prod.example"
 cp "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1" "$ROOT_DIR/release/README.md" "$STAGING/release/"
+cp "$ROOT_DIR/scripts/dev/provision-agent-worker.sh" "$STAGING/scripts/dev/"
 cp -R "$ROOT_DIR/release/samples" "$STAGING/release/"
 
 # Normalize archive metadata so rerunning publication for the same immutable
@@ -37,14 +38,16 @@ if tar --version 2>/dev/null | grep -q 'GNU tar'; then
   (
     cd "$OUTPUT_DIR"
     find "$BUNDLE_NAME" -print | LC_ALL=C sort | \
-      tar -czf "$ARCHIVE" --no-recursion --owner=0 --group=0 --numeric-owner -T -
+      tar -cf - --no-recursion --owner=0 --group=0 --numeric-owner -T - | \
+      gzip -n >"$ARCHIVE"
   )
 else
   (
     cd "$OUTPUT_DIR"
     find "$BUNDLE_NAME" -print | LC_ALL=C sort | \
-      COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" --no-recursion \
-        --uid 0 --gid 0 --uname root --gname root -T -
+      COPYFILE_DISABLE=1 tar -cf - --no-recursion \
+        --uid 0 --gid 0 --uname root --gname root -T - | \
+      gzip -n >"$ARCHIVE"
   )
 fi
 (

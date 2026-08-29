@@ -3,21 +3,21 @@
 # Start the full Abada development stack with local Engine and Studio images.
 #
 # Usage:
-#   ./scripts/dev/up.sh               # standard dev stack
-#   ./scripts/dev/up.sh --agent        # build the local agent worker + start + provision it
-#   ./scripts/dev/up.sh --agent --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.3
+#   ./scripts/dev/up.sh               # full dev stack, including the local agent worker
+#   ./scripts/dev/up.sh --no-agent    # core stack only (diagnostics)
+#   ./scripts/dev/up.sh --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.3
 #                                      # use a pinned remote agent image instead of the local build
 #   ./scripts/dev/up.sh --telemetry     # also enable the bundled telemetry overlay
-#   ./scripts/dev/up.sh --agent --telemetry
+#   ./scripts/dev/up.sh --telemetry --no-agent
 #
-# When `--agent` is passed, the script first brings up the base stack,
-# provisions Keycloak + Engine for the first-party worker, then starts the
-# worker. That ordering avoids a cold-realm race where the worker tries to
-# authenticate before its confidential client exists.
+# The script first brings up the base stack, provisions Keycloak + Engine for
+# the first-party worker, then starts the worker. That ordering avoids a
+# cold-realm race where the worker tries to authenticate before its
+# confidential client exists.
 #
 # By default, the worker image is built locally from `agent-worker/Dockerfile`
 # and tagged as `abada-agent-worker:local`. Source changes trigger an automatic
-# rebuild on the next `up.sh --agent`. Use `--agent-image <ref>` to swap to a
+# rebuild on the next `up.sh`. Use `--agent-image <ref>` to swap to a
 # pinned image (for example for production-parity tests).
 #
 set -euo pipefail
@@ -26,13 +26,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ABADA_ENV_FILE:-$ROOT_DIR/.env.dev}"
 ENGINE_IMAGE="${ABADA_LOCAL_ENGINE_IMAGE:-abada-engine:local}"
 STUDIO_IMAGE="${ABADA_LOCAL_STUDIO_IMAGE:-abada-studio:local}"
-AGENT=false
+AGENT=true
 TELEMETRY=false
 AGENT_IMAGE_OPT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --agent) AGENT=true ;;
+    --agent) AGENT=true ;; # retained for command-line compatibility
+    --no-agent) AGENT=false ;;
     --telemetry) TELEMETRY=true ;;
     --agent-image)
       [[ $# -ge 2 ]] || { echo "Error: --agent-image requires an image reference" >&2; exit 2; }
@@ -69,14 +70,14 @@ BASE_FLAGS=(--no-pull)
 $TELEMETRY && BASE_FLAGS+=(--telemetry)
 
 if ! $AGENT; then
-  "$ROOT_DIR/release/abada-platform" up dev "${BASE_FLAGS[@]}"
+  "$ROOT_DIR/release/abada-platform" up dev --no-agent "${BASE_FLAGS[@]}"
   exit 0
 fi
 
 # Start the dependencies first. The worker needs the Keycloak client and global
 # engine worker registration below, so starting it before provisioning creates a
 # cold-stack race.
-"$ROOT_DIR/release/abada-platform" up dev "${BASE_FLAGS[@]}"
+"$ROOT_DIR/release/abada-platform" up dev --no-agent "${BASE_FLAGS[@]}"
 
 echo "Provisioning the agent worker (Keycloak client + global capability registration)..."
 "$ROOT_DIR/scripts/dev/provision-agent-worker.sh"

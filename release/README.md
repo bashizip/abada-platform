@@ -17,6 +17,13 @@ Development:
 ./release/abada-platform up dev
 ```
 
+The Bash development launcher starts the first-party agent worker by default.
+On a new installation it generates an OIDC client secret in the local
+`.env.dev`, provisions the bundled Keycloak realm and Engine capability, and
+starts the pinned `ABADA_AGENT_WORKER_IMAGE` without an activation flag. Set
+the LLM API key in `.env.dev` before running agent tasks. Use `--no-agent` only
+when a core-only stack is needed for diagnostics.
+
 The success screen prints every local URL and the development-only starter
 account. Sign in to Studio with `alice` / `alice`; Alice can author and deploy
 workflows, complete tasks in the Task Inbox, and review runs under Operations
