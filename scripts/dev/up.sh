@@ -52,11 +52,20 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 update_image_var() {
-  if grep -q "^${1}=" "$ENV_FILE"; then
-    sed -i '' "s|^${1}=.*|${1}=${2}|" "$ENV_FILE"
-  else
-    echo "${1}=${2}" >> "$ENV_FILE"
-  fi
+  local key="$1" value="$2" temp_file
+  umask 077
+  temp_file="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
+  awk -v key="$key" -v value="$value" '
+    index($0, key "=") == 1 {
+      if (!updated) print key "=" value
+      updated = 1
+      next
+    }
+    { print }
+    END { if (!updated) print key "=" value }
+  ' "$ENV_FILE" >"$temp_file"
+  mv "$temp_file" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
 }
 update_image_var ABADA_ENGINE_IMAGE "$ENGINE_IMAGE"
 update_image_var ABADA_STUDIO_IMAGE "$STUDIO_IMAGE"
