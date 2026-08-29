@@ -241,7 +241,7 @@ ABADA_CONFIG_PATH="$TMP_DIR/config.js" \
 grep -q 'https://api.abada.test' "$TMP_DIR/config.js"
 
 "$ROOT_DIR/release/build-bundle.sh" 1.0.0-rc.3-test >/dev/null
-grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.2-test\.tar\.gz$' \
+grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.3-test\.tar\.gz$' \
   "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz.sha256"
 tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
 test -f "$TMP_DIR/deployment/telemetry/config.alloy"

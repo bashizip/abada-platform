@@ -1,0 +1,190 @@
+name: Publish release bundle
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Immutable release tag (vX.Y.Z)
+        required: true
+        type: string
+      promote:
+        description: Promote this verified version through /latest
+        required: true
+        type: boolean
+    secrets:
+      CF_ACCOUNT_ID:
+        required: true
+      CF_API_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable release tag to publish or retry
+        required: true
+        type: string
+      promote:
+        description: Promote this verified version through /latest
+        required: true
+        default: false
+        type: boolean
+
+# Serializing promotions prevents two tags from racing to update /latest.
+concurrency:
+  group: abada-release-distribution
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish public release distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Validate release tag
+        shell: bash
+        env:
+          RELEASE_INPUT: ${{ inputs.tag }}
+        run: |
+          tag="$RELEASE_INPUT"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "::error::Expected an immutable tag such as v1.0.0-rc.4"
+            exit 64
+          fi
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "VERSION=${tag#v}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Verify installer distribution contracts
+        shell: bash
+        run: |
+          ./scripts/test/verify-install-distribution.sh
+          npm test --prefix install/worker
+
+      - name: Build reproducible checksummed bundle
+        shell: bash
+        run: |
+          ./release/build-bundle.sh "$VERSION"
+          cp "release/dist/abada-platform-$VERSION.tar.gz.sha256" "$RUNNER_TEMP/first.sha256"
+          ./release/build-bundle.sh "$VERSION"
+          cmp "$RUNNER_TEMP/first.sha256" "release/dist/abada-platform-$VERSION.tar.gz.sha256"
+
+      - name: Create or update the authenticated GitHub release mirror
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            notes=("docs/release-notes/$VERSION-release-notes.md")
+            if [[ -f "${notes[0]}" ]]; then
+              notes=(--notes-file "${notes[0]}")
+            else
+              notes=(--generate-notes)
+            fi
+            gh release create "$RELEASE_TAG" --verify-tag \
+              --title "Abada $VERSION" "${notes[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" \
+            "release/dist/abada-platform-$VERSION.tar.gz" \
+            "release/dist/abada-platform-$VERSION.tar.gz.sha256" \
+            --clobber
+
+      - name: Upload immutable bundle and checksum to R2
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: ./scripts/release/upload-bundle-to-r2.sh "$VERSION"
+
+      - name: Deploy public installer Worker
+        uses: cloudflare/wrangler-action@v3.15.0
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          workingDirectory: install/worker
+          wranglerVersion: "4.78.0"
+          command: deploy
+
+      - name: Verify public artifact and checksum
+        shell: bash
+        run: |
+          base="https://install.abadaplatform.com"
+          archive="abada-platform-$VERSION.tar.gz"
+          download="$RUNNER_TEMP/abada-public-download"
+          mkdir -p "$download"
+          for file in "$archive" "$archive.sha256"; do
+            curl -fsSIL --retry 8 --retry-all-errors --retry-delay 5 \
+              "$base/$file" >/dev/null
+            curl -fsSL --retry 8 --retry-all-errors --retry-delay 5 \
+              "$base/$file" -o "$download/$file"
+          done
+          (
+            cd "$download"
+            sha256sum --check "$archive.sha256"
+          )
+          cmp "release/dist/$archive.sha256" "$download/$archive.sha256"
+
+      # No registry login occurs in this job. These checks therefore prove the
+      # exact tags are anonymously pullable from a clean machine.
+      - name: Configure public manifest inspection
+        uses: docker/setup-buildx-action@v3
+
+      - name: Inspect all public image manifests without authentication
+        shell: bash
+        run: |
+          ./scripts/test/verify-image-platforms.sh \
+            "ghcr.io/bashizip/abada-engine:$VERSION" \
+            "ghcr.io/bashizip/abada-studio:$VERSION" \
+            "ghcr.io/bashizip/abada-docs:$VERSION" \
+            "ghcr.io/bashizip/abada-agent-worker:$VERSION"
+
+      - name: Run the public installer end to end on a clean runner
+        shell: bash
+        run: |
+          install_dir="$RUNNER_TEMP/abada-platform-$VERSION"
+          cleanup() {
+            if [[ -x "$install_dir/release/abada-platform" ]]; then
+              "$install_dir/release/abada-platform" down dev || true
+            fi
+          }
+          trap cleanup EXIT
+          curl -fsSL https://install.abadaplatform.com/install.sh | \
+            env ABADA_VERSION="$VERSION" ABADA_INSTALL_DIR="$install_dir" bash
+          curl -fsS --retry 10 --retry-all-errors --retry-delay 2 \
+            http://api.localhost/api/v1/info >/dev/null
+
+      # Promotion is intentionally last. A failed bundle, private image, or
+      # failed clean-machine startup cannot become the installer's default.
+      - name: Promote the verified version as latest
+        if: inputs.promote
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          latest_file="$RUNNER_TEMP/abada-latest"
+          printf '%s\n' "$VERSION" >"$latest_file"
+          npx --yes wrangler@4.78.0 r2 object put abada-releases/latest \
+            --remote \
+            --file "$latest_file" \
+            --content-type "text/plain; charset=utf-8" \
+            --cache-control "no-store"
+
+      - name: Verify the default release pointer
+        if: inputs.promote
+        shell: bash
+        run: |
+          published="$(curl -fsSL --retry 8 --retry-all-errors --retry-delay 5 \
+            "https://install.abadaplatform.com/latest")"
+          [[ "$published" == "$VERSION" ]] || {
+            echo "::error::Expected /latest=$VERSION but received '$published'"
+            exit 1
+          }

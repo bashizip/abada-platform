@@ -1,0 +1,16 @@
+name = "abada-install"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+workers_dev = false
+
+assets = { directory = "../public", binding = "ASSETS" }
+
+[[routes]]
+pattern = "install.abadaplatform.com"
+custom_domain = true
+
+# R2 bucket that stores versioned release bundles.
+# Create once: `npx wrangler r2 bucket create abada-releases`
+[[r2_buckets]]
+binding = "R2_RELEASES"
+bucket_name = "abada-releases"

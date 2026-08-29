@@ -1,0 +1,8 @@
+{
+  "name": "abada-install-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test worker.test.js"
+  }
+}

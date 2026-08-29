@@ -14,6 +14,10 @@ workflows.
 Add `--telemetry` for the bundled observability overlay. Build a self-contained
 release archive with `./release/build-bundle.sh VERSION`. The deployment
 contract check is `./scripts/test/validate-platform-deployment.sh`.
+Installer distribution is checked by
+`./scripts/test/verify-install-distribution.sh`; the emergency R2 upload helper
+is `./scripts/release/upload-bundle-to-r2.sh VERSION`. Normal tag releases use
+the automated workflow documented in [`install/README.md`](../install/README.md).
 
 The former TLS setup and Docker Hub publishing helpers were removed. Local
 development now uses HTTP and the release workflow publishes immutable GHCR

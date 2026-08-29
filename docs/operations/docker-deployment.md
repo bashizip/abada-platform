@@ -53,6 +53,30 @@ no build context or dependency on a repository clone. The Linux/macOS and
 PowerShell quickstarts download both files and verify the checksum before
 extracting.
 
+Public installation is independent of the GitHub repository's visibility:
+
+```bash
+curl -fsSL https://install.abadaplatform.com/install.sh | bash
+```
+
+The installer resolves the default version from
+`https://install.abadaplatform.com/latest`. An exact version is selected by
+passing the override to `bash`:
+
+```bash
+curl -fsSL https://install.abadaplatform.com/install.sh | \
+  ABADA_VERSION=1.0.0-rc.4 bash
+```
+
+The `abada-install` Cloudflare Worker serves the short-cached installer from
+static assets and exposes only versioned bundle/checksum objects plus `latest`
+from the private, dedicated `abada-releases` R2 bucket. The tag release
+workflow publishes the four GHCR images first, uploads and verifies the public
+bundle, performs an unauthenticated clean-runner install, and promotes
+`latest` last. See [`install/README.md`](../../install/README.md) for the
+reproducible Cloudflare setup, scoped secrets, retry procedure and cache
+contract.
+
 ## Verification
 
 ```bash

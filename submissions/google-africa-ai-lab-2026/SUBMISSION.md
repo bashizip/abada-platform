@@ -15,7 +15,7 @@
 `Abada`
 
 ### Company website
-`https://abada.studio`
+`https://abadaplatform.com`
 
 ### HQ Location
 *[Fill in your city/country]*
@@ -199,7 +199,7 @@ Create a 10-12 slide deck (Google Slides or Canva):
 | 9 | **Team:** Technical founder with deep backend and AI integration experience |
 | 10 | **Google AI Lab Ask:** 3 months to build Gemini Function Calling, multimodal agents, and African language support |
 | 11 | **Roadmap:** Lab → Demo Day → Seed funding → African enterprise pilots |
-| 12 | **Contact:** bashizip@gmail.com, abada.studio |
+| 12 | **Contact:** bashizip@gmail.com, abadaplatform.com |
 
 ---
 

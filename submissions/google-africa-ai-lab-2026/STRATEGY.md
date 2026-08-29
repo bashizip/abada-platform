@@ -38,7 +38,7 @@ The form needs exactly four artifacts. Everything else is optional.
 | 1 | One-sentence description | "Describe what your company does" | ✅ Done (in `SUBMISSION.md`) | — |
 | 2 | Pitch deck (10–12 slides) + shareable link | "Link to latest pitch deck" | ⬜ Not started | Sat Aug 29 |
 | 3 | Demo video (2–3 min) + shareable link | "Link to latest product demo and/or video" | ⬜ Not started | Sun Aug 30 |
-| 4 | Website live at abada.studio | "Company website" | ⬜ Needs verification/polish | Sat Aug 29 |
+| 4 | Website live at abadaplatform.com | "Company website" | ⬜ Needs verification/polish | Sat Aug 29 |
 | 5 | HQ location + Field dropdown | — | ⬜ 2 minutes | Sun Aug 30 (submission) |
 
 ---
@@ -76,7 +76,7 @@ The form needs exactly four artifacts. Everything else is optional.
 
 **Afternoon — website + recording:**
 
-- Ship the landing page on abada.studio. Link docs; don't rebuild them.
+- Ship the landing page on abadaplatform.com. Link docs; don't rebuild them.
 - Record the demo in **segments — one take per beat**, never one long take. 1080p, hide the bookmarks bar, bump font sizes.
 - Rehearse twice before hitting record.
 
@@ -85,7 +85,7 @@ The form needs exactly four artifacts. Everything else is optional.
 ### Day 3 — Sun Aug 30. Edit, polish, SUBMIT.
 
 - [ ] Generate TTS voiceover per beat (script was locked Friday), cut video to the audio, add captions.
-- [ ] Title card: the one sentence. End card: repo URL + abada.studio.
+- [ ] Title card: the one sentence. End card: repo URL + abadaplatform.com.
 - [ ] Upload video (Loom/YouTube unlisted/Drive), test link incognito.
 - [ ] Final deck pass: rehearse once against a timer, fix typos.
 - [ ] **Fill the form and submit in the evening.** Fill HQ location and Field dropdown directly in the form.
@@ -166,7 +166,7 @@ If Sunday noon arrives with no video: switch to the code-walkthrough fallback im
 
 **Saturday:**
 - [ ] Deck built, shareable link tested incognito
-- [ ] Website live at abada.studio with quickstart command block
+- [ ] Website live at abadaplatform.com with quickstart command block
 - [ ] Demo segments recorded (one take per beat)
 
 **Sunday:**

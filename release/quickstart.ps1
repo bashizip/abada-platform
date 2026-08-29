@@ -1,14 +1,20 @@
 param(
-  [string]$Version = $(if ($env:ABADA_VERSION) { $env:ABADA_VERSION } else { "1.0.0-rc.3" }),
+  [string]$Version = $(if ($env:ABADA_VERSION) { $env:ABADA_VERSION } else { "" }),
   [ValidateSet("dev", "prod")]
   [string]$Profile = $(if ($env:ABADA_PROFILE) { $env:ABADA_PROFILE } else { "dev" }),
-  [string]$Repository = $(if ($env:ABADA_REPOSITORY) { $env:ABADA_REPOSITORY } else { "bashizip/abada-engine" }),
-  [string]$InstallDirectory = $(if ($env:ABADA_INSTALL_DIR) { $env:ABADA_INSTALL_DIR } else { Join-Path (Get-Location) "abada-platform-$Version" })
+  [string]$InstallDirectory = $(if ($env:ABADA_INSTALL_DIR) { $env:ABADA_INSTALL_DIR } else { "" })
 )
 
 $ErrorActionPreference = "Stop"
-if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?$') {
+$BaseUrl = if ($env:ABADA_RELEASE_BASE_URL) { $env:ABADA_RELEASE_BASE_URL.TrimEnd('/') } else { "https://install.abadaplatform.com" }
+if (-not $Version) {
+  $Version = (Invoke-RestMethod -Uri "$BaseUrl/latest").Trim()
+}
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$') {
   throw 'Version must be an immutable semantic version'
+}
+if (-not $InstallDirectory) {
+  $InstallDirectory = Join-Path (Get-Location) "abada-platform-$Version"
 }
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker is required" }
 & docker compose version | Out-Null
@@ -23,7 +29,6 @@ if ($Version -eq '1.0.0-rc.1') {
 }
 
 $Archive = "abada-platform-$Version.tar.gz"
-$BaseUrl = if ($env:ABADA_RELEASE_BASE_URL) { $env:ABADA_RELEASE_BASE_URL } else { "https://github.com/$Repository/releases/download/v$Version" }
 $TemporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Path $TemporaryDirectory | Out-Null
 
@@ -34,7 +39,12 @@ try {
   Invoke-WebRequest -Uri "$BaseUrl/$Archive" -OutFile $ArchivePath
   Invoke-WebRequest -Uri "$BaseUrl/$Archive.sha256" -OutFile $ChecksumPath
 
-  $Expected = ((Get-Content $ChecksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+  $ChecksumLines = @(Get-Content $ChecksumPath)
+  $EscapedArchive = [regex]::Escape($Archive)
+  if ($ChecksumLines.Count -ne 1 -or $ChecksumLines[0] -notmatch "^([0-9a-fA-F]{64})  $EscapedArchive$") {
+    throw "Checksum file must contain exactly the expected archive entry"
+  }
+  $Expected = $Matches[1].ToLowerInvariant()
   $Actual = (Get-FileHash -Algorithm SHA256 $ArchivePath).Hash.ToLowerInvariant()
   if ($Expected -ne $Actual) { throw "Release archive checksum verification failed" }
 

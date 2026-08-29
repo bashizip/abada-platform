@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${ABADA_VERSION:-${1:-1.0.0-rc.3}}"
+VERSION="${ABADA_VERSION:-${1:-}}"
 PROFILE="${ABADA_PROFILE:-dev}"
-REPOSITORY="${ABADA_REPOSITORY:-bashizip/abada-engine}"
-INSTALL_DIR="${ABADA_INSTALL_DIR:-$PWD/abada-platform-$VERSION}"
-ARCHIVE="abada-platform-$VERSION.tar.gz"
-BASE_URL="${ABADA_RELEASE_BASE_URL:-https://github.com/$REPOSITORY/releases/download/v$VERSION}"
+BASE_URL="${ABADA_RELEASE_BASE_URL:-https://install.abadaplatform.com}"
+BASE_URL="${BASE_URL%/}"
 
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || {
+command -v curl >/dev/null 2>&1 || { echo "Error: curl is required" >&2; exit 69; }
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(curl --fail --location --silent --show-error "$BASE_URL/latest")"
+fi
+
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || {
   echo "Error: version must be an immutable semantic version" >&2
   exit 64
 }
@@ -19,7 +22,9 @@ BASE_URL="${ABADA_RELEASE_BASE_URL:-https://github.com/$REPOSITORY/releases/down
 
 command -v docker >/dev/null 2>&1 || { echo "Error: Docker is required" >&2; exit 69; }
 docker compose version >/dev/null
-command -v curl >/dev/null 2>&1 || { echo "Error: curl is required" >&2; exit 69; }
+
+INSTALL_DIR="${ABADA_INSTALL_DIR:-$PWD/abada-platform-$VERSION}"
+ARCHIVE="abada-platform-$VERSION.tar.gz"
 
 if [[ "$VERSION" == "1.0.0-rc.1" ]]; then
   docker_arch="$(docker info --format '{{.Architecture}}')"
@@ -38,6 +43,21 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 echo "Downloading Abada $VERSION release bundle..."
 curl --fail --location --silent --show-error "$BASE_URL/$ARCHIVE" -o "$TMP_DIR/$ARCHIVE"
 curl --fail --location --silent --show-error "$BASE_URL/$ARCHIVE.sha256" -o "$TMP_DIR/$ARCHIVE.sha256"
+
+CHECKSUM_FILE="$TMP_DIR/$ARCHIVE.sha256"
+CHECKSUM_LINE="$(cat "$CHECKSUM_FILE")"
+if [[ "$(awk 'END { print NR }' "$CHECKSUM_FILE")" != "1" ]]; then
+  echo "Error: checksum file must contain exactly the expected archive entry" >&2
+  exit 65
+fi
+if [[ ! "$CHECKSUM_LINE" =~ ^([0-9a-fA-F]{64})[[:space:]][[:space:]](.+)$ ]]; then
+  echo "Error: checksum file must contain exactly the expected archive entry" >&2
+  exit 65
+fi
+if [[ "${BASH_REMATCH[2]}" != "$ARCHIVE" ]]; then
+  echo "Error: checksum file must contain exactly the expected archive entry" >&2
+  exit 65
+fi
 
 (
   cd "$TMP_DIR"

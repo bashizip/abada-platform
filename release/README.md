@@ -51,7 +51,10 @@ public hostnames, explicit CORS origins, ACME email, and an externally managed
 OIDC/Keycloak-compatible provider.
 
 The downloadable `quickstart.sh` and `quickstart.ps1` verify the archive and
-start development automatically. When invoked with the production profile,
-they only install the bundle and create `.env.prod`; operators must edit it,
-run `doctor prod`, and issue the explicit `up prod` command printed by the
-script.
+start development automatically. They resolve the default version from the
+public `https://install.abadaplatform.com/latest` pointer; set
+`ABADA_VERSION` for an exact immutable release and
+`ABADA_RELEASE_BASE_URL` for a mirror. When invoked with the production
+profile, they only install the bundle and create `.env.prod`; operators must
+edit it, run `doctor prod`, and issue the explicit `up prod` command printed
+by the script.

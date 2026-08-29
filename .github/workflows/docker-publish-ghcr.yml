@@ -65,31 +65,12 @@ jobs:
   release-bundle:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: images
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/publish-release-bundle.yml
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build self-contained checksummed platform archive
-        shell: bash
-        run: ./release/build-bundle.sh "${GITHUB_REF_NAME#v}"
-      - name: Create or update the GitHub release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            notes=("docs/release-notes/$version-release-notes.md")
-            if [[ -f "${notes[0]}" ]]; then
-              notes=(--notes-file "${notes[0]}")
-            else
-              notes=(--generate-notes)
-            fi
-            gh release create "$GITHUB_REF_NAME" --verify-tag \
-              --title "Abada $version" "${notes[@]}"
-          fi
-          gh release upload "$GITHUB_REF_NAME" \
-            "release/dist/abada-platform-$version.tar.gz" \
-            "release/dist/abada-platform-$version.tar.gz.sha256" \
-            --clobber
+    with:
+      tag: ${{ github.ref_name }}
+      promote: true
+    secrets:
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
