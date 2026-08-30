@@ -82,17 +82,16 @@ class InsightLoopIntegrationTest {
                     .hasMessageContaining("approval policy");
 
             InsightProposalEntity afterLead = service.review(proposal.getId(), "lead-user", List.of("lead"),
-                    InsightProposalReviewEntity.Decision.APPROVE, "Technically sound", proposal.getUpdatedAt());
+                    InsightProposalReviewEntity.Decision.APPROVE, "Technically sound", null);
             assertThat(afterLead.getStatus()).isEqualTo(InsightProposalEntity.Status.IN_REVIEW);
             InsightProposalEntity adopted = service.review(proposal.getId(), "compliance-user",
                     List.of("compliance"), InsightProposalReviewEntity.Decision.APPROVE,
-                    "Controls verified", afterLead.getUpdatedAt());
+                    "Controls verified", null);
             assertThat(adopted.getStatus()).isEqualTo(InsightProposalEntity.Status.ADOPTED);
             assertThat(adopted.getAdoptedVersion()).isEqualTo(2);
-            Instant adoptedAt = adopted.getUpdatedAt();
             assertThatThrownBy(() -> service.review(proposal.getId(), "late-reviewer",
                     List.of("lead"), InsightProposalReviewEntity.Decision.APPROVE,
-                    "Too late", adoptedAt))
+                    "Too late", null))
                     .isInstanceOf(InsightProposalService.InsightConflictException.class)
                     .hasMessageContaining("already ADOPTED");
 
@@ -104,7 +103,7 @@ class InsightLoopIntegrationTest {
                     ("# newer immutable version\n" + staleTarget.getBpmnXml()).getBytes(StandardCharsets.UTF_8)));
             InsightProposalEntity superseded = service.review(stale.getId(), "reviewer",
                     List.of("abada-insight-reviewer"), InsightProposalReviewEntity.Decision.APPROVE,
-                    "Reviewed", stale.getUpdatedAt());
+                    "Reviewed", null);
             assertThat(superseded.getStatus()).isEqualTo(InsightProposalEntity.Status.SUPERSEDED);
         }
     }
