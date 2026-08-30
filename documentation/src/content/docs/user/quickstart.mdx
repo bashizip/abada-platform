@@ -11,7 +11,7 @@ development preflight and starts the local HTTP platform.
 mkdir abada-quickstart && cd abada-quickstart
 curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
 chmod +x quickstart.sh
-./quickstart.sh 1.0.0-rc.3
+./quickstart.sh 1.0.0-rc.4
 ```
 
 The current launcher finishes with a success panel that confirms container
@@ -37,7 +37,7 @@ Windows PowerShell:
 New-Item -ItemType Directory abada-quickstart
 Set-Location abada-quickstart
 Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 -OutFile quickstart.ps1
-.\quickstart.ps1 -Version 1.0.0-rc.3
+.\quickstart.ps1 -Version 1.0.0-rc.4
 ```
 
 Abada's release-image contract supports `linux/amd64` and `linux/arm64`.
@@ -50,7 +50,7 @@ Verify and tear down:
 
 ```bash
 curl -fsS http://api.localhost/api/actuator/health/readiness
-cd abada-platform-1.0.0-rc.3
+cd abada-platform-1.0.0-rc.4
 ./release/abada-platform status dev
 ./release/abada-platform down dev
 ```

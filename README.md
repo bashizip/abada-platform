@@ -137,7 +137,7 @@ Add `--telemetry` for the bundled Grafana, Prometheus, Jaeger, and Loki stack.
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
 chmod +x quickstart.sh
-./quickstart.sh 1.0.0-rc.3
+./quickstart.sh 1.0.0-rc.4
 ```
 
 See [`release/README.md`](release/README.md).
@@ -177,7 +177,7 @@ See the [BPMN support matrix](docs/reference/bpmn-support.md) for exact semantic
 
 ## Status
 
-**Certified baseline:** `1.0.0-rc.3` — stable REST and worker contracts, direct OIDC JWT validation, backend RBAC, cluster-safe PostgreSQL runtime.
+**Certified baseline:** `1.0.0-rc.4` — stable REST and worker contracts, direct OIDC JWT validation, backend RBAC, cluster-safe PostgreSQL runtime.
 
 **1.1 agentic checkpoint** (in development): native APL runtime, deterministic decision tables, governed Insight Loop, project envelopes, first-party agent worker. Progress tracked in the [1.1 RC roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 

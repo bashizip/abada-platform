@@ -11,7 +11,7 @@
     </parent>
     <groupId>dev.abada</groupId>
     <artifactId>abada-engine</artifactId>
-    <version>1.0.0-rc.3</version>
+    <version>1.0.0-rc.4</version>
     <name>Abada Engine</name>
     <description>Lightweight, pluggable BPMN-based workflow engine</description>
     <url />

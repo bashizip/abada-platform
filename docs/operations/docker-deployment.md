@@ -44,7 +44,7 @@ external; bundled Keycloak is development-only.
 ## Release artifact
 
 ```bash
-./release/build-bundle.sh 1.0.0-rc.3
+./release/build-bundle.sh 1.0.0-rc.4
 ```
 
 The result under `release/dist/` contains all Compose/configuration assets,

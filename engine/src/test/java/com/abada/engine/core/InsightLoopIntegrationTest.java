@@ -77,7 +77,7 @@ class InsightLoopIntegrationTest {
             assertThatThrownBy(() -> service.review(proposal.getId(), "wrong-role",
                     List.of("abada-admin"), InsightProposalReviewEntity.Decision.APPROVE,
                     "Admin access does not override the configured separation of duties",
-                    proposal.getUpdatedAt()))
+                    null))
                     .isInstanceOf(ProcessEngineException.class)
                     .hasMessageContaining("approval policy");
 
