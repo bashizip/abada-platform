@@ -272,3 +272,5 @@ authoritative contracts under `docs/`; it does not replace them. Use MDX for
 structured components and Mermaid only where a diagram materially clarifies a
 relationship or sequence. Keep the user guide deferred until its roadmap
 milestone is explicitly started.
+
+@RTK.md
