@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Braces, Rocket, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, Braces, Lightbulb, Rocket, RotateCcw, X } from 'lucide-react';
 import { WorkflowFile } from '@/types';
 
 interface DeployDialogProps {
@@ -10,10 +10,14 @@ interface DeployDialogProps {
   defaultPayload: Record<string, unknown>;
   onClose: () => void;
   onConfirm: (payload: Record<string, unknown>) => Promise<void>;
+  examples?: Record<string, Record<string, unknown>>;
+  onGenerateInsightEvidence?: () => Promise<void>;
+  insightEvidenceRunning?: boolean;
 }
 
 export const DeployDialog: React.FC<DeployDialogProps> = ({
   workflow, isOpen, isDeploying, dryRunPassed, defaultPayload, onClose, onConfirm,
+  examples, onGenerateInsightEvidence, insightEvidenceRunning = false,
 }) => {
   const [payloadText, setPayloadText] = useState(() => JSON.stringify(defaultPayload, null, 2));
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +62,32 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
               onChange={(event) => { setPayloadText(event.target.value); setError(null); }}
               className="w-full h-48 p-3 bg-transparent resize-none outline-none font-mono text-[11px] disabled:opacity-60" />
           </div>
+          {examples && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[#A89F91]">Example:</span>
+              {Object.entries(examples).map(([name, payload]) => (
+                <button key={name} type="button" disabled={isDeploying || insightEvidenceRunning}
+                  onClick={() => setPayloadText(JSON.stringify(payload, null, 2))}
+                  className="rounded-lg border border-[#3A322E] px-2.5 py-1 text-[10px] font-semibold text-[#EAE3D9] hover:border-[#2A9D8F] disabled:opacity-50">
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
           {error && <div className="text-[11px] text-[#E76F51]">{error}</div>}
+          {onGenerateInsightEvidence && (
+            <button type="button" disabled={isDeploying || insightEvidenceRunning}
+              onClick={() => void onGenerateInsightEvidence()}
+              className="w-full rounded-xl border border-[#9D4EDD]/40 bg-[#9D4EDD]/10 p-3 text-left disabled:opacity-50">
+              <span className="flex items-center gap-2 text-[11px] font-semibold text-[#C9A7FF]">
+                {insightEvidenceRunning ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <Lightbulb className="h-3.5 w-3.5" />}
+                {insightEvidenceRunning ? 'Running four LOW executions…' : 'Generate Insight evidence'}
+              </span>
+              <span className="mt-1 block text-[10px] text-[#A89F91]">
+                Starts four real LOW runs with Gemini. No proposal is approved automatically.
+              </span>
+            </button>
+          )}
           <div className="flex justify-end gap-2">
             <button onClick={onClose} disabled={isDeploying} className="px-3 py-2 rounded-lg border border-[#3A322E] text-xs text-[#A89F91]">Cancel</button>
             <button onClick={() => void confirm()} disabled={isDeploying}

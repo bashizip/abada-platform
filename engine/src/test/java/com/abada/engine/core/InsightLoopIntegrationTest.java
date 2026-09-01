@@ -64,6 +64,22 @@ class InsightLoopIntegrationTest {
                     .withPassword("abada");
 
     @Test
+    void newestCompletedWindowRemainsASingleCursorAfterRepeatedCycles() {
+        try (ConfigurableApplicationContext context = startApp()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            var repository = context.getBean(InsightObservationWindowRepository.class);
+            Instant firstEnd = Instant.parse("2026-08-31T10:00:00Z");
+            Instant secondEnd = Instant.parse("2026-08-31T10:01:00Z");
+            repository.save(completedWindow(firstEnd.minusSeconds(10), firstEnd));
+            repository.save(completedWindow(secondEnd.minusSeconds(10), secondEnd));
+
+            assertThat(repository.findLatestCompleted()).get()
+                    .extracting(InsightObservationWindowEntity::getEndedAt)
+                    .isEqualTo(secondEnd);
+        }
+    }
+
+    @Test
     void parallelPolicyRequiresEveryRoleAndSupersedesStaleTargets() {
         try (ConfigurableApplicationContext context = startApp()) {
             context.getBean(DatabaseTestHelper.class).cleanup();
@@ -180,6 +196,34 @@ class InsightLoopIntegrationTest {
 
             assertThat(context.getBean(InsightProposalRepository.class).findById(proposalId).orElseThrow()
                     .getStatus()).isEqualTo(InsightProposalEntity.Status.ADOPTED);
+        }
+    }
+
+    @Test
+    void accumulatesFallbackEvidenceAcrossObservationWindows() {
+        try (ConfigurableApplicationContext context = startApp()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/candidate-review.apl.yaml");
+            ExternalTaskCommandService tasks = context.getBean(ExternalTaskCommandService.class);
+            InsightWorker worker = context.getBean(InsightWorker.class);
+
+            runInstance(engine, tasks, Map.of("score", 30));
+            runInstance(engine, tasks, Map.of("score", 30));
+            assertThat(worker.runCycle()).isEqualTo(InsightWorker.RunOutcome.PROCESSED);
+            assertThat(context.getBean(InsightFindingRepository.class).findAll()).isEmpty();
+
+            runInstance(engine, tasks, Map.of("score", 30));
+            runInstance(engine, tasks, Map.of("score", 30));
+            assertThat(worker.runCycle()).isEqualTo(InsightWorker.RunOutcome.PROCESSED);
+
+            assertThat(context.getBean(InsightFindingRepository.class).findAll())
+                    .singleElement()
+                    .satisfies(finding -> {
+                        assertThat(finding.getSignalType())
+                                .isEqualTo(InsightFindingEntity.SignalType.FALLBACK_THRASH);
+                        assertThat(finding.getSampleCount()).isEqualTo(4);
+                    });
         }
     }
 
@@ -310,6 +354,15 @@ class InsightLoopIntegrationTest {
         proposal.setCreatedAt(Instant.now());
         proposal.setUpdatedAt(Instant.now());
         return proposal;
+    }
+
+    private InsightObservationWindowEntity completedWindow(Instant start, Instant end) {
+        InsightObservationWindowEntity window = new InsightObservationWindowEntity();
+        window.setStartedAt(start);
+        window.setEndedAt(end);
+        window.setCompletedAt(end);
+        window.setStatus(InsightObservationWindowEntity.Status.COMPLETED);
+        return window;
     }
 
     private static ConfigurableApplicationContext startApp(String... insightExtras) {

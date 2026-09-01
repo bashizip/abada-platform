@@ -38,7 +38,12 @@ umask 022
   printf '  apiUrl: "%s",\n' "$(escape_js "$ABADA_API_URL")"
   printf '  oidcUrl: "%s",\n' "$(escape_js "${ABADA_OIDC_URL:-http://keycloak.localhost}")"
   printf '  oidcRealm: "%s",\n' "$(escape_js "${ABADA_OIDC_REALM:-abada-dev}")"
-  printf '  oidcClientId: "%s"\n' "$(escape_js "${ABADA_OIDC_CLIENT_ID:-abada-frontend}")"
+  printf '  oidcClientId: "%s",\n' "$(escape_js "${ABADA_OIDC_CLIENT_ID:-abada-frontend}")"
+  case "${ABADA_STARTER_WORKFLOW_ENABLED:-false}" in
+    true|false) starter_enabled="${ABADA_STARTER_WORKFLOW_ENABLED:-false}" ;;
+    *) echo "Error: ABADA_STARTER_WORKFLOW_ENABLED must be true or false" >&2; exit 64 ;;
+  esac
+  printf '  starterWorkflowEnabled: %s\n' "$starter_enabled"
   printf '});\n'
 } > "$config_path"
 

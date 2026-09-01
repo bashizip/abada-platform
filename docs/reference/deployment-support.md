@@ -15,7 +15,7 @@ An entry becomes certified only when its roadmap evidence is checked. The
 table distinguishes an implemented/configuration-valid profile from a
 release-certified one so documentation never broadens the current guarantee.
 
-`1.0.0-rc.4` is published as an evaluation release candidate with the
+`1.0.0-rc.5` is prepared as an evaluation release candidate with the
 executable Compose configuration, preflight, archive and
 PostgreSQL/Testcontainers evidence. It does not claim a completed public-cloud
 production certification. Public TLS, external-OIDC reference-host testing,

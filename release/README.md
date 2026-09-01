@@ -7,7 +7,7 @@ profile you need, then run the preflight before starting containers.
 Release images support `linux/amd64` and `linux/arm64`. The original immutable
 `1.0.0-rc.1` images contain only `linux/amd64`; the current launcher detects
 that exact release on an ARM64 Docker host, prints a notice, and enables
-Docker's compatibility mode. `1.0.0-rc.4` is the current release; RC.3 was the first
+Docker's compatibility mode. `1.0.0-rc.5` is the prepared release; RC.3 was the first
 whose manifests are required to contain both native platforms.
 
 Development:
@@ -24,10 +24,11 @@ starts the pinned `ABADA_AGENT_WORKER_IMAGE` without an activation flag. Set
 the LLM API key in `.env.dev` before running agent tasks. Use `--no-agent` only
 when a core-only stack is needed for diagnostics.
 
-The success screen prints every local URL and the development-only starter
-account. Sign in to Studio with `alice` / `alice`; Alice can author and deploy
-workflows, complete tasks in the Task Inbox, and review runs under Operations
-and Administration.
+The public installer securely requests and validates a Gemini key before
+startup. The success screen prints every local URL and the development-only
+starter account. Sign in to Studio with `alice` / `alice`; Studio creates and
+deploys the AI Lead Triage starter, including its human form and local demo
+adapters, without overwriting existing projects.
 
 Production:
 

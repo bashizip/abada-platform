@@ -337,8 +337,8 @@ print_success_panel() {
 
     print_section "First run"
     printf '  1. Open %bStudio%b and sign in as %balice%b.\n' "$BOLD" "$RESET" "$BOLD" "$RESET"
-    printf '  2. Import and deploy a workflow in the %bDesigner%b, then start an instance.\n' "$BOLD" "$RESET"
-    printf '  3. Complete work in the %bTask Inbox%b and review it under %bOperations%b.\n' "$BOLD" "$RESET" "$BOLD" "$RESET"
+    printf '  2. Open the pre-deployed %bAI Lead Triage%b process in the Designer.\n' "$BOLD" "$RESET"
+    printf '  3. Start HIGH, MEDIUM or LOW examples, then inspect %bTasks%b, %bOperations%b and %bInsight%b.\n' "$BOLD" "$RESET" "$BOLD" "$RESET" "$BOLD" "$RESET"
   fi
 
   printf -v root_quoted '%q' "$ROOT_DIR"

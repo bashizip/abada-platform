@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Project, ProjectAPI } from '@/api/projects';
 import { WorkflowFile, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
+import { config } from '@/config/runtime';
+import { ensureLeadTriageStarter } from '@/lib/starter/leadTriage';
 
 export const createEmptyWorkflow = (
   id: string,
@@ -29,6 +31,8 @@ export function useProjectWorkspace(authenticated: boolean) {
   const [activeProject, setActiveProject] = useState<Project | undefined>();
   const [showProjects, setShowProjects] = useState(false);
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
+  const [workspaceStatus, setWorkspaceStatus] = useState<'loading' | 'seeding' | 'ready' | 'error'>('loading');
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   const persistedFingerprint = useRef(new Map<string, string>());
   const failedAutosaveFingerprint = useRef(new Map<string, string>());
@@ -66,16 +70,36 @@ export function useProjectWorkspace(authenticated: boolean) {
     setTreeRefreshKey((val) => val + 1);
   }, []);
 
-  useEffect(() => {
+  const initializeWorkspace = useCallback(async () => {
     if (!authenticated) return;
-    ProjectAPI.list().then((available) => {
+    setWorkspaceStatus('loading');
+    setWorkspaceError(null);
+    try {
+      let available = await ProjectAPI.list();
+      let seededProject: Project | undefined;
+      if (config.starterWorkflowEnabled) {
+        setWorkspaceStatus('seeding');
+        const result = await ensureLeadTriageStarter(available);
+        available = result.projects;
+        seededProject = result.project;
+      }
       setProjects(available);
       const remembered = localStorage.getItem('abada.studio.projectId');
-      const selected = available.find((project) => project.id === remembered) || available[0];
-      if (selected) void openProject(selected);
+      const selected = seededProject
+        || available.find((project) => project.id === remembered)
+        || available[0];
+      if (selected) await openProject(selected);
       else setShowProjects(true);
-    }).catch(() => setShowProjects(true));
+      setWorkspaceStatus('ready');
+    } catch (reason) {
+      setWorkspaceError(reason instanceof Error ? reason.message : String(reason));
+      setWorkspaceStatus('error');
+    }
   }, [authenticated, openProject]);
+
+  useEffect(() => {
+    if (authenticated) void initializeWorkspace();
+  }, [authenticated, initializeWorkspace]);
 
   // Autosave timer
   useEffect(() => {
@@ -179,5 +203,8 @@ export function useProjectWorkspace(authenticated: boolean) {
     updateActiveWorkflow,
     processesRootId,
     persistedProcessKeys,
+    workspaceStatus,
+    workspaceError,
+    retryWorkspace: initializeWorkspace,
   };
 }

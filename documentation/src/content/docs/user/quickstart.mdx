@@ -3,16 +3,18 @@ title: Quickstart
 description: Install and validate a versioned Abada release from an empty directory.
 ---
 
-The downloader retrieves both the release archive and its SHA-256 file. It
-refuses to extract the archive when verification fails, then runs the
-development preflight and starts the local HTTP platform.
+The installer requests a Gemini API key with hidden input, validates access to
+`gemini-3.6-flash`, retrieves the checksummed release archive, and starts the
+local HTTP platform.
 
 ```bash
 mkdir abada-quickstart && cd abada-quickstart
-curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
-chmod +x quickstart.sh
-./quickstart.sh 1.0.0-rc.4
+curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
+
+Automation may supply `ABADA_AGENT_LLM_API_KEY` to the `bash` process. The key
+is stored only in the untracked local `.env.dev` with mode `0600`; it is never
+part of the release archive or Studio runtime configuration.
 
 The current launcher finishes with a success panel that confirms container
 health and groups URLs, starter accounts, first-run guidance and management
@@ -26,6 +28,9 @@ Use `alice` / `alice` to sign in to Studio. Studio is the single operator UI:
 its Header tabs cover Designer, Task Inbox, Operations and Insight, and the
 **Administration** button is gated on the `abada-admin` JWT group. These
 credentials are local development data and must never be reused in production.
+On the first login, Studio creates and deploys the `AI Lead Triage` starter and
+opens its auto-layouted diagram. The Deploy & Start dialog contains HIGH,
+MEDIUM and LOW inputs plus an explicit action for four LOW Insight samples.
 
 The original immutable `1.0.0-rc.1` archive prints the same URLs in a compact
 summary. The structured success panel is included in subsequent release
@@ -37,7 +42,7 @@ Windows PowerShell:
 New-Item -ItemType Directory abada-quickstart
 Set-Location abada-quickstart
 Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.ps1 -OutFile quickstart.ps1
-.\quickstart.ps1 -Version 1.0.0-rc.4
+.\quickstart.ps1 -Version 1.0.0-rc.5
 ```
 
 Abada's release-image contract supports `linux/amd64` and `linux/arm64`.
@@ -50,7 +55,7 @@ Verify and tear down:
 
 ```bash
 curl -fsS http://api.localhost/api/actuator/health/readiness
-cd abada-platform-1.0.0-rc.4
+cd abada-platform
 ./release/abada-platform status dev
 ./release/abada-platform down dev
 ```

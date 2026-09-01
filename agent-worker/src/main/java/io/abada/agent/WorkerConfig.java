@@ -23,7 +23,8 @@ public record WorkerConfig(
         Duration pollInterval,
         Duration lockDuration,
         int maxTasks,
-        Set<String> allowedTools) {
+        Set<String> allowedTools,
+        Set<String> localAckTopics) {
 
     public WorkerConfig(
             URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
@@ -33,7 +34,7 @@ public record WorkerConfig(
             Duration lockDuration, int maxTasks, Set<String> allowedTools) {
         this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
                 llmBaseUrl, llmApiKey, openAiBaseUrl, openAiApiKey,
-                defaultModel, workerId, Set.of(), pollInterval, lockDuration, maxTasks, allowedTools);
+                defaultModel, workerId, Set.of(), pollInterval, lockDuration, maxTasks, allowedTools, Set.of());
     }
 
     public static WorkerConfig fromEnvironment() {
@@ -44,6 +45,7 @@ public record WorkerConfig(
                 .map(String::strip).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
         Set<String> models = Arrays.stream(env.getOrDefault("ABADA_AGENT_MODELS", "").split(","))
                 .map(String::strip).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
+        Set<String> localAckTopics = parseLocalAckTopics(env);
         String tokenUrl = env.getOrDefault("ABADA_AGENT_OIDC_TOKEN_URL", "");
         String clientId = env.getOrDefault("ABADA_AGENT_OIDC_CLIENT_ID", "");
         String clientSecret = env.getOrDefault("ABADA_AGENT_OIDC_CLIENT_SECRET", "");
@@ -67,8 +69,20 @@ public record WorkerConfig(
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_POLL_INTERVAL_MS", 1_000, 100, 60_000)),
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_LOCK_DURATION_MS", 120_000, 1_000, 3_600_000)),
                 (int) longValue(env, "ABADA_AGENT_MAX_TASKS", 4, 1, 50),
-                tools
+                tools,
+                localAckTopics
         );
+    }
+
+    static Set<String> parseLocalAckTopics(Map<String, String> env) {
+        Set<String> topics = Arrays.stream(env.getOrDefault("ABADA_AGENT_LOCAL_ACK_TOPICS", "").split(","))
+                .map(String::strip)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.toUnmodifiableSet());
+        if (topics.contains("abada:agent")) {
+            throw new IllegalArgumentException("ABADA_AGENT_LOCAL_ACK_TOPICS must not include abada:agent");
+        }
+        return topics;
     }
 
     static Endpoints resolveEndpoints(Map<String, String> env) {

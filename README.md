@@ -135,10 +135,12 @@ Add `--telemetry` for the bundled Grafana, Prometheus, Jaeger, and Loki stack.
 ### Versioned release bundle
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/bashizip/abada-engine/main/release/quickstart.sh
-chmod +x quickstart.sh
-./quickstart.sh 1.0.0-rc.4
+curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
+
+The installer validates a Gemini key, then the first Studio login creates and
+deploys the auto-layouted AI Lead Triage starter. The key stays in the local
+mode-`0600` `.env.dev` and is never bundled or exposed to Studio.
 
 See [`release/README.md`](release/README.md).
 
@@ -177,7 +179,7 @@ See the [BPMN support matrix](docs/reference/bpmn-support.md) for exact semantic
 
 ## Status
 
-**Certified baseline:** `1.0.0-rc.4` — stable REST and worker contracts, direct OIDC JWT validation, backend RBAC, cluster-safe PostgreSQL runtime.
+**Prepared baseline:** `1.0.0-rc.5` — RC.4 reliability plus the opt-in Lead Triage starter, validated Gemini setup and local demonstration adapters. Publication remains gated by the RC evidence workflow.
 
 **1.1 agentic checkpoint** (in development): native APL runtime, deterministic decision tables, governed Insight Loop, project envelopes, first-party agent worker. Progress tracked in the [1.1 RC roadmap](docs/development/roadmap-to-1.1.0-rc.md).
 

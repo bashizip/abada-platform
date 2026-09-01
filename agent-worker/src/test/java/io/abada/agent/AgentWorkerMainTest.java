@@ -2,6 +2,7 @@ package io.abada.agent;
 
 import com.sun.net.httpserver.HttpServer;
 import io.abada.worker.AgentWorkDescriptor;
+import io.abada.worker.LockedExternalTask;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -110,6 +111,35 @@ class AgentWorkerMainTest {
     void resolveEndpointsRequiresAtLeastOneEndpoint() {
         assertThrows(IllegalArgumentException.class,
                 () -> WorkerConfig.resolveEndpoints(Map.of()));
+    }
+
+    @Test
+    void localAcknowledgementTopicsAreTrimmedAndDeduplicated() {
+        Set<String> topics = WorkerConfig.parseLocalAckTopics(Map.of(
+                "ABADA_AGENT_LOCAL_ACK_TOPICS",
+                " demo.crm.upsert, demo.nurture.enqueue, demo.crm.upsert, "));
+
+        assertEquals(Set.of("demo.crm.upsert", "demo.nurture.enqueue"), topics);
+    }
+
+    @Test
+    void localAcknowledgementTopicsCannotReplaceTheAgentHandler() {
+        assertThrows(IllegalArgumentException.class,
+                () -> WorkerConfig.parseLocalAckTopics(Map.of(
+                        "ABADA_AGENT_LOCAL_ACK_TOPICS", "demo.crm.upsert,abada:agent")));
+    }
+
+    @Test
+    void localAcknowledgementIsExplicitlyADevelopmentAdapter() {
+        var task = new LockedExternalTask("task-1", "demo.crm.upsert", Map.of(), "instance-7",
+                "sync-crm", 3, null, null, "1", null, "project-1");
+
+        Map<?, ?> ack = (Map<?, ?>) AgentWorkerMain.localAcknowledgement(task).get("systemAck");
+
+        assertEquals("Local demo adapter", ack.get("adapter"));
+        assertEquals("demo.crm.upsert", ack.get("topic"));
+        assertEquals("instance-7", ack.get("processInstanceId"));
+        assertEquals("ACKNOWLEDGED", ack.get("status"));
     }
 
     @Test

@@ -16,6 +16,8 @@ on:
         required: true
       CF_API_TOKEN:
         required: true
+      GEMINI_API_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -148,6 +150,8 @@ jobs:
 
       - name: Run the public installer end to end on a clean runner
         shell: bash
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           install_dir="$RUNNER_TEMP/abada-platform-$VERSION"
           cleanup() {
@@ -157,7 +161,8 @@ jobs:
           }
           trap cleanup EXIT
           curl -fsSL https://install.abadaplatform.com/install.sh | \
-            env ABADA_VERSION="$VERSION" ABADA_INSTALL_DIR="$install_dir" bash
+            env ABADA_VERSION="$VERSION" ABADA_INSTALL_DIR="$install_dir" \
+              ABADA_AGENT_LLM_API_KEY="$GEMINI_API_KEY" bash
           curl -fsS --retry 10 --retry-all-errors --retry-delay 2 \
             http://api.localhost/api/v1/info >/dev/null
 

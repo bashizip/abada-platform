@@ -20,6 +20,11 @@ public interface InsightExecutionFactRepository extends JpaRepository<InsightExe
                     String projectId, String definitionKey, String activityId, java.time.Instant before);
 
     java.util.List<InsightExecutionFactEntity>
+            findByProjectIdAndDefinitionKeyAndDefinitionDeploymentIdAndActivityIdAndEndedAtBefore(
+                    String projectId, String definitionKey, String definitionDeploymentId,
+                    String activityId, java.time.Instant before);
+
+    java.util.List<InsightExecutionFactEntity>
             findByEndedAtGreaterThanEqualAndEndedAtLessThanOrderByDefinitionDeploymentId(
                     java.time.Instant from, java.time.Instant to);
 

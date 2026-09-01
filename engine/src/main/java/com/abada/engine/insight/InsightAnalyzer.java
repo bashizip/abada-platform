@@ -135,14 +135,20 @@ public class InsightAnalyzer {
                     }
                 }
             } else if (key.nodeType().equals(NodeType.DECISION.name())) {
-                long fallbackUses = nodeFacts.stream()
+                List<InsightExecutionFactEntity> decisionFacts = new ArrayList<>(facts
+                        .findByProjectIdAndDefinitionKeyAndDefinitionDeploymentIdAndActivityIdAndEndedAtBefore(
+                                key.projectId(), key.definitionKey(), key.deploymentId(),
+                                key.nodeId(), windowStart));
+                decisionFacts.addAll(nodeFacts);
+                long decisionAttempts = decisionFacts.size();
+                long fallbackUses = decisionFacts.stream()
                         .filter(f -> Boolean.TRUE.equals(f.getFallbackUsed()))
                         .count();
-                if (attempts >= minFallback) {
-                    double ratio = (double) fallbackUses / attempts;
+                if (decisionAttempts >= minFallback) {
+                    double ratio = (double) fallbackUses / decisionAttempts;
                     if (ratio >= fallbackThreshold) {
                         findings.add(new Finding(key, "Decisions landing on the otherwise rule",
-                                "FALLBACK_THRASH", ratio, fallbackThreshold, attempts,
+                                "FALLBACK_THRASH", ratio, fallbackThreshold, decisionAttempts,
                                 severity(ratio, fallbackThreshold)));
                     }
                 }

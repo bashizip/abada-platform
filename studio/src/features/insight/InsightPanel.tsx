@@ -3,7 +3,11 @@ import { Sparkles, Loader2, CheckCircle2, XCircle, Brain } from 'lucide-react';
 import { InsightAPI, InsightProposalSummary, InsightProposalDetail } from '@/api/insight';
 import { useToast } from '@/components/ToastContext';
 
-export const InsightPanel: React.FC = () => {
+interface InsightPanelProps {
+  projectId?: string;
+}
+
+export const InsightPanel: React.FC<InsightPanelProps> = ({ projectId }) => {
   const { showToast } = useToast();
   const [proposals, setProposals] = useState<InsightProposalSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -15,7 +19,7 @@ export const InsightPanel: React.FC = () => {
     setLoading(true);
     try {
       const [p, config] = await Promise.all([
-        InsightAPI.listProposals(),
+        InsightAPI.listProposals(undefined, projectId),
         InsightAPI.getLlmConfig().catch(() => null),
       ]);
       setProposals(p.items);
@@ -25,7 +29,7 @@ export const InsightPanel: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [projectId, showToast]);
 
   useEffect(() => {
     void load();
@@ -39,7 +43,8 @@ export const InsightPanel: React.FC = () => {
         proposalId,
         approved ? 'APPROVE' : 'REJECT',
         approved ? 'Approved from Insight panel' : 'Rejected from Insight panel',
-        detail.updatedAt
+        detail.updatedAt,
+        projectId,
       );
       showToast('success', approved ? 'Proposal approved' : 'Proposal rejected');
       void load();
@@ -51,9 +56,10 @@ export const InsightPanel: React.FC = () => {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case 'PENDING':
+      case 'DRAFT':
+      case 'IN_REVIEW':
         return <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F4A261]/20 text-[#F4A261] font-medium">Pending</span>;
-      case 'APPROVED':
+      case 'ADOPTED':
         return <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#2A9D8F]/20 text-[#2A9D8F] font-medium">Approved</span>;
       case 'REJECTED':
         return <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#E76F51]/20 text-[#E76F51] font-medium">Rejected</span>;
@@ -101,7 +107,7 @@ export const InsightPanel: React.FC = () => {
                   onClick={async () => {
                     setDetailLoading(true);
                     try {
-                      const detail = await InsightAPI.getProposal(p.id);
+                      const detail = await InsightAPI.getProposal(p.id, projectId);
                       setSelectedProposal(detail);
                     } catch (err) {
                       showToast('error', err instanceof Error ? err.message : 'Failed to load proposal detail');
@@ -166,7 +172,7 @@ export const InsightPanel: React.FC = () => {
                 </div>
               )}
 
-              {selectedProposal.status === 'PENDING' && (
+              {['DRAFT', 'IN_REVIEW'].includes(selectedProposal.status) && (
                 <div className="flex items-center gap-2 pt-2">
                   <button
                     onClick={() => void handleReview(selectedProposal.id, true)}

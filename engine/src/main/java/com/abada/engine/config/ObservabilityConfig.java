@@ -36,7 +36,7 @@ public class ObservabilityConfig {
     @Primary
     @ConditionalOnProperty(name = "abada.telemetry.enabled", havingValue = "true")
     OpenTelemetrySdk enabledOpenTelemetry(
-            @Value("${spring.application.version:1.0.0-rc.4}") String appVersion,
+            @Value("${spring.application.version:1.0.0-rc.5}") String appVersion,
             @Value("${app.project:abada}") String project,
             @Value("${spring.application.name:abada-engine}") String serviceName,
             @Value("${abada.telemetry.environment:${spring.profiles.active:default}}") String environment,
@@ -76,7 +76,7 @@ public class ObservabilityConfig {
     @Bean
     Tracer tracer(OpenTelemetry openTelemetry,
             @Value("${spring.application.name:abada-engine}") String serviceName,
-            @Value("${spring.application.version:1.0.0-rc.4}") String appVersion) {
+            @Value("${spring.application.version:1.0.0-rc.5}") String appVersion) {
         return openTelemetry.getTracer(serviceName, appVersion);
     }
 
@@ -85,7 +85,7 @@ public class ObservabilityConfig {
     OtlpMeterRegistry otlpMeterRegistry(
             @Value("${abada.telemetry.otlp.endpoint:}") String otlpEndpoint,
             @Value("${management.otlp.metrics.export.step:10s}") String configuredStep,
-            @Value("${spring.application.version:1.0.0-rc.4}") String appVersion,
+            @Value("${spring.application.version:1.0.0-rc.5}") String appVersion,
             @Value("${app.project:abada}") String project,
             @Value("${spring.application.name:abada-engine}") String serviceName,
             @Value("${abada.telemetry.environment:${spring.profiles.active:default}}") String environment) {

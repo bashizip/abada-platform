@@ -44,7 +44,7 @@ external; bundled Keycloak is development-only.
 ## Release artifact
 
 ```bash
-./release/build-bundle.sh 1.0.0-rc.4
+./release/build-bundle.sh 1.0.0-rc.5
 ```
 
 The result under `release/dist/` contains all Compose/configuration assets,
@@ -65,7 +65,7 @@ passing the override to `bash`:
 
 ```bash
 curl -fsSL https://install.abadaplatform.com/install.sh | \
-  ABADA_VERSION=1.0.0-rc.4 bash
+  ABADA_VERSION=1.0.0-rc.5 bash
 ```
 
 The `abada-install` Cloudflare Worker serves the short-cached installer from

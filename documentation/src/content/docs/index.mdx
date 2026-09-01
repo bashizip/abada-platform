@@ -3,7 +3,7 @@ title: Abada Engine documentation
 description: Architecture and developer guidance for the PostgreSQL-backed BPMN orchestration engine.
 template: splash
 hero:
-  tagline: Understand the durable BPMN runtime, then change it without weakening its guarantees.
+  tagline: Legacy workflow engines treat AI as a REST connector; AI swarms treat execution as a free-for-all. Abada brings ACID-backed transactional guardrails to self-optimizing autonomous agents.
   actions:
     - text: Deploy Abada
       link: /user/quickstart/
@@ -20,6 +20,10 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<video controls preload="metadata" poster="/videos/abada-studio-overview-thumbnail.png" style={{width:'100%',maxWidth:'960px',borderRadius:'8px'}}>
+  <source src="/videos/abada-studio-overview.mp4" type="video/mp4" />
+</video>
 
 <div style="text-align:center;margin:-1rem 0 2rem;padding:1rem;background:var(--sl-color-bg-nav);border:1px solid var(--sl-color-gray-5);border-radius:8px;font-family:monospace;font-size:0.95rem;">
   curl -fsSL https://install.abadaplatform.com | bash
@@ -57,7 +61,7 @@ This site serves three audiences:
 
 ## Current release boundary
 
-These guides describe the `1.0.0-rc.4` evaluation release candidate. PostgreSQL
+These guides describe the prepared `1.0.0-rc.5` evaluation release candidate. PostgreSQL
 is the production source of truth, API v1 and worker protocol v1 are frozen,
 and multi-replica execution is certified for the documented BPMN subset.
 Conformance publication, rolling-upgrade evidence, security review, benchmarks

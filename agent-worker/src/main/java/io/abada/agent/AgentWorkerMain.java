@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -30,17 +31,28 @@ public final class AgentWorkerMain {
                 : new ClientCredentialsTokenSupplier(config);
         AbadaWorkerClient engine = new AbadaWorkerClient(config.engineUrl(), tokens);
         AgentGatewayFactory gateways = new AgentGatewayFactory(config);
-        engine.registerCapabilities(List.of("abada:agent"), List.copyOf(config.allowedModels()));
+        LinkedHashSet<String> configuredTopics = new LinkedHashSet<>();
+        configuredTopics.add("abada:agent");
+        configuredTopics.addAll(config.localAckTopics());
+        List<String> topics = List.copyOf(configuredTopics);
+        engine.registerCapabilities(topics, List.copyOf(config.allowedModels()));
         LOG.log(System.Logger.Level.INFO,
-                "agent_worker_started worker_id={0} topic=abada:agent models={1}",
+                "agent_worker_started worker_id={0} topics={1} models={2}",
                 config.workerId(),
+                String.join(",", topics),
                 config.allowedModels().isEmpty() ? "(all)" : String.join(",", config.allowedModels()));
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 List<LockedExternalTask> tasks = engine.fetchAndLock(config.workerId(),
-                        List.of("abada:agent"),
+                        topics,
                         config.lockDuration(), config.maxTasks(), RequestOptions.defaults());
-                for (LockedExternalTask task : tasks) process(engine, gateways, config, task);
+                for (LockedExternalTask task : tasks) {
+                    if (config.localAckTopics().contains(task.topicName())) {
+                        processLocalAcknowledgement(engine, config, task);
+                    } else {
+                        process(engine, gateways, config, task);
+                    }
+                }
                 if (tasks.isEmpty()) Thread.sleep(config.pollInterval().toMillis());
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
@@ -55,6 +67,23 @@ public final class AgentWorkerMain {
                 }
             }
         }
+    }
+
+    private static void processLocalAcknowledgement(AbadaWorkerClient engine, WorkerConfig config,
+            LockedExternalTask task) {
+        engine.complete(task.id(), config.workerId(), localAcknowledgement(task),
+                new RequestOptions("local-ack-" + task.id(), task.traceParent(), null));
+        LOG.log(System.Logger.Level.INFO,
+                "local_demo_task_acknowledged task_id={0} topic={1} instance_id={2}",
+                task.id(), task.topicName(), task.processInstanceId());
+    }
+
+    static Map<String, Object> localAcknowledgement(LockedExternalTask task) {
+        return Map.of("systemAck", Map.of(
+                "adapter", "Local demo adapter",
+                "topic", task.topicName(),
+                "processInstanceId", task.processInstanceId(),
+                "status", "ACKNOWLEDGED"));
     }
 
     private static void process(AbadaWorkerClient engine, AgentGatewayFactory gateways,

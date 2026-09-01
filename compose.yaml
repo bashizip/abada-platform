@@ -25,7 +25,7 @@ services:
       start_period: 10s
 
   abada-engine:
-    image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.0.0-rc.4}
+    image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.0.0-rc.5}
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: "5601"
@@ -40,6 +40,11 @@ services:
       OTEL_SDK_DISABLED: "true"
       ABADA_OUTBOX_DISPATCHER_ENABLED: "true"
       ABADA_INSIGHT_ENABLED: ${ABADA_INSIGHT_ENABLED:-false}
+      ABADA_INSIGHT_INITIAL_DELAY_MS: ${ABADA_INSIGHT_INITIAL_DELAY_MS:-60000}
+      ABADA_INSIGHT_INTERVAL_MS: ${ABADA_INSIGHT_INTERVAL_MS:-300000}
+      ABADA_INSIGHT_DRIFT_SECONDS: ${ABADA_INSIGHT_DRIFT_SECONDS:-30}
+      ABADA_INSIGHT_MIN_FALLBACK_SAMPLES: ${ABADA_INSIGHT_MIN_FALLBACK_SAMPLES:-8}
+      ABADA_INSIGHT_FALLBACK_RATIO_THRESHOLD: ${ABADA_INSIGHT_FALLBACK_RATIO_THRESHOLD:-0.6}
       ABADA_LLM_BASE_URL: ${ABADA_LLM_BASE_URL:-}
       ABADA_LLM_API_KEY: ${ABADA_LLM_API_KEY:-}
       ABADA_LLM_MODEL: ${ABADA_LLM_MODEL:-gemini-3.6-flash}
@@ -70,7 +75,7 @@ services:
       start_period: 30s
 
   abada-studio:
-    image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.4}
+    image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.5}
     environment:
       ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
       ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
@@ -111,6 +116,7 @@ services:
       ABADA_AGENT_OPENAI_API_KEY: ${ABADA_AGENT_OPENAI_API_KEY:-${ABADA_AGENT_LLM_API_KEY:-${ABADA_LLM_API_KEY:-}}}
       ABADA_AGENT_LLM_MODEL: ${ABADA_AGENT_LLM_MODEL:-${ABADA_LLM_MODEL:-gemini-3.6-flash}}
       ABADA_AGENT_ALLOWED_TOOLS: ${ABADA_AGENT_ALLOWED_TOOLS:-}
+      ABADA_AGENT_LOCAL_ACK_TOPICS: ${ABADA_AGENT_LOCAL_ACK_TOPICS:-}
       ABADA_AGENT_MODELS: ${ABADA_AGENT_MODELS:-}
       ABADA_AGENT_POLL_INTERVAL_MS: ${ABADA_AGENT_POLL_INTERVAL_MS:-1000}
       ABADA_AGENT_MAX_TASKS: ${ABADA_AGENT_MAX_TASKS:-4}
@@ -135,7 +141,7 @@ services:
         condition: service_healthy
 
   abada-docs:
-    image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.4}
+    image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.5}
     networks:
       - edge
     restart: unless-stopped

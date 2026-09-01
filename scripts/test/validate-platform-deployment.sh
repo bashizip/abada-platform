@@ -25,7 +25,7 @@ grep -q 'AGENT=true' "$ROOT_DIR/scripts/dev/up.sh"
 for launcher in "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1"; do
   grep -q 'ABADA PLATFORM' "$launcher"
   grep -q 'alice / alice' "$launcher"
-  grep -q 'Import and deploy' "$launcher"
+  grep -q 'AI Lead Triage' "$launcher"
 done
 grep -q 'bpmndi:BPMNDiagram' "$ROOT_DIR/release/samples/approval.bpmn"
 # Studio is the sole supported operator UI. The retired Tenda/Orun apps and the

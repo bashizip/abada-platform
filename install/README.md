@@ -6,13 +6,18 @@ The public Linux/macOS installer is:
 curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
 
+The interactive installer reads a Gemini API key with hidden input from
+`/dev/tty`, validates `gemini-3.6-flash`, and stores it only in the untracked
+mode-`0600` `.env.dev`. Non-interactive automation must provide
+`ABADA_AGENT_LLM_API_KEY` to the `bash` process.
+
 With no override, the script reads the version from the public `/latest`
 pointer. To install an older or newly published exact version, pass the
 variable to `bash` (the right-hand side of the pipeline):
 
 ```bash
 curl -fsSL https://install.abadaplatform.com/install.sh | \
-  ABADA_VERSION=1.0.0-rc.4 bash
+  ABADA_VERSION=1.0.0-rc.5 bash
 
 curl -fsSL https://install.abadaplatform.com/install.sh | \
   ABADA_INSTALL_DIR=/opt/abada bash
@@ -124,8 +129,8 @@ The emergency helper validates the local checksum and refuses to overwrite a
 version whose R2 checksum differs:
 
 ```bash
-./release/build-bundle.sh 1.0.0-rc.4
-./scripts/release/upload-bundle-to-r2.sh 1.0.0-rc.4
+./release/build-bundle.sh 1.0.0-rc.5
+./scripts/release/upload-bundle-to-r2.sh 1.0.0-rc.5
 ```
 
 It intentionally does not update `/latest`. Prefer the manual workflow retry,

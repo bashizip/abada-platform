@@ -41,6 +41,7 @@ import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
+import { LEAD_TRIAGE_EXAMPLES, STARTER_PROCESS_KEY } from '@/lib/starter/leadTriage';
 
 type StudioView = 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
 type DesignerMode = 'diagram' | 'apl';
@@ -59,12 +60,14 @@ export default function App() {
   const [showDeployDialog, setShowDeployDialog] = useState(false);
   const [diffSnapshot, setDiffSnapshot] = useState<WorkflowDiffSnapshot | null>(null);
   const [insightDialog, setInsightDialog] = useState<null | { state: 'loading' | 'empty' | 'error'; message?: string }>(null);
+  const [insightEvidenceRunning, setInsightEvidenceRunning] = useState(false);
 
   const {
     workflows, setWorkflows, activeWorkflowId, setActiveWorkflowId,
     currentWorkflow, projects, setProjects, activeProject,
     showProjects, setShowProjects, treeRefreshKey, setTreeRefreshKey,
-    openProject, updateActiveWorkflow, processesRootId, persistedProcessKeys
+    openProject, updateActiveWorkflow, processesRootId, persistedProcessKeys,
+    workspaceStatus, workspaceError, retryWorkspace
   } = useProjectWorkspace(authenticated);
 
   const {
@@ -333,6 +336,19 @@ export default function App() {
         setTreeRefreshKey((value) => value + 1);
       }
       const response = activeProject ? await ProjectAPI.deployDocument(activeProject.id, deployWorkflow) : await EngineAPI.deployWorkflow(currentWorkflow);
+      if (activeProject && deployWorkflow.documentId) {
+        const refreshedDocument = (await ProjectAPI.documents(activeProject.id))
+          .find((document) => document.id === deployWorkflow.documentId);
+        if (refreshedDocument) {
+          deployWorkflow = {
+            ...deployWorkflow,
+            revision: refreshedDocument.revision,
+            updatedAt: refreshedDocument.updatedAt,
+          };
+          setWorkflows((items) => items.map((item) =>
+            item.id === deployWorkflow.id ? deployWorkflow : item));
+        }
+      }
       const { processInstanceId } = await EngineAPI.startProcess(response.processKey, payload, activeProject?.id);
       const instance = await EngineAPI.getInstance(processInstanceId, activeProject?.id);
       setSimulationLogs(prev => [...prev, { id: `deploy-${Date.now()}-2`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'success', message: `Deployed [${response.processKey}] v${response.version} and started live instance ${processInstanceId}.` }]);
@@ -345,6 +361,40 @@ export default function App() {
       showToast('error', err.message || 'Deployment failed');
     } finally {
       setIsDeploying(false);
+    }
+  };
+
+  const handleGenerateInsightEvidence = async () => {
+    if (!activeProject || currentWorkflow.processKey !== STARTER_PROCESS_KEY || insightEvidenceRunning) return;
+    if (!window.confirm('Start four real LOW lead executions? This makes four Gemini API requests and does not approve any Insight proposal.')) return;
+    setInsightEvidenceRunning(true);
+    try {
+      const instances = await Promise.all(Array.from({ length: 4 }, (_, index) => {
+        const payload = structuredClone(LEAD_TRIAGE_EXAMPLES.LOW) as Record<string, any>;
+        payload.lead.id = `LEAD-LOW-INSIGHT-${index + 1}-${Date.now()}`;
+        return EngineAPI.startProcess(STARTER_PROCESS_KEY, payload, activeProject.id);
+      }));
+      const deadline = Date.now() + 180_000;
+      while (Date.now() < deadline) {
+        const states = await Promise.all(instances.map(({ processInstanceId }) =>
+          EngineAPI.getInstance(processInstanceId, activeProject.id)));
+        if (states.every((instance) => instance.status === 'COMPLETED')) {
+          showToast('success', 'Four LOW executions completed. Insight is analyzing the persisted evidence.');
+          setInstancesRefreshKey((value) => value + 1);
+          setShowDeployDialog(false);
+          setCurrentView('insight');
+          return;
+        }
+        if (states.some((instance) => ['FAILED', 'CANCELLED'].includes(instance.status))) {
+          throw new Error('At least one LOW execution did not complete successfully');
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+      }
+      throw new Error('Timed out while waiting for the four LOW executions');
+    } catch (reason) {
+      showToast('error', reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setInsightEvidenceRunning(false);
     }
   };
 
@@ -398,7 +448,27 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-[#1A1614] text-[#EAE3D9] overflow-hidden">
       {!authenticated && <SignInGate />}
-      {authenticated && (
+      {authenticated && workspaceStatus !== 'ready' && (
+        <div className="flex flex-1 items-center justify-center bg-[#1A1614] p-6">
+          <div className="w-full max-w-md rounded-2xl border border-[#3A322E] bg-[#25201D] p-6 text-center shadow-warm-lg">
+            {workspaceStatus !== 'error' ? (
+              <>
+                <Activity className="mx-auto h-7 w-7 animate-pulse text-[#2A9D8F]" />
+                <h1 className="mt-3 text-sm font-semibold">Preparing your Abada workspace</h1>
+                <p className="mt-1 text-xs text-[#A89F91]">{workspaceStatus === 'seeding' ? 'Creating and deploying the Lead Triage starter…' : 'Loading projects and process definitions…'}</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-sm font-semibold text-[#E76F51]">Workspace setup needs attention</h1>
+                <p className="mt-2 text-xs text-[#A89F91]">{workspaceError || 'The workspace could not be initialized.'}</p>
+                <button type="button" onClick={() => void retryWorkspace()}
+                  className="mt-4 rounded-lg bg-[#F4A261] px-4 py-2 text-xs font-semibold text-[#1A1614]">Retry setup</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {authenticated && workspaceStatus === 'ready' && (
         <>
       <Header
         currentWorkflow={displayedWorkflow}
@@ -646,7 +716,7 @@ export default function App() {
         )}
         {currentView === 'inbox' && <TaskInbox projectId={activeProject?.id} />}
         {currentView === 'administration' && <AdministrationView activeProject={activeProject} />}
-        {currentView === 'insight' && <InsightPanel />}
+        {currentView === 'insight' && <InsightPanel projectId={activeProject?.id} />}
         {currentView === 'operations' && (
           <ProcessOperations
             projectId={activeProject?.id}
@@ -677,9 +747,16 @@ export default function App() {
         isOpen={showDeployDialog}
         isDeploying={isDeploying}
         dryRunPassed={dryRunFingerprint === workflowFingerprint(currentWorkflow)}
-        defaultPayload={Object.keys(lastDryRunPayload).length ? lastDryRunPayload : deriveDefaultPayload(currentWorkflow)}
+        defaultPayload={Object.keys(lastDryRunPayload).length
+          ? lastDryRunPayload
+          : currentWorkflow.processKey === STARTER_PROCESS_KEY
+            ? LEAD_TRIAGE_EXAMPLES.HIGH
+            : deriveDefaultPayload(currentWorkflow)}
         onClose={() => setShowDeployDialog(false)}
         onConfirm={handleDeploy}
+        examples={currentWorkflow.processKey === STARTER_PROCESS_KEY ? LEAD_TRIAGE_EXAMPLES : undefined}
+        onGenerateInsightEvidence={currentWorkflow.processKey === STARTER_PROCESS_KEY ? handleGenerateInsightEvidence : undefined}
+        insightEvidenceRunning={insightEvidenceRunning}
       />
 
       <ProcessDetailsModal
