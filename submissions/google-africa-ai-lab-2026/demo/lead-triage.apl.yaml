@@ -1,0 +1,106 @@
+version: abada.io/v1
+
+metadata:
+  key: google_lab_lead_triage
+  name: Google Lab Lead Triage
+  owner: sales-operations
+  category: sales
+
+flow:
+  entry: receive-lead
+  nodes:
+    - id: receive-lead
+      type: webhook
+      description: Receive a new sales lead
+      next: analyze-lead
+
+    - id: analyze-lead
+      type: agent
+      description: Analyze lead with Gemini
+      profile: abada.agent/v1
+      model: gemini-3.6-flash
+      prompt: |
+        You are a sales-operations classifier. Use only the supplied lead object.
+
+        Apply these deterministic business thresholds:
+        - HIGH: annualBudgetUsd >= 100000 and purchaseTimeframeDays <= 90.
+        - MEDIUM: annualBudgetUsd >= 25000 or companyEmployees >= 100.
+        - LOW: every other lead.
+
+        Return only one JSON object with exactly these fields:
+        {"priority":"HIGH|MEDIUM|LOW","reason":"one concise sentence","_confidence":95}
+        _confidence must be a number from 0 to 100. Do not add markdown fences.
+      inputs:
+        lead: "${lead}"
+      result_variable: triage
+      output_schema:
+        type: object
+        required: [priority, reason, _confidence]
+        properties:
+          priority:
+            type: string
+            enum: [HIGH, MEDIUM, LOW]
+          reason:
+            type: string
+          _confidence:
+            type: number
+      confidence_threshold: 70
+      temperature: 0.0
+      max_tokens: 2048
+      timeout_ms: 60000
+      max_attempts: 3
+      retry_backoff_ms: 2000
+      next: priority-policy
+
+    - id: priority-policy
+      type: decision-table
+      description: Apply the governed lead-routing policy
+      decisionKey: LEAD_PRIORITY_POLICY_V1
+      hitPolicy: FIRST
+      inputs:
+        priority: "${triage.priority}"
+      rules:
+        - when: "priority == 'HIGH'"
+          then: { route: HIGH, action: SENIOR_REVIEW }
+        - when: "priority == 'MEDIUM'"
+          then: { route: MEDIUM, action: CRM_FOLLOW_UP }
+        # LOW is intentionally the observed fallback in v1. Insight should
+        # propose an explicit LOW rule after repeated execution evidence.
+        - otherwise: true
+          then: { route: LOW, action: NURTURE }
+      next: route-lead
+
+    - id: route-lead
+      type: condition
+      description: Route using the deterministic policy result
+      rules:
+        - if: "${route == 'HIGH'}"
+          then: senior-sales-review
+        - if: "${route == 'MEDIUM'}"
+          then: sync-crm
+        - else: enqueue-nurture
+          then: enqueue-nurture
+
+    - id: senior-sales-review
+      type: human-input
+      description: Senior sales review
+      formKey: lead-triage-review
+      assignees:
+        - abada-task-user
+      next: sync-crm
+
+    - id: sync-crm
+      type: engine-task
+      description: Synchronize the qualified lead
+      service: demo.crm.upsert
+      next: done
+
+    - id: enqueue-nurture
+      type: engine-task
+      description: Enqueue the lead for nurturing
+      service: demo.nurture.enqueue
+      next: done
+
+    - id: done
+      type: end
+      description: Lead triage completed

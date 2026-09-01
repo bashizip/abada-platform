@@ -1,0 +1,10 @@
+{
+  "lead": {
+    "id": "LAB-LOW-004",
+    "company": "Community Pilot Four",
+    "companyEmployees": 30,
+    "annualBudgetUsd": 12000,
+    "purchaseTimeframeDays": 180,
+    "need": "Plan a future automation initiative"
+  }
+}

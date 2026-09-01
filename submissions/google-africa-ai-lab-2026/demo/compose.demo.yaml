@@ -1,0 +1,26 @@
+services:
+  abada-engine:
+    image: ghcr.io/bashizip/abada-engine:1.0.0-rc.4
+    pull_policy: never
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/abada_google_lab_demo_20260831"
+      ABADA_INSIGHT_ENABLED: "true"
+      ABADA_INSIGHT_INITIAL_DELAY_MS: "5000"
+      ABADA_INSIGHT_INTERVAL_MS: "86400000"
+      ABADA_INSIGHT_DRIFT_SECONDS: "0"
+      ABADA_INSIGHT_MIN_FALLBACK_SAMPLES: "4"
+      ABADA_INSIGHT_FALLBACK_RATIO_THRESHOLD: "0.5"
+      ABADA_LLM_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai"
+      ABADA_LLM_API_KEY: ${ABADA_AGENT_LLM_API_KEY:?ABADA_AGENT_LLM_API_KEY must be set in .env.dev}
+      ABADA_LLM_MODEL: "gemini-3.6-flash"
+      ABADA_LLM_OPENROUTER_ENABLED: "false"
+  abada-agent-worker:
+    image: ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.4
+    pull_policy: never
+    environment:
+      ABADA_AGENT_LLM_BASE_URL: "https://generativelanguage.googleapis.com/v1beta"
+      ABADA_AGENT_LLM_API_KEY: ${ABADA_AGENT_LLM_API_KEY:?ABADA_AGENT_LLM_API_KEY must be set in .env.dev}
+      ABADA_AGENT_OPENAI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai"
+      ABADA_AGENT_OPENAI_API_KEY: ${ABADA_AGENT_LLM_API_KEY:?ABADA_AGENT_LLM_API_KEY must be set in .env.dev}
+      ABADA_AGENT_LLM_MODEL: "gemini-3.6-flash"
+      ABADA_AGENT_MODELS: "gemini-3.6-flash"

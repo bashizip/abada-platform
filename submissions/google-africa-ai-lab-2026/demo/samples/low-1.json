@@ -1,0 +1,10 @@
+{
+  "lead": {
+    "id": "LAB-LOW-001",
+    "company": "Community Pilot One",
+    "companyEmployees": 8,
+    "annualBudgetUsd": 3000,
+    "purchaseTimeframeDays": 240,
+    "need": "Explore workflow automation"
+  }
+}

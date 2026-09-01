@@ -1,0 +1,51 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+loki.source.file "abada_engine" {
+  targets = [
+    {
+      __path__     = "/var/log/abada/*.log",
+      job          = "abada-engine",
+      service_name = "abada-engine",
+    },
+  ]
+  forward_to = [loki.process.abada_engine.receiver]
+  tail_from_end = true
+
+  file_match {
+    enabled     = true
+    sync_period = "5s"
+  }
+}
+
+loki.process "abada_engine" {
+  forward_to = [loki.write.local.receiver]
+
+  stage.json {
+    expressions = {
+      level    = "level",
+      trace_id = "traceId",
+      span_id  = "spanId",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "level",
+    }
+  }
+}
+
+loki.write "local" {
+  endpoint {
+    url                 = "http://loki:3100/loki/api/v1/push"
+    batch_size          = "1MiB"
+    batch_wait          = "1s"
+    remote_timeout      = "5s"
+    min_backoff_period  = "500ms"
+    max_backoff_period  = "5s"
+    max_backoff_retries = 10
+  }
+}

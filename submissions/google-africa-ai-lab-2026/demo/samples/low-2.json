@@ -1,0 +1,10 @@
+{
+  "lead": {
+    "id": "LAB-LOW-002",
+    "company": "Community Pilot Two",
+    "companyEmployees": 12,
+    "annualBudgetUsd": 5000,
+    "purchaseTimeframeDays": 300,
+    "need": "Understand AI process orchestration"
+  }
+}

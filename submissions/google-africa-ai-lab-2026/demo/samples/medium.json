@@ -1,0 +1,10 @@
+{
+  "lead": {
+    "id": "LAB-MEDIUM-001",
+    "company": "Lake Region Logistics",
+    "companyEmployees": 140,
+    "annualBudgetUsd": 30000,
+    "purchaseTimeframeDays": 150,
+    "need": "Automate internal service requests"
+  }
+}

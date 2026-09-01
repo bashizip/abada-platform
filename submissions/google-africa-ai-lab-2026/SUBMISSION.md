@@ -2,7 +2,11 @@
 
 **Deadline:** August 31, 2026  
 **Program:** https://labs.google/aifuturesfund/africaailab  
-**Form:** https://docs.google.com/forms/d/e/1FAIpQLSeWGDlcZtSSNd4T9uz45pH3LglGJWAbjgGvtzQeobbZ6Re17Pw/viewform
+**Form:** https://docs.google.com/forms/d/e/1FAIpQLSeWGDlcZtSSNd4Tuz45pH3LglGJWAbjgGvtzQeobbZ6Re17Pw/viewform?usp=header
+
+> **Live-form audit (August 31):** the application is still open. The form has
+> two pages. Only the pitch-deck link is a required artifact; the demo/video is
+> optional. Do not submit confidential information.
 
 ---
 
@@ -18,20 +22,55 @@
 `https://abadaplatform.com`
 
 ### HQ Location
-*[Fill in your city/country]*
+`Democratic Republic of the Congo`
 
 ### Field
-*[Select from dropdown — likely "Developer Tools / Infrastructure" or "Enterprise Software"]*
+`Dev Tools`
 
 ### Link to latest pitch deck
-*[Upload to Google Slides / Canva / Drive and paste link here]*
+`https://docs.google.com/presentation/d/1LwKcgfB1FbA7a5_Cp3kw2H1tycBs2c0-q1U0kEwhTsI/edit`
 
 ### Describe what your company does in one sentence
 
-> Abada is an open-source, AI-native workflow orchestration platform that lets teams build and run durable business processes in YAML — where Gemini-powered agents, human tasks, and system integrations are first-class citizens, compiled directly to a PostgreSQL-backed execution graph without XML.
+> Abada is an open-source platform for building, running and continuously improving AI-powered business processes, combining durable orchestration, governed AI agents, human work and evidence-based optimization.
 
 ### Link to latest product demo and/or video
-*[Upload Loom / YouTube / Drive and paste link here]*
+*[Optional — upload Loom / YouTube / Drive and paste the public link here]*
+
+---
+
+## Page 2 — Founder and Company Information
+
+### Name of Founder(s)
+`Patrick Bashizi`
+
+### Social Handles
+*[Optional — founder/company LinkedIn, X, GitHub, etc.]*
+
+### Product Development Stage
+`Launched`
+
+The selectable values are `Idea`, `Prototype`, `Pre-Launch`, and `Launched`.
+`Launched` is supported by the published `1.0.0-rc.4` evaluation release and
+the live website.
+
+### ARR (USD)
+*[Optional — select the truthful range; do not infer]*
+
+### Monthly Active Users
+*[Optional — select the truthful range; do not infer]*
+
+### Total Capital Raised to Date (USD)
+*[Optional — select the truthful range; do not infer]*
+
+### Investors
+*[Optional — enter only public/non-confidential information]*
+
+### Open to raising Capital from Google now or in the near future?
+`Yes`
+
+### Privacy & Terms
+*[Required — founder must review and accept the Google Terms of Service and acknowledge the Google Privacy Policy]*
 
 ---
 
@@ -39,86 +78,30 @@
 
 ### The Problem
 
-African enterprises (banks, telcos, agritech, govtech) need workflow automation but face three structural barriers:
+AI prototypes produce answers, but business operations require a complete
+lifecycle: durable state, deterministic decisions, human approvals, failure
+recovery, auditability and controlled evolution. Teams otherwise assemble
+separate tools for process design, model calls, human work, operations and
+optimization.
 
-1. **BPMN XML is hostile to developers.** A moderately complex process requires 2,000+ lines of XML. Version control is painful. Code review is impossible. AI models struggle to generate or edit it reliably.
-2. **Developer scarcity.** There are not enough senior backend engineers to hand-craft orchestration logic in XML or low-code drag-and-drop tools.
-3. **AI is a bolt-on, not a native primitive.** Existing platforms treat LLM calls as external service tasks. There is no first-class concept of an "agent" that can reason, retry, validate output schema, and participate in the process state machine.
+### The Solution: One Governed Process Lifecycle
 
-### The Solution: APL (Abada Process Language)
+Abada lets teams create or import a process, run agents, people and systems on
+one durable state machine, observe execution evidence, and turn that evidence
+into validated improvements reviewed by humans.
 
-Abada replaces BPMN XML with **APL** — a YAML-native process definition language (`abada.io/v1`) that compiles directly to an executable graph. No XML round-trip. No visual designer lock-in.
+APL (`abada.io/v1`) is Abada's native, reviewable process representation. It is
+one authoring path beneath Studio, alongside visual creation, AI-assisted
+authoring and supported BPMN import.
 
-**Example — Lead Triage Process (61 lines of YAML):**
+**Product proof — Lead Triage:**
 
-A real-world sales workflow where a Gemini agent classifies incoming leads, routes high-value ones to a senior reviewer, and sends the rest to a CRM — all in 61 lines of readable YAML:
+A checked-in Studio process combines a webhook, a governed Gemini agent,
+deterministic routing, a human review and a CRM integration. Its native APL
+source is a compact implementation detail, while the operational lifecycle is
+the product proof.
 
-```yaml
-version: abada.io/v1
-
-metadata:
-  key: lead_triage_demo
-  name: Lead Triage Demo
-  owner: sales-team
-  category: sales
-
-flow:
-  entry: receive-lead
-  nodes:
-    - id: receive-lead
-      type: webhook
-      description: Receive a new sales lead
-      next: analyze-lead
-
-    - id: analyze-lead
-      type: agent
-      description: Classify the lead priority
-      profile: abada.agent/v1
-      model: gemini-3.6-flash
-      prompt: |
-        Analyze the company size: ${lead.companySize}.
-        Classify the lead priority.
-
-        Return exactly one value:
-        HIGH, MEDIUM, or LOW.
-      result_variable: lead_priority
-      confidence_threshold: 85
-      temperature: 0.1
-      max_attempts: 3
-      retry_backoff_ms: 2000
-      next: check-priority
-
-    - id: check-priority
-      type: condition
-      description: Route the lead according to the classified priority
-      rules:
-        - if: "${lead_priority == 'HIGH'}"
-          then: senior-sales-review
-        - else: standard-workflow
-          then: standard-workflow
-
-    - id: senior-sales-review
-      type: human-input
-      description: Senior sales director review
-      formKey: lead-triage-review
-      assignees:
-        - sales-director
-      next: end
-
-    - id: standard-workflow
-      type: engine-task
-      description: Trigger the standard CRM sequence
-      service: trigger-crm-sequence
-      next: end
-
-    - id: end
-      type: end
-      description: Lead triage completed
-```
-
-Equivalent BPMN XML: **~800+ lines.**
-
-**What this demonstrates:**
+**What the process demonstrates:**
 - **Webhook trigger** — ingest a lead via API
 - **Gemini agent node** — classifies priority with `confidence_threshold`, `max_attempts`, `retry_backoff_ms`
 - **Condition routing** — branches based on agent output
@@ -126,7 +109,7 @@ Equivalent BPMN XML: **~800+ lines.**
 - **System integration** — standard leads flow to CRM via `engine-task`
 - **End-to-end durability** — PostgreSQL-backed, survives restarts, audit trail for compliance
 
-### AI-Native by Design
+### AI-Native Execution
 
 Abada does not "add AI" to BPMN. AI is a first-class node type:
 
@@ -151,7 +134,18 @@ Abada does not "add AI" to BPMN. AI is a first-class node type:
 - **Agent nodes** declare `prompt`, `model`, `temperature`, `output_schema`, `tools`, `max_attempts`, `retry_backoff_ms`
 - **Gemini is the default/first allowed model** (`gemini-3.6-flash`)
 - **Natural language → APL authoring:** Describe a workflow in plain English; the system generates valid YAML, validates it, and repairs it if invalid
-- **Insight engine:** Analyzes runtime metrics and proposes APL optimizations via LLM
+- **Insight Engine:** Records execution facts, detects bounded operational
+  signals, validates proposed APL changes and routes them through governed review
+
+### Governed Continuous Improvement
+
+The Insight Engine persists terminal execution facts in PostgreSQL and detects
+external-task failure rate, p95 latency regression and decision-table fallback
+thrash. It produces parser-validated proposals bound to the exact target
+checksum. Authorized reviewers approve or reject through parallel or sequential
+policies; adoption creates a new immutable definition version.
+
+Insight never rewrites a running instance and does not silently apply changes.
 
 ### Production Runtime
 
@@ -159,11 +153,13 @@ Abada does not "add AI" to BPMN. AI is a first-class node type:
 - **Versioned, immutable definitions** — redeployment never changes running instances
 - **Durable jobs with leases** — safe against duplicate execution, network partitions
 - **Self-hosted** — data sovereignty, works on-prem or cloud
-- **BPMN compatibility layer** — import existing BPMN for migration; export to BPMN for interoperability
+- **BPMN interoperability** — execute supported BPMN directly, import it into
+  Studio and round-trip the documented subset; unsupported execution semantics
+  fail explicitly
 
 ### Traction
 
-- Version **1.0.0-rc.x** — feature-complete for certified production topology
+- Version **1.0.0-rc.4** — published evaluation release candidate for the certified production topology
 - Full Testcontainers coverage for PostgreSQL persistence, migration, locking, concurrency
 - Restart-recovery and duplicate-request tests validated
 - Open-source under active development
@@ -177,60 +173,65 @@ Abada does not "add AI" to BPMN. AI is a first-class node type:
 | **Gemini Function Calling for Agent Tools** | Expand `agent` node `tools` to use Gemini Function Calling for structured external API invocations within workflows |
 | **Multimodal Agent Nodes** | Image/document understanding as workflow steps (KYC, invoice processing, medical imaging routing) |
 | **African Language Prompt Tuning** | Optimize prompts for Swahili, Yoruba, Amharic, etc. in agent nodes |
-| **Natural Language Process Refinement** | Enhance the Insight engine with Gemini to suggest optimizations based on runtime metrics |
-| **APL ↔ BPMN Bidirectional** | Generate BPMN XML from APL for interoperability; import BPMN to APL for migration |
+| **Natural Language Process Refinement** | Extend governed Insight proposals with Gemini while preserving parser validation and human review |
 
 ---
 
 ## Pitch Deck Outline
 
-Create a 10-12 slide deck (Google Slides or Canva):
+Create a 10-slide deck:
 
 | Slide | Content |
 |---|---|
-| 1 | **Hook:** "What if business processes were written in YAML, not XML — and AI agents were first-class citizens?" |
-| 2 | **Problem:** African enterprises waste months wiring together workflows with legacy BPMN tools that require XML expertise, expensive consultants, and don't natively support AI |
-| 3 | **Solution:** Abada — open-source, self-hosted workflow orchestration with APL, a YAML-native DSL where agent, human-input, decision-table, and engine-task nodes compile directly to a durable execution graph |
-| 4 | **The APL Difference:** Show lead-triage YAML (~61 lines) vs equivalent BPMN XML (~800+ lines). Emphasize: no XML round-trip, AI-native by design |
-| 5 | **AI-Native Architecture:** Agent nodes use Gemini by default. Natural language → APL authoring. Insight engine proposes optimizations |
-| 6 | **Traction:** 1.0.0-rc, PostgreSQL-backed, Testcontainers-verified, restart-recovery tested, BPMN compatibility layer |
-| 7 | **Market:** African enterprises (banks, telcos, agritech, govtech) need workflow automation but lack developer density for complex BPMN |
-| 8 | **Business Model:** Open-source core + managed hosting / enterprise support (future) |
-| 9 | **Team:** Technical founder with deep backend and AI integration experience |
-| 10 | **Google AI Lab Ask:** 3 months to build Gemini Function Calling, multimodal agents, and African language support |
-| 11 | **Roadmap:** Lab → Demo Day → Seed funding → African enterprise pilots |
-| 12 | **Contact:** bashizip@gmail.com, abadaplatform.com |
+| 1 | **Hook:** Build processes that improve with every execution |
+| 2 | **Problem:** AI workflows need an operational lifecycle |
+| 3 | **Platform:** Create or import → Run → Observe → Improve |
+| 4 | **Creation:** Visual Studio, AI authoring, APL, Dry Run and first-class nodes |
+| 5 | **Gemini:** Durable, validated, observable agent execution |
+| 6 | **Insight:** Facts → findings → proposal → review → new immutable version |
+| 7 | **Trust:** PostgreSQL reliability, RBAC, audit and reviewer policies |
+| 8 | **Interoperability:** Native creation plus bounded BPMN import/export |
+| 9 | **Africa and business model:** High-stakes use cases; OSS core plus future hosting/support |
+| 10 | **Founder and Lab ask:** Patrick Bashizi; function calling, multimodal and African languages |
 
 ---
 
 ## Product Demo Script
 
-Record a 2-3 minute Loom or screen recording showing:
+Record a 75–90 second walkthrough showing:
 
-1. **Open Abada Studio** (or the authoring interface)
-2. **Show APL authoring:** Type or paste the lead-triage YAML, deploy it
-3. **Start a process instance** via webhook/API with a sample lead payload
-4. **Show the runtime:** Token reaches the `analyze-lead` agent node
-5. **Show the agent node:** Trigger the agent that calls Gemini, show `lead_priority` populated with HIGH/MEDIUM/LOW
-6. **Show conditional routing:** HIGH priority routes to `senior-sales-review` human task with form; standard routes to CRM
-7. **Show restart recovery:** Stop the engine, restart, show the process resumes from the exact same state
+1. **Creation paths:** Empty workflow, supported BPMN import and Paste APL
+2. **Created process:** Gemini agent, deterministic decision, human task and integration
+3. **Governed agent properties:** model, output contract, confidence and retry
+4. **Durable execution:** deploy, start and inspect persisted agent telemetry
+5. **Governed improvement:** real Insight proposal, diff and Approve/Reject controls
 
-**Alternative (if no running demo):** Code walkthrough — screen-share the APL parser, show how lead-triage YAML compiles to `ParsedProcessDefinition`, show `AplAuthoringService` generating APL from natural language, show the `LeadTriageHumanInputTest` passing.
+**Recorded proof:** the local demo uses real Gemini 3.6 Flash classifications,
+persisted HIGH and LOW executions, human review, a clearly labelled local CRM
+adapter and an LLM-generated Insight proposal that remains unapproved.
 
 **Upload to:** Loom (free), YouTube (unlisted), or Google Drive (shareable link)
 
 ---
 
-## Quick Checklist
+## Quick Checklist — Required Before Submission
 
-- [ ] Fill in HQ Location
-- [ ] Select Field from dropdown
-- [ ] Create pitch deck (Google Slides / Canva)
-- [ ] Upload pitch deck and get shareable link
-- [ ] Record product demo (Loom / screen recording)
-- [ ] Upload demo and get shareable link
+- [x] Correct the broken form URL
+- [x] Confirm HQ country: `Democratic Republic of the Congo`
+- [x] Select Field: `Dev Tools`
+- [x] Create and visually verify the local 10-slide PPTX
+- [x] Import the deck into native Google Slides
+- [x] Preserve and verify the existing read-only Google Slides link
 - [ ] Copy-paste one-sentence description into form
-- [ ] Submit form before August 31, 2026
+- [x] Provide exact founder name: `Patrick Bashizi`
+- [x] Select Product Development Stage: `Launched`
+- [x] Open to raising capital from Google: `Yes`
+- [ ] Review and accept Privacy & Terms
+- [ ] Optionally answer ARR, MAU, capital raised, investors, and social handles
+- [x] Record and verify the optional product demo locally
+- [ ] Upload the optional product demo after separate authorization
+- [ ] Test every submitted link in a signed-out/incognito window
+- [ ] Submit only after Patrick gives explicit, action-time authorization
 
 ---
 

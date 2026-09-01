@@ -1,78 +1,38 @@
-# Screen Recordings Checklist
+# Product Demo Recording Plan
 
-All recordings: 1080p, 14pt font, hide bookmarks bar, no audio, `.webm` format.
-Target duration: 5–8 seconds each, auto-playing muted loop.
+Produce one truthful, caption-first walkthrough of Abada's complete process
+lifecycle.
 
----
+## Deliverable
 
-## Recordings
+| File | Format | Resolution | Target duration | Status |
+|---|---|---:|---:|---|
+| `abada-process-lifecycle-demo-captioned.mp4` | MP4, H.264, captions burned in | 1920×1080 | 84.5 seconds | Ready locally |
+| `abada-process-lifecycle-demo.mp4` | MP4, H.264 | 1920×1080 | 84.5 seconds | Ready locally |
+| `demo-captions.srt` | English subtitles | — | 84.5 seconds | Ready locally |
 
-| # | Name | Section | Description | Duration | Status | File |
-|---|---|---|---|---|---|---|
-| 1 | `apl-authoring.webm` | APL vs BPMN | Pasting lead-triage YAML into Studio, deploying it | ~8s | ⬜ | `recordings/apl-authoring.webm` |
-| 2 | `agent-execution.webm` | Feature: AI-Native | Agent node firing, returning HIGH/MEDIUM/LOW classification | ~5s | ⬜ | `recordings/agent-execution.webm` |
-| 3 | `condition-routing.webm` | Feature: AI-Native | Condition node branching to human task or CRM based on agent output | ~5s | ⬜ | `recordings/condition-routing.webm` |
-| 4 | `restart-recovery.webm` | Feature: Durable Runtime | Engine restarts, process resumes from exact same state | ~5s | ⬜ | `recordings/restart-recovery.webm` |
-| 5 | `quickstart-install.webm` | Feature: Self-Hosted | Terminal: `curl` command → stack boots → Studio loads | ~8s | ⬜ | `recordings/quickstart-install.webm` |
+## Storyboard
 
----
+| Time | Shot | Proof shown |
+|---:|---|---|
+| 00:00–00:07.5 | Studio **New Process** dialog | Empty process, supported BPMN import and Paste APL are alternative entry points. |
+| 00:07.5–00:19 | Lead-triage visual canvas | Gemini, deterministic routing, human review and local adapters in one process. |
+| 00:19–00:31.5 | Gemini node inspector | Model, prompt, JSON contract, confidence, timeout and retries are governed. |
+| 00:31.5–00:43 | Operations | Five real completed runs, an online Agent Worker and no failed execution. |
+| 00:43–00:56.5 | HIGH instance variables | Real HIGH result, 100% confidence, human approval and local CRM acknowledgement. |
+| 00:56.5–01:12 | Insight graph diff | Four LOW runs, FALLBACK_THRASH and an LLM proposal with Approve/Reject. |
+| 01:12–01:19.5 | Insight APL diff | Explicit LOW rule is proposed but remains unapproved. |
+| 01:19.5–01:24.5 | Closing card | Create or import → Run → Observe → Improve. |
 
-## Recording Setup
+All runtime proof in the final cut is real: Gemini 3.6 Flash produced the HIGH
+and LOW classifications, PostgreSQL persisted the runs, and the Insight Engine
+generated proposal #1. The proposal was not approved.
 
-- **Resolution:** 1920×1080
-- **Font size:** Bump to 14pt in Studio and terminal before recording
-- **Bookmarks bar:** Hide in Chrome/Safari
-- **Terminal:** Dark theme, full-screen, no other tabs visible
-- **Studio:** Clean workspace, no extra panels, lead-triage process open
-- **Format:** `.webm` (smaller than `.mp4`, auto-plays in browsers)
-- **Tool:** Use built-in screen recording (Cmd+Shift+5 on Mac) or OBS
+## Recording Rules
 
----
-
-## Recording Steps
-
-### 1. apl-authoring.webm
-1. Open Studio with lead-triage process loaded
-2. Show the YAML editor with the 61-line lead-triage definition
-3. Click Deploy
-4. Show deployment success indicator
-
-### 2. agent-execution.webm
-1. Start a process instance with a lead payload
-2. Token reaches `analyze-lead` agent node
-3. Show `lead_priority` variable populated with HIGH/MEDIUM/LOW
-4. Brief pause on the result
-
-### 3. condition-routing.webm
-1. After agent returns HIGH priority
-2. Show `check-priority` condition node evaluating
-3. Token routes to `senior-sales-review` human task
-4. Show the human task form appearing
-
-### 4. restart-recovery.webm
-1. Show a running process instance (mid-execution)
-2. Stop the engine (Ctrl+C or docker stop)
-3. Restart the engine
-4. Show the process resumes from the exact same state
-5. Token continues where it left off
-
-### 5. quickstart-install.webm
-1. Open a clean terminal
-2. Type: `curl -fsSL https://install.abadaplatform.com | bash`
-3. Show the script running, downloading, verifying
-4. Show the stack starting (docker compose)
-5. Studio loads in browser
-
----
-
-## Post-Recording
-
-- [ ] Trim each clip to target duration
-- [ ] Convert to `.webm` if recorded as `.mp4` (use `ffmpeg`)
-- [ ] Test autoplay muted in browser
-- [ ] Upload to Google Drive / YouTube unlisted
-- [ ] Get shareable links for website embed
-
----
-
-*Created August 28, 2026*
+- 1920×1080, 16:9, clean Studio captures only.
+- Use only the local development account and non-sensitive sample data.
+- English captions must remain readable with audio muted.
+- Never reveal API keys, tokens, authorization headers, local paths or unrelated tabs.
+- Record short segments and assemble them in storyboard order.
+- Verify duration, complete playback, captions and every frame before upload.
