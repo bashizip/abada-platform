@@ -1,531 +1,278 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Abada — AI-Native Workflow Orchestration</title>
-  <meta name="description" content="Open-source, self-hosted workflow orchestration where Gemini agents and human tasks are first-class citizens — durable, auditable, and yours to run.">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23080b10'/%3E%3Cpath d='M14 48 28 14h8l14 34h-9l-3-8H25l-3 8zm14-16h7l-3.5-10z' fill='%2345e28d'/%3E%3C/svg%3E">
+  <title>Abada — AI-powered processes that improve</title>
+  <meta name="description" content="Build, run, observe, and continuously improve AI-powered business processes with durable orchestration and human-governed change.">
+  <meta property="og:title" content="Abada — AI-powered processes that improve">
+  <meta property="og:description" content="Open-source orchestration for governed AI agents, human work, durable execution, and evidence-based improvement.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#080b10">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.6; overflow-x: hidden; }
-    a { color: #60a5fa; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    /* ── Hero ── */
-    .hero { position: relative; text-align: center; padding: 8rem 2rem 5rem; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
-    .hero-bg { position: absolute; inset: 0; z-index: 0; }
-    .hero-bg canvas { width: 100%; height: 100%; }
-    .hero-content { position: relative; z-index: 1; max-width: 800px; }
-    .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); color: #fff; margin-bottom: 1rem; line-height: 1.15; font-weight: 700; }
-    .hero .tagline { font-size: clamp(1rem, 2.5vw, 1.25rem); color: #aaa; margin-bottom: 2.5rem; max-width: 640px; margin-left: auto; margin-right: auto; }
-    .cta-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.8rem 1.6rem; border-radius: 8px; font-weight: 600; font-size: 0.95rem; transition: all 0.2s; cursor: pointer; border: none; }
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-primary:hover { background: #1d4ed8; text-decoration: none; transform: translateY(-1px); }
-    .btn-secondary { background: rgba(255,255,255,0.05); color: #e0e0e0; border: 1px solid #333; }
-    .btn-secondary:hover { background: rgba(255,255,255,0.1); text-decoration: none; }
-
-    /* ── Problem ── */
-    .problem { padding: 6rem 2rem; text-align: center; }
-    .problem h2 { font-size: 1.8rem; color: #fff; margin-bottom: 0.75rem; }
-    .problem .subtitle { color: #777; font-size: 1rem; margin-bottom: 3rem; max-width: 540px; margin-left: auto; margin-right: auto; }
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; max-width: 820px; margin: 0 auto; }
-    .stat-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 2.5rem 1.5rem; transition: border-color 0.3s; }
-    .stat-card:hover { border-color: #333; }
-    .stat-number { font-size: 2.8rem; font-weight: 800; line-height: 1; margin-bottom: 0.5rem; }
-    .stat-label { color: #888; font-size: 0.9rem; }
-    .stat-card:nth-child(1) .stat-number { color: #f87171; }
-    .stat-card:nth-child(2) .stat-number { color: #4ade80; }
-    .stat-card:nth-child(3) .stat-number { color: #facc15; }
-
-    /* ── APL vs BPMN ── */
-    .comparison { padding: 6rem 2rem; }
-    .comparison h2 { text-align: center; font-size: 1.8rem; color: #fff; margin-bottom: 0.75rem; }
-    .comparison .subtitle { text-align: center; color: #777; margin-bottom: 3rem; }
-    .code-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 1100px; margin: 0 auto; }
-    .code-panel { border-radius: 10px; overflow: hidden; border: 1px solid #1e1e1e; }
-    .code-panel-header { padding: 0.75rem 1rem; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.5rem; }
-    .code-panel.bpmn .code-panel-header { background: #1a0a0a; color: #f87171; border-bottom: 1px solid #2a1515; }
-    .code-panel.apl .code-panel-header { background: #0a1a0a; color: #4ade80; border-bottom: 1px solid #152a15; }
-    .code-panel-body { background: #0d0d0d; padding: 1rem; height: 340px; overflow: hidden; position: relative; }
-    .code-panel.bpmn .code-panel-body { animation: scroll-bpmn 20s linear infinite; }
-    .code-panel-body pre { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.75rem; line-height: 1.6; color: #666; white-space: pre; }
-    .code-panel.apl .code-panel-body pre { color: #4ade80; }
-    .code-panel-body::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(transparent, #0d0d0d); pointer-events: none; }
-    @keyframes scroll-bpmn { 0% { transform: translateY(0); } 100% { transform: translateY(-50%); } }
-    .code-badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-top: 0.5rem; }
-    .code-panel.bpmn .code-badge { background: rgba(248,113,113,0.1); color: #f87171; }
-    .code-panel.apl .code-badge { background: rgba(74,222,128,0.1); color: #4ade80; }
-
-    /* ── Demo Video ── */
-    .demo { padding: 6rem 2rem; text-align: center; }
-    .demo h2 { font-size: 1.8rem; color: #fff; margin-bottom: 0.75rem; }
-    .demo .subtitle { color: #777; margin-bottom: 2rem; }
-    .video-container { position: relative; max-width: 860px; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid #1e1e1e; background: #000; aspect-ratio: 16/9; }
-    .video-container iframe { width: 100%; height: 100%; border: none; }
-    .video-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; color: #555; }
-    .video-placeholder .play-icon { width: 64px; height: 64px; border-radius: 50%; background: rgba(37,99,235,0.2); border: 2px solid #2563eb; display: flex; align-items: center; justify-content: center; }
-    .video-placeholder .play-icon::after { content: ''; display: block; width: 0; height: 0; border-style: solid; border-width: 10px 0 10px 18px; border-color: transparent transparent transparent #2563eb; margin-left: 3px; }
-    .caption-bar { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.85); padding: 0.6rem 1rem; font-size: 0.8rem; color: #ccc; text-align: center; }
-
-    /* ── Features ── */
-    .features { padding: 6rem 2rem; }
-    .features h2 { text-align: center; font-size: 1.8rem; color: #fff; margin-bottom: 0.75rem; }
-    .features .subtitle { text-align: center; color: #777; margin-bottom: 3rem; }
-    .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; max-width: 1000px; margin: 0 auto; }
-    .feature-card { background: #111; border: 1px solid #1e1e1e; border-radius: 12px; overflow: hidden; transition: border-color 0.3s; }
-    .feature-card:hover { border-color: #333; }
-    .feature-video { aspect-ratio: 16/9; background: #0a0a0a; display: flex; align-items: center; justify-content: center; color: #444; font-size: 0.85rem; border-bottom: 1px solid #1e1e1e; position: relative; overflow: hidden; }
-    .feature-video video { width: 100%; height: 100%; object-fit: cover; }
-    .feature-video .rec-badge { position: absolute; top: 0.75rem; right: 0.75rem; background: rgba(239,68,68,0.9); color: #fff; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .feature-text { padding: 1.5rem; }
-    .feature-text h3 { color: #fff; font-size: 1.05rem; margin-bottom: 0.4rem; }
-    .feature-text p { color: #888; font-size: 0.9rem; }
-
-    /* ── Quickstart ── */
-    .quickstart { padding: 6rem 2rem; text-align: center; }
-    .quickstart h2 { font-size: 1.8rem; color: #fff; margin-bottom: 0.5rem; }
-    .quickstart .subtitle { color: #777; margin-bottom: 2rem; }
-    .install-box { background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 1rem 1.25rem; max-width: 580px; margin: 0 auto 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-    .install-box code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem; color: #4ade80; user-select: all; flex: 1; text-align: left; }
-    .copy-btn { background: rgba(255,255,255,0.05); border: 1px solid #333; color: #aaa; padding: 0.4rem 0.8rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-    .copy-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-    .copy-btn.copied { background: rgba(74,222,128,0.1); color: #4ade80; border-color: rgba(74,222,128,0.3); }
-    .quickstart .note { color: #555; font-size: 0.8rem; margin-top: 0.75rem; }
-
-    /* ── Footer ── */
-    .footer { text-align: center; padding: 4rem 2rem; color: #555; font-size: 0.85rem; border-top: 1px solid #111; }
-    .footer-tagline { color: #888; font-size: 0.95rem; margin-bottom: 1rem; }
-    .footer-links { display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1rem; }
-
-    /* ── Responsive ── */
-    @media (max-width: 768px) {
-      .code-split { grid-template-columns: 1fr; }
-      .stat-grid { grid-template-columns: 1fr; }
-      .hero { padding: 5rem 1.5rem 3rem; min-height: auto; }
+    :root {
+      --bg: #080b10;
+      --surface: #0e131b;
+      --line: #202b39;
+      --text: #f4f7fb;
+      --muted: #9aa8b8;
+      --blue: #58a6ff;
+      --blue-strong: #2478f2;
+      --green: #45e28d;
+      --shadow: 0 28px 80px rgba(0, 0, 0, .42);
+      --radius: 18px;
+      --max: 1180px;
     }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 70% 10%, rgba(36,120,242,.14), transparent 34rem), radial-gradient(circle at 12% 42%, rgba(69,226,141,.07), transparent 30rem), var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+    button { font: inherit; }
+    code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    :focus-visible { outline: 3px solid rgba(88,166,255,.65); outline-offset: 3px; }
+    .shell { width: min(calc(100% - 40px), var(--max)); margin-inline: auto; }
+    .eyebrow { color: var(--green); font: 700 .78rem/1.2 "SFMono-Regular", Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; }
+    .section { padding: 108px 0; }
+    .section-head { max-width: 720px; margin-bottom: 48px; }
+    .section-head.center { margin-inline: auto; text-align: center; }
+    .section h2 { margin: 12px 0 14px; font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.08; letter-spacing: -.045em; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 1.08rem; }
+
+    .nav { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid rgba(255,255,255,.07); background: rgba(8,11,16,.76); backdrop-filter: blur(18px); }
+    .nav-inner { height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: inline-flex; align-items: center; gap: 11px; font-weight: 800; letter-spacing: -.03em; }
+    .brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--green); color: #06120b; font-weight: 900; }
+    .nav-links { display: flex; align-items: center; gap: 26px; color: #c4ced9; font-size: .9rem; }
+    .nav-links a:hover { color: white; }
+    .nav-cta { padding: 9px 14px; border: 1px solid #334257; border-radius: 9px; background: rgba(255,255,255,.035); }
+
+    .hero { padding: 92px 0 72px; }
+    .hero-grid { display: grid; grid-template-columns: .9fr 1.1fr; align-items: center; gap: 64px; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 9px; margin-bottom: 22px; padding: 7px 11px; border: 1px solid rgba(69,226,141,.25); border-radius: 999px; background: rgba(69,226,141,.07); color: #b7f7d3; font-size: .8rem; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 14px rgba(69,226,141,.8); }
+    .hero h1 { margin: 0 0 22px; font-size: clamp(3rem, 6vw, 5.8rem); line-height: .98; letter-spacing: -.065em; }
+    .hero h1 span { color: var(--green); }
+    .hero-copy { max-width: 650px; margin: 0 0 30px; color: #b7c2ce; font-size: clamp(1.05rem, 2vw, 1.25rem); }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 9px; padding: 0 19px; border: 1px solid transparent; border-radius: 10px; font-weight: 750; transition: transform .18s, background .18s; }
+    .button:hover { transform: translateY(-2px); }
+    .button-primary { background: var(--blue-strong); color: white; box-shadow: 0 12px 35px rgba(36,120,242,.24); }
+    .button-primary:hover { background: #3286ff; }
+    .button-secondary { border-color: #324052; background: rgba(255,255,255,.035); color: #eaf0f6; }
+    .hero-note { margin-top: 18px; color: #6f7f90; font-size: .78rem; }
+    .product-frame { position: relative; padding: 10px; border: 1px solid #243247; border-radius: 22px; background: linear-gradient(145deg, rgba(88,166,255,.13), rgba(69,226,141,.05)); box-shadow: var(--shadow); }
+    .product-frame::before { content: ""; position: absolute; inset: -1px; z-index: -1; border-radius: inherit; background: linear-gradient(130deg, rgba(88,166,255,.4), transparent 45%, rgba(69,226,141,.3)); filter: blur(18px); opacity: .35; }
+    .product-frame img { width: 100%; aspect-ratio: 16/9; object-fit: cover; object-position: top; border-radius: 14px; border: 1px solid #172230; }
+    .proof-pill { position: absolute; right: 25px; bottom: 25px; display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: 1px solid rgba(69,226,141,.28); border-radius: 9px; background: rgba(8,14,18,.9); color: #d8fbe8; font-size: .76rem; box-shadow: 0 10px 30px #0008; }
+
+    .proof-strip { border-block: 1px solid #172230; background: rgba(10,15,22,.65); }
+    .proof-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+    .proof-item { padding: 28px 24px; border-right: 1px solid #172230; }
+    .proof-item:last-child { border-right: 0; }
+    .proof-value { color: white; font-size: 1.15rem; font-weight: 800; }
+    .proof-label { color: #718195; font-size: .8rem; }
+
+    .lifecycle { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; counter-reset: stages; }
+    .stage { position: relative; min-height: 250px; padding: 26px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(145deg, rgba(18,25,35,.95), rgba(10,14,20,.95)); }
+    .stage::before { counter-increment: stages; content: "0" counter(stages); color: #334156; font: 800 .78rem/1 "SFMono-Regular", monospace; }
+    .stage::after { content: "→"; position: absolute; top: 18px; right: 20px; color: #34445a; font-size: 1.4rem; }
+    .stage:last-child::after { content: "↺"; color: var(--green); }
+    .stage h3 { margin: 58px 0 10px; font-size: 1.35rem; }
+    .stage p { margin: 0; color: var(--muted); font-size: .92rem; }
+    .stage .stage-tag { display: inline-flex; margin-top: 22px; padding: 5px 8px; border-radius: 6px; background: rgba(88,166,255,.09); color: #9dcbff; font: 700 .68rem/1 monospace; text-transform: uppercase; }
+
+    .showcase { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; padding: 72px 0; }
+    .showcase + .showcase { border-top: 1px solid #172230; }
+    .showcase.reverse .showcase-copy { order: 2; }
+    .showcase.reverse .shot { order: 1; }
+    .showcase h3 { margin: 10px 0 16px; font-size: clamp(1.8rem, 3vw, 2.8rem); line-height: 1.08; letter-spacing: -.04em; }
+    .showcase-copy > p { color: var(--muted); }
+    .check-list { display: grid; gap: 12px; margin: 24px 0 0; padding: 0; list-style: none; }
+    .check-list li { display: flex; gap: 10px; color: #c2ccd7; font-size: .92rem; }
+    .check { color: var(--green); font-weight: 900; }
+    .shot { padding: 8px; border: 1px solid #202d3e; border-radius: var(--radius); background: #0b1017; box-shadow: 0 26px 65px rgba(0,0,0,.32); }
+    .shot img { width: 100%; border-radius: 11px; aspect-ratio: 4/3; object-fit: cover; object-position: top; }
+    .shot.wide img { aspect-ratio: 16/9; }
+    .shot-caption { display: flex; justify-content: space-between; gap: 20px; padding: 10px 8px 3px; color: #718195; font-size: .72rem; }
+    .shot-caption strong { color: #b8c5d2; }
+
+    .demo-wrap { display: grid; grid-template-columns: .72fr 1.28fr; gap: 42px; align-items: center; padding: 38px; border: 1px solid #253246; border-radius: 24px; background: linear-gradient(125deg, rgba(36,120,242,.1), rgba(69,226,141,.035)); }
+    .demo-copy h2 { font-size: clamp(2rem, 3.8vw, 3.4rem); }
+    .demo-copy p { color: var(--muted); }
+    .demo-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .demo-facts span { padding: 6px 9px; border: 1px solid #2a394d; border-radius: 7px; color: #aebdcb; font-size: .72rem; }
+    .video { overflow: hidden; border: 1px solid #26354a; border-radius: 14px; background: #05070a; aspect-ratio: 16/9; box-shadow: 0 22px 55px #0007; }
+    .video iframe { width: 100%; height: 100%; border: 0; }
+
+    .reliability { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; }
+    .reliability-card { padding: 32px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .reliability-card.large { grid-row: span 2; }
+    .reliability-card h3 { margin: 10px 0 12px; font-size: 1.45rem; }
+    .reliability-card p { margin: 0; color: var(--muted); }
+    .architecture { display: grid; gap: 9px; margin-top: 28px; }
+    .arch-row { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: center; padding: 13px 15px; border: 1px solid #273447; border-radius: 10px; background: #0a0f16; }
+    .arch-row strong { color: var(--green); font: 700 .72rem/1 monospace; text-transform: uppercase; }
+    .arch-row span { color: #c4cfda; font-size: .84rem; }
+    .interop { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .interop-card { padding: 34px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(145deg, #111924, #0d1219); }
+    .interop-card h3 { margin: 12px 0; font-size: 1.5rem; }
+    .interop-card p { color: var(--muted); }
+    .interop-card code { color: #a8f2c9; }
+
+    .quickstart { padding: 76px 0 110px; }
+    .quickstart-card { padding: 46px; border: 1px solid rgba(69,226,141,.22); border-radius: 24px; background: linear-gradient(135deg, rgba(69,226,141,.09), rgba(36,120,242,.07)); text-align: center; }
+    .quickstart h2 { margin: 10px 0 12px; }
+    .quickstart p { color: var(--muted); }
+    .install { display: flex; align-items: center; justify-content: space-between; gap: 18px; max-width: 720px; margin: 28px auto 18px; padding: 14px 16px 14px 20px; border: 1px solid #2b3a4d; border-radius: 12px; background: #080c11; text-align: left; }
+    .install code { overflow-x: auto; color: var(--green); font-size: .86rem; white-space: nowrap; }
+    .copy { flex: 0 0 auto; padding: 7px 11px; border: 1px solid #34465d; border-radius: 7px; background: #111923; color: #c7d2de; cursor: pointer; }
+    .copy:hover { background: #192333; }
+    footer { border-top: 1px solid #172230; padding: 42px 0; color: #718195; }
+    .footer-grid { display: flex; align-items: center; justify-content: space-between; gap: 28px; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 22px; color: #a9b6c4; font-size: .86rem; }
+    .footer-note { font-size: .78rem; text-align: right; }
+
+    @media (max-width: 960px) {
+      .hero-grid, .showcase, .demo-wrap, .reliability { grid-template-columns: 1fr; }
+      .hero { padding-top: 68px; }
+      .product-frame { margin-top: 16px; }
+      .proof-grid, .lifecycle { grid-template-columns: repeat(2, 1fr); }
+      .proof-item:nth-child(2) { border-right: 0; }
+      .proof-item:nth-child(-n+2) { border-bottom: 1px solid #172230; }
+      .showcase.reverse .showcase-copy, .showcase.reverse .shot { order: initial; }
+      .reliability-card.large { grid-row: auto; }
+    }
+    @media (max-width: 680px) {
+      .shell { width: min(calc(100% - 28px), var(--max)); }
+      .section { padding: 78px 0; }
+      .nav-links a:not(.nav-cta) { display: none; }
+      .hero h1 { font-size: clamp(2.7rem, 14vw, 4.2rem); }
+      .proof-grid, .lifecycle, .interop { grid-template-columns: 1fr; }
+      .proof-item { border-right: 0; border-bottom: 1px solid #172230; }
+      .stage { min-height: 210px; }
+      .showcase { gap: 30px; padding: 48px 0; }
+      .demo-wrap, .quickstart-card { padding: 24px; }
+      .install { align-items: stretch; flex-direction: column; }
+      .footer-grid { align-items: flex-start; flex-direction: column; }
+      .footer-note { text-align: left; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
   </style>
 </head>
 <body>
-
-  <!-- ════════════ HERO ════════════ -->
-  <section class="hero">
-    <div class="hero-bg"><canvas id="hero-canvas"></canvas></div>
-    <div class="hero-content">
-      <h1>AI-Native Workflow Orchestration</h1>
-      <p class="tagline">Open-source, self-hosted workflow orchestration where Gemini agents and human tasks are first-class citizens — durable, auditable, and yours to run.</p>
-      <div class="cta-group">
-        <a href="https://github.com/bashizip/abada-engine" class="btn btn-primary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          Star on GitHub
-        </a>
-        <a href="#demo" class="btn btn-secondary">Watch Demo</a>
+  <nav class="nav" aria-label="Primary navigation">
+    <div class="shell nav-inner">
+      <a class="brand" href="#top" aria-label="Abada home"><span class="brand-mark">A</span><span>Abada</span></a>
+      <div class="nav-links">
+        <a href="#platform">Platform</a><a href="#insight">Insight</a><a href="#demo">Demo</a><a href="https://abadaplatform.com/docs">Docs</a><a class="nav-cta" href="https://github.com/bashizip/abada-engine">GitHub ↗</a>
       </div>
     </div>
-  </section>
+  </nav>
 
-  <!-- ════════════ PROBLEM ════════════ -->
-  <section class="problem">
-    <h2>Workflow automation is broken</h2>
-    <p class="subtitle">Legacy tools force developers into XML verbosity, consultant dependency, and AI bolt-ons.</p>
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-number" data-target="2000">0</div>
-        <div class="stat-label">lines of BPMN XML for a simple process</div>
-        <span class="code-badge">BPMN XML</span>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number" data-target="61">0</div>
-        <div class="stat-label">lines of APL YAML for the same process</div>
-        <span class="code-badge">APL YAML</span>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number" style="font-size:2rem;">AI is bolt-on</div>
-        <div class="stat-label">everywhere else — not in Abada</div>
-        <span class="code-badge" style="background:rgba(250,204,21,0.1);color:#facc15;">AI-Native</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- ════════════ APL vs BPMN ════════════ -->
-  <section class="comparison" id="comparison">
-    <h2>61 lines vs 800+</h2>
-    <p class="subtitle">The same lead-triage process. YAML you can version control. XML you can't.</p>
-    <div class="code-split">
-      <div class="code-panel bpmn">
-        <div class="code-panel-header">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
-          BPMN XML
+  <main id="top">
+    <section class="hero">
+      <div class="shell hero-grid">
+        <div>
+          <div class="hero-badge"><span class="status-dot"></span>Open source · Self-hosted · 1.0.0-rc.4</div>
+          <h1>Build processes that <span>improve.</span></h1>
+          <p class="hero-copy">Create AI-powered business processes from scratch, run agents, people and systems on durable infrastructure, then turn execution evidence into governed improvements.</p>
+          <div class="actions"><a class="button button-primary" href="#demo">Watch the 84-second demo <span aria-hidden="true">▶</span></a><a class="button button-secondary" href="https://github.com/bashizip/abada-engine">Explore the source <span aria-hidden="true">↗</span></a></div>
+          <p class="hero-note">Importing supported BPMN is one entry path — not the product story.</p>
         </div>
-        <div class="code-panel-body">
-          <pre id="bpmn-code"></pre>
+        <div class="product-frame">
+          <img src="assets/lead-triage-studio.png" alt="Abada Studio showing the complete lead triage process with Gemini, deterministic routing, human review and system tasks">
+          <div class="proof-pill"><span class="status-dot"></span>Real process · Real Gemini execution</div>
         </div>
       </div>
-      <div class="code-panel apl">
-        <div class="code-panel-header">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          APL YAML
-        </div>
-        <div class="code-panel-body">
-          <pre>version: abada.io/v1
+    </section>
 
-metadata:
-  key: lead_triage_demo
-  name: Lead Triage Demo
-  owner: sales-team
-  category: sales
-
-flow:
-  entry: receive-lead
-  nodes:
-    - id: receive-lead
-      type: webhook
-      description: Receive a new sales lead
-      next: analyze-lead
-
-    - id: analyze-lead
-      type: agent
-      description: Classify the lead priority
-      profile: abada.agent/v1
-      model: gemini-3.6-flash
-      prompt: |
-        Analyze the company size:
-        ${lead.companySize}.
-        Classify the lead priority.
-        Return exactly one value:
-        HIGH, MEDIUM, or LOW.
-      result_variable: lead_priority
-      confidence_threshold: 85
-      temperature: 0.1
-      max_attempts: 3
-      retry_backoff_ms: 2000
-      next: check-priority
-
-    - id: check-priority
-      type: condition
-      description: Route by priority
-      rules:
-        - if: "${lead_priority == 'HIGH'}"
-          then: senior-sales-review
-        - else: standard-workflow
-          then: standard-workflow
-
-    - id: senior-sales-review
-      type: human-input
-      description: Senior sales director review
-      formKey: lead-triage-review
-      assignees:
-        - sales-director
-      next: end
-
-    - id: standard-workflow
-      type: engine-task
-      description: Trigger the standard CRM
-      service: trigger-crm-sequence
-      next: end
-
-    - id: end
-      type: end
-      description: Lead triage completed</pre>
-        </div>
+    <div class="proof-strip" aria-label="Technical proof">
+      <div class="shell proof-grid">
+        <div class="proof-item"><div class="proof-value">1.0.0-rc.4</div><div class="proof-label">Current evaluation release</div></div>
+        <div class="proof-item"><div class="proof-value">323 tests</div><div class="proof-label">Recorded release-gate suite</div></div>
+        <div class="proof-item"><div class="proof-value">PostgreSQL</div><div class="proof-label">Authoritative runtime state</div></div>
+        <div class="proof-item"><div class="proof-value">Human-governed</div><div class="proof-label">No silent process mutation</div></div>
       </div>
     </div>
-  </section>
 
-  <!-- ════════════ DEMO VIDEO ════════════ -->
-  <section class="demo" id="demo">
-    <h2>See It In Action</h2>
-    <p class="subtitle">2-minute walkthrough: from YAML to running process with Gemini agents.</p>
-    <div class="video-container">
-      <div class="video-placeholder" id="video-placeholder">
-        <div class="play-icon"></div>
-        <span>Demo video — replace with Loom/YouTube embed</span>
-      </div>
-      <div class="caption-bar">Sound off? Captions included. Click to unmute.</div>
-    </div>
-  </section>
-
-  <!-- ════════════ FEATURES ════════════ -->
-  <section class="features" id="features">
-    <h2>Built for what matters</h2>
-    <p class="subtitle">Three pillars that make Abada different.</p>
-    <div class="feature-grid">
-      <div class="feature-card">
-        <div class="feature-video">
-          <span class="rec-badge">REC</span>
-          <video muted loop autoplay playsinline src="recordings/apl-authoring.webm"></video>
-          <span style="position:absolute;color:#444;font-size:0.8rem;">Screen recording: apl-authoring.webm</span>
-        </div>
-        <div class="feature-text">
-          <h3>AI-Native Agents</h3>
-          <p>Gemini-powered nodes with prompt, model, output schema, confidence threshold, and retry — all in the process definition. No bolt-on integrations.</p>
+    <section class="section" id="platform">
+      <div class="shell">
+        <div class="section-head center"><div class="eyebrow">One operational lifecycle</div><h2>From process idea to better process</h2><p>Abada connects design, execution, operations and controlled evolution instead of leaving teams to assemble separate tools.</p></div>
+        <div class="lifecycle">
+          <article class="stage"><h3>Create or import</h3><p>Design visually, author with AI, use reviewable native source, or import the documented BPMN subset.</p><span class="stage-tag">Studio</span></article>
+          <article class="stage"><h3>Run</h3><p>Coordinate Gemini agents, deterministic decisions, human tasks, events and external systems.</p><span class="stage-tag">Engine</span></article>
+          <article class="stage"><h3>Observe</h3><p>Inspect persisted results, confidence, attempts, latency, history, incidents and human work.</p><span class="stage-tag">Operations</span></article>
+          <article class="stage"><h3>Improve</h3><p>Convert bounded execution signals into validated proposals that authorized people approve or reject.</p><span class="stage-tag">Insight</span></article>
         </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-video">
-          <span class="rec-badge">REC</span>
-          <video muted loop autoplay playsinline src="recordings/restart-recovery.webm"></video>
-          <span style="position:absolute;color:#444;font-size:0.8rem;">Screen recording: restart-recovery.webm</span>
-        </div>
-        <div class="feature-text">
-          <h3>Durable Runtime</h3>
-          <p>PostgreSQL-backed with transactional outbox, restart recovery, and durable job leases. Stop the engine, restart it — processes resume from the exact same state.</p>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <div class="shell">
+        <article class="showcase">
+          <div class="showcase-copy"><div class="eyebrow">Governed AI execution</div><h3>Gemini becomes a workflow participant</h3><p>The model call is not hidden behind an opaque automation. Its prompt, selected inputs, output contract, confidence threshold and recovery policy are part of the versioned process.</p><ul class="check-list"><li><span class="check">✓</span>Structured outputs for deterministic downstream routing</li><li><span class="check">✓</span>Durable jobs with retry metadata and persisted results</li><li><span class="check">✓</span>Human review when the business process requires it</li></ul></div>
+          <figure class="shot"><img src="assets/gemini-node-config.png" alt="Gemini node configuration in Abada Studio"><figcaption class="shot-caption"><strong>Gemini 3.6 Flash</strong><span>Model · prompt · schema · confidence · retry</span></figcaption></figure>
+        </article>
+        <article class="showcase reverse">
+          <div class="showcase-copy"><div class="eyebrow">Durable operations</div><h3>Every execution leaves usable evidence</h3><p>Operators can see what ran, what the agent returned, where the process routed, and whether a person or system completed the next step.</p><ul class="check-list"><li><span class="check">✓</span>PostgreSQL-backed workflow and work state</li><li><span class="check">✓</span>Restart recovery, durable leases and transactional outbox</li><li><span class="check">✓</span>Immutable definition versions and backend RBAC</li></ul></div>
+          <figure class="shot"><img src="assets/operations-runs.png" alt="Abada operations view showing completed lead triage executions"><figcaption class="shot-caption"><strong>Real lead-triage runs</strong><span>Persisted status and runtime telemetry</span></figcaption></figure>
+        </article>
+        <article class="showcase" id="insight">
+          <div class="showcase-copy"><div class="eyebrow">Insight Engine</div><h3>Evidence becomes a proposal — never a silent rewrite</h3><p>Insight detects bounded operational signals, asks the LLM for a candidate improvement, validates the proposed source, and presents a diff for human review.</p><ul class="check-list"><li><span class="check">✓</span>Facts → findings → validated proposal</li><li><span class="check">✓</span>Approve or reject under explicit reviewer policy</li><li><span class="check">✓</span>Adoption creates a new immutable version</li></ul></div>
+          <figure class="shot wide"><img src="assets/insight-proposal.png" alt="Abada Insight view showing a real LLM-generated proposal and human review controls"><figcaption class="shot-caption"><strong>Real local execution</strong><span>4 LOW runs · FALLBACK_THRASH · proposal remains unapproved</span></figcaption></figure>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="demo">
+      <div class="shell demo-wrap">
+        <div class="demo-copy"><div class="eyebrow">Product proof</div><h2>See the complete loop in 84 seconds</h2><p>A real Lead Triage process: create, run with Gemini, inspect persisted results, complete human work, and review an Insight proposal.</p><div class="demo-facts"><span>1080p</span><span>English captions</span><span>Real Gemini run</span><span>No simulated result</span></div></div>
+        <div class="video"><iframe src="https://drive.google.com/file/d/1c0Jksb-GxlS_8g97d4ZrjXZCbIpopRnE/preview" title="Abada process lifecycle demo" allow="autoplay" loading="lazy"></iframe></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-head"><div class="eyebrow">Reliable by design</div><h2>AI-native without weakening the process engine</h2><p>The production contract stays database-authoritative. Agents consume the same durable work model as other external participants.</p></div>
+        <div class="reliability">
+          <article class="reliability-card large"><div class="eyebrow">Execution architecture</div><h3>Clear responsibilities. Recoverable work.</h3><p>Remote model calls stay outside workflow-state transactions. Results return through authenticated worker contracts and advance state atomically.</p><div class="architecture"><div class="arch-row"><strong>Design</strong><span>Studio · APL · supported BPMN import</span></div><div class="arch-row"><strong>State</strong><span>Engine · PostgreSQL · immutable definitions</span></div><div class="arch-row"><strong>Work</strong><span>Agent Worker · Gemini · external adapters</span></div><div class="arch-row"><strong>Control</strong><span>RBAC · audit history · reviewer policies</span></div></div></article>
+          <article class="reliability-card"><div class="eyebrow">Failure recovery</div><h3>Designed to resume</h3><p>Durable leases, retry metadata, idempotent commands and transactional outbox delivery support restart recovery and at-least-once side effects.</p></article>
+          <article class="reliability-card"><div class="eyebrow">Data control</div><h3>Self-hosted</h3><p>Run the platform, operational state and model configuration on infrastructure you control — on-premises or in your cloud.</p></article>
         </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-video">
-          <span class="rec-badge">REC</span>
-          <video muted loop autoplay playsinline src="recordings/quickstart-install.webm"></video>
-          <span style="position:absolute;color:#444;font-size:0.8rem;">Screen recording: quickstart-install.webm</span>
-        </div>
-        <div class="feature-text">
-          <h3>Self-Hosted</h3>
-          <p>Your data stays on your infrastructure. One command to run: <code style="color:#4ade80;font-size:0.85rem;">curl ... | bash</code>. Works on-prem or in your cloud. No vendor lock-in.</p>
-        </div>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <div class="shell">
+        <div class="section-head center"><div class="eyebrow">Interoperability without the baggage</div><h2>Create natively. Import when needed.</h2><p>Modernization is one adoption path. Abada is equally designed for processes created directly in Studio.</p></div>
+        <div class="interop"><article class="interop-card"><div class="eyebrow">Native creation</div><h3>Start with the process you want</h3><p>Use the visual designer, assisted authoring or reviewable <code>abada.io/v1</code> source. Add agents, human forms, decisions, events and system work as first-class nodes.</p></article><article class="interop-card"><div class="eyebrow">BPMN adoption path</div><h3>Bring the process you have</h3><p>Execute, import, convert and export the documented BPMN subset. Unsupported execution semantics fail explicitly instead of being accepted ambiguously.</p></article></div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ════════════ QUICKSTART ════════════ -->
-  <section class="quickstart" id="quickstart">
-    <h2>Zero to Running Process in 5 Minutes</h2>
-    <p class="subtitle">Requires Docker. The script downloads, verifies, and starts the full stack.</p>
-    <div class="install-box">
-      <code>curl -fsSL https://install.abadaplatform.com/install.sh | bash</code>
-      <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
-    </div>
-    <p class="note">Default login: <strong style="color:#aaa;">alice / alice</strong></p>
-  </section>
+    <section class="quickstart" id="quickstart">
+      <div class="shell quickstart-card"><div class="eyebrow">Run it yourself</div><h2>Start the self-hosted stack</h2><p>Docker is required. The verified installer downloads and starts the platform.</p><div class="install"><code>curl -fsSL https://install.abadaplatform.com/install.sh | bash</code><button class="copy" type="button" id="copy-install">Copy</button></div><div class="actions" style="justify-content:center"><a class="button button-primary" href="https://abadaplatform.com/docs">Read the documentation</a><a class="button button-secondary" href="mailto:bashizip@gmail.com">Talk to the founder</a></div></div>
+    </section>
+  </main>
 
-  <!-- ════════════ FOOTER ════════════ -->
-  <footer class="footer">
-    <p class="footer-tagline">Built for the African enterprise.</p>
-    <div class="footer-links">
-      <a href="https://github.com/bashizip/abada-engine">GitHub</a>
-      <a href="https://abadaplatform.com/docs">Docs</a>
-      <a href="mailto:bashizip@gmail.com">Contact</a>
-    </div>
-    <p>Abada is open-source under active development.</p>
-  </footer>
+  <footer><div class="shell footer-grid"><a class="brand" href="#top"><span class="brand-mark">A</span><span>Abada</span></a><div class="footer-links"><a href="https://github.com/bashizip/abada-engine">GitHub</a><a href="https://abadaplatform.com/docs">Docs</a><a href="#demo">Demo</a><a href="mailto:bashizip@gmail.com">Contact</a></div><div class="footer-note">Open source under active development.<br>Built in the Democratic Republic of the Congo.</div></div></footer>
 
-  <!-- ════════════ JS ════════════ -->
   <script>
-    /* ── Hero animated background: flowing workflow graph ── */
-    (function() {
-      const canvas = document.getElementById('hero-canvas');
-      const ctx = canvas.getContext('2d');
-      let w, h, nodes = [], edges = [], mouse = { x: -1000, y: -1000 };
-      const NODE_COUNT = 40;
-      const CONNECT_DIST = 180;
-
-      function resize() {
-        w = canvas.width = canvas.offsetWidth;
-        h = canvas.height = canvas.offsetHeight;
-      }
-      window.addEventListener('resize', resize);
-      resize();
-
-      for (let i = 0; i < NODE_COUNT; i++) {
-        nodes.push({
-          x: Math.random() * w, y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4,
-          r: Math.random() * 2 + 1.5
-        });
-      }
-
-      canvas.addEventListener('mousemove', e => {
-        const rect = canvas.getBoundingClientRect();
-        mouse.x = e.clientX - rect.left;
-        mouse.y = e.clientY - rect.top;
-      });
-      canvas.addEventListener('mouseleave', () => { mouse.x = -1000; mouse.y = -1000; });
-
-      function draw() {
-        ctx.clearRect(0, 0, w, h);
-
-        /* edges */
-        for (let i = 0; i < nodes.length; i++) {
-          for (let j = i + 1; j < nodes.length; j++) {
-            const dx = nodes[i].x - nodes[j].x;
-            const dy = nodes[i].y - nodes[j].y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < CONNECT_DIST) {
-              const alpha = (1 - dist / CONNECT_DIST) * 0.15;
-              ctx.beginPath();
-              ctx.moveTo(nodes[i].x, nodes[i].y);
-              ctx.lineTo(nodes[j].x, nodes[j].y);
-              ctx.strokeStyle = `rgba(37, 99, 235, ${alpha})`;
-              ctx.lineWidth = 1;
-              ctx.stroke();
-            }
-          }
-          /* mouse interaction */
-          const dx = nodes[i].x - mouse.x;
-          const dy = nodes[i].y - mouse.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 200) {
-            const alpha = (1 - dist / 200) * 0.3;
-            ctx.beginPath();
-            ctx.moveTo(nodes[i].x, nodes[i].y);
-            ctx.lineTo(mouse.x, mouse.y);
-            ctx.strokeStyle = `rgba(96, 165, 250, ${alpha})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
-        }
-
-        /* nodes */
-        for (const n of nodes) {
-          ctx.beginPath();
-          ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(96, 165, 250, 0.5)';
-          ctx.fill();
-          n.x += n.vx; n.y += n.vy;
-          if (n.x < 0 || n.x > w) n.vx *= -1;
-          if (n.y < 0 || n.y > h) n.vy *= -1;
-        }
-
-        requestAnimationFrame(draw);
-      }
-      draw();
-    })();
-
-    /* ── Stat counter animation ── */
-    (function() {
-      const observer = new IntersectionObserver(entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const el = entry.target;
-            const target = parseInt(el.dataset.target);
-            if (!target) return;
-            let current = 0;
-            const step = Math.ceil(target / 60);
-            const timer = setInterval(() => {
-              current += step;
-              if (current >= target) { current = target; clearInterval(timer); }
-              el.textContent = current.toLocaleString() + '+';
-            }, 20);
-            observer.unobserve(el);
-          }
-        });
-      }, { threshold: 0.5 });
-      document.querySelectorAll('.stat-number[data-target]').forEach(el => observer.observe(el));
-    })();
-
-    /* ── BPMN code (scrolling, dimmed) ── */
-    document.getElementById('bpmn-code').textContent = (function() {
-      const lines = [];
-      const bpmnFragments = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"',
-        '  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"',
-        '  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"',
-        '  id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">',
-        '',
-        '  <bpmn:process id="Process_LeadTriage" isExecutable="true">',
-        '',
-        '    <bpmn:startEvent id="StartEvent_1" name="Receive Lead">',
-        '      <bpmn:outgoing>Flow_1</bpmn:outgoing>',
-        '    </bpmn:startEvent>',
-        '',
-        '    <bpmn:task id="Task_AnalyzeLead" name="Analyze Lead Priority">',
-        '      <bpmn:incoming>Flow_1</bpmn:incoming>',
-        '      <bpmn:outgoing>Flow_2</bpmn:outgoing>',
-        '      <bpmn:multiInstanceLoopCharacteristics>',
-        '        <bpmn:extensionElements>',
-        '          <abada:agentConfig model="gemini-3.6-flash"',
-        '            confidenceThreshold="85" maxAttempts="3"',
-        '            retryBackoffMs="2000" temperature="0.1">',
-        '            <abada:prompt>Analyze the company size: ${lead.companySize}...</abada:prompt>',
-        '            <abada:outputSchema type="string">',
-        '              <abada:enum>HIGH</abada:enum>',
-        '              <abada:enum>MEDIUM</abada:enum>',
-        '              <abada:enum>LOW</abada:enum>',
-        '            </abada:outputSchema>',
-        '          </abada:agentConfig>',
-        '        </bpmn:extensionElements>',
-        '      </bpmn:multiInstanceLoopCharacteristics>',
-        '    </bpmn:task>',
-        '',
-        '    <bpmn:exclusiveGateway id="Gateway_CheckPriority"',
-        '      name="Check Priority" gatewayDirection="Diverging">',
-        '      <bpmn:incoming>Flow_2</bpmn:incoming>',
-        '      <bpmn:outgoing>Flow_3</bpmn:outgoing>',
-        '      <bpmn:outgoing>Flow_4</bpmn:outgoing>',
-        '    </bpmn:exclusiveGateway>',
-        '',
-        '    <bpmn:conditionExpression id="Cond_HighPriority">',
-        '      ${lead_priority == "HIGH"}',
-        '    </bpmn:conditionExpression>',
-        '',
-        '    <bpmn:task id="Task_SeniorReview" name="Senior Sales Review">',
-        '      <bpmn:incoming>Flow_3</bpmn:incoming>',
-        '      <bpmn:outgoing>Flow_5</bpmn:outgoing>',
-        '      <bpmn:potentialOwner>',
-        '        <bpmn:resourceAssignmentExpression>',
-        '          <bpmn:formalExpression>sales-director</bpmn:formalExpression>',
-        '        </bpmn:resourceAssignmentExpression>',
-        '      </bpmn:potentialOwner>',
-        '    </bpmn:task>',
-        '',
-        '    <bpmn:task id="Task_CRMSequence" name="Trigger CRM Sequence">',
-        '      <bpmn:incoming>Flow_4</bpmn:incoming>',
-        '      <bpmn:outgoing>Flow_6</bpmn:outgoing>',
-        '    </bpmn:task>',
-        '',
-        '    <bpmn:endEvent id="EndEvent_1" name="Lead Triage Completed">',
-        '      <bpmn:incoming>Flow_5</bpmn:incoming>',
-        '      <bpmn:incoming>Flow_6</bpmn:incoming>',
-        '    </bpmn:endEvent>',
-        '',
-        '    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_AnalyzeLead"/>',
-        '    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_AnalyzeLead" targetRef="Gateway_CheckPriority"/>',
-        '    <bpmn:sequenceFlow id="Flow_3" name="HIGH" sourceRef="Gateway_CheckPriority" targetRef="Task_SeniorReview">',
-        '      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" id="Cond_HighPriority"/>',
-        '    </bpmn:sequenceFlow>',
-        '    <bpmn:sequenceFlow id="Flow_4" name="MEDIUM/LOW" sourceRef="Gateway_CheckPriority" targetRef="Task_CRMSequence"/>',
-        '    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_SeniorReview" targetRef="EndEvent_1"/>',
-        '    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_CRMSequence" targetRef="EndEvent_1"/>',
-        '',
-        '  </bpmn:process>',
-        '',
-        '  <bpmndi:BPMNDiagram id="BPMNDiagram_1">',
-        '    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_LeadTriage">',
-        '      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">',
-        '        <dc:Bounds x="179" y="99" width="36" height="36"/>',
-        '      </bpmndi:BPMNShape>',
-        '      <bpmndi:BPMNShape id="Task_AnalyzeLead_di" bpmnElement="Task_AnalyzeLead">',
-        '        <dc:Bounds x="270" y="77" width="100" height="80"/>',
-        '      </bpmndi:BPMNShape>',
-        '      <bpmndi:BPMNShape id="Gateway_CheckPriority_di" bpmnElement="Gateway_CheckPriority" isMarkerVisible="true">',
-        '        <dc:Bounds x="425" y="92" width="50" height="50"/>',
-        '      </bpmndi:BPMNShape>',
-        '      <bpmndi:BPMNShape id="Task_SeniorReview_di" bpmnElement="Task_SeniorReview">',
-        '        <dc:Bounds x="530" y="77" width="100" height="80"/>',
-        '      </bpmndi:BPMNShape>',
-        '      <bpmndi:BPMNShape id="Task_CRMSequence_di" bpmnElement="Task_CRMSequence">',
-        '        <dc:Bounds x="530" y="192" width="100" height="80"/>',
-        '      </bpmndi:BPMNShape>',
-        '      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">',
-        '        <dc:Bounds x="702" y="99" width="36" height="36"/>',
-        '      </bpmndi:BPMNShape>',
-        '    </bpmndi:BPMNPlane>',
-        '  </bpmndi:BPMNDiagram>',
-        '</bpmn:definitions>',
-      ];
-      /* Duplicate for continuous scroll effect */
-      return bpmnFragments.join('\n') + '\n\n' + bpmnFragments.join('\n');
-    })();
-
-    /* ── Copy button ── */
-    function copyInstall(btn) {
-      navigator.clipboard.writeText('curl -fsSL https://install.abadaplatform.com/install.sh | bash');
-      btn.textContent = 'Copied!';
-      btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-    }
+    const copyButton = document.getElementById('copy-install');
+    copyButton.addEventListener('click', async () => {
+      const command = 'curl -fsSL https://install.abadaplatform.com/install.sh | bash';
+      try { await navigator.clipboard.writeText(command); copyButton.textContent = 'Copied'; }
+      catch { copyButton.textContent = 'Select command'; }
+      window.setTimeout(() => { copyButton.textContent = 'Copy'; }, 1800);
+    });
   </script>
-
 </body>
 </html>
