@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { SimulationLog } from '@/types';
 
 export function useDryRunSimulation() {
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [simulationLogs, setSimulationLogs] = useState<SimulationLog[]>([]);
-  const [showLogPanel, setShowLogPanel] = useState<boolean>(true);
+  // The run log is contextual UI, not a persistent workspace panel. Starting
+  // closed keeps an empty audit dialog from covering every fresh canvas.
+  const [showLogPanel, setShowLogPanel] = useState<boolean>(false);
   const [showRunPanel, setShowRunPanel] = useState<boolean>(false);
   const [dryRunFingerprint, setDryRunFingerprint] = useState<string | null>(null);
   const [lastDryRunPayload, setLastDryRunPayload] = useState<Record<string, unknown>>({});

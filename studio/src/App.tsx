@@ -92,6 +92,10 @@ export default function App() {
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
 
   useEffect(() => {
+    if (currentView !== 'designer') setShowLogPanel(false);
+  }, [currentView, setShowLogPanel]);
+
+  useEffect(() => {
     const sync = () => setAuthenticated(keycloak.authenticated === true);
     sync();
     keycloak.onAuthSuccess = sync;
@@ -632,7 +636,10 @@ export default function App() {
               logs={simulationLogs}
               isOpen={showLogPanel}
               onClose={() => setShowLogPanel(false)}
-              onClearLogs={() => setSimulationLogs([])}
+              onClearLogs={() => {
+                setSimulationLogs([]);
+                setShowLogPanel(false);
+              }}
               isSimulating={isSimulating}
             />
           </>
