@@ -42,6 +42,7 @@ import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
 import { LEAD_TRIAGE_EXAMPLES, STARTER_PROCESS_KEY } from '@/lib/starter/leadTriage';
+import { runSequentialInsightEvidence } from '@/lib/starter/insightEvidence';
 
 type StudioView = 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
 type DesignerMode = 'diagram' | 'apl';
@@ -369,28 +370,22 @@ export default function App() {
     if (!window.confirm('Start four real LOW lead executions? This makes four Gemini API requests and does not approve any Insight proposal.')) return;
     setInsightEvidenceRunning(true);
     try {
-      const instances = await Promise.all(Array.from({ length: 4 }, (_, index) => {
-        const payload = structuredClone(LEAD_TRIAGE_EXAMPLES.LOW) as Record<string, any>;
-        payload.lead.id = `LEAD-LOW-INSIGHT-${index + 1}-${Date.now()}`;
-        return EngineAPI.startProcess(STARTER_PROCESS_KEY, payload, activeProject.id);
-      }));
-      const deadline = Date.now() + 180_000;
-      while (Date.now() < deadline) {
-        const states = await Promise.all(instances.map(({ processInstanceId }) =>
-          EngineAPI.getInstance(processInstanceId, activeProject.id)));
-        if (states.every((instance) => instance.status === 'COMPLETED')) {
-          showToast('success', 'Four LOW executions completed. Insight is analyzing the persisted evidence.');
-          setInstancesRefreshKey((value) => value + 1);
-          setShowDeployDialog(false);
-          setCurrentView('insight');
-          return;
-        }
-        if (states.some((instance) => ['FAILED', 'CANCELLED'].includes(instance.status))) {
-          throw new Error('At least one LOW execution did not complete successfully');
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
-      }
-      throw new Error('Timed out while waiting for the four LOW executions');
+      await runSequentialInsightEvidence({
+        count: 4,
+        start: async (index) => {
+          const payload = structuredClone(LEAD_TRIAGE_EXAMPLES.LOW) as Record<string, any>;
+          payload.lead.id = `LEAD-LOW-INSIGHT-${index + 1}-${Date.now()}`;
+          const { processInstanceId } = await EngineAPI.startProcess(
+            STARTER_PROCESS_KEY, payload, activeProject.id);
+          return processInstanceId;
+        },
+        get: (processInstanceId) => EngineAPI.getInstance(processInstanceId, activeProject.id),
+        wait: (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+      });
+      showToast('success', 'Four LOW executions completed. Insight is analyzing the persisted evidence.');
+      setInstancesRefreshKey((value) => value + 1);
+      setShowDeployDialog(false);
+      setCurrentView('insight');
     } catch (reason) {
       showToast('error', reason instanceof Error ? reason.message : String(reason));
     } finally {

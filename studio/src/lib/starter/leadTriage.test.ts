@@ -3,6 +3,7 @@ import { ProjectAPI, type Project, type ProjectDocument, type ProjectTreeNode } 
 import {
   ensureLeadTriageStarter,
   LEAD_TRIAGE_APL,
+  STARTER_HUMAN_REVIEW_GROUP,
   STARTER_PROCESS_KEY,
   STARTER_PROJECT_SLUG,
 } from './leadTriage';
@@ -30,12 +31,20 @@ const ownerMember = {
   principalId: 'principal-1', username: 'alice', principalType: 'HUMAN' as const,
   roles: ['OWNER'] as const, reviewLanes: [], taskGroups: [], version: 0,
 };
+const bobPrincipal = { id: 'principal-2', username: 'bob', type: 'HUMAN' as const };
+const bobMember = {
+  principalId: bobPrincipal.id, username: 'bob', principalType: 'HUMAN' as const,
+  roles: ['VIEWER'] as const, reviewLanes: [], taskGroups: [STARTER_HUMAN_REVIEW_GROUP], version: 0,
+};
 
 const mockMembership = () => {
   vi.spyOn(ProjectAPI, 'members').mockResolvedValue([{ ...ownerMember, roles: [...ownerMember.roles] }]);
-  vi.spyOn(ProjectAPI, 'putMember').mockResolvedValue({
-    ...ownerMember, roles: ['OWNER', 'REVIEWER'],
-  });
+  vi.spyOn(ProjectAPI, 'principals').mockResolvedValue([bobPrincipal]);
+  vi.spyOn(ProjectAPI, 'putMember').mockImplementation(async (_projectId, principalId, roles,
+    reviewLanes, taskGroups) => ({
+      ...(principalId === ownerMember.principalId ? ownerMember : bobMember),
+      principalId, roles, reviewLanes, taskGroups,
+    }));
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -48,6 +57,8 @@ describe('Lead Triage starter', () => {
     const start = workflow.nodes.find((node) => node.id === 'receive-lead')!;
     const end = workflow.nodes.find((node) => node.id === 'done')!;
     expect(start.x).toBeLessThan(end.x);
+    const review = workflow.nodes.find((node) => node.id === 'senior-sales-review')!;
+    expect(review.humanConfig?.assignees).toEqual([STARTER_HUMAN_REVIEW_GROUP]);
   });
 
   it('creates, deploys and then returns the starter project', async () => {
@@ -70,8 +81,10 @@ describe('Lead Triage starter', () => {
     expect(ProjectAPI.createResource).toHaveBeenCalledOnce();
     expect(ProjectAPI.createDocument).toHaveBeenCalledOnce();
     expect(ProjectAPI.deployDocument).toHaveBeenCalledOnce();
-    expect(ProjectAPI.putMember).toHaveBeenCalledWith(
+    expect(ProjectAPI.putMember).toHaveBeenNthCalledWith(1,
       project.id, ownerMember.principalId, ['OWNER', 'REVIEWER'], ['TECHNICAL'], [], 0);
+    expect(ProjectAPI.putMember).toHaveBeenNthCalledWith(2,
+      project.id, bobPrincipal.id, ['VIEWER'], [], [STARTER_HUMAN_REVIEW_GROUP], undefined);
     expect(result.project?.slug).toBe(STARTER_PROJECT_SLUG);
   });
 
@@ -124,5 +137,77 @@ describe('Lead Triage starter', () => {
       STARTER_PROJECT_SLUG, expect.any(String), expect.any(String));
     expect(result.projects).toContainEqual(existing);
     expect(result.project?.id).toBe(project.id);
+  });
+
+  it('opens the deployed starter for Bob without mutating the project', async () => {
+    const bobProject: Project = {
+      ...project, currentUserRoles: ['VIEWER'], currentUserReviewLanes: [],
+    };
+    vi.spyOn(ProjectAPI, 'documents').mockResolvedValue([{ ...document, lastDeploymentId: 'deployment-1' }]);
+    vi.spyOn(ProjectAPI, 'list').mockResolvedValue([bobProject]);
+    const create = vi.spyOn(ProjectAPI, 'create');
+    const members = vi.spyOn(ProjectAPI, 'members');
+    const treeCall = vi.spyOn(ProjectAPI, 'tree');
+    const putMember = vi.spyOn(ProjectAPI, 'putMember');
+
+    const result = await ensureLeadTriageStarter([bobProject]);
+
+    expect(result.document?.lastDeploymentId).toBe('deployment-1');
+    expect(create).not.toHaveBeenCalled();
+    expect(members).not.toHaveBeenCalled();
+    expect(treeCall).not.toHaveBeenCalled();
+    expect(putMember).not.toHaveBeenCalled();
+  });
+
+  it('tells Bob to let Alice initialize when no starter is visible', async () => {
+    vi.spyOn(ProjectAPI, 'create').mockRejectedValue(new Error('Forbidden'));
+
+    await expect(ensureLeadTriageStarter([])).rejects.toThrow(
+      'Sign in once as alice / alice, then retry as bob');
+  });
+
+  it('preserves existing Bob roles and task groups while adding the dedicated review group', async () => {
+    const readyOwnerProject: Project = {
+      ...project, currentUserRoles: ['OWNER', 'REVIEWER'], currentUserReviewLanes: ['TECHNICAL'],
+    };
+    const existingBob = {
+      ...bobMember, roles: ['VIEWER', 'OPERATOR'] as const, taskGroups: ['customer-support'], version: 4,
+    };
+    vi.spyOn(ProjectAPI, 'members').mockResolvedValue([
+      { ...ownerMember, roles: ['OWNER', 'REVIEWER'], reviewLanes: ['TECHNICAL'] },
+      { ...existingBob, roles: [...existingBob.roles] },
+    ]);
+    const putMember = vi.spyOn(ProjectAPI, 'putMember').mockResolvedValue({
+      ...existingBob, roles: [...existingBob.roles],
+      taskGroups: ['customer-support', STARTER_HUMAN_REVIEW_GROUP],
+    });
+    vi.spyOn(ProjectAPI, 'tree').mockResolvedValue(tree);
+    vi.spyOn(ProjectAPI, 'documents').mockResolvedValue([{ ...document, lastDeploymentId: 'deployment-1' }]);
+    vi.spyOn(ProjectAPI, 'createResource').mockResolvedValue({} as never);
+    vi.spyOn(ProjectAPI, 'list').mockResolvedValue([readyOwnerProject]);
+
+    await ensureLeadTriageStarter([readyOwnerProject]);
+
+    expect(putMember).toHaveBeenCalledWith(project.id, bobPrincipal.id,
+      ['VIEWER', 'OPERATOR'], [], ['customer-support', STARTER_HUMAN_REVIEW_GROUP], 4);
+  });
+
+  it('does not rewrite a correctly provisioned Bob membership', async () => {
+    const readyOwnerProject: Project = {
+      ...project, currentUserRoles: ['OWNER', 'REVIEWER'], currentUserReviewLanes: ['TECHNICAL'],
+    };
+    vi.spyOn(ProjectAPI, 'members').mockResolvedValue([
+      { ...ownerMember, roles: ['OWNER', 'REVIEWER'], reviewLanes: ['TECHNICAL'] },
+      { ...bobMember, roles: [...bobMember.roles], taskGroups: [...bobMember.taskGroups] },
+    ]);
+    const putMember = vi.spyOn(ProjectAPI, 'putMember');
+    vi.spyOn(ProjectAPI, 'tree').mockResolvedValue(tree);
+    vi.spyOn(ProjectAPI, 'documents').mockResolvedValue([{ ...document, lastDeploymentId: 'deployment-1' }]);
+    vi.spyOn(ProjectAPI, 'createResource').mockResolvedValue({} as never);
+    vi.spyOn(ProjectAPI, 'list').mockResolvedValue([readyOwnerProject]);
+
+    await ensureLeadTriageStarter([readyOwnerProject]);
+
+    expect(putMember).not.toHaveBeenCalled();
   });
 });

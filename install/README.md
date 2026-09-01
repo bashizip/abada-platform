@@ -11,6 +11,10 @@ The interactive installer reads a Gemini API key with hidden input from
 mode-`0600` `.env.dev`. Non-interactive automation must provide
 `ABADA_AGENT_LLM_API_KEY` to the `bash` process.
 
+Alice (`alice` / `alice`) performs the one-time Starter initialization. Bob
+(`bob` / `bob`) is then the exclusive candidate for the HIGH human-review
+task. Insight proposal generation uses a bounded 90-second Gemini timeout.
+
 With no override, the script reads the version from the public `/latest`
 pointer. To install an older or newly published exact version, pass the
 variable to `bash` (the right-hand side of the pipeline):

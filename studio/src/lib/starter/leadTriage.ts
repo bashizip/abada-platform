@@ -5,6 +5,7 @@ import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 export const STARTER_PROJECT_SLUG = 'abada-starter';
 export const STARTER_PROCESS_KEY = 'lead_triage';
 const STARTER_REVIEW_LANE = 'TECHNICAL';
+export const STARTER_HUMAN_REVIEW_GROUP = 'lead-triage-human-reviewer';
 
 export const LEAD_TRIAGE_EXAMPLES = {
   HIGH: {
@@ -107,7 +108,7 @@ flow:
       type: human-input
       description: Senior sales review
       formKey: lead-triage-review
-      assignees: [abada-task-user]
+      assignees: [lead-triage-human-reviewer]
       next: sync-crm
     - id: sync-crm
       type: engine-task
@@ -153,17 +154,36 @@ export interface StarterBootstrapResult {
 export async function ensureLeadTriageStarter(available: Project[]): Promise<StarterBootstrapResult> {
   let project = available.find((candidate) => candidate.slug === STARTER_PROJECT_SLUG);
   if (!project) {
-    project = await ProjectAPI.create(
-      STARTER_PROJECT_SLUG,
-      'Abada Starter',
-      'A local, non-sensitive workspace demonstrating governed AI lead triage.',
-    );
+    try {
+      project = await ProjectAPI.create(
+        STARTER_PROJECT_SLUG,
+        'Abada Starter',
+        'A local, non-sensitive workspace demonstrating governed AI lead triage.',
+      );
+    } catch (cause) {
+      throw new Error(
+        'Abada Starter is not initialized. Sign in once as alice / alice, then retry as bob.',
+        { cause },
+      );
+    }
     available = [...available, project];
   }
 
+  const canSeed = project.currentUserRoles.includes('OWNER')
+    || project.currentUserRoles.includes('MAINTAINER');
+  if (!canSeed) {
+    const documents = await ProjectAPI.documents(project.id);
+    const document = documents.find((candidate) => candidate.processKey === STARTER_PROCESS_KEY);
+    if (!document?.lastDeploymentId) {
+      throw new Error('Abada Starter initialization is incomplete. Sign in as alice / alice and retry.');
+    }
+    const projects = await ProjectAPI.list();
+    return { projects, project: projects.find((candidate) => candidate.id === project.id) || project, document };
+  }
+
+  let members = await ProjectAPI.members(project.id);
   if (!project.currentUserRoles.includes('REVIEWER')
       || !project.currentUserReviewLanes.includes(STARTER_REVIEW_LANE)) {
-    const members = await ProjectAPI.members(project.id);
     const currentRoles = new Set(project.currentUserRoles);
     const currentReviewLanes = new Set(project.currentUserReviewLanes);
     const matchingMembers = members.filter((member) =>
@@ -175,13 +195,44 @@ export async function ensureLeadTriageStarter(available: Project[]): Promise<Sta
       throw new Error('Starter project reviewer membership could not be identified safely');
     }
     const member = matchingMembers[0];
-    await ProjectAPI.putMember(
+    const updated = await ProjectAPI.putMember(
       project.id,
       member.principalId,
       [...new Set([...member.roles, 'REVIEWER' as const])],
       [...new Set([...member.reviewLanes, STARTER_REVIEW_LANE])],
       member.taskGroups,
       member.version,
+    );
+    members = members.map((candidate) => candidate.principalId === updated.principalId ? updated : candidate);
+  }
+
+  const bobMembers = members.filter((member) => member.username === 'bob');
+  if (bobMembers.length > 1) throw new Error('Multiple project members resolve to username bob');
+  let bob = bobMembers[0];
+  if (!bob) {
+    const principals = await ProjectAPI.principals(project.id, 'bob');
+    const exact = principals.filter((principal) => principal.username === 'bob');
+    if (exact.length !== 1) {
+      throw new Error('The development principal bob is unavailable; verify the bundled Keycloak realm');
+    }
+    bob = {
+      principalId: exact[0].id,
+      username: exact[0].username,
+      principalType: exact[0].type,
+      roles: [],
+      reviewLanes: [],
+      taskGroups: [],
+      version: 0,
+    };
+  }
+  if (!bob.roles.includes('VIEWER') || !bob.taskGroups.includes(STARTER_HUMAN_REVIEW_GROUP)) {
+    await ProjectAPI.putMember(
+      project.id,
+      bob.principalId,
+      [...new Set([...bob.roles, 'VIEWER' as const])],
+      bob.reviewLanes,
+      [...new Set([...bob.taskGroups, STARTER_HUMAN_REVIEW_GROUP])],
+      bobMembers.length ? bob.version : undefined,
     );
   }
 

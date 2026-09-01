@@ -29,6 +29,8 @@ startup. The success screen prints every local URL and the development-only
 starter account. Sign in to Studio with `alice` / `alice`; Studio creates and
 deploys the AI Lead Triage starter, including its human form and local demo
 adapters, without overwriting existing projects.
+The bootstrap adds `bob` / `bob` as a Viewer and the exclusive member of the
+Lead Triage HIGH-review task group; Alice remains the project operator.
 
 Production:
 

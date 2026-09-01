@@ -21,7 +21,8 @@ mkdir -p "$PUBLIC_DIR" "$STAGING_DIR/release" "$FAKE_BIN"
 printf '%s\n' "$VERSION" >"$PUBLIC_DIR/latest"
 printf '%s\n' 'ABADA_AGENT_LLM_API_KEY=' 'ABADA_AGENT_OPENAI_API_KEY=' \
   'ABADA_LLM_API_KEY=' 'ABADA_LLM_BASE_URL=' 'ABADA_LLM_MODEL=gemini-3.6-flash' \
-  'ABADA_INSIGHT_ENABLED=false' 'ABADA_STARTER_WORKFLOW_ENABLED=true' \
+  'ABADA_INSIGHT_ENABLED=false' 'ABADA_INSIGHT_LLM_TIMEOUT_MS=90000' \
+  'ABADA_STARTER_WORKFLOW_ENABLED=true' \
   >"$STAGING_DIR/release/.env.dev.example"
 
 cat >"$STAGING_DIR/release/abada-platform" <<'FIXTURE'
@@ -83,6 +84,9 @@ ABADA_INSTALL_DIR="$INSTALL_DIR" \
 [[ -x "$INSTALL_DIR/release/abada-platform" ]]
 [[ ! -e "$INSTALL_DIR/$ARCHIVE" ]]
 [[ "$(awk -F= '$1 == "ABADA_INSIGHT_ENABLED" { print $2 }' "$INSTALL_DIR/.env.dev")" == "true" ]]
+[[ "$(awk -F= '$1 == "ABADA_INSIGHT_LLM_TIMEOUT_MS" { print $2 }' "$INSTALL_DIR/.env.dev")" == "90000" ]]
+grep -Fq 'Initialize: alice / alice' "$INSTALL_OUTPUT"
+grep -Fq 'HIGH review: bob / bob' "$INSTALL_OUTPUT"
 [[ "$(awk -F= '$1 == "ABADA_AGENT_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]]
 [[ "$(awk -F= '$1 == "ABADA_AGENT_OPENAI_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]]
 [[ "$(awk -F= '$1 == "ABADA_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]]

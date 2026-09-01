@@ -84,7 +84,7 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
                 {insightEvidenceRunning ? 'Running four LOW executions…' : 'Generate Insight evidence'}
               </span>
               <span className="mt-1 block text-[10px] text-[#A89F91]">
-                Starts four real LOW runs with Gemini. No proposal is approved automatically.
+                Starts four quota-safe LOW runs with Gemini (about 5 minutes). No proposal is approved automatically.
               </span>
             </button>
           )}

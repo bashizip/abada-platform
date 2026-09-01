@@ -141,6 +141,8 @@ curl -fsSL https://install.abadaplatform.com/install.sh | bash
 The installer validates a Gemini key, then the first Studio login creates and
 deploys the auto-layouted AI Lead Triage starter. The key stays in the local
 mode-`0600` `.env.dev` and is never bundled or exposed to Studio.
+Alice initializes and runs the process; a HIGH result is reviewed exclusively
+by the bundled `bob` / `bob` user before the local CRM acknowledgement.
 
 See [`release/README.md`](release/README.md).
 

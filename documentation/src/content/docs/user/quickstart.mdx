@@ -30,7 +30,12 @@ its Header tabs cover Designer, Task Inbox, Operations and Insight, and the
 credentials are local development data and must never be reused in production.
 On the first login, Studio creates and deploys the `AI Lead Triage` starter and
 opens its auto-layouted diagram. The Deploy & Start dialog contains HIGH,
-MEDIUM and LOW inputs plus an explicit action for four LOW Insight samples.
+MEDIUM and LOW inputs plus an explicit action for four LOW Insight samples. The
+Gemini calls run sequentially with a quota-safe delay, so allow about five minutes.
+Alice initializes and operates the project. A HIGH result creates a human task
+exclusively for `bob` / `bob`; Bob opens the same Starter project in Studio,
+claims the review, completes its form, and returns execution to the local demo
+adapter. The Insight proposal call uses a bounded 90-second Gemini timeout.
 
 The original immutable `1.0.0-rc.1` archive prints the same URLs in a compact
 summary. The structured success panel is included in subsequent release
