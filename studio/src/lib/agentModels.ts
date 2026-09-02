@@ -36,3 +36,7 @@ export const agentModelGuardMessage = (issues: InvalidAgentModel[]): string =>
     .map((issue) =>
       `Agent node "${issue.nodeTitle}" declares model "${issue.model}" which is not on the allowed model list (${ALLOWED_AGENT_MODELS.join(', ')}).`)
     .join(' ');
+
+/** Returns true if the workflow contains at least one agent node. */
+export const hasAgentNodes = (nodes: { type: string }[]): boolean =>
+  nodes.some((node) => node.type === 'agent');

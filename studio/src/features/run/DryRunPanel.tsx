@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Braces, CheckCircle2, ChevronRight, FlaskConical, Play, RotateCcw, X } from 'lucide-react';
 import { WorkflowEdge, WorkflowFile, WorkflowNode } from '@/types';
 import { deriveDefaultPayload, NodeRunStatus, sleep } from '@/lib/run/liveRun';
-import { agentModelGuardMessage, invalidAgentModels } from '@/lib/agentModels';
+import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
+import { InsightAPI } from '@/api/insight';
 
 type PauseState =
   | { kind: 'agent'; node: WorkflowNode; edges: WorkflowEdge[] }
@@ -100,6 +101,20 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
       setPayloadError(message);
       onBlocked?.(message);
       return;
+    }
+
+    if (hasAgentNodes(workflow.nodes)) {
+      try {
+        const aiSettings = await InsightAPI.getAiSettings();
+        if (!aiSettings.configured) {
+          const message = 'This workflow contains AI agent nodes but no LLM API key is configured. Go to Settings → AI Providers to configure one before deploying.';
+          setPayloadError(message);
+          onBlocked?.(message);
+          return;
+        }
+      } catch {
+        // If we can't check, let the engine reject at deploy time
+      }
     }
 
     const currentRun = ++runId.current;

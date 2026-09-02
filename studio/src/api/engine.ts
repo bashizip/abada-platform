@@ -342,7 +342,9 @@ export class EngineAPI {
       body: JSON.stringify(variables)
     });
     if (!res.ok) {
-      throw new Error(`Failed to start process: ${res.statusText}`);
+      const body = await res.json().catch(() => null);
+      const message = body?.message || res.statusText;
+      throw new Error(message);
     }
     return res.json();
   }

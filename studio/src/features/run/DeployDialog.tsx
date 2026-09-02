@@ -74,7 +74,19 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
               ))}
             </div>
           )}
-          {error && <div className="text-[11px] text-[#E76F51]">{error}</div>}
+          {error && (
+            <div className="rounded-xl border border-[#E76F51]/40 bg-[#E76F51]/10 p-3 text-[11px] text-[#E76F51] flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p>{error}</p>
+                {error.includes('LLM API key') && (
+                  <p className="mt-1 text-[10px] text-[#A89F91]">
+                    Configure an AI provider in <strong>Settings → AI Providers</strong> or set the <code>ABADA_LLM_API_KEY</code> environment variable.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
           {onGenerateInsightEvidence && (
             <button type="button" disabled={isDeploying || insightEvidenceRunning}
               onClick={() => void onGenerateInsightEvidence()}
