@@ -36,7 +36,7 @@ export function Cta() {
             Download the brief
           </a>
           <a
-            href={DEMO_URL}
+            href="#quickstart"
             className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3.5 text-[15px] text-t1 transition-colors hover:border-signal/50"
           >
             <Play className="size-4" />

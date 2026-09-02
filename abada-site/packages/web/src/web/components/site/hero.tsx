@@ -1,5 +1,5 @@
 import { ArrowUpRight, Play } from "lucide-react";
-import { BRIEF_URL, CALENDAR_URL, DEMO_URL, GITHUB_URL } from "../../lib/links";
+import { BRIEF_URL, CALENDAR_URL, GITHUB_URL } from "../../lib/links";
 
 const FACTS = [
   { k: "1.0.0-rc.4", v: "Published evaluation release" },
@@ -42,7 +42,7 @@ export function Hero() {
 
             <div className="rise-240 mt-9 flex flex-wrap items-center gap-3">
               <a
-                href={DEMO_URL}
+                href="#quickstart"
                 className="inline-flex items-center gap-2 rounded-lg bg-signal px-5 py-3 text-[15px] font-medium text-[#04150f] transition-opacity hover:opacity-90"
               >
                 <Play className="size-4 fill-current" />
