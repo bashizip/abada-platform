@@ -52,7 +52,7 @@ public class InsightProperties {
     @Value("${abada.insight.llm.api-key:${ABADA_LLM_API_KEY:}}")
     private String llmApiKey;
 
-    @Value("${abada.insight.llm.model:${ABADA_LLM_MODEL:deepseek/deepseek-v4-flash-free}}")
+    @Value("${abada.insight.llm.model:${ABADA_LLM_MODEL:gemini-3.6-flash}}")
     private String llmModel;
 
     @Value("${abada.insight.llm.timeout-ms:30000}")

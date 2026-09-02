@@ -16,31 +16,38 @@ import org.springframework.stereotype.Component;
 @Component
 public class OpenAiCompatibleLlmClient {
     private final InsightProperties properties;
+    private final LlmKeyResolver keyResolver;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
-    public OpenAiCompatibleLlmClient(InsightProperties properties, ObjectMapper objectMapper) {
+    public OpenAiCompatibleLlmClient(InsightProperties properties, LlmKeyResolver keyResolver,
+                                     ObjectMapper objectMapper) {
         this.properties = properties;
+        this.keyResolver = keyResolver;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder().connectTimeout(properties.getLlmTimeout()).build();
     }
 
-    public boolean isConfigured() { return properties.isLlmConfigured(); }
-    public String model() { return properties.getLlmModel(); }
+    public boolean isConfigured() { return keyResolver.isConfigured(); }
+    public String model() { return keyResolver.resolveModel(); }
 
     public String complete(String systemPrompt, String userPrompt) throws Exception {
-        if (!isConfigured()) throw new IllegalStateException("LLM provider is not configured");
+        String apiKey = keyResolver.resolveKey();
+        String baseUrl = keyResolver.resolveBaseUrl();
+        String model = keyResolver.resolveModel();
+        if (apiKey == null || apiKey.isBlank()) throw new IllegalStateException("LLM provider is not configured");
+        if (baseUrl == null || baseUrl.isBlank()) throw new IllegalStateException("LLM base URL is not configured");
         Map<String, Object> payload = Map.of(
-                "model", properties.getLlmModel(),
+                "model", model,
                 "temperature", 0.2,
                 "messages", List.of(
                         Map.of("role", "system", "content", systemPrompt),
                         Map.of("role", "user", "content", userPrompt)));
         HttpRequest.Builder request = HttpRequest.newBuilder(
-                        URI.create(stripTrailingSlash(properties.getLlmBaseUrl()) + "/chat/completions"))
+                        URI.create(stripTrailingSlash(baseUrl) + "/chat/completions"))
                 .timeout(properties.getLlmTimeout())
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + properties.getLlmApiKey());
+                .header("Authorization", "Bearer " + apiKey);
         if (properties.isOpenRouterEnabled()) {
             request.header("HTTP-Referer", properties.getOpenRouterReferer());
             request.header("X-Title", properties.getOpenRouterTitle());
@@ -49,7 +56,16 @@ public class OpenAiCompatibleLlmClient {
                         objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8)).build(),
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (response.statusCode() / 100 != 2) {
-            throw new IllegalStateException("LLM endpoint returned HTTP " + response.statusCode());
+            String detail = extractErrorDetail(response.body());
+            int status = response.statusCode();
+            if (status == 401 || status == 403) {
+                throw new IllegalStateException("LLM API authentication failed: Invalid or expired API key (HTTP " + status + (detail.isBlank() ? "" : ": " + detail) + ")");
+            } else if (status == 404) {
+                throw new IllegalStateException("LLM model or endpoint not found: '" + model + "' (HTTP 404" + (detail.isBlank() ? "" : ": " + detail) + ")");
+            } else if (status == 429) {
+                throw new IllegalStateException("LLM quota or rate limit exceeded (HTTP 429" + (detail.isBlank() ? "" : ": " + detail) + ")");
+            }
+            throw new IllegalStateException("LLM endpoint returned HTTP " + response.statusCode() + (detail.isBlank() ? "" : ": " + detail));
         }
         JsonNode content = objectMapper.readTree(response.body()).path("choices").path(0)
                 .path("message").path("content");
@@ -57,6 +73,26 @@ public class OpenAiCompatibleLlmClient {
             throw new IllegalStateException("LLM response contained no usable text");
         }
         return extractDocument(content.asText());
+    }
+
+    private String extractErrorDetail(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) return "";
+        try {
+            JsonNode tree = objectMapper.readTree(responseBody);
+            JsonNode errorNode = tree.path("error");
+            if (!errorNode.isMissingNode()) {
+                String message = errorNode.path("message").asText("");
+                String status = errorNode.path("status").asText("");
+                if (!message.isBlank() && !status.isBlank()) return status + " - " + message;
+                if (!message.isBlank()) return message;
+                if (!status.isBlank()) return status;
+                return errorNode.toString();
+            }
+        } catch (Exception ignored) {
+            // fallback
+        }
+        String stripped = responseBody.strip().replaceAll("\\s+", " ");
+        return stripped.length() > 200 ? stripped.substring(0, 200) + "…" : stripped;
     }
 
     public static String extractDocument(String completion) {

@@ -12,6 +12,8 @@ import com.abada.engine.core.model.TaskInstance;
 import com.abada.engine.core.model.ProcessStatus;
 import com.abada.engine.dto.UserTaskPayload;
 import com.abada.engine.insight.InsightFactWriter;
+import com.abada.engine.insight.InsightProperties;
+import com.abada.engine.llm.LlmKeyResolver;
 import com.abada.engine.observability.EngineMetrics;
 import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.parser.AplParser;
@@ -82,6 +84,8 @@ public class AbadaEngine {
     private final ActivityHistoryService historyService;
     private final InsightFactWriter insightFactWriter;
     private final TaskGroupResolver taskGroupResolver;
+    private final InsightProperties insightProperties;
+    private final LlmKeyResolver llmKeyResolver;
     private final Map<String, ParsedProcessDefinition> definitionsByDeploymentId = new ConcurrentHashMap<>();
 
     @Autowired
@@ -91,7 +95,9 @@ public class AbadaEngine {
             EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
             InsightFactWriter insightFactWriter,
             TaskGroupResolver taskGroupResolver,
-            @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
+            @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels,
+            @Autowired(required = false) InsightProperties insightProperties,
+            @Autowired(required = false) LlmKeyResolver llmKeyResolver) {
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
         this.aplParser = new AplParser(allowedAgentModels);
@@ -107,6 +113,8 @@ public class AbadaEngine {
         this.historyService = historyService;
         this.insightFactWriter = insightFactWriter;
         this.taskGroupResolver = taskGroupResolver;
+        this.insightProperties = insightProperties;
+        this.llmKeyResolver = llmKeyResolver;
     }
 
     @PostConstruct
@@ -246,6 +254,12 @@ public class AbadaEngine {
                 throw new ProcessEngineException("Unknown process ID: " + processDefinitionId);
             }
             ParsedProcessDefinition definition = cacheDefinition(deployment);
+
+            if (definitionHasAgentTasks(definition) && !isLlmConfiguredForAgentTasks()) {
+                throw new ProcessEngineException("Cannot start process instance: definition '" + definition.getId()
+                        + "' contains AI agent task(s) but no LLM API key is configured. "
+                        + "Set one via the Studio Settings > AI Providers tab or the ABADA_LLM_API_KEY environment variable.");
+            }
 
             ProcessInstance instance = new ProcessInstance(definition);
             instance.setProcessDefinitionDeploymentId(deployment.getDeploymentId());
@@ -1016,6 +1030,18 @@ public class AbadaEngine {
         } catch (java.security.NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 is unavailable", ex);
         }
+    }
+
+    private static boolean definitionHasAgentTasks(ParsedProcessDefinition definition) {
+        if (definition == null || definition.getServiceTasks() == null) return false;
+        return definition.getServiceTasks().values().stream()
+                .anyMatch(task -> task.agentWork() != null
+                        || AplParser.AGENT_EXTERNAL_TOPIC.equals(task.topicName()));
+    }
+
+    private boolean isLlmConfiguredForAgentTasks() {
+        if (llmKeyResolver != null && llmKeyResolver.isConfigured()) return true;
+        return insightProperties != null && insightProperties.isLlmConfigured();
     }
 
 }
