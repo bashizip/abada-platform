@@ -50,7 +50,7 @@ abada:
     otlp:
       endpoint: ${ABADA_TELEMETRY_OTLP_ENDPOINT:}
   agent:
-    allowed-models: ${ABADA_AGENT_ALLOWED_MODELS:gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini}
+    allowed-models: ${ABADA_AGENT_ALLOWED_MODELS:gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini}
   workers:
     first-party:
       - username: ${ABADA_FIRST_PARTY_AGENT_USERNAME:service-account-abada-agent-worker}

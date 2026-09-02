@@ -43,7 +43,7 @@ services:
       ABADA_LLM_BASE_URL: ${ABADA_LLM_BASE_URL:-}
       ABADA_LLM_API_KEY: ${ABADA_LLM_API_KEY:-}
       ABADA_LLM_MODEL: ${ABADA_LLM_MODEL:-gemini-3.6-flash}
-      ABADA_AGENT_ALLOWED_MODELS: ${ABADA_AGENT_ALLOWED_MODELS:-gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini}
+      ABADA_AGENT_ALLOWED_MODELS: ${ABADA_AGENT_ALLOWED_MODELS:-gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini}
       ABADA_KEYCLOAK_URL: ${ABADA_KEYCLOAK_URL:-http://keycloak.localhost}
       ABADA_KEYCLOAK_REALM: ${ABADA_KEYCLOAK_REALM:-abada-dev}
       ABADA_KEYCLOAK_ADMIN_CLIENT_ID: ${ABADA_KEYCLOAK_ADMIN_CLIENT_ID:-abada-admin-api}

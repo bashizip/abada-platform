@@ -91,7 +91,7 @@ public final class AplParser {
 
     /** Default allow-list of agent LLM models deployable without extra configuration. */
     public static final String DEFAULT_ALLOWED_AGENT_MODELS =
-            "gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini";
+            "gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini";
 
     public static final int MAX_DEPLOYMENT_BYTES = 10 * 1024 * 1024;
 

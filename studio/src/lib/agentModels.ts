@@ -13,6 +13,8 @@ export const DEFAULT_AGENT_MODEL = 'gemini-3.6-flash';
 
 export const AGENT_MODEL_OPTIONS: string[] = [
   DEFAULT_AGENT_MODEL,
+  'gemini-3.7-flash',
+  'gemini-3.8-flash',
   'deepseek/deepseek-v4-flash-free',
   'gpt-5-mini',
 ];
