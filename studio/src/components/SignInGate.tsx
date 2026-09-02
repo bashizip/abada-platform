@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { keycloak } from '@/auth/keycloakClient';
 
 /**
@@ -11,8 +11,8 @@ import { keycloak } from '@/auth/keycloakClient';
 export const SignInGate: React.FC = () => (
   <div className="flex flex-col items-center justify-center h-screen w-screen bg-[#1A1614] text-[#EAE3D9]">
     <div className="flex items-center gap-3 mb-8">
-      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#9D4EDD] to-[#25201D] border border-[#9D4EDD]/40 flex items-center justify-center glow-amethyst-subtle">
-        <Cpu className="w-6 h-6 text-[#EAE3D9]" />
+      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#9D4EDD] to-[#25201D] border border-[#9D4EDD]/40 flex items-center justify-center glow-amethyst-subtle overflow-hidden">
+        <img src="/favicon.svg" alt="" className="w-9 h-9" />
       </div>
       <div>
         <h1 className="font-bold text-xl tracking-wide">ABADA</h1>
