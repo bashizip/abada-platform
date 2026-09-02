@@ -286,6 +286,76 @@ function minimizeCrossings(
 }
 
 /* ------------------------------------------------------------------ */
+/* Node-node overlap resolution (post-processing)                     */
+/* ------------------------------------------------------------------ */
+
+const MIN_NODE_GAP = 24; // min clearance between any two nodes
+
+/** Do two axis-aligned rectangles overlap (with gap padding)? */
+function rectsOverlap(a: Rect, b: Rect, gap: number): boolean {
+  return !(a.x + a.w + gap <= b.x ||
+           b.x + b.w + gap <= a.x ||
+           a.y + a.h + gap <= b.y ||
+           b.y + b.h + gap <= a.y);
+}
+
+/**
+ * After dagre + rank swapping, some nodes in the same rank may still
+ * overlap or be too close together. This pass detects overlaps and
+ * pushes nodes apart vertically.
+ */
+function resolveOverlaps(
+  nodes: WorkflowNode[],
+  rankMap: Map<string, number>,
+): WorkflowNode[] {
+  if (nodes.length < 2) return nodes;
+
+  const result = [...nodes];
+  const nodeMap = new Map(result.map((n) => [n.id, n]));
+
+  // Group by rank
+  const ranks = new Map<number, WorkflowNode[]>();
+  for (const node of result) {
+    const rank = rankMap.get(node.id) ?? 0;
+    if (!ranks.has(rank)) ranks.set(rank, []);
+    ranks.get(rank)!.push(node);
+  }
+
+  // Within each rank, sort by y and push apart overlapping nodes
+  for (const [, rankNodes] of ranks) {
+    if (rankNodes.length < 2) continue;
+
+    // Sort by y position
+    rankNodes.sort((a, b) => a.y - b.y);
+
+    let changed = true;
+    let iterations = 0;
+    while (changed && iterations < 10) {
+      changed = false;
+      iterations++;
+      for (let i = 0; i < rankNodes.length - 1; i++) {
+        const upper = rankNodes[i];
+        const lower = rankNodes[i + 1];
+        const upperRect = nodeRect(upper);
+        const lowerRect = nodeRect(lower);
+
+        if (rectsOverlap(upperRect, lowerRect, MIN_NODE_GAP)) {
+          // Push lower node down just enough to clear the upper node
+          const overlapY = (upper.y + estimateNodeHeight(upper) + MIN_NODE_GAP) - lower.y;
+          if (overlapY > 0) {
+            lower.y += overlapY;
+            nodeMap.set(lower.id, lower);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
 /* Node-edge crossing avoidance (post-processing)                     */
 /* ------------------------------------------------------------------ */
 
@@ -455,8 +525,11 @@ export function autoLayoutWorkflow(
   // 1. Minimize edge-edge crossings via rank-aware swapping
   const sorted = minimizeCrossings(positioned, edges, rankMap);
 
-  // 2. Shift nodes to avoid crossing edges they aren't connected to
-  const final = avoidNodeEdgeCrossings(sorted, edges, rankMap);
+  // 2. Resolve node-node overlaps within each rank
+  const nonOverlapping = resolveOverlaps(sorted, rankMap);
+
+  // 3. Shift nodes to avoid crossing edges they aren't connected to
+  const final = avoidNodeEdgeCrossings(nonOverlapping, edges, rankMap);
 
   return final;
 }
