@@ -160,6 +160,79 @@ class AgentWorkerMainTest {
     }
 
     @Test
+    void unconfiguredApiKeyThrowsAgentConfigurationException() {
+        var unconfigured = new WorkerConfig(URI.create("http://engine.invalid"), "token", null,
+                "", "", URI.create("http://llm.invalid/v1"), "",
+                URI.create("http://llm.invalid/v1"), "", "test-model", "test-worker",
+                Duration.ofMillis(100), Duration.ofSeconds(10), 1, Set.of());
+        var gateway = new GoogleGeminiGateway(unconfigured);
+
+        var error = assertThrows(AgentGateway.AgentConfigurationException.class,
+                () -> gateway.execute(descriptor(80.0, "gemini-3.6-flash"), Map.of()));
+        assertTrue(error.getMessage().contains("API key is not configured"));
+    }
+
+    @Test
+    void http401ThrowsAgentAuthenticationExceptionWithParsedBody() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/openai/chat/completions", exchange -> {
+            byte[] response = "{\"error\":{\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"API_KEY_INVALID\"}}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(401, response.length);
+            try (var output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        URI baseUrl = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        var gateway = new GoogleGeminiGateway(config(baseUrl));
+
+        var error = assertThrows(AgentGateway.AgentAuthenticationException.class,
+                () -> gateway.execute(descriptor(80.0, "gemini-3.6-flash"), Map.of()));
+        assertTrue(error.getMessage().contains("authentication failed"));
+        assertTrue(error.getMessage().contains("API_KEY_INVALID"));
+    }
+
+    @Test
+    void http429ThrowsAgentQuotaExceededException() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/openai/chat/completions", exchange -> {
+            byte[] response = "{\"error\":{\"message\":\"Resource has been exhausted\",\"status\":\"RESOURCE_EXHAUSTED\"}}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(429, response.length);
+            try (var output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        URI baseUrl = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        var gateway = new GoogleGeminiGateway(config(baseUrl));
+
+        var error = assertThrows(AgentGateway.AgentQuotaExceededException.class,
+                () -> gateway.execute(descriptor(80.0, "gemini-3.6-flash"), Map.of()));
+        assertTrue(error.getMessage().contains("quota or rate limit exceeded"));
+        assertTrue(error.getMessage().contains("RESOURCE_EXHAUSTED"));
+    }
+
+    @Test
+    void unreachableEndpointThrowsAgentUnreachableException() {
+        var unreachableConfig = config(URI.create("http://127.0.0.1:54321/v1"));
+        var gateway = new GoogleGeminiGateway(unreachableConfig);
+
+        var error = assertThrows(AgentGateway.AgentUnreachableException.class,
+                () -> gateway.execute(descriptor(80.0, "gemini-3.6-flash"), Map.of()));
+        assertTrue(error.getMessage().contains("unreachable"));
+    }
+
+    @Test
+    void stripFenceHandlesEmbeddedJsonFencesWithSurroundingText() throws Exception {
+        var capturedBody = new StringBuilder();
+        URI baseUrl = startServer("/v1/openai/chat/completions",
+                "{\"choices\":[{\"message\":{\"content\":\"Here is the classification:\\n```json\\n{\\\"answer\\\":\\\"approved\\\",\\\"_confidence\\\":96.5}\\n```\\nHope this helps!\"}}]}",
+                capturedBody, "");
+        var gateway = new GoogleGeminiGateway(config(baseUrl));
+
+        AgentGateway.AgentResult result = gateway.execute(descriptor(0.0, "gemini-3.6-flash"), Map.of());
+
+        assertEquals("approved", ((Map<?, ?>) result.value()).get("answer"));
+        assertEquals(96.5, result.confidence());
+    }
+
+    @Test
     void gatewaysReportStableProviderFamiliesAndPromptHashes() {
         var config = config(URI.create("http://llm.invalid/v1"));
         assertEquals("openai-compatible",

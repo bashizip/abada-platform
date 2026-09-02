@@ -48,6 +48,9 @@ public abstract class AbstractAgentGateway implements AgentGateway {
 
     protected AgentResult executeChatCompletion(URI targetUri, String apiKey, String model,
                                                  AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new AgentConfigurationException(provider() + " API key is not configured (ABADA_AGENT_LLM_API_KEY / ABADA_LLM_API_KEY is unset or blank)");
+        }
         long timeoutMs = work.timeoutMs() == null ? 60_000L : work.timeoutMs();
         String prompt = renderPrompt(work, variables);
         Map<String, Object> body = new LinkedHashMap<>();
@@ -66,24 +69,68 @@ public abstract class AbstractAgentGateway implements AgentGateway {
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body)))
                 .build();
 
-        HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException(provider() + " gateway returned HTTP " + response.statusCode());
+        HttpResponse<String> response;
+        try {
+            response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception networkException) {
+            String host = targetUri.getHost() == null ? targetUri.toString() : targetUri.getHost();
+            throw new AgentUnreachableException(provider() + " API is unreachable at " + host + " (" + networkException.getMessage() + ")", networkException);
         }
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            String detail = extractErrorDetail(response.body());
+            int status = response.statusCode();
+            if (status == 401 || status == 403) {
+                throw new AgentAuthenticationException(provider() + " API authentication failed: Invalid or expired API key (HTTP " + status + (detail.isBlank() ? "" : ": " + detail) + ")");
+            } else if (status == 404) {
+                throw new AgentModelNotFoundException(provider() + " model or endpoint not found: '" + model + "' (HTTP 404" + (detail.isBlank() ? "" : ": " + detail) + ")");
+            } else if (status == 429) {
+                throw new AgentQuotaExceededException(provider() + " quota or rate limit exceeded (HTTP 429" + (detail.isBlank() ? "" : ": " + detail) + ")");
+            } else {
+                throw new AgentExecutionException(provider() + " API returned error (HTTP " + status + (detail.isBlank() ? "" : ": " + detail) + ")");
+            }
+        }
+
         JsonNode contentNode = JSON.readTree(response.body()).path("choices").path(0)
                 .path("message").path("content");
         if (!contentNode.isTextual() || contentNode.asText().isBlank()) {
-            throw new IllegalStateException(provider() + " gateway returned no assistant content");
+            throw new AgentExecutionException(provider() + " gateway returned no assistant content");
         }
         return decodeResult(contentNode.asText(), work);
+    }
+
+    private static String extractErrorDetail(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) return "";
+        try {
+            JsonNode tree = JSON.readTree(responseBody);
+            JsonNode errorNode = tree.path("error");
+            if (!errorNode.isMissingNode()) {
+                String message = errorNode.path("message").asText("");
+                String status = errorNode.path("status").asText("");
+                if (!message.isBlank() && !status.isBlank()) return status + " - " + message;
+                if (!message.isBlank()) return message;
+                if (!status.isBlank()) return status;
+                return errorNode.toString();
+            }
+        } catch (Exception ignored) {
+            // fallback to raw truncated response body
+        }
+        String stripped = responseBody.strip().replaceAll("\\s+", " ");
+        return stripped.length() > 200 ? stripped.substring(0, 200) + "…" : stripped;
     }
 
     protected AgentResult decodeResult(String content, AgentWorkDescriptor work) throws Exception {
         if (work.outputSchema() == null || work.outputSchema().isEmpty()) {
             return new AgentResult(content, null);
         }
-        JsonNode parsed = JSON.readTree(stripFence(content));
-        if (!parsed.isObject()) throw new IllegalStateException("Agent output must be a JSON object");
+        String stripped = stripFence(content);
+        JsonNode parsed;
+        try {
+            parsed = JSON.readTree(stripped);
+        } catch (Exception parseException) {
+            throw new AgentExecutionException("Agent output is not valid JSON (" + parseException.getMessage() + "): " + content);
+        }
+        if (!parsed.isObject()) throw new AgentExecutionException("Agent output must be a JSON object, received: " + content);
         double confidence = parsed.path("_confidence").asDouble(100.0);
         double minimum = work.confidenceThreshold() == null ? 0.0 : work.confidenceThreshold();
         if (confidence < minimum) throw new ConfidenceBelowThresholdException(confidence);
@@ -91,11 +138,19 @@ public abstract class AbstractAgentGateway implements AgentGateway {
     }
 
     protected String stripFence(String value) {
-        String stripped = value.strip();
-        if (stripped.startsWith("```")) {
-            stripped = stripped.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+        if (value == null || value.isBlank()) return "";
+        String content = value.strip();
+        int fence = content.indexOf("```");
+        if (fence >= 0) {
+            int start = content.indexOf('\n', fence);
+            int end = start < 0 ? -1 : content.indexOf("```", start + 1);
+            if (start >= 0 && end > start) {
+                content = content.substring(start + 1, end);
+            } else if (content.startsWith("```")) {
+                content = content.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+            }
         }
-        return stripped;
+        return content.strip();
     }
 
     protected static String blankToDefault(String value, String fallback) {

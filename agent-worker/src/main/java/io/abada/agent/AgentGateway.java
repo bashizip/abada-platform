@@ -20,13 +20,60 @@ public interface AgentGateway {
     final class ConfidenceBelowThresholdException extends IllegalStateException {
         private final Double confidence;
 
-        ConfidenceBelowThresholdException(double confidence) {
+        public ConfidenceBelowThresholdException(double confidence) {
             super("Agent confidence is below the APL threshold");
             this.confidence = confidence;
         }
 
-        Double confidence() {
+        public Double confidence() {
             return confidence;
         }
     }
+
+    class AgentGatewayException extends IllegalStateException {
+        public AgentGatewayException(String message) {
+            super(message);
+        }
+
+        public AgentGatewayException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    class AgentConfigurationException extends AgentGatewayException {
+        public AgentConfigurationException(String message) {
+            super(message);
+        }
+    }
+
+    class AgentAuthenticationException extends AgentGatewayException {
+        public AgentAuthenticationException(String message) {
+            super(message);
+        }
+    }
+
+    class AgentModelNotFoundException extends AgentGatewayException {
+        public AgentModelNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    class AgentQuotaExceededException extends AgentGatewayException {
+        public AgentQuotaExceededException(String message) {
+            super(message);
+        }
+    }
+
+    class AgentUnreachableException extends AgentGatewayException {
+        public AgentUnreachableException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    class AgentExecutionException extends AgentGatewayException {
+        public AgentExecutionException(String message) {
+            super(message);
+        }
+    }
 }
+

@@ -19,8 +19,9 @@ public final class OpenAiCompatibleGateway extends AbstractAgentGateway {
     @Override
     public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
         String model = blankToDefault(work.model(), config.defaultModel());
-        URI targetUri = config.openAiBaseUrl().resolve(
-                config.openAiBaseUrl().getPath().replaceAll("/+$", "") + "/chat/completions");
+        String rawPath = config.openAiBaseUrl().getPath() == null ? "" : config.openAiBaseUrl().getPath().replaceAll("/+$", "");
+        String targetPath = rawPath.endsWith("/chat/completions") ? rawPath : rawPath + "/chat/completions";
+        URI targetUri = config.openAiBaseUrl().resolve(targetPath);
         return executeChatCompletion(targetUri, config.openAiApiKey(), model, work, variables);
     }
 }

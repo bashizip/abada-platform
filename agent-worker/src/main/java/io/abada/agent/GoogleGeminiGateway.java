@@ -19,8 +19,16 @@ public final class GoogleGeminiGateway extends AbstractAgentGateway {
     @Override
     public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
         String model = blankToDefault(work.model(), config.defaultModel()).strip().replaceFirst("(?i)^google/", "");
-        URI targetUri = config.llmBaseUrl().resolve(
-                config.llmBaseUrl().getPath().replaceAll("/+$", "") + "/openai/chat/completions");
+        String rawPath = config.llmBaseUrl().getPath() == null ? "" : config.llmBaseUrl().getPath().replaceAll("/+$", "");
+        String targetPath;
+        if (rawPath.endsWith("/openai")) {
+            targetPath = rawPath + "/chat/completions";
+        } else if (rawPath.endsWith("/openai/chat/completions") || rawPath.endsWith("/chat/completions")) {
+            targetPath = rawPath;
+        } else {
+            targetPath = rawPath + "/openai/chat/completions";
+        }
+        URI targetUri = config.llmBaseUrl().resolve(targetPath);
         return executeChatCompletion(targetUri, config.llmApiKey(), model, work, variables);
     }
 }
