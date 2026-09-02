@@ -112,6 +112,93 @@ function computeSpacing(nodeCount: number, edgeCount: number) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Geometry helpers                                                   */
+/* ------------------------------------------------------------------ */
+
+interface Rect { x: number; y: number; w: number; h: number }
+
+function nodeRect(n: WorkflowNode): Rect {
+  return { x: n.x, y: n.y, w: estimateNodeWidth(n), h: estimateNodeHeight(n) };
+}
+
+/** Distance from point (px,py) to line segment (ax,ay)-(bx,by). */
+function distToSegment(
+  px: number, py: number,
+  ax: number, ay: number,
+  bx: number, by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/** Does a rectangle intersect a line segment (with padding)? */
+function rectIntersectsSegment(rect: Rect, ax: number, ay: number, bx: number, by: number, pad: number): boolean {
+  // Quick reject: bounding box of the segment vs the rect (with padding)
+  const segMinX = Math.min(ax, bx) - pad;
+  const segMaxX = Math.max(ax, bx) + pad;
+  const segMinY = Math.min(ay, by) - pad;
+  const segMaxY = Math.max(ay, by) + pad;
+  if (rect.x + rect.w < segMinX || rect.x > segMaxX) return false;
+  if (rect.y + rect.h < segMinY || rect.y > segMaxY) return false;
+
+  // Check if any corner of the rect is close to the segment
+  const corners: [number, number][] = [
+    [rect.x, rect.y],
+    [rect.x + rect.w, rect.y],
+    [rect.x, rect.y + rect.h],
+    [rect.x + rect.w, rect.y + rect.h],
+  ];
+  for (const [cx, cy] of corners) {
+    if (distToSegment(cx, cy, ax, ay, bx, by) < pad) return true;
+  }
+
+  // Check if the segment passes through the rect
+  const steps = 8;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const sx = ax + t * (bx - ax);
+    const sy = ay + t * (by - ay);
+    if (sx >= rect.x - pad && sx <= rect.x + rect.w + pad &&
+        sy >= rect.y - pad && sy <= rect.y + rect.h + pad) return true;
+  }
+
+  return false;
+}
+
+/** Count how many edges cross through a node's bounding box. */
+function countEdgeCrossingsForNode(
+  node: WorkflowNode,
+  allNodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  nodeMap: Map<string, WorkflowNode>,
+  pad: number,
+): number {
+  const rect = nodeRect(node);
+  let count = 0;
+  for (const edge of edges) {
+    // Skip edges where this node is source or target
+    if (edge.source === node.id || edge.target === node.id) continue;
+    const src = nodeMap.get(edge.source);
+    const tgt = nodeMap.get(edge.target);
+    if (!src || !tgt) continue;
+    const srcRect = nodeRect(src);
+    const tgtRect = nodeRect(tgt);
+    // Edge goes from source center to target center
+    const ax = srcRect.x + srcRect.w / 2;
+    const ay = srcRect.y + srcRect.h / 2;
+    const bx = tgtRect.x + tgtRect.w / 2;
+    const by = tgtRect.y + tgtRect.h / 2;
+    if (rectIntersectsSegment(rect, ax, ay, bx, by, pad)) count++;
+  }
+  return count;
+}
+
+/* ------------------------------------------------------------------ */
 /* Edge crossing minimization                                         */
 /* ------------------------------------------------------------------ */
 
@@ -136,8 +223,8 @@ function minimizeCrossings(
   }
 
   // Build adjacency: for each node, the set of ranks it connects to
-  const upEdges = new Map<string, Set<number>>(); // node -> ranks of upstream nodes
-  const downEdges = new Map<string, Set<number>>(); // node -> ranks of downstream nodes
+  const upEdges = new Map<string, Set<number>>();
+  const downEdges = new Map<string, Set<number>>();
   for (const edge of edges) {
     const srcRank = rankMap.get(edge.source) ?? 0;
     const tgtRank = rankMap.get(edge.target) ?? 0;
@@ -147,16 +234,13 @@ function minimizeCrossings(
     downEdges.get(edge.source)!.add(tgtRank);
   }
 
-  // Count crossings between two adjacent nodes in the same rank
-  function countCrossings(a: WorkflowNode, b: WorkflowNode, rank: number): number {
+  function countCrossings(a: WorkflowNode, b: WorkflowNode): number {
     let crossings = 0;
     const aUp = upEdges.get(a.id) ?? new Set();
     const bUp = upEdges.get(b.id) ?? new Set();
     const aDown = downEdges.get(a.id) ?? new Set();
     const bDown = downEdges.get(b.id) ?? new Set();
 
-    // Upstream crossings: a connects to rank R, b connects to rank R-1
-    // If a's upstream is "below" b's upstream in the target rank, it's a crossing
     for (const r of aUp) {
       const targetNodes = ranks.get(r);
       if (!targetNodes) continue;
@@ -164,8 +248,6 @@ function minimizeCrossings(
       const bIdx = targetNodes.indexOf(b);
       if (aIdx >= 0 && bIdx >= 0 && aIdx > bIdx) crossings++;
     }
-
-    // Downstream crossings
     for (const r of aDown) {
       const targetNodes = ranks.get(r);
       if (!targetNodes) continue;
@@ -173,11 +255,9 @@ function minimizeCrossings(
       const bIdx = targetNodes.indexOf(b);
       if (aIdx >= 0 && bIdx >= 0 && aIdx > bIdx) crossings++;
     }
-
     return crossings;
   }
 
-  // Iterative swap: for each rank, try swapping adjacent nodes if it reduces crossings
   let improved = true;
   let iterations = 0;
   while (improved && iterations < 10) {
@@ -187,17 +267,13 @@ function minimizeCrossings(
       for (let i = 0; i < rankNodes.length - 1; i++) {
         const a = rankNodes[i];
         const b = rankNodes[i + 1];
-        const crossingsBefore = countCrossings(a, b, 0) + countCrossings(b, a, 0);
-
-        // Try swap
+        const before = countCrossings(a, b) + countCrossings(b, a);
         rankNodes[i] = b;
         rankNodes[i + 1] = a;
-        const crossingsAfter = countCrossings(b, a, 0) + countCrossings(a, b, 0);
-
-        if (crossingsAfter < crossingsBefore) {
+        const after = countCrossings(b, a) + countCrossings(a, b);
+        if (after < before) {
           improved = true;
         } else {
-          // Swap back
           rankNodes[i] = a;
           rankNodes[i + 1] = b;
         }
@@ -205,9 +281,112 @@ function minimizeCrossings(
     }
   }
 
-  // Flatten back to ordered list, preserving rank order
   const sortedRanks = [...ranks.entries()].sort((a, b) => a[0] - b[0]);
-  return sortedRanks.flatMap(([, nodes]) => nodes);
+  return sortedRanks.flatMap(([, n]) => n);
+}
+
+/* ------------------------------------------------------------------ */
+/* Node-edge crossing avoidance (post-processing)                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * After dagre + crossing minimization, some nodes may still visually
+ * cross edges they aren't connected to. This pass detects those
+ * crossings and tries shifting nodes vertically (within their rank)
+ * to find a clear position.
+ */
+function avoidNodeEdgeCrossings(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  rankMap: Map<string, number>,
+): WorkflowNode[] {
+  if (nodes.length < 3) return nodes;
+
+  const result = [...nodes];
+  const nodeMap = new Map(result.map((n) => [n.id, n]));
+  const PAD = 16; // min clearance between a node and a non-incident edge
+
+  // Group by rank for local shifting
+  const ranks = new Map<number, WorkflowNode[]>();
+  for (const node of result) {
+    const rank = rankMap.get(node.id) ?? 0;
+    if (!ranks.has(rank)) ranks.set(rank, []);
+    ranks.get(rank)!.push(node);
+  }
+
+  // Iterative: shift each node up/down to reduce edge crossings
+  let improved = true;
+  let rounds = 0;
+  while (improved && rounds < 5) {
+    improved = false;
+    rounds++;
+    for (const node of result) {
+      const currentCrossings = countEdgeCrossingsForNode(node, result, edges, nodeMap, PAD);
+      if (currentCrossings === 0) continue;
+
+      const rank = rankMap.get(node.id) ?? 0;
+      const rankNodes = ranks.get(rank) ?? [];
+      const nodeIdx = rankNodes.indexOf(node);
+      if (nodeIdx < 0) continue;
+
+      // Compute the y-range we can shift to without overlapping siblings
+      let minShift = -60;
+      let maxShift = 60;
+      const nodeH = estimateNodeHeight(node);
+      for (let j = 0; j < rankNodes.length; j++) {
+        if (j === nodeIdx) continue;
+        const sibling = rankNodes[j];
+        const siblingH = estimateNodeHeight(sibling);
+        const gap = 20; // min gap between nodes in same rank
+        if (sibling.y < node.y) {
+          // sibling is above — we can't shift up past it
+          const limit = sibling.y + siblingH + gap - node.y;
+          minShift = Math.max(minShift, limit);
+        } else {
+          // sibling is below — we can't shift down past it
+          const limit = sibling.y - gap - nodeH - node.y;
+          maxShift = Math.min(maxShift, limit);
+        }
+      }
+
+      if (minShift > maxShift) continue; // no room to shift
+
+      // Try a few shift positions and pick the best
+      let bestShift = 0;
+      let bestCrossings = currentCrossings;
+      const candidates = [0];
+      for (let s = 20; s <= 60; s += 20) {
+        if (s >= minShift && s <= maxShift) candidates.push(s);
+        if (-s >= minShift && -s <= maxShift) candidates.push(-s);
+      }
+      // Also try the extremes
+      if (minShift !== 0) candidates.push(minShift);
+      if (maxShift !== 0) candidates.push(maxShift);
+
+      for (const shift of candidates) {
+        if (shift === 0) continue;
+        // Temporarily shift
+        const origY = node.y;
+        node.y += shift;
+        nodeMap.set(node.id, node);
+        const crossings = countEdgeCrossingsForNode(node, result, edges, nodeMap, PAD);
+        if (crossings < bestCrossings) {
+          bestCrossings = crossings;
+          bestShift = shift;
+        }
+        node.y = origY;
+        nodeMap.set(node.id, node);
+      }
+
+      if (bestShift !== 0) {
+        node.y += bestShift;
+        nodeMap.set(node.id, node);
+        improved = true;
+      }
+    }
+  }
+
+  return result;
 }
 
 /* ------------------------------------------------------------------ */
@@ -273,8 +452,11 @@ export function autoLayoutWorkflow(
     };
   });
 
-  // Attempt to minimize edge crossings within each rank
-  const result = minimizeCrossings(positioned, edges, rankMap);
+  // 1. Minimize edge-edge crossings via rank-aware swapping
+  const sorted = minimizeCrossings(positioned, edges, rankMap);
 
-  return result;
+  // 2. Shift nodes to avoid crossing edges they aren't connected to
+  const final = avoidNodeEdgeCrossings(sorted, edges, rankMap);
+
+  return final;
 }
