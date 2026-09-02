@@ -28,7 +28,6 @@ export type AbadaNodeType = Node<WorkflowNode & Record<string, unknown> & {
   diffKind?: DiffChangeKind | null;
   diffAnnotation?: string;
   onConnectStart?: (nodeId: string) => void;
-  onSelectNode?: (nodeId: string) => void;
 }, 'abadaNode'>;
 
 const getNodeColor = (type: NodeType) => {
@@ -141,9 +140,8 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
 
   return (
     <div
-      onClick={(e) => { e.stopPropagation(); data.onSelectNode?.(id); }}
-      className={`abada-node-card relative w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg z-10 group ${
-        isSelected && !isLiveCurrent ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]' : ''
+      className={`abada-node-card relative w-52 bg-[#25201D] rounded-2xl border-2 ${styles.border} shadow-warm-lg z-10 group cursor-pointer transition-all ${
+        isSelected && !isLiveCurrent ? 'border-[#F4A261] ring-2 ring-[#F4A261]/40 ring-offset-2 ring-offset-[#1A1614] scale-[1.03]' : ''
       } ${isAgentGlow ? 'glow-amethyst' : ''} ${
         isActiveSim ? 'scale-105 transition-transform' : ''
       } ${

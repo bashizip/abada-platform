@@ -89,7 +89,6 @@ export const Canvas: React.FC<CanvasProps> = ({
         status: executionStatuses[node.id] || 'idle',
         isActiveSim: activeSimulationNodeId === node.id,
         isLiveCurrent: activeLiveNodeIds.includes(node.id),
-        onSelectNode,
       },
       selected: selectedNodeId === node.id
     })),
@@ -130,6 +129,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     deletedNodes.forEach((node) => onDeleteNode(node.id));
   }, [onDeleteNode, readOnly]);
 
+  const onNodeClick = useCallback((_: any, node: Node) => {
+    onSelectNode(node.id);
+  }, [onSelectNode]);
+
   const onPaneClick = useCallback(() => {
     onSelectNode(null);
   }, [onSelectNode]);
@@ -167,6 +170,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onConnect={onConnect}
+        onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         onNodesDelete={onNodesDelete}
         onPaneClick={onPaneClick}
