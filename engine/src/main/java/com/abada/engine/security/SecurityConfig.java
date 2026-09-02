@@ -93,6 +93,11 @@ public class SecurityConfig {
                         "/v1/insight/policies/**")
                         .hasAnyAuthority("SCOPE_insight:read", AbadaRoles.INSIGHT_REVIEWER,
                                 AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.POST, "/v1/insight/config/llm/test",
+                        "/v1/insight/config/ai/test")
+                        .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.PUT, "/v1/insight/config/ai")
+                        .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/insight/proposals/*/reviews")
                         .hasAnyAuthority("SCOPE_insight:review", AbadaRoles.INSIGHT_REVIEWER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.PUT, "/v1/insight/policies/**")

@@ -60,6 +60,18 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "Created $ENV_FILE from the safe development defaults."
 fi
 
+# Sync defaults that changed between releases so existing .env.dev files
+# pick up the new values without manual editing.
+sync_default() {
+  local key="$1" new_value="$2"
+  if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+    sed -i '' "s|^${key}=.*|${key}=${new_value}|" "$ENV_FILE"
+  else
+    echo "${key}=${new_value}" >> "$ENV_FILE"
+  fi
+}
+sync_default ABADA_INSIGHT_ENABLED true
+
 update_image_var() {
   local key="$1" value="$2" temp_file
   umask 077

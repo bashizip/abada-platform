@@ -143,6 +143,25 @@ class SecurityAuthorizationContractTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"requiredApprovals\":1,\"requiredGroups\":\"reviewers\","
                         + "\"approvalMode\":\"PARALLEL\"}"), "insight-reviewer");
+        // AI provider config endpoints require insight:configure scope
+        assertForbidden(put("/v1/insight/config/ai")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"baseUrl\":\"https://api.openai.com/v1\",\"model\":\"gpt-4o\"}"),
+                "insight-reader");
+        assertForbidden(put("/v1/insight/config/ai")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"baseUrl\":\"https://api.openai.com/v1\",\"model\":\"gpt-4o\"}"),
+                "insight-reviewer");
+        assertForbidden(post("/v1/insight/config/ai/test")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"baseUrl\":\"https://api.openai.com/v1\",\"model\":\"gpt-4o\"}"),
+                "insight-reader");
+        assertForbidden(post("/v1/insight/config/ai/test")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"baseUrl\":\"https://api.openai.com/v1\",\"model\":\"gpt-4o\"}"),
+                "insight-reviewer");
+        assertForbidden(post("/v1/insight/config/llm/test"), "insight-reader");
+        assertForbidden(post("/v1/insight/config/llm/test"), "insight-reviewer");
     }
 
     @Test
@@ -195,6 +214,27 @@ class SecurityAuthorizationContractTest {
                 "worker");
         assertForbidden(put("/v1/workers/me").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"topics\":[\"t\"],\"models\":[]}"), "operator");
+    }
+
+    @Test
+    void insightConfigWriteAllowedForAdminScope() throws Exception {
+        mvc.perform(put("/v1/insight/config/ai")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"baseUrl\":\"https://api.openai.com/v1\",\"model\":\"gpt-4o\","
+                                + "\"enabled\":true}")
+                        .header("Authorization", "Bearer insight-admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.configured").value(false));
+        mvc.perform(post("/v1/insight/config/ai/test")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"baseUrl\":\"https://api.openai.com/v1\",\"model\":\"gpt-4o\"}")
+                        .header("Authorization", "Bearer insight-admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").exists());
+        mvc.perform(post("/v1/insight/config/llm/test")
+                        .header("Authorization", "Bearer insight-admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").exists());
     }
 
     @Test

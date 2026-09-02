@@ -11,12 +11,8 @@ interface SettingsPanelProps {
 
 type Tab = 'ai' | 'insight' | 'governance';
 
-const PROVIDER_PRESETS: Record<string, { baseUrl: string; model: string }> = {
-  'gemini': { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-3.6-flash' },
-  'openai': { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  'openrouter': { baseUrl: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4-flash-free' },
-  'openai-compatible': { baseUrl: '', model: '' },
-};
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash'] as const;
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, definitionKey, projectId }) => {
   const [activeTab, setActiveTab] = useState<Tab>('ai');
@@ -28,10 +24,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
 
   // AI Provider form state
-  const [providerType, setProviderType] = useState('openai-compatible');
-  const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('');
+  const [model, setModel] = useState<string>(GEMINI_MODELS[0]);
   const [isSavingAi, setIsSavingAi] = useState(false);
   const [isTestingAi, setIsTestingAi] = useState(false);
   const [testResult, setTestResult] = useState<LlmConnectionTestResult | null>(null);
@@ -50,9 +44,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
       setPolicy(approvalPolicy);
 
       if (aiData) {
-        setProviderType(aiData.providerType);
-        setBaseUrl(aiData.baseUrl);
-        setModel(aiData.model);
+        setModel(aiData.model || GEMINI_MODELS[0]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load configuration');
@@ -78,8 +70,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
     setTestResult(null);
     try {
       const request: SaveAiProviderRequest = {
-        providerType,
-        baseUrl,
+        providerType: 'gemini',
+        baseUrl: GEMINI_BASE_URL,
         model,
         enabled: true,
       };
@@ -101,11 +93,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
     setError(null);
     setTestResult(null);
     try {
-      const overrides: Partial<SaveAiProviderRequest> = {};
+      const overrides: Partial<SaveAiProviderRequest> = {
+        providerType: 'gemini',
+        baseUrl: GEMINI_BASE_URL,
+        model,
+      };
       if (apiKey.trim()) overrides.apiKey = apiKey.trim();
-      if (baseUrl) overrides.baseUrl = baseUrl;
-      if (model) overrides.model = model;
-      const result = await InsightAPI.testAiConnection(Object.keys(overrides).length ? overrides : undefined);
+      const result = await InsightAPI.testAiConnection(overrides);
       setTestResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection test failed');
@@ -124,15 +118,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
       setError(err instanceof Error ? err.message : 'Failed to save approval policy');
     } finally {
       setIsSavingPolicy(false);
-    }
-  };
-
-  const handleProviderTypeChange = (type: string) => {
-    setProviderType(type);
-    const preset = PROVIDER_PRESETS[type];
-    if (preset) {
-      if (preset.baseUrl) setBaseUrl(preset.baseUrl);
-      if (preset.model) setModel(preset.model);
     }
   };
 
@@ -250,40 +235,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
                 </span>
               </div>
 
-              {/* Provider Type */}
+              {/* Gemini Config */}
               <div className="space-y-2">
-                <h3 className="text-[10px] uppercase tracking-wider text-[#A89F91] font-medium">Provider</h3>
-                <label className="block text-[10px] text-[#A89F91]">
-                  Provider Type
-                  <select
-                    value={providerType}
-                    onChange={(e) => handleProviderTypeChange(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 text-xs text-[#EAE3D9]"
-                  >
-                    <option value="openai-compatible">OpenAI Compatible</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="openrouter">OpenRouter</option>
-                  </select>
-                </label>
-                <label className="block text-[10px] text-[#A89F91]">
-                  Base URL
-                  <input
-                    type="text"
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                    placeholder="https://api.example.com/v1"
-                    className={`mt-1 ${inputClass}`}
-                  />
-                </label>
+                <h3 className="text-[10px] uppercase tracking-wider text-[#A89F91] font-medium">Google Gemini</h3>
                 <label className="block text-[10px] text-[#A89F91]">
                   Model
-                  <input
-                    type="text"
+                  <select
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    placeholder="model-name"
-                    className={`mt-1 ${inputClass}`}
-                  />
+                    className="mt-1 w-full rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 text-xs text-[#EAE3D9]"
+                  >
+                    {GEMINI_MODELS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
                 </label>
                 <label className="block text-[10px] text-[#A89F91]">
                   API Key
@@ -291,7 +256,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={aiSettings?.apiKeyHint || 'Enter API key'}
+                    placeholder={aiSettings?.apiKeyHint || 'Enter Gemini API key'}
                     className={`mt-1 ${inputClass}`}
                   />
                   {aiSettings?.apiKeyHint && (
@@ -341,7 +306,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
                 <button
                   type="button"
                   onClick={saveAiSettings}
-                  disabled={isSavingAi || !baseUrl.trim()}
+                  disabled={isSavingAi}
                   className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[#2A9D8F]/50 bg-[#2A9D8F]/15 py-2 text-xs font-medium text-[#2A9D8F] disabled:opacity-50 transition-all"
                 >
                   {isSavingAi ? (

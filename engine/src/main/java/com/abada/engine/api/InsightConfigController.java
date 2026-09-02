@@ -82,8 +82,8 @@ public class InsightConfigController {
                 "enabled", properties.isEnabled(),
                 "configured", properties.isLlmConfigured(),
                 "providerType", properties.getLlmProviderType(),
-                "baseUrl", maskUrl(properties.getLlmBaseUrl()),
-                "model", properties.getLlmModel(),
+                "baseUrl", maskUrl(keyResolver.resolveBaseUrl()),
+                "model", keyResolver.resolveModel(),
                 "openRouterEnabled", properties.isOpenRouterEnabled(),
                 "openRouterReferer", properties.getOpenRouterReferer(),
                 "openRouterTitle", properties.getOpenRouterTitle()

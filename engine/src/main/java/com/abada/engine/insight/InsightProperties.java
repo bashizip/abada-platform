@@ -1,5 +1,8 @@
 package com.abada.engine.insight;
 
+import com.abada.engine.persistence.entity.AiProviderSettingsEntity;
+import com.abada.engine.persistence.repository.AiProviderSettingsRepository;
+import com.abada.engine.security.AesEncryption;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -12,6 +15,14 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class InsightProperties {
+
+    private final AiProviderSettingsRepository settingsRepository;
+    private final AesEncryption encryption;
+
+    public InsightProperties(AiProviderSettingsRepository settingsRepository, AesEncryption encryption) {
+        this.settingsRepository = settingsRepository;
+        this.encryption = encryption;
+    }
 
     @Value("${abada.insight.enabled:false}")
     private boolean enabled;
@@ -146,8 +157,19 @@ public class InsightProperties {
         return openRouterTitle;
     }
 
-    /** True when the OpenAI-compatible endpoint is configured and usable. */
+    /** True when any source (DB workspace key or env var) provides a usable LLM configuration. */
     public boolean isLlmConfigured() {
+        // 1. Check DB-stored AI provider settings (GUI-configured)
+        var dbSettings = settingsRepository.findById("default");
+        if (dbSettings.isPresent()) {
+            AiProviderSettingsEntity s = dbSettings.get();
+            boolean hasKey = s.getApiKeyEnc() != null && !s.getApiKeyEnc().isBlank();
+            boolean hasUrl = s.getBaseUrl() != null && !s.getBaseUrl().isBlank();
+            if (s.isEnabled() && hasKey && hasUrl) {
+                return true;
+            }
+        }
+        // 2. Fall back to environment variables
         return llmBaseUrl != null && !llmBaseUrl.isBlank()
                 && llmApiKey != null && !llmApiKey.isBlank();
     }
