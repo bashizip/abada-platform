@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["dist/**", "dist-electron/**", ".expo/**"]
+}

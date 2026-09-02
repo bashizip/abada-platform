@@ -1,0 +1,8 @@
+{
+  "id": "website",
+  "name": "Abada Website",
+  "description": "Abada platform website",
+  "url": "https://abadaplatform.com",
+  "hostname": "abadaplatform.com",
+  "port": 8080
+}

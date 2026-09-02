@@ -1,0 +1,129 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink: #05070a;
+  --color-ink-alt: #080b10;
+  --color-surface: #0d1117;
+  --color-surface-2: #11161d;
+  --color-hairline: rgba(255, 255, 255, 0.08);
+  --color-hairline-strong: rgba(255, 255, 255, 0.16);
+
+  --color-signal: #34d399;
+  --color-signal-dim: #0f6f52;
+  --color-wire: #60a5fa;
+  --color-amber: #fbbf24;
+
+  --color-t1: #f5f7fa;
+  --color-t2: #94a3b8;
+  --color-t3: #5b6675;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-t1);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv01";
+  }
+
+  ::selection {
+    background: var(--color-signal);
+    color: #04150f;
+  }
+}
+
+@layer components {
+  .mono-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-t3);
+  }
+
+  .h-display {
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 0.96;
+  }
+
+  .h-section {
+    font-size: clamp(1.9rem, 3.4vw, 3rem);
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    line-height: 1.05;
+  }
+
+  .prose-lead {
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: var(--color-t2);
+    max-width: 62ch;
+  }
+
+  .hairline {
+    border-top: 1px solid var(--color-hairline);
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  .glow-signal {
+    background: radial-gradient(
+      60% 60% at 50% 40%,
+      rgba(52, 211, 153, 0.16) 0%,
+      rgba(52, 211, 153, 0) 70%
+    );
+  }
+}
+
+@utility rise-* {
+  animation: rise 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(--value(integer) * 1ms);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
