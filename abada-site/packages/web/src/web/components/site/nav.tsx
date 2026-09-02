@@ -9,7 +9,7 @@ const LINKS = [
   { label: "Quickstart", href: "#quickstart" },
   { label: "Architecture", href: "#architecture" },
   { label: "Insight", href: "#insight" },
-  { label: "Founder", href: "#founder" },
+  { label: "Vision", href: "#vision" },
 ];
 
 export function Nav({ anchorBase = "" }: { anchorBase?: string }) {

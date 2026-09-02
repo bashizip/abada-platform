@@ -7,7 +7,7 @@ import { Architecture } from "../components/site/architecture";
 import { Insight } from "../components/site/insight";
 import { Reliability } from "../components/site/reliability";
 import { Market } from "../components/site/market";
-import { Founder } from "../components/site/founder";
+import { Vision } from "../components/site/vision";
 import { Cta } from "../components/site/cta";
 
 function Index() {
@@ -23,7 +23,7 @@ function Index() {
         <Insight />
         <Reliability />
         <Market />
-        <Founder />
+        <Vision />
         <Cta />
       </main>
       <StickyCta />
