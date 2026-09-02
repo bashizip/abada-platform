@@ -97,6 +97,42 @@ class AplRuntimeTest {
     }
 
     @Test
+    void rejectsStartingProcessWithAgentTasksWhenGeminiApiKeyIsUnconfigured() {
+        try (ConfigurableApplicationContext context = new SpringApplicationBuilder(AbadaEngineApplication.class)
+                .web(WebApplicationType.SERVLET)
+                .initializers(ctx -> TestPropertySourceUtils.addInlinedPropertiesToEnvironment(
+                        ctx,
+                        "server.port=0",
+                        "spring.datasource.url=" + POSTGRES.getJdbcUrl(),
+                        "spring.datasource.username=" + POSTGRES.getUsername(),
+                        "spring.datasource.password=" + POSTGRES.getPassword(),
+                        "spring.datasource.driver-class-name=org.postgresql.Driver",
+                        "spring.datasource.hikari.maximum-pool-size=3",
+                        "spring.datasource.hikari.minimum-idle=1",
+                        "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
+                        "spring.jpa.hibernate.ddl-auto=validate",
+                        "spring.jpa.open-in-view=false",
+                        "spring.flyway.enabled=true",
+                        "spring.task.scheduling.enabled=false",
+                        "abada.outbox.dispatcher.enabled=false",
+                        "abada.security.mode=disabled",
+                        "abada.insight.llm.base-url=",
+                        "abada.insight.llm.api-key=",
+                        "otel.sdk.disabled=true",
+                        "management.tracing.enabled=false",
+                        "management.otlp.metrics.export.enabled=false"))
+                .run("--spring.profiles.active=test")) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/candidate-review.apl.yaml");
+
+            assertThatThrownBy(() -> engine.startProcess("candidate_review", "alice", Map.of("score", 88)))
+                    .isInstanceOf(ProcessEngineException.class)
+                    .hasMessageContaining("contains AI agent task(s) but no LLM API key is configured");
+        }
+    }
+
+    @Test
     void executesScriptNodeInTransactionAndCompletes() {
         try (ConfigurableApplicationContext context = startApplication()) {
             context.getBean(DatabaseTestHelper.class).cleanup();
@@ -568,6 +604,8 @@ class AplRuntimeTest {
                         "spring.task.scheduling.enabled=false",
                         "abada.outbox.dispatcher.enabled=false",
                         "abada.security.mode=disabled",
+                        "abada.insight.llm.base-url=http://llm.test.invalid/v1",
+                        "abada.insight.llm.api-key=test-key",
                         "otel.sdk.disabled=true",
                         "management.tracing.enabled=false",
                         "management.otlp.metrics.export.enabled=false"))

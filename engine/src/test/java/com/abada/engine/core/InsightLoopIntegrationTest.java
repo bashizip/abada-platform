@@ -381,6 +381,8 @@ class InsightLoopIntegrationTest {
                 "spring.task.scheduling.enabled=false",
                 "abada.outbox.dispatcher.enabled=false",
                 "abada.security.mode=disabled",
+                "abada.insight.llm.base-url=http://llm.test.invalid/v1",
+                "abada.insight.llm.api-key=test-key",
                 "otel.sdk.disabled=true",
                 "management.tracing.enabled=false",
                 "management.otlp.metrics.export.enabled=false",
