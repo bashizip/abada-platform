@@ -141,7 +141,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
 
   return (
     <div
-      onClick={() => data.onSelectNode?.(id)}
+      onClick={(e) => { e.stopPropagation(); data.onSelectNode?.(id); }}
       className={`abada-node-card relative w-52 bg-[#25201D] rounded-2xl border ${styles.border} shadow-warm-lg z-10 group ${
         isSelected && !isLiveCurrent ? 'ring-2 ring-[#F4A261] ring-offset-2 ring-offset-[#1A1614]' : ''
       } ${isAgentGlow ? 'glow-amethyst' : ''} ${
