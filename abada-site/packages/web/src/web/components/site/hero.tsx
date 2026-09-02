@@ -46,7 +46,7 @@ export function Hero() {
                 className="inline-flex items-center gap-2 rounded-lg bg-signal px-5 py-3 text-[15px] font-medium text-[#04150f] transition-opacity hover:opacity-90"
               >
                 <Play className="size-4 fill-current" />
-                Watch the 84-second demo
+                Show it in action
               </a>
               <a
                 href={CALENDAR_URL}
@@ -69,6 +69,9 @@ export function Hero() {
               <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="underline decoration-hairline-strong underline-offset-4 hover:text-t2">
                 source on GitHub
               </a>
+            </p>
+            <p className="rise-320 mt-3 text-[12.5px] text-t3">
+              Full video coming soon.
             </p>
           </div>
 

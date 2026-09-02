@@ -32,10 +32,8 @@ export function Nav({ anchorBase = "" }: { anchorBase?: string }) {
     >
       <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center justify-between px-6">
         <a href={anchorBase || "#top"} className="flex items-center gap-2.5">
-          <span className="flex size-7 items-center justify-center rounded-md bg-signal font-semibold text-[13px] text-[#04150f]">
-            A
-          </span>
-          <span className="font-semibold tracking-tight">Abada</span>
+          <img src="/logo.svg" alt="Abada" className="size-8" />
+          <span className="text-[15px] font-bold tracking-wide uppercase">Abada Platform</span>
         </a>
 
         <nav className="hidden items-center gap-7 lg:flex">

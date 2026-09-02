@@ -40,17 +40,15 @@ export function Cta() {
             className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3.5 text-[15px] text-t1 transition-colors hover:border-signal/50"
           >
             <Play className="size-4" />
-            84-second demo
+            Show it in action
           </a>
         </div>
 
         <div className="hairline mt-20 flex flex-col gap-6 pt-8 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="flex size-7 items-center justify-center rounded-md bg-signal font-semibold text-[13px] text-[#04150f]">
-              A
-            </span>
+            <img src="/logo.svg" alt="Abada" className="size-8" />
             <div>
-              <p className="text-[14px] font-semibold">Abada</p>
+              <p className="text-[15px] font-bold tracking-wide uppercase">Abada Platform</p>
               <p className="font-mono text-[10.5px] text-t3">
                 Open source · Built in the Democratic Republic of the Congo
               </p>
