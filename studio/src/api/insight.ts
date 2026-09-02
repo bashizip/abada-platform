@@ -14,6 +14,32 @@ export interface InsightLlmConfig {
   openRouterTitle: string;
 }
 
+export interface AiProviderSettings {
+  configured: boolean;
+  providerType: string;
+  baseUrl: string;
+  model: string;
+  apiKeyHint: string;
+  enabled: boolean;
+}
+
+export interface SaveAiProviderRequest {
+  providerType?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  timeoutMs?: number;
+  enabled?: boolean;
+}
+
+export interface LlmConnectionTestResult {
+  success: boolean;
+  status: 'READY' | 'NOT_CONFIGURED' | 'ERROR';
+  latencyMs?: number;
+  model?: string;
+  message: string;
+}
+
 export interface InsightProposalSummary {
   id: number;
   definitionKey: string;
@@ -73,6 +99,63 @@ export class InsightAPI {
     });
     if (!res.ok) {
       throw new Error(`Failed to fetch LLM config: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Performs a live connection test to the configured Gemini / LLM provider.
+   */
+  static async testLlmConnection(): Promise<LlmConnectionTestResult> {
+    const res = await authenticatedFetch(`${this.BASE_URL}/insight/config/llm/test`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      throw new Error(`Connection test failed: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Retrieves the saved AI provider settings from the database.
+   */
+  static async getAiSettings(): Promise<AiProviderSettings> {
+    const res = await authenticatedFetch(`${this.BASE_URL}/insight/config/ai`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch AI settings: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Saves AI provider settings. The API key is encrypted server-side.
+   */
+  static async saveAiSettings(request: SaveAiProviderRequest): Promise<AiProviderSettings> {
+    const res = await authenticatedFetch(`${this.BASE_URL}/insight/config/ai`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to save AI settings: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Tests the AI provider connection with saved or provided settings.
+   */
+  static async testAiConnection(overrides?: Partial<SaveAiProviderRequest>): Promise<LlmConnectionTestResult> {
+    const res = await authenticatedFetch(`${this.BASE_URL}/insight/config/ai/test`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: overrides ? JSON.stringify(overrides) : undefined,
+    });
+    if (!res.ok) {
+      throw new Error(`AI connection test failed: ${res.statusText}`);
     }
     return res.json();
   }
