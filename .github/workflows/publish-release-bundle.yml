@@ -149,7 +149,7 @@ jobs:
             "ghcr.io/bashizip/abada-agent-worker:$VERSION"
 
       - name: Run the public installer end to end on a clean runner
-        if: secrets.GEMINI_API_KEY != ''
+        if: ${{ secrets.GEMINI_API_KEY != '' }}
         shell: bash
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
