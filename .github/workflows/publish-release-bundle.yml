@@ -149,11 +149,14 @@ jobs:
             "ghcr.io/bashizip/abada-agent-worker:$VERSION"
 
       - name: Run the public installer end to end on a clean runner
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
         shell: bash
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          if [[ -z "$GEMINI_API_KEY" ]]; then
+            echo "GEMINI_API_KEY secret not configured — skipping installer E2E"
+            exit 0
+          fi
           install_dir="$RUNNER_TEMP/abada-platform-$VERSION"
           cleanup() {
             if [[ -x "$install_dir/release/abada-platform" ]]; then
