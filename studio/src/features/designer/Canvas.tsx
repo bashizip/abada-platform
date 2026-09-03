@@ -271,34 +271,36 @@ const CanvasControls: React.FC<{
   }, [selectedNodeId, onDeleteNode]);
 
   return (
-    <Controls showInteractive={false}>
-      <ControlButton
-        onClick={handleAutoLayout}
-        title="Auto Layout — re-layout the diagram as a readable left-to-right flow"
-        aria-label="Auto Layout"
-      >
-        <Workflow className="w-4 h-4" />
-      </ControlButton>
-      {processKey && (
+    <Panel position="bottom-left" className="mb-16">
+      <Controls showInteractive={false}>
         <ControlButton
-          onClick={handleLockLayout}
-          title={locked
-            ? 'Layout locked — click to update the saved layout'
-            : 'Lock Layout — save current positions for running instances'}
-          aria-label="Lock Layout"
+          onClick={handleAutoLayout}
+          title="Auto Layout — re-layout the diagram as a readable left-to-right flow"
+          aria-label="Auto Layout"
         >
-          {locked ? <Lock className="w-4 h-4 text-[#2A9D8F]" /> : <Unlock className="w-4 h-4" />}
+          <Workflow className="w-4 h-4" />
         </ControlButton>
-      )}
-      {selectedNodeId && (
-        <ControlButton
-          onClick={handleDelete}
-          title="Delete selected node"
-          aria-label="Delete selected node"
-        >
-          <Trash2 className="w-4 h-4 text-[#E76F51]" />
-        </ControlButton>
-      )}
-    </Controls>
+        {processKey && (
+          <ControlButton
+            onClick={handleLockLayout}
+            title={locked
+              ? 'Layout locked — click to update the saved layout'
+              : 'Lock Layout — save current positions for running instances'}
+            aria-label="Lock Layout"
+          >
+            {locked ? <Lock className="w-4 h-4 text-[#2A9D8F]" /> : <Unlock className="w-4 h-4" />}
+          </ControlButton>
+        )}
+        {selectedNodeId && (
+          <ControlButton
+            onClick={handleDelete}
+            title="Delete selected node"
+            aria-label="Delete selected node"
+          >
+            <Trash2 className="w-4 h-4 text-[#E76F51]" />
+          </ControlButton>
+        )}
+      </Controls>
+    </Panel>
   );
 };
