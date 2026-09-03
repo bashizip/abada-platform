@@ -65,7 +65,11 @@ fi
 sync_default() {
   local key="$1" new_value="$2"
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i '' "s|^${key}=.*|${key}=${new_value}|" "$ENV_FILE"
+    if [[ "$(uname)" == "Darwin" ]]; then
+      sed -i '' "s|^${key}=.*|${key}=${new_value}|" "$ENV_FILE"
+    else
+      sed -i "s|^${key}=.*|${key}=${new_value}|" "$ENV_FILE"
+    fi
   else
     echo "${key}=${new_value}" >> "$ENV_FILE"
   fi
