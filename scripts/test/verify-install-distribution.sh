@@ -90,7 +90,12 @@ grep -Fq 'HIGH review: bob / bob' "$INSTALL_OUTPUT" || { echo "missing HIGH revi
 [[ "$(awk -F= '$1 == "ABADA_AGENT_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_AGENT_LLM_API_KEY mismatch" >&2; exit 1; } || { echo "ABADA_AGENT_LLM_API_KEY mismatch" >&2; exit 1; }
 [[ "$(awk -F= '$1 == "ABADA_AGENT_OPENAI_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_AGENT_OPENAI_API_KEY mismatch" >&2; exit 1; } || { echo "ABADA_AGENT_OPENAI_API_KEY mismatch" >&2; exit 1; }
 [[ "$(awk -F= '$1 == "ABADA_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_LLM_API_KEY mismatch" >&2; exit 1; } || { echo "ABADA_LLM_API_KEY mismatch" >&2; exit 1; }
-[[ "$(stat -f '%Lp' "$INSTALL_DIR/.env.dev" 2>/dev/null || stat -c '%a' "$INSTALL_DIR/.env.dev")" == "600" ]] || { echo "env.dev permissions not 600" >&2; exit 1; } || { echo "env.dev permissions not 600" >&2; exit 1; }
+if stat -c '%a' "$INSTALL_DIR/.env.dev" >/dev/null 2>&1; then
+  ACTUAL_PERMS="$(stat -c '%a' "$INSTALL_DIR/.env.dev")"
+else
+  ACTUAL_PERMS="$(stat -f '%Lp' "$INSTALL_DIR/.env.dev")"
+fi
+[[ "$ACTUAL_PERMS" == "600" ]] || { echo "env.dev permissions not 600 (got: $ACTUAL_PERMS)" >&2; exit 1; } || { echo "env.dev permissions not 600" >&2; exit 1; }
 if grep -Fq 'test_gemini_key_1234567890' "$INSTALL_OUTPUT"; then
   echo "Installer exposed the Gemini credential in its output" >&2
   exit 1
