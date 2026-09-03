@@ -34,22 +34,17 @@ fi
 # Verify Docker daemon is reachable
 docker info >/dev/null 2>&1 || fail "Docker daemon is not running. Start Docker Desktop or the Docker service and try again."
 
-# A real provider key is mandatory for the default starter. Read from /dev/tty
-# because stdin contains this script when invoked through `curl | bash`.
+# The provider key is optional. Headless installs may set ABADA_AGENT_LLM_API_KEY;
+# everyone else can add the key after startup in Studio → Settings, which stores
+# it AES-encrypted in the database — the recommended path. Installation must
+# never block on it.
 GEMINI_KEY="${ABADA_AGENT_LLM_API_KEY:-}"
-if [[ -z "$GEMINI_KEY" ]]; then
-  if [[ -r /dev/tty && -w /dev/tty ]]; then
-    printf 'Gemini API key (input hidden): ' >/dev/tty
-    IFS= read -r -s GEMINI_KEY </dev/tty
-    printf '\n' >/dev/tty
-  else
-    fail "A Gemini API key is required. Set ABADA_AGENT_LLM_API_KEY for non-interactive installation."
-  fi
+if [[ -n "$GEMINI_KEY" ]]; then
+  # Trim whitespace, quotes and carriage returns that terminals and editors
+  # commonly introduce when pasting keys.
+  GEMINI_KEY="$(printf '%s' "$GEMINI_KEY" | tr -d '[:space:]"'"'")"
+  [[ "$GEMINI_KEY" =~ ^[A-Za-z0-9_-]{20,}$ ]] || fail "The Gemini API key has an invalid format. Expected 20+ characters of letters, digits, underscore or dash (got ${#GEMINI_KEY} characters after cleanup)."
 fi
-# Trim whitespace, quotes and carriage returns that terminals and editors
-# commonly introduce when pasting keys.
-GEMINI_KEY="$(printf '%s' "$GEMINI_KEY" | tr -d '[:space:]"'"'")"
-[[ "$GEMINI_KEY" =~ ^[A-Za-z0-9_-]{20,}$ ]] || fail "The Gemini API key has an invalid format. Expected 20+ characters of letters, digits, underscore or dash (got ${#GEMINI_KEY} characters after cleanup)."
 
 # Resolve the public pointer only when the caller did not request an exact
 # immutable version. The release workflow updates this object after the bundle,
@@ -71,21 +66,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Keep the credential out of process arguments and diagnostics while proving
-# that the selected model is reachable before any containers are started.
-GEMINI_CONFIG="${DOWNLOAD_DIR}/gemini.curl.conf"
-GEMINI_RESPONSE="${DOWNLOAD_DIR}/gemini-response.json"
-umask 077
-printf 'header = "Authorization: Bearer %s"\n' "$GEMINI_KEY" >"$GEMINI_CONFIG"
-printf 'header = "Content-Type: application/json"\n' >>"$GEMINI_CONFIG"
-printf 'data = "{\\"model\\":\\"gemini-3.6-flash\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"Reply with exactly READY\\"}],\\"temperature\\":0,\\"max_tokens\\":64}"\n' >>"$GEMINI_CONFIG"
-info "Validating Gemini 3.6 Flash access ..."
-GEMINI_HTTP_STATUS="$(curl --silent --show-error --config "$GEMINI_CONFIG" \
-  --request POST 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' \
-  --output "$GEMINI_RESPONSE" --write-out '%{http_code}')" || fail "Could not reach the Gemini API."
-[[ "$GEMINI_HTTP_STATUS" == 2* ]] || fail "Gemini rejected the supplied credential (HTTP ${GEMINI_HTTP_STATUS})."
-grep -q '"content"' "$GEMINI_RESPONSE" || fail "Gemini returned no assistant response for gemini-3.6-flash."
-ok "Gemini 3.6 Flash is ready."
+# If a key was provided, prove it works before starting containers so a typo
+# fails fast instead of surfacing later as failed agent/insight calls.
+if [[ -n "$GEMINI_KEY" ]]; then
+  # Keep the credential out of process arguments and diagnostics.
+  GEMINI_CONFIG="${DOWNLOAD_DIR}/gemini.curl.conf"
+  GEMINI_RESPONSE="${DOWNLOAD_DIR}/gemini-response.json"
+  umask 077
+  printf 'header = "Authorization: Bearer %s"\n' "$GEMINI_KEY" >"$GEMINI_CONFIG"
+  printf 'header = "Content-Type: application/json"\n' >>"$GEMINI_CONFIG"
+  printf 'data = "{\\"model\\":\\"gemini-3.6-flash\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"Reply with exactly READY\\"}],\\"temperature\\":0,\\"max_tokens\\":64}"\n' >>"$GEMINI_CONFIG"
+  info "Validating Gemini 3.6 Flash access ..."
+  GEMINI_HTTP_STATUS="$(curl --silent --show-error --config "$GEMINI_CONFIG" \
+    --request POST 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' \
+    --output "$GEMINI_RESPONSE" --write-out '%{http_code}')" || fail "Could not reach the Gemini API."
+  [[ "$GEMINI_HTTP_STATUS" == 2* ]] || fail "Gemini rejected the supplied credential (HTTP ${GEMINI_HTTP_STATUS})."
+  grep -q '"content"' "$GEMINI_RESPONSE" || fail "Gemini returned no assistant response for gemini-3.6-flash."
+  ok "Gemini 3.6 Flash is ready."
+else
+  info "No API key provided — add one later in Studio → Settings (stored encrypted in the database)."
+fi
 
 # --- download ----------------------------------------------------------------
 
@@ -145,15 +145,18 @@ set_env_value() {
   fi
   mv "$temporary" "$ENV_FILE"
 }
-set_env_value ABADA_AGENT_LLM_API_KEY "$GEMINI_KEY"
-set_env_value ABADA_AGENT_OPENAI_API_KEY "$GEMINI_KEY"
-set_env_value ABADA_LLM_API_KEY "$GEMINI_KEY"
+if [[ -n "$GEMINI_KEY" ]]; then
+  set_env_value ABADA_AGENT_LLM_API_KEY "$GEMINI_KEY"
+  set_env_value ABADA_AGENT_OPENAI_API_KEY "$GEMINI_KEY"
+  set_env_value ABADA_LLM_API_KEY "$GEMINI_KEY"
+fi
 set_env_value ABADA_LLM_BASE_URL "https://generativelanguage.googleapis.com/v1beta/openai"
 set_env_value ABADA_LLM_MODEL "gemini-3.6-flash"
 set_env_value ABADA_INSIGHT_ENABLED "true"
 set_env_value ABADA_INSIGHT_LLM_TIMEOUT_MS "90000"
 set_env_value ABADA_STARTER_WORKFLOW_ENABLED "true"
 chmod 600 "$ENV_FILE"
+[[ -n "$GEMINI_KEY" ]] && GEMINI_KEY_SET=1
 unset GEMINI_KEY
 
 # --- start -------------------------------------------------------------------
@@ -169,5 +172,10 @@ echo "  Keycloak: http://keycloak.localhost"
 echo ""
 echo "  Initialize: alice / alice"
 echo "  HIGH review: bob / bob"
+echo ""
+if [[ "${GEMINI_KEY_SET:-}" != "1" ]]; then
+  echo "  Gemini key: not set — add it in Studio → Settings (stored encrypted)."
+  echo "              Or re-run with ABADA_AGENT_LLM_API_KEY=<key> to bake it in."
+fi
 echo ""
 echo "  Manage: ${INSTALL_DIR}/release/abada-platform {status|logs|down} dev"
