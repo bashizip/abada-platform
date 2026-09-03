@@ -24,7 +24,7 @@
   },
   "overrides": {
     "dompurify": "3.4.13",
-    "fast-uri": "3.1.5",
+    "fast-uri": "3.1.6",
     "js-yaml": "4.3.1",
     "nanoid": "3.3.18",
     "postcss": "8.5.23"
