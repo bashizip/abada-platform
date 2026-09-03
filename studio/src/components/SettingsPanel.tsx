@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { X, Settings, Server, Key, Cpu, Globe, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Plug, Loader2 } from 'lucide-react';
 import { InsightAPI, InsightLlmConfig, InsightApprovalPolicy, AiProviderSettings, SaveAiProviderRequest, LlmConnectionTestResult } from '@/api/insight';
+import { setCachedModel } from '@/lib/agentModels';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -80,6 +81,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
       }
       const result = await InsightAPI.saveAiSettings(request);
       setAiSettings(result);
+      setCachedModel(model);
       setApiKey('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save AI settings');

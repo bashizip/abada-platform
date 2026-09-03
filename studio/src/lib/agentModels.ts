@@ -1,18 +1,49 @@
 /**
- * Agent node LLM models. `DEFAULT_AGENT_MODEL` mirrors the platform default the
- * engine/worker fall back to (gemini-3.6-flash), and `AGENT_MODEL_OPTIONS` feeds
- * the node settings panel's model selector. The panel always appends the node's
- * current APL model to the options when it is not in the curated list, so the
- * dropdown and the APL YAML stay in sync for any provider/model id.
+ * Agent node LLM models. The default model is dynamically loaded from
+ * the AI provider settings saved in the Settings panel (database-backed).
+ * Falls back to gemini-3.6-flash if no settings are saved yet.
  *
- * `ALLOWED_AGENT_MODELS` is the deployment gate: the engine rejects APL whose
- * agent nodes declare a model outside this list, and the studio blocks both
- * Dry Run and Deploy & Start with the same message.
+ * `AGENT_MODEL_OPTIONS` feeds the node settings panel's model selector.
+ * `ALLOWED_AGENT_MODELS` is the deployment gate: the engine rejects APL
+ * whose agent nodes declare a model outside this list.
  */
-export const DEFAULT_AGENT_MODEL = 'gemini-3.6-flash';
+import { InsightAPI } from '@/api/insight';
+
+const FALLBACK_DEFAULT_MODEL = 'gemini-3.6-flash';
+
+/** Cached model from the saved AI provider settings. */
+let cachedModel: string | null = null;
+
+/** Synchronous default — returns cached value or fallback. */
+export function getDefaultAgentModel(): string {
+  return cachedModel ?? FALLBACK_DEFAULT_MODEL;
+}
+
+/** Load the saved model from the API. Call once at app startup. */
+export async function initAgentModel(): Promise<string> {
+  try {
+    const settings = await InsightAPI.getAiSettings();
+    if (settings.model && settings.model.trim()) {
+      cachedModel = settings.model.trim();
+    }
+  } catch {
+    // API unavailable — keep fallback
+  }
+  return getDefaultAgentModel();
+}
+
+/**
+ * Update the cached model after the user saves settings in the panel.
+ * Avoids a round-trip on the next node creation.
+ */
+export function setCachedModel(model: string): void {
+  if (model && model.trim()) {
+    cachedModel = model.trim();
+  }
+}
 
 export const AGENT_MODEL_OPTIONS: string[] = [
-  DEFAULT_AGENT_MODEL,
+  'gemini-3.6-flash',
   'gemini-3.7-flash',
   'gemini-3.8-flash',
   'deepseek/deepseek-v4-flash-free',
@@ -36,7 +67,8 @@ export const invalidAgentModels = (nodes: { id: string; title: string; type: str
 export const agentModelGuardMessage = (issues: InvalidAgentModel[]): string =>
   issues
     .map((issue) =>
-      `Agent node "${issue.nodeTitle}" declares model "${issue.model}" which is not on the allowed model list (${ALLOWED_AGENT_MODELS.join(', ')}).`)
+      `Agent node "${issue.nodeTitle}" declares model "${issue.model}" which is not on the allowed model list (${ALLOWED_AGENT_MODELS.join(', ')}).`
+    )
     .join(' ');
 
 /** Returns true if the workflow contains at least one agent node. */

@@ -1,6 +1,6 @@
 import React from 'react';
 import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig } from '@/types';
-import { AGENT_MODEL_OPTIONS, DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
+import { AGENT_MODEL_OPTIONS, getDefaultAgentModel } from '@/lib/agentModels';
 import { 
   Bot, 
   UserCheck, 
@@ -98,7 +98,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
           <div className="flex justify-between text-[#A89F91]">
             <span>Model Engine</span>
-            <span className="text-[#9D4EDD] font-mono">{DEFAULT_AGENT_MODEL}</span>
+            <span className="text-[#9D4EDD] font-mono">{getDefaultAgentModel()}</span>
           </div>
           <div className="flex justify-between text-[#A89F91]">
             <span>Default Fallback</span>
@@ -158,7 +158,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   // the dropdown can never render an empty/ghost selection.
   const agentConfig = selectedNode.agentConfig;
   const humanConfig = selectedNode.humanConfig;
-  const currentModel = agentConfig?.model || DEFAULT_AGENT_MODEL;
+  const currentModel = agentConfig?.model || getDefaultAgentModel();
   const modelOptions = AGENT_MODEL_OPTIONS.includes(currentModel)
     ? AGENT_MODEL_OPTIONS
     : [currentModel, ...AGENT_MODEL_OPTIONS];
@@ -332,7 +332,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               >
                 {modelOptions.map((model) => (
                   <option key={model} value={model}>
-                    {model}{model === DEFAULT_AGENT_MODEL ? ' (Default)' : ''}
+                    {model}{model === getDefaultAgentModel() ? ' (Default)' : ''}
                   </option>
                 ))}
               </select>
