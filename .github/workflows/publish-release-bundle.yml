@@ -153,8 +153,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [[ -z "$GEMINI_API_KEY" ]]; then
-            echo "GEMINI_API_KEY secret not configured — skipping installer E2E"
+          if [[ "${#GEMINI_API_KEY}" -lt 10 ]]; then
+            echo "GEMINI_API_KEY not configured or too short — skipping installer E2E"
             exit 0
           fi
           install_dir="$RUNNER_TEMP/abada-platform-$VERSION"
