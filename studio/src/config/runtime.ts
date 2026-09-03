@@ -12,7 +12,7 @@ declare global {
   }
 }
 
-const supplied = window.__ABADA_STUDIO_CONFIG__ ?? {};
+const supplied = typeof window !== 'undefined' ? (window.__ABADA_STUDIO_CONFIG__ ?? {}) : {};
 
 const booleanValue = (value: unknown, fallback: boolean): boolean => {
   if (typeof value === 'boolean') return value;
