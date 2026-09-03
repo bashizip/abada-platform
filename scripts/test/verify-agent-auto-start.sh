@@ -96,9 +96,9 @@ fi
 
 : >"$DOCKER_LOG"
 ABADA_TEST_DOCKER_LOG="$DOCKER_LOG" ABADA_ENV_FILE="$ENV_FILE" PATH="$FAKE_BIN:$PATH" \
-  "$ROOT_DIR/scripts/dev/up.sh" >"$TMP_DIR/source-up.out"
+  "$ROOT_DIR/scripts/dev/up.sh" --no-build >"$TMP_DIR/source-up.out"
 
 grep -q 'Agent worker is ready' "$TMP_DIR/source-up.out"
-grep -Eq -- '--profile agent up -d --build --wait abada-agent-worker$' "$DOCKER_LOG"
+grep -Eq -- '--profile agent up -d --wait abada-agent-worker$' "$DOCKER_LOG"
 
 echo "Automatic dev agent startup contract passed"
