@@ -1,7 +1,7 @@
 import { XMLBuilder } from 'fast-xml-parser';
 import { APLDocument, APLDecisionTableNode, APLScriptNode, APLValue } from '../apl/types';
 import { normalizeTableInputs, resolveRuleOutcome } from '../apl/parser';
-import { DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
+import { getDefaultAgentModel } from '@/lib/agentModels';
 
 /** Renders a typed output value as the string the engine coerces back. */
 const renderValue = (value: APLValue): string => {
@@ -64,7 +64,7 @@ export function compileAPLToBPMN(apl: APLDocument): string {
             'bpmn:extensionElements': {
               'camunda:properties': {
                 'camunda:property': [
-                  { '@_name': 'model', '@_value': node.model || DEFAULT_AGENT_MODEL },
+                  { '@_name': 'model', '@_value': node.model || getDefaultAgentModel() },
                   { '@_name': 'prompt', '@_value': node.prompt || '' },
                   { '@_name': 'confidence_threshold', '@_value': (node.confidence_threshold || 85).toString() }
                 ]

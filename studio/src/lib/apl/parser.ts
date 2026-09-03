@@ -11,7 +11,7 @@ import {
   APLValue,
 } from './types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, DMNConfig } from '@/types';
-import { DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
+import { getDefaultAgentModel } from '@/lib/agentModels';
 
 /**
  * Parses an APL YAML string into an APLDocument object.
@@ -211,7 +211,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.type = 'agent';
         wNode.agentConfig = {
           profileVersion: aplNode.profile || 'abada.agent/v1',
-          model: aplNode.model || DEFAULT_AGENT_MODEL,
+          model: aplNode.model || getDefaultAgentModel(),
           systemPrompt: aplNode.prompt || '',
           confidenceThreshold: aplNode.confidence_threshold || 85,
           temperature: aplNode.temperature ?? 0.2,

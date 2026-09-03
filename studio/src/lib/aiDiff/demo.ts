@@ -1,6 +1,6 @@
 import { WorkflowFile, WorkflowEdge } from '@/types';
 import { WorkflowDiffSnapshot, DiffProposal, DiffNodeChange, DiffEdgeChange } from './types';
-import { DEFAULT_AGENT_MODEL } from '@/lib/agentModels';
+import { getDefaultAgentModel } from '@/lib/agentModels';
 
 /**
  * Builds a demo Insight-Engine proposal over a workflow snapshot, the same
@@ -64,7 +64,7 @@ export const buildDemoProposal = (wf: WorkflowFile): WorkflowDiffSnapshot => {
       x: startNode.x + 260,
       y: startNode.y + 40,
       agentConfig: {
-        model: DEFAULT_AGENT_MODEL,
+        model: getDefaultAgentModel(),
         systemPrompt:
           'Normalize the incoming payload into a clean JSON document with the ' +
           '{ income: number, creditScore: number, requestedAmount: number } shape.',
