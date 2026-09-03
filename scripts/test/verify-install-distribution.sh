@@ -69,7 +69,7 @@ exec "${ABADA_TEST_REAL_CURL:?}" "$@"
 FIXTURE
 chmod +x "$FAKE_BIN/curl"
 
-cmp "$ROOT_DIR/install/install.sh" "$ROOT_DIR/install/public/install.sh"
+cmp "$ROOT_DIR/install/install.sh" "$ROOT_DIR/install/public/install.sh" || { echo "install scripts differ" >&2; exit 1; }
 
 INSTALL_DIR="$TMP_DIR/default-install"
 PATH="$FAKE_BIN:$PATH" \
@@ -80,17 +80,17 @@ ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR/" \
 ABADA_INSTALL_DIR="$INSTALL_DIR" \
   bash "$ROOT_DIR/install/install.sh" >"$INSTALL_OUTPUT" 2>&1
 
-[[ "$(cat "$MARKER")" == "up dev" ]]
-[[ -x "$INSTALL_DIR/release/abada-platform" ]]
-[[ ! -e "$INSTALL_DIR/$ARCHIVE" ]]
-[[ "$(awk -F= '$1 == "ABADA_INSIGHT_ENABLED" { print $2 }' "$INSTALL_DIR/.env.dev")" == "true" ]]
-[[ "$(awk -F= '$1 == "ABADA_INSIGHT_LLM_TIMEOUT_MS" { print $2 }' "$INSTALL_DIR/.env.dev")" == "90000" ]]
-grep -Fq 'Initialize: alice / alice' "$INSTALL_OUTPUT"
-grep -Fq 'HIGH review: bob / bob' "$INSTALL_OUTPUT"
-[[ "$(awk -F= '$1 == "ABADA_AGENT_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]]
-[[ "$(awk -F= '$1 == "ABADA_AGENT_OPENAI_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]]
-[[ "$(awk -F= '$1 == "ABADA_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]]
-[[ "$(stat -f '%Lp' "$INSTALL_DIR/.env.dev" 2>/dev/null || stat -c '%a' "$INSTALL_DIR/.env.dev")" == "600" ]]
+[[ "$(cat "$MARKER")" == "up dev" ]] || { echo "marker mismatch: $(cat "$MARKER" 2>/dev/null || echo '<missing>')" >&2; exit 1; }
+[[ -x "$INSTALL_DIR/release/abada-platform" ]] || { echo "abada-platform not executable" >&2; exit 1; } || { echo "abada-platform not executable" >&2; exit 1; }
+[[ ! -e "$INSTALL_DIR/$ARCHIVE" ]] || { echo "archive not cleaned up" >&2; exit 1; } || { echo "archive not cleaned up" >&2; exit 1; }
+[[ "$(awk -F= '$1 == "ABADA_INSIGHT_ENABLED" { print $2 }' "$INSTALL_DIR/.env.dev")" == "true" ]] || { echo "ABADA_INSIGHT_ENABLED not set to true" >&2; exit 1; } || { echo "ABADA_INSIGHT_ENABLED not set to true" >&2; exit 1; }
+[[ "$(awk -F= '$1 == "ABADA_INSIGHT_LLM_TIMEOUT_MS" { print $2 }' "$INSTALL_DIR/.env.dev")" == "90000" ]] || { echo "ABADA_INSIGHT_LLM_TIMEOUT_MS mismatch" >&2; exit 1; } || { echo "ABADA_INSIGHT_LLM_TIMEOUT_MS mismatch" >&2; exit 1; }
+grep -Fq 'Initialize: alice / alice' "$INSTALL_OUTPUT" || { echo "missing Initialize line in install output" >&2; cat "$INSTALL_OUTPUT" >&2; exit 1; }
+grep -Fq 'HIGH review: bob / bob' "$INSTALL_OUTPUT" || { echo "missing HIGH review line in install output" >&2; cat "$INSTALL_OUTPUT" >&2; exit 1; }
+[[ "$(awk -F= '$1 == "ABADA_AGENT_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_AGENT_LLM_API_KEY mismatch" >&2; exit 1; } || { echo "ABADA_AGENT_LLM_API_KEY mismatch" >&2; exit 1; }
+[[ "$(awk -F= '$1 == "ABADA_AGENT_OPENAI_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_AGENT_OPENAI_API_KEY mismatch" >&2; exit 1; } || { echo "ABADA_AGENT_OPENAI_API_KEY mismatch" >&2; exit 1; }
+[[ "$(awk -F= '$1 == "ABADA_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_LLM_API_KEY mismatch" >&2; exit 1; } || { echo "ABADA_LLM_API_KEY mismatch" >&2; exit 1; }
+[[ "$(stat -f '%Lp' "$INSTALL_DIR/.env.dev" 2>/dev/null || stat -c '%a' "$INSTALL_DIR/.env.dev")" == "600" ]] || { echo "env.dev permissions not 600" >&2; exit 1; } || { echo "env.dev permissions not 600" >&2; exit 1; }
 if grep -Fq 'test_gemini_key_1234567890' "$INSTALL_OUTPUT"; then
   echo "Installer exposed the Gemini credential in its output" >&2
   exit 1
@@ -123,7 +123,7 @@ ABADA_VERSION="$VERSION" \
 ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
 ABADA_INSTALL_DIR="$EXPLICIT_INSTALL_DIR" \
   bash "$ROOT_DIR/install/install.sh" >/dev/null
-[[ "$(cat "$MARKER")" == "up dev" ]]
+[[ "$(cat "$MARKER")" == "up dev" ]] || { echo "marker mismatch: $(cat "$MARKER" 2>/dev/null || echo '<missing>')" >&2; exit 1; }
 
 # The standalone quickstart shares the same public distribution and checksum
 # contract.
@@ -135,7 +135,7 @@ ABADA_VERSION="$VERSION" \
 ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
 ABADA_INSTALL_DIR="$QUICKSTART_INSTALL_DIR" \
   bash "$ROOT_DIR/release/quickstart.sh" >/dev/null
-[[ "$(cat "$MARKER")" == "up dev" ]]
+[[ "$(cat "$MARKER")" == "up dev" ]] || { echo "marker mismatch: $(cat "$MARKER" 2>/dev/null || echo '<missing>')" >&2; exit 1; }
 
 # Corrupted downloads must never be extracted or started.
 printf '%s\n' 'corrupt' >>"$PUBLIC_DIR/$ARCHIVE"
@@ -151,7 +151,7 @@ if PATH="$FAKE_BIN:$PATH" \
   echo "Installer accepted a bundle whose checksum did not match" >&2
   exit 1
 fi
-[[ ! -e "$MARKER" ]]
+[[ ! -e "$MARKER" ]] || { echo "marker should not exist after corrupt install" >&2; exit 1; }
 
 grep -A2 '^/install\.sh$' "$ROOT_DIR/install/public/_headers" | \
   grep -q 'Cache-Control: public, max-age=300'
