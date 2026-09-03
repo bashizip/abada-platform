@@ -46,7 +46,10 @@ if [[ -z "$GEMINI_KEY" ]]; then
     fail "A Gemini API key is required. Set ABADA_AGENT_LLM_API_KEY for non-interactive installation."
   fi
 fi
-[[ "$GEMINI_KEY" =~ ^[A-Za-z0-9_-]{20,}$ ]] || fail "The Gemini API key has an invalid format."
+# Trim whitespace, quotes and carriage returns that terminals and editors
+# commonly introduce when pasting keys.
+GEMINI_KEY="$(printf '%s' "$GEMINI_KEY" | tr -d '[:space:]"'"'")"
+[[ "$GEMINI_KEY" =~ ^[A-Za-z0-9_-]{20,}$ ]] || fail "The Gemini API key has an invalid format. Expected 20+ characters of letters, digits, underscore or dash (got ${#GEMINI_KEY} characters after cleanup)."
 
 # Resolve the public pointer only when the caller did not request an exact
 # immutable version. The release workflow updates this object after the bundle,
