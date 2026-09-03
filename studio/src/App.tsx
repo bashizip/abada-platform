@@ -631,6 +631,8 @@ export default function App() {
                     onAddNode={handleAddNode}
                     onOpenAplEditor={() => setDesignerMode('apl')}
                     onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
+                    onToast={(msg) => showToast('success', msg)}
+                    processKey={currentWorkflow.processKey}
                     isSimulating={isSimulating}
                     activeSimulationNodeId={activeSimulationNodeId}
                     executionStatuses={executionStatuses}

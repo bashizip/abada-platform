@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -11,11 +11,12 @@ import {
   BackgroundVariant,
   Panel
 } from '@xyflow/react';
-import { Bot, Code2, CirclePlay, Trash2, Workflow } from 'lucide-react';
+import { Bot, Code2, CirclePlay, Trash2, Workflow, Lock, Unlock } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import { AbadaNode } from './NodeRenderer';
 import { AbadaEdge } from './EdgeRenderer';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
+import { savePreferredLayout, hasSavedLayout } from '@/lib/run/layoutPrefs';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
 import { WorkflowNode, WorkflowEdge, EventSubtype, GatewaySubtype } from '@/types';
 
@@ -31,6 +32,8 @@ interface CanvasProps {
   onAddNode: (type: WorkflowNode['type'], subtype?: EventSubtype | GatewaySubtype) => void;
   onOpenAplEditor: () => void;
   onFocusPrompt: () => void;
+  onToast?: (message: string) => void;
+  processKey?: string;
   isSimulating: boolean;
   activeSimulationNodeId: string | null;
   executionStatuses?: Record<string, NodeRunStatus>;
@@ -62,6 +65,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onAddNode,
   onOpenAplEditor,
   onFocusPrompt,
+  onToast,
+  processKey,
   isSimulating,
   activeSimulationNodeId,
   executionStatuses = {},
@@ -183,22 +188,18 @@ export const Canvas: React.FC<CanvasProps> = ({
         elementsSelectable={!readOnly}
         proOptions={{ hideAttribution: true }}
       >
-        {!readOnly && selectedNodeId && (
-          <Panel position="top-right">
-            <button
-              type="button"
-              onClick={() => onDeleteNode(selectedNodeId)}
-              className="flex items-center gap-2 rounded-lg border border-[#E76F51]/50 bg-[#251B18]/95 px-3 py-2 text-[11px] font-semibold text-[#E76F51] shadow-warm-md transition-colors hover:border-[#E76F51] hover:bg-[#E76F51]/15 focus:outline-none focus:ring-2 focus:ring-[#E76F51]"
-              title="Delete selected node and its connected flows"
-              aria-label="Delete selected node"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete node
-            </button>
-          </Panel>
-        )}
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />
-        {!readOnly && <AutoLayoutControl nodes={rawNodes} edges={rawEdges} onAutoLayout={onAutoLayout} />}
+        {!readOnly && (
+          <CanvasControls
+            nodes={rawNodes}
+            edges={rawEdges}
+            selectedNodeId={selectedNodeId}
+            processKey={processKey}
+            onAutoLayout={onAutoLayout}
+            onDeleteNode={onDeleteNode}
+            onToast={onToast}
+          />
+        )}
       </ReactFlow>
 
       {rawNodes.length === 0 && !readOnly && (
@@ -237,22 +238,37 @@ export const Canvas: React.FC<CanvasProps> = ({
 };
 
 /**
- * Rendered inside <ReactFlow> so useReactFlow can read the store: lays the
- * whole graph out deterministically (ranked left→right) and re-fits the
- * viewport so the readable diagram is immediately visible.
+ * Rendered inside <ReactFlow> so useReactFlow can read the store.
+ * Contains the auto-layout, lock-layout, and delete-node controls.
  */
-const AutoLayoutControl: React.FC<{
+const CanvasControls: React.FC<{
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  selectedNodeId: string | null;
+  processKey?: string;
   onAutoLayout?: (nodes: WorkflowNode[]) => void;
-}> = ({ nodes, edges, onAutoLayout }) => {
+  onDeleteNode: (id: string) => void;
+  onToast?: (message: string) => void;
+}> = ({ nodes, edges, selectedNodeId, processKey, onAutoLayout, onDeleteNode, onToast }) => {
   const { fitView } = useReactFlow();
+  const [locked, setLocked] = useState(() => (processKey ? hasSavedLayout(processKey) : false));
 
   const handleAutoLayout = useCallback(() => {
     if (!onAutoLayout) return;
     onAutoLayout(autoLayoutWorkflow(nodes, edges));
     requestAnimationFrame(() => fitView({ padding: 0.2, duration: 400 }));
   }, [nodes, edges, onAutoLayout, fitView]);
+
+  const handleLockLayout = useCallback(() => {
+    if (!processKey) return;
+    savePreferredLayout(processKey, nodes);
+    setLocked(true);
+    onToast?.('Layout locked — running instances will use this layout');
+  }, [processKey, nodes, onToast]);
+
+  const handleDelete = useCallback(() => {
+    if (selectedNodeId) onDeleteNode(selectedNodeId);
+  }, [selectedNodeId, onDeleteNode]);
 
   return (
     <Controls showInteractive={false}>
@@ -263,6 +279,26 @@ const AutoLayoutControl: React.FC<{
       >
         <Workflow className="w-4 h-4" />
       </ControlButton>
+      {processKey && (
+        <ControlButton
+          onClick={handleLockLayout}
+          title={locked
+            ? 'Layout locked — click to update the saved layout'
+            : 'Lock Layout — save current positions for running instances'}
+          aria-label="Lock Layout"
+        >
+          {locked ? <Lock className="w-4 h-4 text-[#2A9D8F]" /> : <Unlock className="w-4 h-4" />}
+        </ControlButton>
+      )}
+      {selectedNodeId && (
+        <ControlButton
+          onClick={handleDelete}
+          title="Delete selected node"
+          aria-label="Delete selected node"
+        >
+          <Trash2 className="w-4 h-4 text-[#E76F51]" />
+        </ControlButton>
+      )}
     </Controls>
   );
 };

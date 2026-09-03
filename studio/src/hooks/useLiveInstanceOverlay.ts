@@ -5,6 +5,7 @@ import { WorkflowFile, SimulationLog } from '@/types';
 import { deriveLiveExecutionOverlay, NodeRunStatus } from '@/lib/run/liveRun';
 import { deriveInstancePath } from '@/lib/run/instanceDetail';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
+import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { readInspectorPanelPinned, readInspectorPanelWidth, useInspectorPanelPrefs } from '@/lib/run/panelPrefs';
 
 /**
@@ -101,6 +102,12 @@ export function useLiveInstanceOverlay(
         instanceWorkflow = { ...parsed, id: `instance-${instance.id}`, version: String(definition.version) };
       }
       if (!instanceWorkflow) throw new Error('The immutable definition for this instance is unavailable');
+      // Apply the user's preferred layout if one has been saved for this process
+      const layoutKey = instance.processDefinitionId;
+      instanceWorkflow = {
+        ...instanceWorkflow,
+        nodes: applyPreferredLayout(layoutKey, instanceWorkflow.nodes),
+      };
       setLiveWorkflow(instanceWorkflow);
 
       const [fresh, activities, history] = await Promise.all([

@@ -28,6 +28,7 @@ import {
   ProjectJob,
 } from '@/api/engine';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
+import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
 import {
@@ -109,7 +110,9 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         const def = await EngineAPI.getDefinitionForInstance(inst, projectId);
         setDefinition(def);
         if (def?.schemaType === 'APL_NATIVE' && def.bpmnXml) {
-          setWorkflow(aplToWorkflow(parseAPLYaml(def.bpmnXml)));
+          let wf = aplToWorkflow(parseAPLYaml(def.bpmnXml));
+          wf = { ...wf, nodes: applyPreferredLayout(inst.processDefinitionId, wf.nodes) };
+          setWorkflow(wf);
           setSelectedNodeId((current) => current ?? inst.currentActivityId ?? null);
         }
       }
