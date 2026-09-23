@@ -717,32 +717,44 @@ public final class AplParser {
         return candidate;
     }
 
-    /** Native APL definitions are strictly acyclic: the engine never loops. */
+    /**
+     * Native APL definitions are strictly acyclic: the engine never loops.
+     *
+     * <p>Iterative three-colour depth-first search (unvisited, on the current
+     * path, finished). A finished node is never re-entered, so validation is
+     * O(V+E) even for graphs with many converging branches.
+     */
     private static void rejectCycles(String entry, List<SequenceFlow> flows) {
         Map<String, List<String>> adjacency = new LinkedHashMap<>();
         for (SequenceFlow flow : flows) {
             adjacency.computeIfAbsent(flow.getSourceRef(), key -> new ArrayList<>()).add(flow.getTargetRef());
         }
         Set<String> onPath = new HashSet<>();
-        Deque<Object[]> work = new ArrayDeque<>();
-        work.push(new Object[]{entry, null, null});
-        while (!work.isEmpty()) {
-            Object[] frame = work.peek();
-            String nodeId = (String) frame[0];
-            if (frame[2] == null) {
-                if (!onPath.add(nodeId)) {
-                    throw validation("cyclic flow detected at node '" + nodeId + "'");
+        Set<String> finished = new HashSet<>();
+        Deque<String> nodes = new ArrayDeque<>();
+        Deque<Integer> nextChild = new ArrayDeque<>();
+        nodes.push(entry);
+        nextChild.push(0);
+        onPath.add(entry);
+        while (!nodes.isEmpty()) {
+            String nodeId = nodes.peek();
+            int childIndex = nextChild.pop();
+            List<String> children = adjacency.getOrDefault(nodeId, List.of());
+            if (childIndex < children.size()) {
+                nextChild.push(childIndex + 1);
+                String child = children.get(childIndex);
+                if (onPath.contains(child)) {
+                    throw validation("cyclic flow detected at node '" + child + "'");
                 }
-                frame[2] = Boolean.TRUE;
-                List<String> next = adjacency.get(nodeId);
-                if (next != null) {
-                    for (int index = next.size() - 1; index >= 0; index--) {
-                        work.push(new Object[]{next.get(index), nodeId, null});
-                    }
+                if (!finished.contains(child)) {
+                    nodes.push(child);
+                    nextChild.push(0);
+                    onPath.add(child);
                 }
             } else {
+                nodes.pop();
                 onPath.remove(nodeId);
-                work.pop();
+                finished.add(nodeId);
             }
         }
     }

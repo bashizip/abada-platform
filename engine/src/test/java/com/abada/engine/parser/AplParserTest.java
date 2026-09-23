@@ -551,6 +551,55 @@ class AplParserTest {
     }
 
     @Test
+    void validatesManyConvergingBranchesInLinearTime() {
+        int diamonds = 40;
+        StringBuilder source = new StringBuilder("version: abada.io/v1\n"
+                + "metadata:\n  name: Many Diamonds\n"
+                + "flow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: cond0\n");
+        for (int i = 0; i < diamonds; i++) {
+            String next = i + 1 < diamonds ? "cond" + (i + 1) : "end";
+            source.append("    - id: cond").append(i).append("\n      type: condition\n      rules:\n")
+                    .append("        - if: \"${flag == true}\"\n          then: left").append(i).append("\n")
+                    .append("        - else: right").append(i).append("\n          then: right").append(i).append("\n")
+                    .append("    - id: left").append(i).append("\n      type: engine-task\n      service: left\n")
+                    .append("      next: ").append(next).append("\n")
+                    .append("    - id: right").append(i).append("\n      type: engine-task\n      service: right\n")
+                    .append("      next: ").append(next).append("\n");
+        }
+        source.append("    - id: end\n      type: end\n");
+        byte[] bytes = source.toString().getBytes(StandardCharsets.UTF_8);
+
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(2),
+                () -> parser.parseDetailed(bytes));
+    }
+
+    @Test
+    void rejectsCycleBehindConvergingBranches() {
+        String source = "version: abada.io/v1\n"
+                + "metadata:\n  name: Late Cycle\n"
+                + "flow:\n"
+                + "  entry: start\n"
+                + "  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: route\n"
+                + "    - id: route\n      type: condition\n"
+                + "      rules:\n"
+                + "        - if: \"${flag == true}\"\n          then: left\n"
+                + "        - else: right\n          then: right\n"
+                + "    - id: left\n      type: engine-task\n      service: left\n      next: merge\n"
+                + "    - id: right\n      type: engine-task\n      service: right\n      next: merge\n"
+                + "    - id: merge\n      type: engine-task\n      service: merge\n      next: back\n"
+                + "    - id: back\n      type: condition\n"
+                + "      rules:\n"
+                + "        - if: \"${again == true}\"\n          then: route\n"
+                + "        - else: end\n          then: end\n"
+                + "    - id: end\n      type: end\n";
+        assertThatThrownBy(() -> parser.parseDetailed(source.getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("cyclic flow");
+    }
+
+    @Test
     void rejectsDuplicateElseRules() {
         assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
                 "    - id: route\n"
