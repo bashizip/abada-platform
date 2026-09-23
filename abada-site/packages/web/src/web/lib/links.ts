@@ -1,4 +1,4 @@
-export const GITHUB_URL = "https://github.com/bashizip/abada-engine";
+export const GITHUB_URL = "https://github.com/bashizip/abada-platform";
 export const DOCS_URL = "https://docs.abadaplatform.com";
 export const DEMO_URL = "/#quickstart";
 export const EMAIL = "patrick@abadaplatform.com";

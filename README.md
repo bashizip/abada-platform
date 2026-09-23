@@ -127,8 +127,8 @@ Every component is independently deployable with Docker.
 ## Quick Start
 
 ```bash
-git clone https://github.com/bashizip/abada-engine.git
-cd abada-engine
+git clone https://github.com/bashizip/abada-platform.git
+cd abada-platform
 ./release/abada-platform doctor dev
 ./release/abada-platform up dev
 ```
