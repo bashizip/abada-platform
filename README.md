@@ -204,4 +204,14 @@ See the [BPMN support matrix](docs/reference/bpmn-support.md) for exact semantic
 
 ## License
 
-MIT License
+Copyright © 2025–2026 Patrick Bashizi.
+
+Abada is free software under the [GNU Affero General Public License v3.0 only](LICENSE)
+(`AGPL-3.0-only`). If you run a modified Abada as a network service, you must offer its
+users the corresponding source code.
+
+The Java worker SDK in [`sdk/java`](sdk/java) is licensed under the
+[Apache License 2.0](sdk/java/LICENSE), so workers built on it carry no AGPL obligations.
+
+Releases up to and including `1.0.0-rc.5` were published under the MIT License; that
+grant still applies to those versions.

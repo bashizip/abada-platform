@@ -7,6 +7,13 @@
   <artifactId>abada-agent-worker</artifactId>
   <version>1.0.0-rc.6</version>
   <name>Abada Agent Worker</name>
+  <licenses>
+    <license>
+      <name>GNU Affero General Public License v3.0 only</name>
+      <url>https://www.gnu.org/licenses/agpl-3.0.html</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
