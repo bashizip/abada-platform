@@ -102,7 +102,7 @@ class AgentWorkerRunnerTest {
         return new WorkerConfig(URI.create("http://engine.invalid"), "token", null, "", "",
                 URI.create("http://llm.invalid/v1"), "key", URI.create("http://llm.invalid/v1"), "key",
                 "test-model", "test-worker", Set.of(), Duration.ofMillis(50), LOCK, maxTasks, Set.of(), Set.of(),
-                WorkerConfig.DEFAULT_MAX_TIMEOUT);
+                WorkerConfig.DEFAULT_MAX_TIMEOUT, WorkerConfig.StructuredOutput.JSON_OBJECT);
     }
 
     private static AgentWorkDescriptor descriptor(Long timeoutMs) {

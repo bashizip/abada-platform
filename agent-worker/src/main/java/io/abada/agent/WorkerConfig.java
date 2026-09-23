@@ -25,7 +25,42 @@ public record WorkerConfig(
         int maxTasks,
         Set<String> allowedTools,
         Set<String> localAckTopics,
-        Duration maxTimeout) {
+        Duration maxTimeout,
+        StructuredOutput structuredOutput) {
+
+    /**
+     * How the worker asks OpenAI-compatible providers for structured output when a
+     * node declares {@code output_schema} ({@code ABADA_AGENT_STRUCTURED_OUTPUT}).
+     * The engine validates the result either way.
+     */
+    public enum StructuredOutput {
+        /** No {@code response_format}; rely on the prompt instruction only. */
+        OFF,
+        /** {@code {"type":"json_object"}}: widely supported JSON mode (default). */
+        JSON_OBJECT,
+        /** {@code {"type":"json_schema", ...}} with the node schema, for providers that support it. */
+        JSON_SCHEMA;
+
+        public Object responseFormat(java.util.Map<String, Object> schema) {
+            return switch (this) {
+                case OFF -> null;
+                case JSON_OBJECT -> java.util.Map.of("type", "json_object");
+                case JSON_SCHEMA -> java.util.Map.of("type", "json_schema", "json_schema",
+                        java.util.Map.of("name", "agent_output", "schema", schema));
+            };
+        }
+
+        static StructuredOutput parse(String value) {
+            if (value == null || value.isBlank()) return JSON_OBJECT;
+            return switch (value.strip().toLowerCase(java.util.Locale.ROOT)) {
+                case "off", "none", "false" -> OFF;
+                case "json_object", "json" -> JSON_OBJECT;
+                case "json_schema", "schema" -> JSON_SCHEMA;
+                default -> throw new IllegalArgumentException(
+                        "ABADA_AGENT_STRUCTURED_OUTPUT must be off, json_object or json_schema");
+            };
+        }
+    }
 
     /** Upper bound applied to any descriptor {@code timeout_ms}. */
     public static final Duration DEFAULT_MAX_TIMEOUT = Duration.ofMinutes(2);
@@ -39,7 +74,7 @@ public record WorkerConfig(
         this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
                 llmBaseUrl, llmApiKey, openAiBaseUrl, openAiApiKey,
                 defaultModel, workerId, Set.of(), pollInterval, lockDuration, maxTasks, allowedTools, Set.of(),
-                DEFAULT_MAX_TIMEOUT);
+                DEFAULT_MAX_TIMEOUT, StructuredOutput.JSON_OBJECT);
     }
 
     public static WorkerConfig fromEnvironment() {
@@ -77,7 +112,8 @@ public record WorkerConfig(
                 tools,
                 localAckTopics,
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_MAX_TIMEOUT_MS", DEFAULT_MAX_TIMEOUT.toMillis(),
-                        1_000, 3_600_000))
+                        1_000, 3_600_000)),
+                StructuredOutput.parse(env.get("ABADA_AGENT_STRUCTURED_OUTPUT"))
         );
     }
 

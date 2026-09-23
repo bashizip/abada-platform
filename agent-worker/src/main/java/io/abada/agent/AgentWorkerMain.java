@@ -237,7 +237,7 @@ public final class AgentWorkerMain {
                 engine.complete(task, Map.of(resultVariable, result.value()),
                         new AgentAttemptMetadata(model, gateway.provider(), attempt, durationMs,
                                 List.copyOf(requestedTools), resultVariable, promptHash(work.prompt()), null,
-                                result.confidence()),
+                                result.confidence(), result.promptTokens(), result.completionTokens()),
                         taskOptions(task.id(), attempt, "complete", task.traceParent()));
                 long done = completed.incrementAndGet();
                 LOG.log(System.Logger.Level.INFO,

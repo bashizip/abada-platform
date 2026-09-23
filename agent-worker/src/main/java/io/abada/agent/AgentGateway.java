@@ -10,8 +10,16 @@ public interface AgentGateway {
     /** Stable provider family reported in attempt metadata, e.g. {@code openai-compatible}. */
     String provider();
 
-    /** Decoded agent result plus the {@code _confidence} the model reported. */
-    record AgentResult(Object value, Double confidence) {}
+    /**
+     * Decoded agent result, the {@code _confidence} the model reported, and the
+     * provider's token usage when available. The engine, not the worker, decides
+     * whether the result satisfies the node's output contract.
+     */
+    record AgentResult(Object value, Double confidence, Integer promptTokens, Integer completionTokens) {
+        public AgentResult(Object value, Double confidence) {
+            this(value, confidence, null, null);
+        }
+    }
 
     /**
      * Carries the achieved {@code _confidence} across the throw boundary so a
