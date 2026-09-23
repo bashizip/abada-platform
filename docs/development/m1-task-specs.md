@@ -32,7 +32,7 @@ M1 exit demo (all on a clean `./release/abada-platform up dev`):
 
 ---
 
-## T1 — Replace Nashorn with CEL for conditions and decision tables
+## T1 — Replace Nashorn with CEL for conditions and decision tables ✅ done
 
 **Goal.** No workflow expression can reach the JVM. Conditions, decision-table
 `when` rules and decision-table input expressions are evaluated by CEL
@@ -53,7 +53,7 @@ to an operator allow-list.
   - Nashorn created via `NashornScriptEngineFactory#getScriptEngine(String[] args, ClassLoader, ClassFilter)` with args `--no-java`, `--no-syntax-extensions`, and a `ClassFilter` that denies every class.
   - Disabled unless `abada.scripts.enabled=true` (env `ABADA_SCRIPTS_ENABLED`). When disabled, deployment of a `script` node / `bpmn:scriptTask` fails with a validation error that names the flag.
 - Embedded delegates (`ProcessInstance.advance`, `Class.forName(serviceTaskMeta.className())`) — allowed only when the class is listed in `abada.delegates.allowed-classes` (comma-separated). Validate at deploy; re-check at runtime.
-- New CLI command in `ENGINE/cli/AbadaCli.java`: `migrate-expressions --dry-run <file|dir>` prints every expression that no longer compiles.
+- New CLI command in `ENGINE/cli/AbadaCli.java`: `abada expressions check <file|dir>` prints every expression that no longer compiles (implemented under this name).
 
 **Changes in behaviour.**
 - Accepted forms: comparisons, boolean logic, arithmetic, string equality with single or double quotes, `in`, `has()`, dotted field access on maps (`applicant.creditScore`), `size()`.
@@ -79,7 +79,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T2 — Loud expression failures
+## T2 — Loud expression failures ✅ done (static identifier warnings deferred to M2/E1)
 
 **Goal.** An expression that cannot be evaluated never silently becomes
 `false`.
@@ -91,7 +91,7 @@ release notes with before/after examples and the dry-run command.
 **Changes.**
 - A runtime evaluation error (missing variable, type mismatch) throws `ExpressionEvaluationException(nodeId, expression, reason)` → the command rolls back → API returns HTTP 422 with code `ABADA-RUNTIME-EXPRESSION-001`, the node id and the missing variable name. No variable values in the message.
 - `has(x.y)` remains the supported way to test for optional fields.
-- Deploy-time static check: every top-level identifier referenced by an expression must be (a) the start payload contract if declared, (b) written by an upstream node (`result_variable`, decision-table outputs, script declared outputs), or (c) listed in a new optional `metadata.variables` list. Unknown identifiers produce a **warning** in the deployment response in rc.6 (becomes an error in 1.1).
+- *Deferred to M2/E1 (typed variable schema); without declared start-payload variables the warning would fire on nearly every condition.* Deploy-time static check: every top-level identifier referenced by an expression must be (a) the start payload contract if declared, (b) written by an upstream node (`result_variable`, decision-table outputs, script declared outputs), or (c) listed in a new optional `metadata.variables` list. Unknown identifiers produce a **warning** in the deployment response in rc.6 (becomes an error in 1.1).
 - Metric `abada.expression.failures` tagged by definition key and node id.
 
 **Acceptance tests.**

@@ -7,10 +7,10 @@ unsupported flow nodes instead of silently treating them as pass-through nodes.
 |---|---|---|---|
 | None start/end events | Supported | One none start event; completion after all active tokens reach an end | [`ScriptTaskTest`](../../engine/src/test/java/com/abada/engine/core/ScriptTaskTest.java) |
 | User task | Supported | Assignee/candidate authorization, claim, complete and fail | [`TaskManagerTest`](../../engine/src/test/java/com/abada/engine/core/TaskManagerTest.java) |
-| Service task (`camunda:class`) | Supported | Synchronous Java delegate execution inside the engine transaction | [`ServiceTaskTest`](../../engine/src/test/java/com/abada/engine/core/ServiceTaskTest.java) |
+| Service task (`camunda:class`) | Supported (operator allow-list) | Synchronous Java delegate execution inside the engine transaction; the class must be listed in `ABADA_DELEGATES_ALLOWED_CLASSES` or deployment fails | [`ServiceTaskTest`](../../engine/src/test/java/com/abada/engine/core/ServiceTaskTest.java) |
 | Service task (`camunda:topic`) | Supported | Durable external task with fetch/lock, completion and failure | [`ExternalTaskTest`](../../engine/src/test/java/com/abada/engine/api/ExternalTaskTest.java) |
-| Script task | Supported | Server-side JavaScript/ECMAScript with process variables as bindings | [`ScriptTaskTest`](../../engine/src/test/java/com/abada/engine/core/ScriptTaskTest.java) |
-| Exclusive gateway | Supported | First matching conditional flow, then configured default flow | [`ProcessInstanceAdvanceTest`](../../engine/src/test/java/com/abada/engine/core/ProcessInstanceAdvanceTest.java) |
+| Script task | Supported (operator opt-in) | Sandboxed JavaScript without Java access, only when `ABADA_SCRIPTS_ENABLED=true`; variables in and out as JSON | [`ScriptTaskTest`](../../engine/src/test/java/com/abada/engine/core/ScriptTaskTest.java) |
+| Exclusive gateway | Supported | First matching conditional flow, then configured default flow; conditions are CEL and an unevaluable condition fails the command | [`ProcessInstanceAdvanceTest`](../../engine/src/test/java/com/abada/engine/core/ProcessInstanceAdvanceTest.java) |
 | Inclusive gateway | Supported | All matching flows and matching-token join behavior | [`InclusiveGatewayTest`](../../engine/src/test/java/com/abada/engine/core/InclusiveGatewayTest.java) |
 | Parallel gateway | Supported | Fork all outgoing flows and wait for all expected join tokens | [`ParallelGatewayTest`](../../engine/src/test/java/com/abada/engine/core/ParallelGatewayTest.java) |
 | Message catch event | Supported | Durable subscription by message name and `correlationKey` variable | [`MessageEventTest`](../../engine/src/test/java/com/abada/engine/core/MessageEventTest.java) |
