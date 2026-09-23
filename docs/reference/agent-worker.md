@@ -75,6 +75,15 @@ is rendered against the declared threshold.
 - Requested tools must all appear in `ABADA_AGENT_ALLOWED_TOOLS`. The v1
   sidecar does not execute arbitrary tool code; allowed identifiers are
   provided as model context for adapters added deliberately by operators.
+- Concurrency and locks: each locked task runs on its own virtual thread,
+  bounded by `ABADA_AGENT_MAX_TASKS` (default 4). The worker fetches only as
+  many tasks as it has free slots. While a task runs, the worker extends its
+  lock every third of `ABADA_AGENT_LOCK_DURATION_MS` (default 120000), so a
+  slow model call never lets the lock expire. If a lock extension is refused
+  (another worker re-acquired the task), the worker abandons the task and
+  reports nothing. A descriptor `timeout_ms` above `ABADA_AGENT_MAX_TIMEOUT_MS`
+  (default 120000) is clamped to it. On shutdown the worker stops fetching and
+  waits up to 30 seconds for in-flight tasks.
 - Model timeouts and task concurrency are bounded. Technical failures consume
   durable engine retries with a bounded retry delay; zero retries creates the
   normal incident. Agent-task retries are seeded from the APL `max_attempts`

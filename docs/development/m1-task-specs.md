@@ -105,7 +105,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T3 — Agent worker: concurrency and lock heartbeat
+## T3 — Agent worker: concurrency and lock heartbeat ✅ done
 
 **Goal.** No lock expires while its task is being processed. Tasks fetched together run concurrently.
 
@@ -114,7 +114,7 @@ release notes with before/after examples and the dry-run command.
 **Changes.**
 - Process each locked task on a virtual thread (`Executors.newVirtualThreadPerTaskExecutor()`), bounded by a semaphore of `ABADA_AGENT_MAX_TASKS`. Fetch only as many tasks as there are free permits.
 - For each running task, schedule `extendLock` every `lockDuration / 3` until completion or failure is reported; stop on any extend error and abandon the task quietly (another worker may own it).
-- On startup, reject configuration where `ABADA_AGENT_LOCK_DURATION_MS` < 2 × the maximum `timeout_ms` the worker will honour (`ABADA_AGENT_MAX_TIMEOUT_MS`, default 120000); clamp a descriptor's `timeout_ms` to that maximum.
+- Clamp a descriptor's `timeout_ms` to `ABADA_AGENT_MAX_TIMEOUT_MS` (default 120000). *Implementation note:* the originally planned startup check (lock ≥ 2 × timeout) was dropped: the heartbeat keeps any lock alive, and a short lock gives faster recovery after a worker crash.
 - Graceful shutdown: stop fetching, wait up to 30 s for in-flight tasks.
 
 **Acceptance tests.**
@@ -221,7 +221,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T8 — O(V+E) cycle detection
+## T8 — O(V+E) cycle detection ✅ done
 
 **Files.** `ENGINE/parser/AplParser.java` (`rejectCycles`), `ENGINE_TEST/parser/AplParserTest.java`.
 

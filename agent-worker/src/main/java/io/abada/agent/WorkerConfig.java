@@ -24,7 +24,11 @@ public record WorkerConfig(
         Duration lockDuration,
         int maxTasks,
         Set<String> allowedTools,
-        Set<String> localAckTopics) {
+        Set<String> localAckTopics,
+        Duration maxTimeout) {
+
+    /** Upper bound applied to any descriptor {@code timeout_ms}. */
+    public static final Duration DEFAULT_MAX_TIMEOUT = Duration.ofMinutes(2);
 
     public WorkerConfig(
             URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
@@ -34,7 +38,8 @@ public record WorkerConfig(
             Duration lockDuration, int maxTasks, Set<String> allowedTools) {
         this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
                 llmBaseUrl, llmApiKey, openAiBaseUrl, openAiApiKey,
-                defaultModel, workerId, Set.of(), pollInterval, lockDuration, maxTasks, allowedTools, Set.of());
+                defaultModel, workerId, Set.of(), pollInterval, lockDuration, maxTasks, allowedTools, Set.of(),
+                DEFAULT_MAX_TIMEOUT);
     }
 
     public static WorkerConfig fromEnvironment() {
@@ -70,7 +75,9 @@ public record WorkerConfig(
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_LOCK_DURATION_MS", 120_000, 1_000, 3_600_000)),
                 (int) longValue(env, "ABADA_AGENT_MAX_TASKS", 4, 1, 50),
                 tools,
-                localAckTopics
+                localAckTopics,
+                Duration.ofMillis(longValue(env, "ABADA_AGENT_MAX_TIMEOUT_MS", DEFAULT_MAX_TIMEOUT.toMillis(),
+                        1_000, 3_600_000))
         );
     }
 
