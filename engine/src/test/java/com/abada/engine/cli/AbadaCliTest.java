@@ -28,4 +28,53 @@ class AbadaCliTest {
         assertThat(Files.readString(output)).contains("abada:assignment");
         assertThat(Files.readString(report)).contains("detectedProfiles", "mappings");
     }
+
+    @Test void expressionCheckReportsDefinitionsThatNeedMigration() throws Exception {
+        Files.writeString(temp.resolve("ok.apl.yaml"), """
+            version: abada.io/v1
+            metadata:
+              name: Ok Flow
+            flow:
+              entry: start
+              nodes:
+                - id: start
+                  type: webhook
+                  next: route
+                - id: route
+                  type: condition
+                  rules:
+                    - if: "${riskLevel == 'LOW' and approved}"
+                      then: done
+                    - else: done
+                      then: done
+                - id: done
+                  type: end
+            """);
+        Files.writeString(temp.resolve("legacy.apl.yaml"), """
+            version: abada.io/v1
+            metadata:
+              name: Legacy Flow
+            flow:
+              entry: start
+              nodes:
+                - id: start
+                  type: webhook
+                  next: route
+                - id: route
+                  type: condition
+                  rules:
+                    - if: "${amount === 5}"
+                      then: done
+                    - else: done
+                      then: done
+                - id: done
+                  type: end
+            """);
+        var out = new ByteArrayOutputStream();
+        int exit = new AbadaCli().run(new String[]{"expressions", "check", temp.toString()},
+                new PrintStream(out), System.err);
+        assertThat(exit).isEqualTo(1);
+        assertThat(out.toString()).contains("legacy.apl.yaml [route]").doesNotContain("ok.apl.yaml [")
+                .contains("2 expression(s) checked, 1 need migration");
+    }
 }

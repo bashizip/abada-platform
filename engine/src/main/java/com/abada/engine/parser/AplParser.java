@@ -110,6 +110,7 @@ public final class AplParser {
     private final YAMLMapper yamlMapper = new YAMLMapper();
 
     private final Set<String> allowedAgentModels;
+    private final boolean enforceDeploymentPolicy;
 
     public AplParser() {
         this(DEFAULT_ALLOWED_AGENT_MODELS);
@@ -120,6 +121,17 @@ public final class AplParser {
      *        declare; a blank value disables the check.
      */
     public AplParser(String allowedAgentModelsCsv) {
+        this(allowedAgentModelsCsv, true);
+    }
+
+    /**
+     * @param enforceDeploymentPolicy when true (deployment and authoring), every
+     *        expression must compile as CEL and scripts/delegates must satisfy the
+     *        operator {@link com.abada.engine.expression.ExecutionPolicy}. Reloading
+     *        already-deployed definitions passes false.
+     */
+    public AplParser(String allowedAgentModelsCsv, boolean enforceDeploymentPolicy) {
+        this.enforceDeploymentPolicy = enforceDeploymentPolicy;
         this.allowedAgentModels = allowedAgentModelsCsv == null || allowedAgentModelsCsv.isBlank()
                 ? Set.of()
                 : Arrays.stream(allowedAgentModelsCsv.split(","))
@@ -570,11 +582,16 @@ public final class AplParser {
         rejectCycles(entry, flows);
 
         String definitionId = processId;
+        ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
+                userTasks, serviceTasks, scriptTasks, decisionTables,
+                flows, gateways, events, endEvents,
+                rawSource, null, null);
+        if (enforceDeploymentPolicy) {
+            com.abada.engine.expression.DefinitionPolicyValidator.validate(definition, APL_VALIDATION_CODE,
+                    "abada.io/v1");
+        }
         return new BpmnParseResult(
-                new ParsedProcessDefinition(definitionId, name, null, entry,
-                        userTasks, serviceTasks, scriptTasks, decisionTables,
-                        flows, gateways, events, endEvents,
-                        rawSource, null, null),
+                definition,
                 new CompatibilityReport(Set.of(CompatibilityProfiles.ABADA_NATIVE),
                         List.of(new CompatibilityMapping("abada.io/v1 APL source",
                                 "Abada canonical process model", definitionId,

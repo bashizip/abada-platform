@@ -52,6 +52,15 @@ public class GlobalExceptionHandler {
      * @param request The current web request.
      * @return A ResponseEntity containing a structured error message with a 400 Bad Request status.
      */
+    /** A workflow expression could not be evaluated; the command rolled back. */
+    @ExceptionHandler(com.abada.engine.expression.ExpressionEvaluationException.class)
+    public ResponseEntity<ErrorResponse> handleExpressionEvaluation(
+            com.abada.engine.expression.ExpressionEvaluationException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(ApiErrors.response(
+                HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.EXPRESSION_EVALUATION_FAILED, ex.getMessage(),
+                request));
+    }
+
     @ExceptionHandler(ProcessEngineException.class)
     public ResponseEntity<ErrorResponse> handleProcessEngineException(ProcessEngineException ex,
             HttpServletRequest request) {

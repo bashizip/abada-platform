@@ -160,6 +160,10 @@ public class ParsedProcessDefinition implements Serializable {
         return serviceTasks;
     }
 
+    public Map<String, ScriptTaskMeta> getScriptTasks() {
+        return scriptTasks;
+    }
+
     public List<SequenceFlow> getSequenceFlows() {
         return sequenceFlows;
     }
