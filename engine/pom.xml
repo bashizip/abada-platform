@@ -54,7 +54,7 @@
         <dependency>
             <groupId>com.networknt</groupId>
             <artifactId>json-schema-validator</artifactId>
-            <version>3.0.7</version>
+            <version>1.5.9</version>
         </dependency>
 
         <!-- Opt-in script tasks only (abada.scripts.enabled); runs inside a class-filtered sandbox. -->

@@ -10,6 +10,11 @@ import com.abada.engine.dto.LockedExternalTask;
 import com.abada.engine.persistence.entity.ExternalTaskEntity;
 import com.abada.engine.persistence.repository.ExternalTaskRepository;
 import com.abada.engine.core.model.ServiceTaskMeta;
+import com.abada.engine.core.model.AgentWorkDescriptor;
+import com.abada.engine.core.model.SequenceFlow;
+import com.abada.engine.core.agent.AgentInputs;
+import com.abada.engine.core.agent.AgentOutputValidator;
+import com.abada.engine.parser.AplParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -69,7 +74,10 @@ public class ExternalTaskCommandService {
                 var serviceTask = instance.getDefinition().getServiceTask(task.getActivityId());
                 history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(),
                         lockDetails(task, request.workerId(), topic, serviceTask));
-                locked.add(new LockedExternalTask(task.getId(), task.getTopicName(), instance.getVariables(),
+                Map<String, Object> payload = serviceTask != null && serviceTask.agentWork() != null
+                        ? AgentInputs.resolve(serviceTask.agentWork(), instance.getVariables())
+                        : instance.getVariables();
+                locked.add(new LockedExternalTask(task.getId(), task.getTopicName(), payload,
                         task.getProcessInstanceId(), task.getActivityId(), task.getRetries(),
                         task.getLockExpirationTime(), task.getTraceParent(), "1",
                         serviceTask == null ? null : serviceTask.agentWork(),
@@ -115,6 +123,13 @@ public class ExternalTaskCommandService {
         ExternalTaskEntity task = loadForUpdate(id);
         if (task.getStatus() == ExternalTaskEntity.Status.COMPLETED) return;
         requireOwnedActiveLock(task, workerId);
+
+        ProcessInstance owner = requireInstance(task);
+        ServiceTaskMeta meta = owner.getDefinition().getServiceTask(task.getActivityId());
+        if (meta != null && meta.agentWork() != null) {
+            completeAgent(task, owner, meta.agentWork(), variables, agent);
+            return;
+        }
 
         task.setStatus(ExternalTaskEntity.Status.COMPLETED);
         task.setLockExpirationTime(null);
@@ -191,6 +206,22 @@ public class ExternalTaskCommandService {
         task.setLockExpirationTime(null);
         repository.save(task);
 
+        String routedTo = errorRoute(requireInstance(task), task.getActivityId(), request);
+        if (routedTo != null) {
+            task.setAgentOutcome(AplParser.OUTCOME_ERROR);
+            repository.save(task);
+            Map<String, Object> routed = new LinkedHashMap<>(request.effectiveVariables());
+            routed.put(AplParser.outcomeVariable(task.getActivityId()), AplParser.OUTCOME_ERROR);
+            routed.put(AplParser.errorCodeVariable(task.getActivityId()), request.errorCode());
+            engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), routed);
+            history.record("EXTERNAL_TASK_BPMN_ERROR", requireInstance(task), task.getActivityId(),
+                    Map.of("externalTaskId", id, "errorCode", request.errorCode(),
+                            "errorMessage", request.errorMessage() == null ? "" : request.errorMessage(),
+                            "routedTo", routedTo));
+            recordExternalTaskFact(task, false);
+            return;
+        }
+
         if (!request.effectiveVariables().isEmpty()) {
             engine.updateProcessVariables(task.getProcessInstanceId(), request.effectiveVariables());
         }
@@ -199,6 +230,116 @@ public class ExternalTaskCommandService {
                 Map.of("externalTaskId", id, "errorCode", request.errorCode(),
                         "errorMessage", request.errorMessage() == null ? "" : request.errorMessage()));
         recordExternalTaskFact(task, false);
+    }
+
+    /**
+     * Applies the engine-side agent output contract ({@link AgentOutputValidator}).
+     * An accepted result, or a rejected one whose outcome the node routes
+     * ({@code on_low_confidence} / {@code on_invalid_output}), completes the task
+     * and advances the instance. A rejected result without a route counts as a
+     * failed attempt: retries are decremented and, at zero, the task becomes an
+     * incident.
+     */
+    private void completeAgent(ExternalTaskEntity task, ProcessInstance instance, AgentWorkDescriptor work,
+            Map<String, Object> variables, AgentAttemptMetadata agent) {
+        String activityId = task.getActivityId();
+        if (instance.isSuspended() || instance.getStatus() == com.abada.engine.core.model.ProcessStatus.SUSPENDED) {
+            throw new ProcessEngineException("Process instance is suspended: " + instance.getId());
+        }
+        if (instance.getStatus() == com.abada.engine.core.model.ProcessStatus.COMPLETED
+                || instance.getStatus() == com.abada.engine.core.model.ProcessStatus.FAILED
+                || instance.getStatus() == com.abada.engine.core.model.ProcessStatus.CANCELLED) {
+            throw new ProcessEngineException("Process instance is already in a terminal state: "
+                    + instance.getStatus());
+        }
+        String resultVariable = work.resultVariable() == null || work.resultVariable().isBlank()
+                ? activityId + "_result" : work.resultVariable();
+        AgentOutputValidator.Verdict verdict = AgentOutputValidator.validate(work, resultVariable, variables);
+        boolean routed = instance.getDefinition().getGateways().containsKey(AplParser.outcomeGatewayId(activityId));
+        boolean hasRoute = verdict.ok() || routed && routesOutcome(instance, activityId, verdict.outcome());
+        task.setAgentOutcome(verdict.outcome());
+        persistAgentMetadata(task, agent);
+
+        if (hasRoute) {
+            Map<String, Object> merged = new LinkedHashMap<>();
+            if (!AplParser.OUTCOME_INVALID_OUTPUT.equals(verdict.outcome())) {
+                merged.put(resultVariable, verdict.value());
+            } else {
+                merged.put(AplParser.rawOutputVariable(activityId), truncatedJson(variables == null
+                        ? null : variables.get(resultVariable)));
+            }
+            if (routed) merged.put(AplParser.outcomeVariable(activityId), verdict.outcome());
+            task.setStatus(ExternalTaskEntity.Status.COMPLETED);
+            task.setLockExpirationTime(null);
+            repository.save(task);
+            engine.resumeFromEvent(task.getProcessInstanceId(), activityId, merged);
+            Map<String, Object> details = new LinkedHashMap<>(completedDetails(task, agent));
+            details.put("agentOutcome", verdict.outcome());
+            if (verdict.reason() != null) details.put("outcomeReason", verdict.reason());
+            history.record("EXTERNAL_TASK_COMPLETED", requireInstance(task), activityId, details);
+            recordExternalTaskFact(task, verdict.ok());
+            return;
+        }
+
+        int current = task.getRetries() == null
+                ? (work.maxAttempts() == null ? 3 : work.maxAttempts()) : task.getRetries();
+        int remaining = Math.max(0, current - 1);
+        task.setRetries(remaining);
+        task.setExceptionMessage("Agent output rejected (" + verdict.outcome() + "): " + verdict.reason());
+        task.setWorkerId(null);
+        if (remaining == 0) {
+            task.setStatus(ExternalTaskEntity.Status.FAILED);
+            task.setLockExpirationTime(null);
+        } else {
+            long backoff = work.retryBackoffMs() == null ? 0L : work.retryBackoffMs();
+            task.setStatus(backoff > 0 ? ExternalTaskEntity.Status.LOCKED : ExternalTaskEntity.Status.OPEN);
+            task.setLockExpirationTime(backoff > 0 ? Instant.now().plusMillis(backoff) : null);
+        }
+        repository.save(task);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("agentOutcome", verdict.outcome());
+        details.put("outcomeReason", verdict.reason());
+        details.put("retries", remaining);
+        if (agent != null) details.put("agent", agentDetails(agent));
+        history.record("EXTERNAL_TASK_OUTPUT_REJECTED", requireInstance(task), activityId, details);
+        if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
+            recordExternalTaskFact(task, false);
+        }
+    }
+
+    /** True when the node's outcome gateway has a conditional flow for this outcome. */
+    private static boolean routesOutcome(ProcessInstance instance, String activityId, String outcome) {
+        String gatewayId = AplParser.outcomeGatewayId(activityId);
+        return instance.getDefinition().getOutgoing(gatewayId).stream()
+                .map(SequenceFlow::getConditionExpression)
+                .anyMatch(condition -> condition != null && condition.contains("'" + outcome + "'"));
+    }
+
+    /** Returns the target a BPMN error routes to through {@code on_error}, or null when unrouted. */
+    private static String errorRoute(ProcessInstance instance, String activityId, ExternalTaskBpmnErrorRequest request) {
+        String gatewayId = AplParser.outcomeGatewayId(activityId);
+        var gateway = instance.getDefinition().getGateways().get(gatewayId);
+        if (gateway == null) return null;
+        Map<String, Object> probe = new java.util.HashMap<>(instance.getVariables());
+        probe.putAll(request.effectiveVariables());
+        probe.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_ERROR);
+        probe.put(AplParser.errorCodeVariable(activityId), request.errorCode());
+        List<SequenceFlow> outgoing = instance.getDefinition().getOutgoing(gatewayId);
+        String chosen = new GatewaySelector().chooseOutgoing(gateway, outgoing, probe);
+        if (chosen == null || chosen.equals(gateway.defaultFlowId())) return null;
+        return outgoing.stream().filter(flow -> flow.getId().equals(chosen)).map(SequenceFlow::getTargetRef)
+                .findFirst().orElse(null);
+    }
+
+    private String truncatedJson(Object value) {
+        String text;
+        try {
+            text = value instanceof String string ? string : objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            text = String.valueOf(value);
+        }
+        return text.length() > 16_384 ? text.substring(0, 16_384) : text;
     }
 
     /** Agent request facts recorded when an {@code abada:agent} task is locked. */
@@ -219,6 +360,7 @@ public class ExternalTaskCommandService {
             if (work.confidenceThreshold() != null) {
                 requested.put("confidenceThreshold", work.confidenceThreshold());
             }
+            requested.put("inputs", List.copyOf(work.inputs().keySet()));
             details.put("agent", requested);
         }
         return details;
@@ -252,6 +394,8 @@ public class ExternalTaskCommandService {
         details.put("promptHash", valueOrEmpty(agent.promptHash()));
         details.put("errorType", valueOrEmpty(agent.errorType()));
         if (agent.confidence() != null) details.put("confidence", agent.confidence());
+        if (agent.promptTokens() != null) details.put("promptTokens", agent.promptTokens());
+        if (agent.completionTokens() != null) details.put("completionTokens", agent.completionTokens());
         return details;
     }
 

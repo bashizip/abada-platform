@@ -222,6 +222,9 @@ public final class AplParser {
             if (nodesById.put(nodeId, node) != null) {
                 throw validation("duplicate node id '" + nodeId + "'");
             }
+            if (nodeId.endsWith(OUTCOME_GATEWAY_SUFFIX)) {
+                throw validation("node id '" + nodeId + "' uses the reserved suffix '" + OUTCOME_GATEWAY_SUFFIX + "'");
+            }
         }
         if (!nodesById.containsKey(entry)) {
             throw validation("flow.entry '" + entry + "' does not match any node id");
@@ -579,6 +582,7 @@ public final class AplParser {
             }
         }
 
+        addOutcomeRoutes(nodesById, flows, flowIds, gateways);
         rejectCycles(entry, flows);
 
         String definitionId = processId;
@@ -630,9 +634,30 @@ public final class AplParser {
         } else if (!rawInputs.isMissingNode() && !rawInputs.isNull()) {
             throw validation("agent node '" + nodeId + "' inputs must be a mapping");
         }
+        String prompt = node.path("prompt").asText("");
+        Set<String> references = promptReferences(prompt, nodeId);
+        if (inputs.isEmpty()) {
+            // Default-deny: an agent receives only the data its prompt names.
+            references.forEach(path -> inputs.put(path, "${" + path + "}"));
+        } else {
+            for (String path : references) {
+                boolean covered = inputs.keySet().stream()
+                        .anyMatch(name -> path.equals(name) || path.startsWith(name + "."));
+                if (!covered) {
+                    throw validation("agent node '" + nodeId + "' prompt references '${" + path
+                            + "}' which is not a declared input; add it to 'inputs' or remove 'inputs' to derive them");
+                }
+            }
+        }
         Map<String, Object> outputSchema = Map.of();
         if (node.path("output_schema").isObject()) {
             outputSchema = yamlMapper.convertValue(node.path("output_schema"), Map.class);
+        }
+        if (!outputSchema.isEmpty()) {
+            String problem = com.abada.engine.core.agent.AgentOutputValidator.schemaProblem(outputSchema);
+            if (problem != null) {
+                throw validation("agent node '" + nodeId + "' output_schema is not a valid JSON Schema: " + problem);
+            }
         }
         List<String> tools = new ArrayList<>();
         JsonNode rawTools = node.path("tools");
@@ -648,7 +673,7 @@ public final class AplParser {
                     + String.join(", ", allowedAgentModels) + ")");
         }
         return new AgentWorkDescriptor(profile, model,
-                node.path("prompt").asText(""), inputs,
+                prompt, inputs,
                 node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
                 confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs);
     }
@@ -774,6 +799,139 @@ public final class AplParser {
                 finished.add(nodeId);
             }
         }
+    }
+
+    /** Reserved suffix of the synthetic gateway that routes agent/engine-task outcomes. */
+    public static final String OUTCOME_GATEWAY_SUFFIX = "__outcome";
+    public static final String OUTCOME_OK = "OK";
+    public static final String OUTCOME_LOW_CONFIDENCE = "LOW_CONFIDENCE";
+    public static final String OUTCOME_INVALID_OUTPUT = "INVALID_OUTPUT";
+    public static final String OUTCOME_ERROR = "ERROR";
+
+    private static final java.util.regex.Pattern PROMPT_REFERENCE =
+            java.util.regex.Pattern.compile("\\$\\{([^}]*)}");
+    private static final java.util.regex.Pattern VARIABLE_PATH =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*");
+
+    /** Id of the synthetic exclusive gateway placed after a node that declares outcome routes. */
+    public static String outcomeGatewayId(String nodeId) {
+        return nodeId + OUTCOME_GATEWAY_SUFFIX;
+    }
+
+    /** Process variable holding a routed node's outcome (OK, LOW_CONFIDENCE, INVALID_OUTPUT, ERROR). */
+    public static String outcomeVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_outcome";
+    }
+
+    /** Process variable holding the BPMN error code reported for a routed node. */
+    public static String errorCodeVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_error_code";
+    }
+
+    /** Process variable holding (truncated) raw output rejected by the agent output contract. */
+    public static String rawOutputVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_raw_output";
+    }
+
+    private static Set<String> promptReferences(String prompt, String nodeId) {
+        Set<String> references = new java.util.LinkedHashSet<>();
+        java.util.regex.Matcher matcher = PROMPT_REFERENCE.matcher(prompt == null ? "" : prompt);
+        while (matcher.find()) {
+            String path = matcher.group(1).strip();
+            if (!VARIABLE_PATH.matcher(path).matches()) {
+                throw validation("agent node '" + nodeId + "' prompt placeholder '${" + matcher.group(1)
+                        + "}' must be a variable path such as ${lead.companySize}");
+            }
+            references.add(path);
+        }
+        return references;
+    }
+
+    /**
+     * Compiles {@code on_low_confidence}, {@code on_invalid_output} (agent) and
+     * {@code on_error} (agent, engine-task) into a synthetic exclusive gateway
+     * after the node. Its conditional flows test the engine-written outcome
+     * variables; its default flow is the node's {@code next}.
+     */
+    private static void addOutcomeRoutes(Map<String, JsonNode> nodesById, List<SequenceFlow> flows,
+            Set<String> flowIds, Map<String, GatewayMeta> gateways) {
+        for (Map.Entry<String, JsonNode> entry : nodesById.entrySet()) {
+            String nodeId = entry.getKey();
+            JsonNode node = entry.getValue();
+            String type = node.path("type").asText();
+            boolean agent = "agent".equals(type);
+            boolean routable = agent || "engine-task".equals(type);
+            List<String[]> routes = new ArrayList<>();
+            String outcome = outcomeVariable(nodeId);
+            if (agent) {
+                addRoute(routes, nodesById, nodeId, node.path("on_invalid_output"), "on_invalid_output",
+                        "${" + outcome + " == '" + OUTCOME_INVALID_OUTPUT + "'}");
+                addRoute(routes, nodesById, nodeId, node.path("on_low_confidence"), "on_low_confidence",
+                        "${" + outcome + " == '" + OUTCOME_LOW_CONFIDENCE + "'}");
+            } else {
+                for (String field : List.of("on_invalid_output", "on_low_confidence")) {
+                    if (node.has(field)) {
+                        throw validation("node '" + nodeId + "' declares '" + field + "', which only agent nodes support");
+                    }
+                }
+            }
+            JsonNode onError = node.path("on_error");
+            if (!onError.isMissingNode() && !onError.isNull()) {
+                if (!routable) {
+                    throw validation("node '" + nodeId + "' declares 'on_error', which only agent and engine-task nodes support");
+                }
+                String errorCode = errorCodeVariable(nodeId);
+                if (onError.isTextual()) {
+                    addRoute(routes, nodesById, nodeId, onError, "on_error", "${" + outcome + " == '" + OUTCOME_ERROR + "'}");
+                } else if (onError.isArray()) {
+                    List<String[]> catchAll = new ArrayList<>();
+                    for (JsonNode rule : onError) {
+                        String code = rule.path("code").asText(null);
+                        if (code != null && !code.matches("[A-Za-z0-9_.:-]{1,128}")) {
+                            throw validation("node '" + nodeId + "' on_error code '" + code + "' is not a valid error code");
+                        }
+                        String condition = code == null
+                                ? "${" + outcome + " == '" + OUTCOME_ERROR + "'}"
+                                : "${" + outcome + " == '" + OUTCOME_ERROR + "' && " + errorCode + " == '" + code + "'}";
+                        addRoute(code == null ? catchAll : routes, nodesById, nodeId, rule.path("then"), "on_error.then",
+                                condition);
+                    }
+                    if (catchAll.size() > 1) {
+                        throw validation("node '" + nodeId + "' declares more than one on_error rule without a code");
+                    }
+                    routes.addAll(catchAll);
+                } else {
+                    throw validation("node '" + nodeId + "' on_error must be a node id or a list of {code, then}");
+                }
+            }
+            if (routes.isEmpty()) continue;
+
+            SequenceFlow normal = flows.stream().filter(flow -> flow.getSourceRef().equals(nodeId)).findFirst()
+                    .orElseThrow(() -> validation("node '" + nodeId + "' declares outcome routes but no 'next'"));
+            String gatewayId = outcomeGatewayId(nodeId);
+            flows.remove(normal);
+            flows.add(new SequenceFlow(flowIdFor(nodeId, gatewayId, flowIds), nodeId, gatewayId, null, null, false));
+            for (String[] route : routes) {
+                flows.add(new SequenceFlow(flowIdFor(gatewayId, route[0], flowIds), gatewayId, route[0], null,
+                        route[1], false));
+            }
+            String defaultFlowId = flowIdFor(gatewayId, normal.getTargetRef(), flowIds);
+            flows.add(new SequenceFlow(defaultFlowId, gatewayId, normal.getTargetRef(), null, null, true));
+            gateways.put(gatewayId, new GatewayMeta(gatewayId, GatewayMeta.Type.EXCLUSIVE, defaultFlowId));
+        }
+    }
+
+    private static void addRoute(List<String[]> routes, Map<String, JsonNode> nodesById, String nodeId,
+            JsonNode target, String field, String condition) {
+        if (target == null || target.isMissingNode() || target.isNull()) return;
+        String targetId = target.asText(null);
+        if (targetId == null || targetId.isBlank()) {
+            throw validation("node '" + nodeId + "' declares an empty '" + field + "' target");
+        }
+        if (!nodesById.containsKey(targetId)) {
+            throw validation("node '" + nodeId + "' " + field + " target '" + targetId + "' is not a declared node");
+        }
+        routes.add(new String[]{targetId, condition});
     }
 
     /** Reads a text field by its canonical name, falling back to a legacy alias. */

@@ -48,6 +48,15 @@ public final class DefinitionPolicyValidator {
                             + ExecutionPolicy.SCRIPTS_ENABLED + "=true (ABADA_SCRIPTS_ENABLED).")));
         }
         for (ServiceTaskMeta task : definition.getServiceTasks().values()) {
+            if (task.agentWork() != null) {
+                task.agentWork().inputs().forEach((name, expression) -> {
+                    if (expression != null && !expression.isBlank()) {
+                        compile(expression, processId, task.id(), errorCode, namespace, issues);
+                    }
+                });
+            }
+        }
+        for (ServiceTaskMeta task : definition.getServiceTasks().values()) {
             if (task.className() != null && !task.className().isBlank()
                     && !ExecutionPolicy.delegateAllowed(task.className())) {
                 issues.add(issue(errorCode, namespace, processId, task.id(),

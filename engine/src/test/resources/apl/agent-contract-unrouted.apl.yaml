@@ -1,0 +1,35 @@
+version: abada.io/v1
+metadata:
+  name: Agent Contract Unrouted
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: classify
+    - id: classify
+      type: agent
+      model: gemini-3.6-flash
+      prompt: "Classify a company of size ${lead.companySize}. Return HIGH, MEDIUM or LOW."
+      result_variable: lead_priority
+      output_schema:
+        type: object
+        required: [priority]
+        properties:
+          priority:
+            enum: [HIGH, MEDIUM, LOW]
+      confidence_threshold: 85
+      max_attempts: 2
+      retry_backoff_ms: 0
+      next: crm
+    - id: review
+      type: human-input
+      description: Review the lead
+      assignees: [sales-director]
+      next: done
+    - id: crm
+      type: engine-task
+      service: crm.sync
+      next: done
+    - id: done
+      type: end

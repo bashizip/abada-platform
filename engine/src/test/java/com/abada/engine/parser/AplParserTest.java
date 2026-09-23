@@ -599,6 +599,104 @@ class AplParserTest {
                 .hasMessageContaining("cyclic flow");
     }
 
+    private static byte[] agentFlow(String agentExtras) {
+        return ("version: abada.io/v1\n"
+                + "metadata:\n  name: Agent Routes\n"
+                + "flow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: classify\n"
+                + "    - id: classify\n      type: agent\n      model: gemini-3.6-flash\n"
+                + "      prompt: \"Classify a company of size ${lead.companySize}.\"\n"
+                + agentExtras
+                + "      next: done\n"
+                + "    - id: review\n      type: human-input\n      assignees: [sales-director]\n      next: done\n"
+                + "    - id: fallback\n      type: engine-task\n      service: fallback\n      next: done\n"
+                + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void derivesAgentInputsFromPromptPlaceholders() {
+        ParsedProcessDefinition definition = parser.parseDetailed(agentFlow("")).definition();
+        assertThat(definition.getServiceTasks().get("classify").agentWork().inputs())
+                .containsExactly(Map.entry("lead.companySize", "${lead.companySize}"));
+    }
+
+    @Test
+    void rejectsPromptPlaceholdersThatAreNotDeclaredInputs() {
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      inputs:\n        caseId: ${caseId}\n")))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("lead.companySize")
+                .hasMessageContaining("not a declared input");
+    }
+
+    @Test
+    void acceptsPromptPathsInsideADeclaredInput() {
+        ParsedProcessDefinition definition = parser.parseDetailed(
+                agentFlow("      inputs:\n        lead: ${lead}\n")).definition();
+        assertThat(definition.getServiceTasks().get("classify").agentWork().inputs()).containsOnlyKeys("lead");
+    }
+
+    @Test
+    void rejectsExpressionPlaceholdersInPrompts() {
+        byte[] source = new String(agentFlow(""), StandardCharsets.UTF_8)
+                .replace("${lead.companySize}", "${lead.companySize * 2}").getBytes(StandardCharsets.UTF_8);
+        assertThatThrownBy(() -> parser.parseDetailed(source))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("must be a variable path");
+    }
+
+    @Test
+    void compilesOutcomeRoutesIntoASyntheticGateway() {
+        ParsedProcessDefinition definition = parser.parseDetailed(agentFlow(
+                "      on_low_confidence: review\n      on_invalid_output: review\n"
+                        + "      on_error:\n        - code: CANNOT_DECIDE\n          then: review\n"
+                        + "        - then: fallback\n")).definition();
+        String gateway = AplParser.outcomeGatewayId("classify");
+        assertThat(definition.getGateways()).containsKey(gateway);
+        assertThat(definition.getOutgoing("classify")).singleElement()
+                .extracting(SequenceFlow::getTargetRef).isEqualTo(gateway);
+        assertThat(definition.getOutgoing(gateway)).extracting(SequenceFlow::getTargetRef)
+                .containsExactly("review", "review", "review", "fallback", "done");
+        assertThat(definition.getOutgoing(gateway)).filteredOn(SequenceFlow::isDefault)
+                .singleElement().extracting(SequenceFlow::getTargetRef).isEqualTo("done");
+        assertThat(definition.getOutgoing(gateway).get(2).getConditionExpression())
+                .contains("classify_error_code == 'CANNOT_DECIDE'");
+    }
+
+    @Test
+    void engineTasksAcceptOnErrorButNotAgentOnlyRoutes() {
+        byte[] ok = ("version: abada.io/v1\nmetadata:\n  name: Task Error\nflow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: crm\n"
+                + "    - id: crm\n      type: engine-task\n      service: crm.sync\n      on_error: failed\n      next: done\n"
+                + "    - id: failed\n      type: end\n"
+                + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
+        assertThat(parser.parseDetailed(ok).definition().getGateways()).containsKey(AplParser.outcomeGatewayId("crm"));
+
+        byte[] bad = new String(ok, StandardCharsets.UTF_8).replace("on_error: failed", "on_low_confidence: failed")
+                .getBytes(StandardCharsets.UTF_8);
+        assertThatThrownBy(() -> parser.parseDetailed(bad))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("only agent nodes");
+    }
+
+    @Test
+    void rejectsReservedIdsAndUnknownRouteTargets() {
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      on_low_confidence: nowhere\n")))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("not a declared node");
+        byte[] reserved = new String(agentFlow(""), StandardCharsets.UTF_8).replace("id: review", "id: x__outcome")
+                .getBytes(StandardCharsets.UTF_8);
+        assertThatThrownBy(() -> parser.parseDetailed(reserved))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("reserved suffix");
+    }
+
+    @Test
+    void rejectsInvalidOutputSchemas() {
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      output_schema:\n        type: 12\n")))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("output_schema is not a valid JSON Schema");
+    }
+
     @Test
     void rejectsDuplicateElseRules() {
         assertThatThrownBy(() -> parser.parseDetailed(standardFlow(
