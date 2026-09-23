@@ -1,0 +1,136 @@
+---
+title: Agent nodes and the Agent Worker
+description: How agent nodes execute as durable external work on the abada:agent topic, how to run and observe the first-party Agent Worker, and what its safety boundaries are.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+An APL `agent` node represents probabilistic work — a model call. It never
+runs inside the engine: it compiles to a **durable external task on the
+`abada:agent` topic**, claimed and completed through the versioned
+`abada.agent/v1` profile. The engine records each attempt and advances the
+workflow only when the worker reports completion or failure through a normal
+command.
+
+```mermaid
+sequenceDiagram
+    participant E as Engine
+    participant DB as PostgreSQL
+    participant W as Agent Worker (abada-agent-worker)
+    participant M as LLM provider
+
+    E->>DB: instance reaches agent node; write external task
+    W->>E: fetch-and-lock abada:agent
+    E->>DB: lock task, extend lease; heartbeat loop
+    W->>M: model call (outside any workflow transaction)
+    M-->>W: structured output (+ _confidence)
+    W->>E: complete with attempt metadata
+    E->>DB: merge variables, write history, advance atomically
+```
+
+## Running the first-party worker
+
+The development profile starts the `abada-agent-worker` service
+automatically — no activation flag or manual provisioning. On first startup
+the launcher generates an OIDC client secret, provisions Keycloak and the
+engine, and registers the worker's global `abada:agent` capability. Use
+`--no-agent` only for core-stack diagnostics.
+
+Before real agent tasks can complete, configure an LLM endpoint in the
+untracked local `.env.dev`:
+
+```dotenv
+ABADA_AGENT_LLM_BASE_URL=https://generativelanguage.googleapis.com/openai
+ABADA_AGENT_LLM_API_KEY=...
+ABADA_AGENT_LLM_MODEL=gemini-3.6-flash
+```
+
+Models starting with `gemini` (or a `google/` prefix) route to the Gemini
+OpenAI-compatible endpoint; other models route to an OpenAI-compatible
+`/chat/completions` endpoint. To use a different OpenAI-compatible provider
+(DeepSeek, OpenRouter, a local gateway), set `ABADA_AGENT_OPENAI_BASE_URL`
+and `ABADA_AGENT_OPENAI_API_KEY`; when unset they fall back to the LLM pair.
+
+## Cost and tool control are local
+
+- `ABADA_AGENT_ALLOWED_MODELS` (comma-separated) is the operator allow-list.
+  An `agent` node naming a model outside it **fails at deployment or authoring
+  validation** — not at first execution. Default:
+  `gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
+- Requested `tools` on a node must all appear in `ABADA_AGENT_ALLOWED_TOOLS`.
+  The worker does not execute arbitrary tool code; identifiers are model
+  context for adapters operators add deliberately.
+
+## What the engine keeps durable
+
+- **Attempt metadata.** Each completion and failure carries `model`, provider,
+  attempt number, `durationMs`, tools, `resultVariable`, a `promptHash`
+  (never the prompt), and — on structured output — the achieved `confidence`
+  against the node's `confidence_threshold`. It is stored on the external-task
+  row and in activity history, and rendered in the instance view.
+- **Resilience.** Leases expire and re-acquire dead-worker work without
+  duplicate transitions; transient failures return tasks to the pool; retries
+  are seeded from the APL `max_attempts`; suspension and cancellation reject
+  late completion atomically. Technical failures consume a durable retry
+  budget; zero retries left creates an incident.
+- **Idempotency.** Completion and failure use task ID + attempt ordinal +
+  operation as the idempotency key, so re-sent reports deduplicate and a
+  stored failure never shadows a later completion of the same attempt.
+
+<Aside type="caution" title="External effects are at-least-once">
+  A model call or a downstream tool effect cannot be rolled back by
+  PostgreSQL. Providers and tool adapters must support their own stable
+  deduplication keys. Logs contain task/activity IDs and counters — never
+  tokens, prompts, variables or model responses.
+</Aside>
+
+## Observing the worker
+
+Studio surfaces worker state per project in the operations view:
+
+| State | Meaning |
+| --- | --- |
+| Online | Heartbeat current (every fetch-and-lock poll writes a debounced heartbeat) |
+| Error | Last fetch-and-lock was rejected (durable incident row) |
+| Offline | No recent heartbeat or lease |
+
+The same view shows last heartbeat, last rejection and consecutive failures,
+backed by the worker-health API. On the instance canvas, the live inspector
+renders the agent attempt's model, provider, latency, tools, confidence and
+threshold.
+
+## What happens without a worker
+
+With no worker (or no LLM key), the instance pauses in `ACTIVE` at the agent
+node. That is intentional: agent work must not advance engine state outside a
+durable command. Start the worker (or configure its endpoint), and the run
+resumes when the task is fetched and completed.
+
+## Securing the worker
+
+For a secured engine, prefer OIDC client credentials
+(`ABADA_AGENT_OIDC_TOKEN_URL`, `ABADA_AGENT_OIDC_CLIENT_ID`,
+`ABADA_AGENT_OIDC_CLIENT_SECRET`) over a static `ABADA_ENGINE_TOKEN`. A
+secured worker self-registers once at startup (`PUT /v1/workers/me`) and polls
+project-agnostically; each locked task carries its owning `projectId`.
+Third-party workers that poll with an explicit `projectId` keep the legacy
+per-project binding semantics and need an Owner-created binding per topic.
+
+<Steps>
+1. **Author** an `agent` node in APL (see [Author processes in native
+   APL](/user/authoring/)) or start the AI Lead Triage starter.
+2. **Deploy & Start** the process with input variables.
+3. **Watch** the run pause at the agent node, then progress once the worker
+   completes the task.
+4. **Inspect** attempt metadata on the instance canvas and worker health in
+   Operations.
+</Steps>
+
+<Aside type="note">
+  The full contract — `abada.agent/v1` descriptor bounds, gateway rules,
+  allow-lists and configuration — lives in the repository's [agent worker
+  reference](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/agent-worker.md)
+  and [external-worker protocol
+  v1](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/external-worker-protocol-v1.md).
+  Execution architecture: [Agent Worker execution](/architecture/agent-worker/).
+</Aside>

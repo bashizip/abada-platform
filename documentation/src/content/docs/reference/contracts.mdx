@@ -1,6 +1,6 @@
 ---
 title: Authoritative contracts
-description: Direct links to Abada's specifications, runtime contracts, ADRs and release evidence.
+description: Direct links to Abada's specifications, runtime and agentic contracts, ADRs and release evidence.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -9,40 +9,62 @@ These repository documents are normative. Links target the `dev` branch so the
 site follows the current integration contract; release tags preserve the
 versioned historical copy.
 
+## APL and authoring
+
+- [APL specification (`abada.io/v1`)](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/apl-specification.md)
+- [APL node reference — every node and property](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/apl-node-reference.md)
+- [Runtime semantics — commands, variables, tasks, forms, retries](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/runtime-semantics.md)
+- [Studio application specification](https://github.com/bashizip/abada-engine/blob/dev/docs/development/studio-app-spec.md)
+- [Human-input forms plan](https://github.com/bashizip/abada-engine/blob/dev/docs/development/human-input-forms-plan.md)
+- [Feature specs: kitchen-sink process, service tasks, process variables, persistence, exclusive gateway](https://github.com/bashizip/abada-engine/blob/dev/docs/features/)
+
+## Agent Worker and Insight Engine
+
+- [Agent worker and `abada.agent/v1` profile](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/agent-worker.md)
+- [External-worker protocol v1](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/external-worker-protocol-v1.md)
+- [Insight Loop reference](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/insight-loop.md)
+- [ADR-003 — Insight Loop and governed APL optimization](https://github.com/bashizip/abada-engine/blob/dev/docs/adr/ADR-003-insight-loop-engine-otel-apl.md)
+- [Project envelope architecture (projects, roles, review lanes)](https://github.com/bashizip/abada-engine/blob/dev/docs/architecture/project-envelope.md)
+- [1.1 execution plan (Studio AI diff, native DMN inspector, Insight)](https://github.com/bashizip/abada-engine/blob/dev/docs/agentic-engine/abada-studio-execution-plan.md)
+
 ## Runtime and public behavior
 
 - [Runtime state architecture](https://github.com/bashizip/abada-engine/blob/dev/docs/architecture/runtime-state.md)
-- [Runtime semantics](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/runtime-semantics.md)
-- [BPMN support contract](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/bpmn-support.md)
-- [Deployment support matrix](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/deployment-support.md)
 - [API v1 contract](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/api-v1.md)
 - [API pagination](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/api-pagination.md)
-- [External-worker protocol v1](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/external-worker-protocol-v1.md)
 - [Security and RBAC](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/security-and-rbac.md)
+- [Event delivery](https://github.com/bashizip/abada-engine/blob/dev/docs/architecture/event-delivery.md)
+- [SPI design](https://github.com/bashizip/abada-engine/blob/dev/docs/architecture/spi-design.md)
 
-## BPMN dialects and compatibility
+## BPMN compatibility and migration
 
+- [BPMN support contract](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/bpmn-support.md)
 - [Normative dialect specification](https://github.com/bashizip/abada-engine/blob/dev/docs/specifications/bpmn-dialects-and-compatibility.md)
-- [Dialect compatibility ADR](https://github.com/bashizip/abada-engine/blob/dev/docs/adr/ADR-001-bpmn-dialects-and-vendor-compatibility.md)
+- [ADR-001 — BPMN dialects and vendor compatibility](https://github.com/bashizip/abada-engine/blob/dev/docs/adr/ADR-001-bpmn-dialects-and-vendor-compatibility.md)
 - [Compatibility profiles](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/compatibility-profiles.md)
 - [Abada-native extensions](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/abada-native-extensions.md)
 - [Camunda 7 profile](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/camunda-7-profile.md)
 - [Assignment semantics](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/assignment-semantics.md)
 - [Migration guide](https://github.com/bashizip/abada-engine/blob/dev/docs/bpmn/migration.md)
+- [ADR-002 — native decision tables (deterministic wall)](https://github.com/bashizip/abada-engine/blob/dev/docs/adr/ADR-002-native-decision-tables-deterministic-wall.md)
+
+## Deployment
+
+- [Deployment support matrix](https://github.com/bashizip/abada-engine/blob/dev/docs/reference/deployment-support.md)
+- [Architecture overview](https://github.com/bashizip/abada-engine/blob/dev/docs/architecture/overview.md)
 
 ## Delivery and release evidence
 
 - [Roadmap to 1.0](https://github.com/bashizip/abada-engine/blob/dev/docs/development/roadmap-to-1.0.md)
 - [Roadmap to 1.1 RC — agentic workflows and infrastructure certification](https://github.com/bashizip/abada-engine/blob/dev/docs/development/roadmap-to-1.1.0-rc.md)
 - [1.0 RC publication gates](https://github.com/bashizip/abada-engine/blob/dev/docs/development/1.0-rc-publication-gates.md)
-- [0.11 implementation plan](https://github.com/bashizip/abada-engine/blob/dev/docs/development/0.11-implementation-plan.md)
-- [BPMN dialect acceptance evidence](https://github.com/bashizip/abada-engine/blob/dev/docs/development/bpmn-dialects-acceptance.md)
 - [1.0.0-rc.5 release notes](https://github.com/bashizip/abada-engine/blob/dev/docs/release-notes/1.0.0-rc.5-release-notes.md)
-- [1.0.0-rc.3 release notes](https://github.com/bashizip/abada-engine/blob/dev/docs/release-notes/1.0.0-rc.3-release-notes.md)
-- [0.11.0-alpha release notes](https://github.com/bashizip/abada-engine/blob/dev/docs/release-notes/0.11.0-alpha-release-notes.md)
+- [1.0.0-rc.4 gate report](https://github.com/bashizip/abada-engine/blob/dev/docs/development/1.0-rc.4-gate-report-2026-08-30.md)
+- [SaaS transformation roadmap](https://github.com/bashizip/abada-engine/blob/dev/docs/saas-roadmap.md)
 
 <Aside type="note">
   Physical table and column names are defined by released Flyway migrations,
   while executable API compatibility is defined by the generated OpenAPI test
-  and `api-v1-contract.json` manifest.
+  and `api-v1-contract.json` manifest. The curated pages on this site summarize
+  these documents; when they disagree, the repository contract wins.
 </Aside>

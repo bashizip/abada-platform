@@ -1,5 +1,7 @@
 # Abada Reliable OSS Core Roadmap
 
+> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`roadmap.md`](roadmap.md). It will move to `docs/archive/` under task T11.
+
 This is the authoritative checklist for the Abada 1.0 reliable open-source
 core. The pre-RC architecture and developer documentation foundation is
 complete; the next milestone is **1.0 RC — Platform deployment, optional

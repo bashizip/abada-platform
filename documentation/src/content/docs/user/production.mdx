@@ -33,6 +33,12 @@ unavailable images.
   sensitive; protect host access and keep Docker patched.
 </Aside>
 
+Agent workers and the Insight Engine are **opt-in in production**: configure
+an operator-managed worker (or third-party workers) with your LLM endpoint
+and allow-lists, and enable `ABADA_INSIGHT_ENABLED` only when you want the
+scheduled analyzer. Nothing in the production profile calls a model without
+your configuration.
+
 Verify:
 
 ```bash

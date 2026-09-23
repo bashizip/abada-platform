@@ -1,6 +1,6 @@
 ---
-title: Abada Engine documentation
-description: Architecture and developer guidance for the PostgreSQL-backed BPMN orchestration engine.
+title: Abada Platform documentation
+description: Agentic orchestration on a transactional ACID rail — Studio authoring, native APL, the durable Agent Worker and the governed Insight Engine.
 template: splash
 hero:
   tagline: Legacy workflow engines treat AI as a REST connector; AI swarms treat execution as a free-for-all. Abada brings ACID-backed transactional guardrails to self-optimizing autonomous agents.
@@ -30,39 +30,71 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 </div>
 
 <CardGrid>
-  <Card title="PostgreSQL is authoritative" icon="database">
-    Mutable workflow state is reconstructed inside each command. Replica-local
-    memory caches only immutable parsed definitions.
+  <Card title="The transactional ACID rail" icon="approve-check-circle">
+    PostgreSQL is authoritative. Lock, validate, advance, persist, write
+    history, facts and outbox records, then commit as one workflow-state
+    transaction.
   </Card>
-  <Card title="Commands are atomic" icon="approve-check-circle">
-    Lock, validate, advance, persist, write history and outbox records, then
-    commit as one workflow-state transaction.
+  <Card title="Studio is the authoring surface" icon="laptop">
+    An AI-native single UI: canvas and APL YAML are one document, Dry Run stays
+    local and mocked, and Deploy &amp; Start is the durable engine action.
   </Card>
-  <Card title="Clusters coordinate through leases" icon="seti">
-    Timers, external work, correlations and outbox delivery use durable rows,
-    database locks and recoverable leases.
+  <Card title="Agents are durable work" icon="seti">
+    Agent nodes compile to external tasks on the worker protocol. The engine
+    never invokes a model inside a workflow transaction.
   </Card>
-  <Card title="Contracts are executable" icon="document">
-    The BPMN subset, API v1, worker protocol, security model and migrations are
-    backed by compatibility and PostgreSQL tests.
+  <Card title="Optimization is governed" icon="document">
+    The Insight Engine turns terminal facts into validated APL proposals that
+    reach production only through explicit human review. No auto-apply.
   </Card>
 </CardGrid>
 
+## From BPMN to agentic orchestration
+
+Abada grew up as a BPMN engine and keeps that heritage: BPMN 2.0 files import,
+validate and run on the same state machine. The platform has since evolved into
+**agentic orchestration on a transactional ACID rail**:
+
+- **APL is the native authoring language.** Studio serializes its canvas to
+  `abada.io/v1` YAML, and the engine compiles that YAML directly into the
+  executable graph — no XML round trip. BPMN remains a first-class import and
+  backward-compatibility format.
+- **Probabilistic work is bounded by deterministic rules.** The doctrine is
+  *the table is the law, agents are the advice*: decision tables evaluate
+  inside the transaction, agent steps run as durable external tasks, and
+  approval gates put a human between them.
+- **Agentic capabilities ride the same rail.** The first-party Agent Worker
+  and the Insight Engine reuse the exact PostgreSQL-authoritative, atomic
+  command machinery that certified the BPMN runtime.
+
 ## Documentation tracks
 
-This site serves three audiences:
+This site serves four audiences:
 
-1. **User guide** provides tested development and production deployments,
-   telemetry choices, a first workflow, backup, upgrades and troubleshooting.
-2. **Architecture** explains system boundaries, state ownership, transaction
-   behavior, cluster safety, security and the canonical BPMN model.
-3. **Developer guide** explains how to navigate the repository, implement
-   changes, evolve migrations and contracts, and select the required tests.
+1. **User guide** — deploy the platform, author your first agentic workflow in
+   native APL, run agent nodes, operate Studio, and review Insight proposals.
+2. **Architecture** — the transactional execution core, the APL canonical
+   model, Agent Worker execution and the Insight Engine, plus deployment,
+   cluster and security boundaries.
+3. **Compatibility & migration** — BPMN import, dialects, the supported subset
+   and the Camunda 7 path.
+4. **Developer guide** — navigating the repository, extending the engine and
+   contracts, and selecting the required evidence.
 
-## Current release boundary
+## Release status
 
-These guides describe the prepared `1.0.0-rc.5` evaluation release candidate. PostgreSQL
-is the production source of truth, API v1 and worker protocol v1 are frozen,
-and multi-replica execution is certified for the documented BPMN subset.
-Conformance publication, rolling-upgrade evidence, security review, benchmarks
-and runbooks remain 1.0 RC gates.
+These guides describe the platform as it exists on the current `dev` tree.
+
+- **`1.0.0-rc.5` — prepared evaluation release candidate.** PostgreSQL is the
+  production source of truth, API v1 and worker protocol v1 are frozen, and the
+  BPMN subset *and* native APL are certified runtime surfaces. The development
+  installer enables the Agent Worker and the Insight Engine out of the box.
+- **1.1 RC agentic track — delivered in the working tree.** Durable agent
+  attempt metadata, worker health, the PostgreSQL-authoritative Insight loop
+  and the Studio governance surface are implemented. Production-scale
+  evidence and the cloud infrastructure certification track remain open; no
+  production-certified 1.1 claim is made until they close.
+
+Status callouts throughout this site mark which capability belongs to which
+tier. The authoritative gates live in the [release roadmaps and
+contracts](/reference/contracts/).

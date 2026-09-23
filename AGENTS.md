@@ -19,9 +19,9 @@ acquisition, stable API/worker contracts and backend RBAC are in scope.
 
 Use these documents as the authoritative product contract:
 
-- `docs/development/roadmap-to-1.0.md` — release checklist and acceptance gates.
-- `docs/development/roadmap-to-1.1.0-rc.md` — agentic workflow integration and
-  deferred cloud/CI certification debt.
+- `docs/development/roadmap.md` — the only active roadmap (1.0.0-rc.6 → 1.1.0),
+  with task specifications in `docs/development/m1-task-specs.md`. Older
+  roadmaps are superseded and kept for history only.
 - `docs/development/1.0-rc-publication-gates.md` — mandatory per-candidate
   publication evidence and GO/NO-GO sign-off.
 - `docs/reference/bpmn-support.md` — supported and rejected BPMN constructs.

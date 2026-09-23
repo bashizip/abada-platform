@@ -1,5 +1,7 @@
 # Abada 1.1 Product & Architecture Execution Plan
 
+> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`../development/roadmap.md`](../development/roadmap.md). It will move to `docs/archive/` under task T11.
+
 - Status: Active implementation — native APL, PostgreSQL Insight facts,
   governed proposals, Studio review, and the Java agent sidecar are delivered
   in the working tree. Remaining unchecked items are evidence or later product

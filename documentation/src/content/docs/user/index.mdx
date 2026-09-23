@@ -6,16 +6,20 @@ description: Select the supported Abada platform profile and telemetry mode.
 import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
 
 Abada ships as a self-contained Compose release bundle. PostgreSQL is the
-source of truth in every supported platform profile.
+source of truth in every supported platform profile. Engine, Studio, the
+Agent Worker and (optionally) the Insight Engine all run from the same
+bundle — see the [quickstart](/user/quickstart/).
 
 <CardGrid>
   <Card title="Development" icon="laptop">
-    PostgreSQL, Engine, Studio, local Keycloak and HTTP routing. Safe
-    defaults are included; no local certificate tool is required.
+    PostgreSQL, Engine, Studio, the Agent Worker, local Keycloak and HTTP
+    routing. Safe defaults are included; no local certificate tool is
+    required.
   </Card>
   <Card title="Production" icon="rocket">
     Versioned images, PostgreSQL, Studio and Traefik TLS. You supply an
-    externally managed OIDC provider, public DNS and secrets.
+    externally managed OIDC provider, public DNS and secrets. Agent workers
+    and the Insight Engine are operator-managed and opt-in.
   </Card>
   <Card title="Telemetry" icon="seti">
     Disabled by default. Add the bundled overlay, or configure an external

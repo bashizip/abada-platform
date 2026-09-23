@@ -235,8 +235,8 @@ function Show-SuccessPanel {
 
     Write-Section 'First run'
     Write-Host '  1. Open Studio and sign in as alice.'
-    Write-Host '  2. Import and deploy a workflow in the Designer, then start an instance.'
-    Write-Host '  3. Complete work in the Task Inbox and review it under Operations.'
+    Write-Host '  2. Open the pre-deployed AI Lead Triage process in the Designer.'
+    Write-Host '  3. Start HIGH, MEDIUM or LOW examples, then inspect Tasks, Operations and Insight.'
   }
 
   $DefaultEnvFile = Join-Path $Root ".env.$Profile"

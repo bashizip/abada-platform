@@ -30,6 +30,7 @@ services:
       ABADA_OIDC_REALM: abada-dev
       ABADA_OIDC_CLIENT_ID: abada-frontend
       ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
+      ABADA_STARTER_WORKFLOW_ENABLED: ${ABADA_STARTER_WORKFLOW_ENABLED:-true}
     depends_on:
       keycloak:
         condition: service_healthy
@@ -115,7 +116,7 @@ services:
       - --api.insecure=true
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=abada_edge
+      - --providers.docker.network=${COMPOSE_PROJECT_NAME:-abada}_edge
       - --entrypoints.web.address=:80
       - --ping=true
     ports:

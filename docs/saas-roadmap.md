@@ -1,5 +1,7 @@
 # Abada Platform → SaaS Transformation Roadmap
 
+> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`development/roadmap.md`](development/roadmap.md). It will move to `docs/archive/` under task T11.
+
 > **Deferred:** This document is not the active delivery roadmap. The reliable
 > OSS core roadmap in `docs/development/roadmap-to-1.0.md` is authoritative until 1.0.
 

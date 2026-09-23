@@ -49,14 +49,26 @@ flowchart LR
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
-| `compose.yaml` | PostgreSQL, Engine, Studio, Docs, internal data and edge networks, persistent workflow/log volumes | Identity provider, TLS policy, telemetry backends |
-| `compose.dev.yaml` | Local HTTP routing, bundled Keycloak, safe evaluation credentials | Production identity or certificates |
+| `compose.yaml` | PostgreSQL, Engine, Studio, the Agent Worker, Docs, internal data and edge networks, persistent workflow/log volumes | Identity provider, TLS policy, telemetry backends, LLM credentials |
+| `compose.dev.yaml` | Local HTTP routing, bundled Keycloak, safe evaluation credentials, automatic Agent Worker provisioning | Production identity or certificates |
 | `compose.prod.yaml` | Exact application version, TLS/ACME routing, required external OIDC and CORS values, production restart/resources | Bundled production Keycloak or default secrets |
 | `compose.telemetry.yaml` | Collector, metrics, traces, logs and Grafana | Database authority, engine readiness or workflow transactions |
 
 The release bundle contains these files and every mounted configuration asset.
 It intentionally contains no Docker build context, so deployments pull the
 same immutable frontend and engine images everywhere.
+
+## Agent Worker and Insight placement
+
+The Agent Worker is a platform service: it connects to the engine through
+worker protocol v1, holds only the LLM endpoint/key and model allow-lists it
+needs, and never exposes those to Studio or the engine. The Insight Engine is
+an out-of-band analyzer inside the engine process (scheduled when
+`ABADA_INSIGHT_ENABLED=true`) that reads durable fact windows from PostgreSQL
+and optionally calls the configured LLM endpoint for proposal drafts. Both
+keep model calls outside workflow transactions and both stay optional for the
+certified core topology: a run never depends on a worker being present (it
+pauses at agent work) and never depends on the analyzer.
 
 ## Frontend startup contract
 

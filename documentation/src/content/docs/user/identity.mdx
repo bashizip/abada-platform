@@ -61,6 +61,7 @@ does not inspect.
 | Reach the Administration tab (users, groups, projects) | `abada-admin` in addition to `abada-worker` |
 | Reach the Insight tab | `abada-worker` (proposal review additionally requires `abada-insight-reviewer` on the project under review) |
 | Call the external-worker protocol | `abada-worker` plus project membership on the bound topic |
+| Run the first-party Agent Worker | `abada-worker` group via OIDC client credentials; self-registers the global `abada:agent` capability (`PUT /v1/workers/me`) |
 
 ### Adding a new user from Studio
 

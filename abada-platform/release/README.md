@@ -7,7 +7,7 @@ profile you need, then run the preflight before starting containers.
 Release images support `linux/amd64` and `linux/arm64`. The original immutable
 `1.0.0-rc.1` images contain only `linux/amd64`; the current launcher detects
 that exact release on an ARM64 Docker host, prints a notice, and enables
-Docker's compatibility mode. `1.0.0-rc.3` is the current release and the first
+Docker's compatibility mode. `1.0.0-rc.5` is the prepared release; RC.3 was the first
 whose manifests are required to contain both native platforms.
 
 Development:
@@ -17,10 +17,20 @@ Development:
 ./release/abada-platform up dev
 ```
 
-The success screen prints every local URL and the development-only starter
-account. Sign in to Studio with `alice` / `alice`; Alice can author and deploy
-workflows, complete tasks in the Task Inbox, and review runs under Operations
-and Administration.
+The Bash development launcher starts the first-party agent worker by default.
+On a new installation it generates an OIDC client secret in the local
+`.env.dev`, provisions the bundled Keycloak realm and Engine capability, and
+starts the pinned `ABADA_AGENT_WORKER_IMAGE` without an activation flag. Set
+the LLM API key in `.env.dev` before running agent tasks. Use `--no-agent` only
+when a core-only stack is needed for diagnostics.
+
+The public installer securely requests and validates a Gemini key before
+startup. The success screen prints every local URL and the development-only
+starter account. Sign in to Studio with `alice` / `alice`; Studio creates and
+deploys the AI Lead Triage starter, including its human form and local demo
+adapters, without overwriting existing projects.
+The bootstrap adds `bob` / `bob` as a Viewer and the exclusive member of the
+Lead Triage HIGH-review task group; Alice remains the project operator.
 
 Production:
 
@@ -51,7 +61,10 @@ public hostnames, explicit CORS origins, ACME email, and an externally managed
 OIDC/Keycloak-compatible provider.
 
 The downloadable `quickstart.sh` and `quickstart.ps1` verify the archive and
-start development automatically. When invoked with the production profile,
-they only install the bundle and create `.env.prod`; operators must edit it,
-run `doctor prod`, and issue the explicit `up prod` command printed by the
-script.
+start development automatically. They resolve the default version from the
+public `https://install.abadaplatform.com/latest` pointer; set
+`ABADA_VERSION` for an exact immutable release and
+`ABADA_RELEASE_BASE_URL` for a mirror. When invoked with the production
+profile, they only install the bundle and create `.env.prod`; operators must
+edit it, run `doctor prod`, and issue the explicit `up prod` command printed
+by the script.

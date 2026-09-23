@@ -1,66 +1,84 @@
 ---
 title: Architecture overview
-description: Components, boundaries and authoritative data flow in Abada Engine.
+description: Components, boundaries and authoritative data flow in Abada's agentic orchestration platform.
 ---
 
 import { Aside, Card, CardGrid } from '@astrojs/starlight/components';
 
-Abada is a self-hosted BPMN orchestration platform. Clients and workers use the
-versioned API, any engine replica may handle a command, and PostgreSQL owns the
-workflow truth.
+Abada orchestrates **agentic workflows on a transactional ACID rail**. Studio
+is the AI-native authoring and operations surface, APL is the native
+definition language, the Engine is a PostgreSQL-authoritative transactional
+core, agent nodes execute as durable external work, and the Insight Engine
+closes a governed self-optimizing loop. Clients and workers use the versioned
+API; any engine replica may handle a command; PostgreSQL owns the workflow
+truth.
 
 ```mermaid
 flowchart TB
-    subgraph Clients
-      S[Studio operator UI]
-      W[External workers and Java SDK]
-      A[API clients]
+    subgraph Authoring[Abada Studio - single operator UI]
+      D[Designer: canvas + APL YAML + AI assist]
+      R[Run: Dry Run local · Deploy & Start durable]
+      I[Insight: proposal review]
+      O[Operations: instances · worker health]
     end
-    P[Traefik or trusted ingress]
-    subgraph Engine cluster
+    subgraph EngineC[Engine cluster]
       E1[Engine replica 1]
-      E2[Engine replica 2]
       EN[Engine replica N]
     end
-    DB[(PostgreSQL)]
-    O[OpenTelemetry collector]
+    AW[Agent Worker - first-party sidecar]
+    W[Third-party workers]
+    DB[(PostgreSQL: state · facts · proposals)]
+    AN[Insight analyzer]
+    M[LLM provider]
+    P[Traefik or trusted ingress]
     IDP[OIDC identity provider]
 
-    S --> P
-    W --> P
-    A --> P
+    D --> R
+    R --> P
     P --> E1
-    P --> E2
     P --> EN
-    IDP -. signed JWT .-> E1
-    IDP -. signed JWT .-> E2
-    IDP -. signed JWT .-> EN
     E1 <--> DB
-    E2 <--> DB
     EN <--> DB
-    E1 -. optional OTLP .-> O
-    E2 -. optional OTLP .-> O
-    EN -. optional OTLP .-> O
+    E1 -. agent task .-> AW
+    AW --> M
+    M --> AW
+    AW -. complete + attempt metadata .-> E1
+    W -. fetch-and-lock .-> E1
+    AN -. lease .-> DB
+    DB -. findings + proposals .-> AN
+    AN -. validated APL drafts .-> DB
+    I -. approve / reject .-> E1
+    IDP -. signed JWT .-> E1
+    E1 -. optional OTLP .-> O[OpenTelemetry backend]
 ```
+
+The doctrine expressed across these components is **the table is the law,
+agents are the advice**: deterministic decision tables evaluate inside the
+transaction, probabilistic agent work stays on the durable worker protocol,
+and humans govern every executable change.
 
 ## Architectural boundaries
 
 <CardGrid>
+  <Card title="Authoring boundary" icon="laptop">
+    Studio serializes one APL document from its canvas and YAML editor; BPMN
+    XML is transpiled at import. Dry Run is local and mocked; Deploy &amp;
+    Start is the only authoring action that persists state.
+  </Card>
   <Card title="Public boundary" icon="puzzle">
     `/api/v1` and worker protocol v1 expose stable DTOs, typed errors,
-    pagination, idempotency and trace propagation.
+    pagination, idempotency and trace propagation — including the additive
+    `abada.agent/v1` profile.
   </Card>
   <Card title="Execution boundary" icon="setting">
-    Core command services reconstruct state and execute the supported BPMN
-    semantics inside explicit transactions.
+    Core command services reconstruct state and execute the canonical model
+    inside explicit transactions; agent and external work always arrives back
+    through a command.
   </Card>
   <Card title="Persistence boundary" icon="database">
     JPA repositories and Flyway migrations map durable definitions, instances,
-    tasks, subscriptions, jobs, variables, history and outbox records.
-  </Card>
-  <Card title="Presentation boundary" icon="laptop">
-    Studio consumes public DTOs. It does not define authorization or
-    reconstruct authoritative workflow history.
+    tasks, subscriptions, jobs, variables, history, Insight facts and outbox
+    records.
   </Card>
 </CardGrid>
 
@@ -72,6 +90,8 @@ flowchart TB
 | Instances, tokens and joins | PostgreSQL | Command-local only |
 | Variables and user tasks | PostgreSQL | Detached read snapshots or command-local models |
 | Subscriptions, timers and work | PostgreSQL | Acquired through locks and leases |
+| Agent and external tasks | PostgreSQL external-task rows (attempt metadata included) | Acquired through fetch-and-lock leases |
+| Insight facts, findings and proposals | PostgreSQL (facts commit with their command) | Analyzer works from durable windows |
 | Audit history and lifecycle events | PostgreSQL | Lifecycle delivery originates from the outbox |
 
 <Aside type="note" title="H2 is not the production reference">
@@ -82,8 +102,10 @@ flowchart TB
 
 ## Continue exploring
 
-- [Runtime and transaction boundaries](/architecture/runtime/)
+- [The transactional execution core](/architecture/runtime/)
+- [Native APL and the canonical model](/architecture/apl/)
+- [Agent Worker execution](/architecture/agent-worker/)
+- [The Insight Engine](/architecture/insight/)
 - [Platform deployment and telemetry boundaries](/architecture/deployment/)
 - [Cluster acquisition and recovery](/architecture/cluster/)
 - [Authentication and authorization](/architecture/security/)
-- [BPMN parsing and canonical execution](/architecture/bpmn/)

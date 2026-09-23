@@ -48,6 +48,21 @@ flowchart TD
     Migration --> Recovery
 ```
 
+## Schemas that grew with the agentic track
+
+Newer capabilities are ordinary additive migrations with the same rules:
+
+| Capability | Migration surface | Note |
+| --- | --- | --- |
+| Schema dispatch | `process_definitions.schema_type` (`BPMN_XML`/`APL_NATIVE`, V10) | Every published schema version v1–v9 upgrades cleanly; the column is NOT NULL and CHECK-constrained |
+| Project file tree | `project_folders`/`project_resources` + folder links (V13) | Project-scoped documents with optimistic revisions; deleting a folder archives contents |
+| Insight Loop | `insight_execution_facts`, `insight_observation_windows`, `insight_findings`, `insight_proposals`, `insight_approval_policies`, `insight_proposal_reviews`, `insight_worker_lease` | Facts commit with their runtime command; uniqueness is per `visit_id`; the analyzer lease must stay cluster-safe |
+| Agent attempt metadata | `agent_metadata` JSON on the external-task row | Same JSON travels in history event details; never prompts, tokens or PII |
+
+Fact rows are small, indexed, bounded writes inside terminal commands — do not
+make analyzer aggregation part of the command transaction, and do not widen
+facts with process variables or prompts.
+
 <Aside type="danger" title="Destructive migrations need an operational contract">
   Do not delete or rewrite production data without explicit backup, restore,
   rollback and upgrade guidance. A downgrade normally requires restoring the

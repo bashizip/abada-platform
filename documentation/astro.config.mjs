@@ -14,8 +14,8 @@ export default defineConfig({
       },
     }),
     starlight({
-      title: 'Abada Engine',
-      description: 'User, architecture and developer guides for the Abada BPMN orchestration platform.',
+      title: 'Abada Platform',
+      description: 'Agentic orchestration on a transactional ACID rail — Studio authoring, native APL, the durable Agent Worker and the governed Insight Engine.',
       favicon: '/favicon.svg',
       lastUpdated: true,
       editLink: {
@@ -42,12 +42,14 @@ export default defineConfig({
           items: [
             { label: 'Choose a deployment', slug: 'user' },
             { label: 'Quickstart', slug: 'user/quickstart' },
-            { label: 'Your first workflow', slug: 'user/first-workflow' },
+            { label: 'Your first agentic workflow', slug: 'user/first-workflow' },
+            { label: 'Author processes in native APL', slug: 'user/authoring' },
+            { label: 'Agent nodes and the Agent Worker', slug: 'user/agent-worker' },
+            { label: 'Studio administration', slug: 'user/studio-administration' },
+            { label: 'Insight: governed AI optimization', slug: 'user/studio-insight' },
             { label: 'Development deployment', slug: 'user/development' },
             { label: 'Production deployment', slug: 'user/production' },
             { label: 'Production identity', slug: 'user/identity' },
-            { label: 'Studio administration', slug: 'user/studio-administration' },
-            { label: 'Studio insight', slug: 'user/studio-insight' },
             { label: 'Telemetry', slug: 'user/telemetry' },
             { label: 'Scaling', slug: 'user/scaling' },
             { label: 'Backup and upgrades', slug: 'user/backup-upgrade' },
@@ -58,11 +60,19 @@ export default defineConfig({
           label: 'Architecture',
           items: [
             { label: 'Architecture overview', slug: 'architecture' },
+            { label: 'The transactional execution core', slug: 'architecture/runtime' },
+            { label: 'Native APL and the canonical model', slug: 'architecture/apl' },
+            { label: 'Agent Worker execution', slug: 'architecture/agent-worker' },
+            { label: 'The Insight Engine', slug: 'architecture/insight' },
             { label: 'Platform deployment', slug: 'architecture/deployment' },
-            { label: 'Runtime and transactions', slug: 'architecture/runtime' },
             { label: 'Cluster execution', slug: 'architecture/cluster' },
             { label: 'Security model', slug: 'architecture/security' },
-            { label: 'BPMN canonical model', slug: 'architecture/bpmn' },
+          ],
+        },
+        {
+          label: 'Compatibility & migration',
+          items: [
+            { label: 'BPMN import and compatibility', slug: 'compatibility/bpmn' },
           ],
         },
         {

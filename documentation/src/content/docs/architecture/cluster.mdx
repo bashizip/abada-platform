@@ -50,6 +50,13 @@ The engine commits a short acquisition transaction, then executes each leased
 item in its own workflow command. A failed advancement therefore rolls back
 that item without holding locks on the rest of the batch.
 
+Agent tasks ride the same machinery: fetch-and-lock claims durable
+`abada:agent` work with `SKIP LOCKED` semantics, worker heartbeats refresh
+owned leases, and expiry re-acquires dead-worker work without duplicate
+transitions. The Insight analyzer adds one more lease consumer — the
+durable singleton lease that guarantees a single analyzer at a time (see
+[The Insight Engine](/architecture/insight/)).
+
 ## Recovery rules
 
 - A replica that dies before acquisition commit owns nothing.

@@ -1,5 +1,7 @@
 # Abada 1.1.0 RC Roadmap — Agentic Workflows and Infrastructure Certification
 
+> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`roadmap.md`](roadmap.md). It will move to `docs/archive/` under task T11.
+
 This roadmap follows the `1.0.0-rc.5` prepared OSS core. Its primary product
 goal is to demonstrate agentic workflows as durable consumers of Abada's
 shared APL/BPMN runtime state machine. It does not weaken that state machine or move agent execution

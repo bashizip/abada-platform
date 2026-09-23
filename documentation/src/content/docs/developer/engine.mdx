@@ -1,13 +1,14 @@
 ---
 title: Changing the engine
-description: How to extend BPMN behavior and mutation commands without weakening runtime guarantees.
+description: How to extend canonical behavior — APL nodes, BPMN constructs, agent work and commands — without weakening runtime guarantees.
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
 Engine changes should enter through an existing abstraction whenever it
-matches the behavior: dialect parser, canonical model, core command, repository
-or stable DTO. Avoid repository-wide refactoring for a local semantic change.
+matches the behavior: APL parser, dialect parser, canonical model, core
+command, repository or stable DTO. Avoid repository-wide refactoring for a
+local semantic change.
 
 ## Mutation implementation pattern
 
@@ -17,7 +18,7 @@ flowchart LR
     Command[Atomic command service]
     Repo[Locking repositories]
     Model[Canonical runtime model]
-    Persist[State, work, history and outbox]
+    Persist[State, work, facts, history and outbox]
 
     Controller --> Command
     Command --> Repo
@@ -31,24 +32,34 @@ flowchart LR
 2. Mark the core mutation boundary with `@AtomicRuntimeCommand` and load every
    mutable input inside it.
 3. Lock the natural owner row before validating status or ownership.
-4. Advance only the canonical process model; never interpret vendor XML during
-   execution.
-5. Persist successor tokens/work, variables, history and outbox events before
-   the transaction commits.
+4. Advance only the canonical process model; never interpret vendor XML or
+   untrusted model output during execution.
+5. Persist successor tokens/work, variables, terminal facts, history and
+   outbox events before the transaction commits.
 6. Return a deterministic response suitable for idempotent replay.
 </Steps>
 
-## Adding BPMN behavior
+## Extending canonical behavior (APL and BPMN)
 
-A supported construct requires all of the following:
+APL nodes and BPMN elements are two authoring surfaces over one canonical
+model. A new executable construct requires all of the following:
 
-- secure parsing and explicit dialect/profile handling;
-- a vendor-neutral canonical representation;
-- deployment validation with stable machine-readable error codes;
-- unambiguous runtime semantics and persistence;
-- successful, invalid-input, rollback and restart tests;
-- an executable BPMN fixture;
-- updates to the BPMN support and runtime-semantics contracts.
+- an APL node shape in the spec and node reference, plus the BPMN dialect
+  mapping (or a documented decision that the construct stays APL-only);
+- a vendor-neutral canonical representation with unambiguous runtime
+  semantics and persistence;
+- deployment validation with stable machine-readable error codes for both
+  schemas;
+- successful, invalid-input, rollback and restart tests, with an APL fixture
+  (and a BPMN fixture when the element exists there);
+- Studio compiler/transpiler and round-trip coverage when the construct is
+  authorable in the canvas;
+- updates to the APL specification, BPMN support and runtime-semantics
+  contracts in the same change.
+
+When the engine's kitchen-sink process is affected, keep the APL twin 1:1
+with the BPMN original and run `AplKitchenSinkTest` plus the Studio
+`verify:kitchen-sink` round-trip check.
 
 <Aside type="caution" title="Reject ambiguity at deployment">
   Never accept an execution-relevant directive that the canonical model cannot
@@ -56,12 +67,34 @@ A supported construct requires all of the following:
   treating the node as pass-through.
 </Aside>
 
+## Agent work stays on the worker boundary
+
+- `agent` nodes compile to external tasks on the fixed `abada:agent` topic.
+  The engine never calls a model inside a command; changes that would add a
+  synchronous model call to an `@AtomicRuntimeCommand` service are rejected by
+  design.
+- Attempt metadata flows in through the completion/failure commands and is
+  persisted on the external-task row and history. Keep prompts, tokens,
+  credentials and sensitive payloads out of both.
+- Retry budgets, idempotency keys (task + attempt + operation) and lease
+  recovery are contract behavior — see the agent worker reference and
+  `AgentWorkerResilienceTest`.
+
+## Insight changes are contract changes
+
+Facts are written in the command transaction; the analyzer runs out of band
+under a durable lease and never holds workflow locks while calling a model.
+Generated proposals are untrusted until `AplParser` validates them and policy
+review approves them. Extending the loop means extending the durable data
+model, thresholds and policies with PostgreSQL evidence — never an external
+analytical dependency and never auto-apply.
+
 ## Embedded execution
 
-Java delegates and scripts execute synchronously inside the workflow
+Scripts and embedded delegates execute synchronously inside the workflow
 transaction. They are suitable for deterministic local logic. Use an external
-task for remote calls, long-running work or effects that need independent retry
-and heartbeat behavior.
+task for remote calls, long-running work, LLM calls or effects that need
+independent retry and heartbeat behavior.
 
 ## Definition caches
 

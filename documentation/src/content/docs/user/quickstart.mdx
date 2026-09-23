@@ -16,13 +16,20 @@ Automation may supply `ABADA_AGENT_LLM_API_KEY` to the `bash` process. The key
 is stored only in the untracked local `.env.dev` with mode `0600`; it is never
 part of the release archive or Studio runtime configuration.
 
+One command brings up the whole platform: **PostgreSQL**, the **Engine**, the
+**Studio** operator UI and the **Agent Worker** (`abada-agent-worker`), behind
+a local HTTP edge with bundled Keycloak identity. The installer also enables
+the **Insight Engine** so the governed optimization loop can observe the runs
+you create.
+
 The current launcher finishes with a success panel that confirms container
 health and groups URLs, starter accounts, first-run guidance and management
 commands. It includes:
 
 - Studio: `http://studio.localhost` (dev) / `http://localhost:5605`
 - Engine information: `http://api.localhost/api/v1/info`
-- Keycloak: `http://keycloak.localhost`
+- Keycloak: `http://keycloak.localhost` (development identity only)
+- Agent Worker health: `GET /api/v1/projects/{projectId}/workers/health` (shown in Studio Operations)
 
 Use `alice` / `alice` to sign in to Studio. Studio is the single operator UI:
 its Header tabs cover Designer, Task Inbox, Operations and Insight, and the

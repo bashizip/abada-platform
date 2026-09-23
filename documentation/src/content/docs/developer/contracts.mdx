@@ -1,6 +1,6 @@
 ---
-title: API and worker contracts
-description: Compatibility rules for REST API v1, typed errors, idempotency and external workers.
+title: API, worker, agent and Insight contracts
+description: Compatibility rules for REST API v1, worker protocol v1, the abada.agent/v1 profile and the Insight API.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -57,6 +57,34 @@ Java SDK under `sdk/java` is the executable reference client.
   Use a stable business or idempotency key at the external system; the engine
   cannot roll that effect back.
 </Aside>
+
+## Agent profile (`abada.agent/v1`)
+
+The agent profile is **additive** to worker protocol v1. Locked tasks for
+native APL `agent` nodes carry an optional `agentWork` descriptor (profile,
+model, prompt inputs, result variable, schema, tools, confidence threshold,
+retry bounds); ordinary BPMN and `engine-task` workers receive `null` and
+stay compatible. Completion and failure bodies accept an additive `agent`
+attempt-metadata block — model, provider, attempt, latency, tools,
+`promptHash`, error type and confidence — persisted on the task row and in
+history. Workers that ignore unknown JSON fields remain protocol-v1
+compatible; agent workers must reject a missing or unknown
+`profileVersion`.
+
+Global (first-party) workers self-register once via
+`PUT /v1/workers/me`, poll fetch-and-lock without a `projectId`, and receive
+the owning `projectId` in each locked-task payload. Operator visibility comes
+from `GET /v1/workers/me` and the per-project worker-health surface.
+
+## Insight API (`/api/v1/insight`)
+
+Insight endpoints are **additive** to API v1 and follow the same
+compatibility policy. Reads (configuration, policies, proposals) require
+`insight:read`; review actions require `insight:review`; policy updates
+require `insight:configure`. Proposal lists are paginated; review requests
+carry `expectedUpdatedAt` (a stale request returns a typed `409`) and policy
+updates carry `expectedVersion`. `requiredApprovals` must equal the number of
+distinct reviewer groups in the policy.
 
 ## Contract change checklist
 

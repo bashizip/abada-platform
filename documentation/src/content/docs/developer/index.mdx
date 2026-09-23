@@ -5,16 +5,18 @@ description: Toolchain, local workflow and invariants for contributing to Abada.
 
 import { Aside, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
 
-Abada combines a Java/Spring workflow engine, two TypeScript applications, a
-Java worker SDK, Docker-based infrastructure and this documentation site.
-Contributions must preserve the database-authoritative runtime and the frozen
-public contracts.
+Abada combines a Java/Spring transactional engine, a React/TypeScript Studio
+operator UI, a Java Agent Worker sidecar, a Java worker SDK, Docker-based
+infrastructure and this documentation site. Contributions must preserve the
+database-authoritative runtime, the frozen public contracts and the agentic
+governance boundaries (no model call inside a workflow transaction, no
+auto-apply optimization).
 
 ## Required toolchain
 
 | Component | Required tool |
 | --- | --- |
-| Engine and SDK | Java 21 and `engine/mvnw` |
+| Engine, Agent Worker and SDK | Java 21 and `engine/mvnw` |
 | Studio and documentation | Node.js 24.18.x and npm 11+ |
 | Persistence tests | Docker Desktop/Engine for PostgreSQL Testcontainers |
 | Local/production composition | Docker Compose v2 |
@@ -27,8 +29,8 @@ public contracts.
 ## First contribution
 
 <Steps>
-1. **Read the contract.** Identify the BPMN, runtime, API, worker, security or
-   deployment promise affected by the change.
+1. **Read the contract.** Identify the APL/BPMN, runtime, agent, Insight,
+   API, worker, security or deployment promise affected by the change.
 2. **Find the command boundary.** Trace the controller or scheduler into its
    core `@AtomicRuntimeCommand` service and repositories.
 3. **Add evidence.** Write parser/unit tests and PostgreSQL behavior tests in
