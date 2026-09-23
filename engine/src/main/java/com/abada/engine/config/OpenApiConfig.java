@@ -47,7 +47,7 @@ public class OpenApiConfig {
                                                                 .bearerFormat("JWT")))
                                 .info(new Info()
                                                 .title(appName + " API")
-                                                .description("High-performance, modular BPMN 2.0 process automation engine.")
+                                                .description("Open-source, self-hosted runtime for governed AI-driven business processes. APL is the native process language; BPMN 2.0 is a documented import subset.")
                                                 .version(appVersion)
                                                 .contact(new Contact()
                                                                 .name("Abada Platform")
