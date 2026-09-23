@@ -1,0 +1,36 @@
+version: abada.io/v1
+metadata:
+  name: M1 Demo Contract
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: classify
+    - id: classify
+      type: agent
+      model: gpt-5-mini
+      prompt: "MODE=${mode} CASE=${caseId}. Classify the lead as HIGH, MEDIUM or LOW."
+      inputs:
+        mode: ${mode}
+        caseId: ${caseId}
+      result_variable: lead_priority
+      output_schema:
+        type: object
+        required: [priority]
+        properties:
+          priority:
+            enum: [HIGH, MEDIUM, LOW]
+      confidence_threshold: 85
+      timeout_ms: 60000
+      max_attempts: 1
+      on_low_confidence: review
+      on_invalid_output: review
+      next: done
+    - id: review
+      type: human-input
+      description: Review the agent result
+      assignees: [abada-task-user]
+      next: done
+    - id: done
+      type: end

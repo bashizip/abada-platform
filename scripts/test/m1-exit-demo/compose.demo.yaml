@@ -1,0 +1,18 @@
+# M1 exit-demo overlay: scripted model, short worker locks, two worker replicas.
+services:
+  mock-llm:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/mock_llm.py"]
+    volumes:
+      - ./scripts/test/m1-exit-demo/mock_llm.py:/mock_llm.py:ro
+    networks:
+      - edge
+
+  abada-agent-worker:
+    environment:
+      ABADA_AGENT_OPENAI_BASE_URL: http://mock-llm:8000/v1
+      ABADA_AGENT_OPENAI_API_KEY: demo-not-a-secret
+      ABADA_AGENT_LOCK_DURATION_MS: "6000"
+      ABADA_AGENT_MAX_TASKS: "4"
+    deploy:
+      replicas: 2
