@@ -319,7 +319,7 @@ class InsightLoopIntegrationTest {
         if (jobs.size() != 1) {
             throw new AssertionError("expected exactly one agent job, got " + jobs.size());
         }
-        externalTasks.complete(jobs.getFirst().id(), Map.of("handled", true));
+        externalTasks.complete(jobs.getFirst().id(), Map.of("notify_result", Map.of("handled", true, "_confidence", 90)));
     }
 
     private void deploy(AbadaEngine engine, String resource) {

@@ -14,15 +14,15 @@ OpenAPI document, Swagger UI and operational health probes.
 {
   "name": "Abada Engine",
   "service": "abada-engine",
-  "description": "Open-source, self-hosted BPMN 2.0 workflow orchestration engine",
-  "version": "1.0.0-rc.5",
+  "description": "Open-source, self-hosted runtime for governed AI-driven business processes",
+  "version": "1.0.0-rc.6",
   "api": {
     "version": "v1",
     "openApi": "/api/v3/api-docs",
     "swaggerUi": "/api/swagger-ui.html"
   },
   "engine": {
-    "standard": "BPMN 2.0",
+    "standard": "APL + BPMN 2.0 import",
     "supportLevel": "documented-subset",
     "persistence": "PostgreSQL"
   },

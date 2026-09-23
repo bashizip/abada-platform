@@ -8,6 +8,7 @@ import {
   APLEventGatewayChild,
   APLEventGatewayNode,
   APLNode,
+  APLOnError,
   APLValue,
 } from './types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, DMNConfig } from '@/types';
@@ -213,7 +214,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           profileVersion: aplNode.profile || 'abada.agent/v1',
           model: aplNode.model || getDefaultAgentModel(),
           systemPrompt: aplNode.prompt || '',
-          confidenceThreshold: aplNode.confidence_threshold || 85,
+          confidenceThreshold: aplNode.confidence_threshold ?? 0,
           temperature: aplNode.temperature ?? 0.2,
           tools: aplNode.tools || [],
           inputs: aplNode.inputs,
@@ -223,6 +224,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           timeoutMs: aplNode.timeout_ms,
           maxAttempts: aplNode.max_attempts,
           retryBackoffMs: aplNode.retry_backoff_ms,
+          onLowConfidence: aplNode.on_low_confidence,
+          onInvalidOutput: aplNode.on_invalid_output,
+          onError: aplNode.on_error,
         };
         break;
       case 'engine-task':
@@ -247,7 +251,6 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           slaHours: aplNode.sla_hours || 24,
           formKey: aplNode.formKey,
           formFields: [],
-          requireDoubleSignOff: aplNode.mode === 'parallel' && (aplNode.assignees?.length || 0) > 1,
         };
         break;
       case 'condition':
@@ -368,13 +371,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         source: aplNode.id,
         target: aplNode.next,
       });
-    } else if (aplNode.type === 'engine-task' && aplNode.on_error) {
-      edges.push({
-        id: `e_${aplNode.id}_${aplNode.on_error}_error`,
-        source: aplNode.id,
-        target: aplNode.on_error,
-        label: 'on_error',
-      });
+    }
+    // Outcome routes are drawn as labelled edges after the normal successor.
+    if (aplNode.type === 'agent' || aplNode.type === 'engine-task') {
+      outcomeRouteEdges(aplNode).forEach((edge) => edges.push(edge));
     }
   });
 
@@ -413,7 +413,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
   // Helper to find outgoing edge target for non-gateway nodes
   const getNextNode = (nodeId: string, sourceType: WorkflowNode['type']): string | undefined => {
     if (sourceType === 'gateway') return undefined; // gateways route via rules
-    const outEdges = wf.edges.filter(e => e.source === nodeId);
+    const outEdges = wf.edges.filter(e => e.source === nodeId && !isOutcomeRouteEdge(e));
     return outEdges.length > 0 ? outEdges[0].target : undefined;
   };
 
@@ -468,12 +468,15 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         result_variable: node.agentConfig?.resultVariable,
         output_schema: node.agentConfig?.outputSchema,
         tools: node.agentConfig?.tools?.length ? node.agentConfig.tools : undefined,
-        confidence_threshold: node.agentConfig?.confidenceThreshold,
+        confidence_threshold: node.agentConfig?.confidenceThreshold ? node.agentConfig.confidenceThreshold : undefined,
         temperature: node.agentConfig?.temperature,
         max_tokens: node.agentConfig?.maxTokens,
         timeout_ms: node.agentConfig?.timeoutMs,
         max_attempts: node.agentConfig?.maxAttempts,
         retry_backoff_ms: node.agentConfig?.retryBackoffMs,
+        on_low_confidence: node.agentConfig?.onLowConfidence || undefined,
+        on_invalid_output: node.agentConfig?.onInvalidOutput || undefined,
+        on_error: node.agentConfig?.onError || undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
@@ -481,7 +484,6 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         ...baseNode,
         type: 'human-input',
         assignees: node.humanConfig?.assignees || [],
-        mode: node.humanConfig?.requireDoubleSignOff ? 'parallel' : 'serial',
         sla_hours: node.humanConfig?.slaHours,
         formKey: node.humanConfig?.formKey,
         next: getNextNode(node.id, node.type),
@@ -623,4 +625,28 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
       nodes: aplNodes,
     }
   };
+}
+
+/** Outcome-route edges (on_low_confidence, on_invalid_output, on_error) are labelled `on_*`. */
+export const isOutcomeRouteEdge = (edge: { label?: string }): boolean =>
+  typeof edge.label === 'string' && edge.label.startsWith('on_');
+
+function outcomeRouteEdges(aplNode: APLNode): WorkflowEdge[] {
+  const routes: { target: string; label: string }[] = [];
+  const node = aplNode as { on_low_confidence?: string; on_invalid_output?: string; on_error?: APLOnError };
+  if (node.on_low_confidence) routes.push({ target: node.on_low_confidence, label: 'on_low_confidence' });
+  if (node.on_invalid_output) routes.push({ target: node.on_invalid_output, label: 'on_invalid_output' });
+  if (typeof node.on_error === 'string' && node.on_error) {
+    routes.push({ target: node.on_error, label: 'on_error' });
+  } else if (Array.isArray(node.on_error)) {
+    node.on_error.forEach((rule) => {
+      if (rule?.then) routes.push({ target: rule.then, label: rule.code ? `on_error: ${rule.code}` : 'on_error' });
+    });
+  }
+  return routes.map((route, index) => ({
+    id: `e_${aplNode.id}_${route.target}_${route.label.replace(/[^a-z_]/gi, '')}_${index}`,
+    source: aplNode.id,
+    target: route.target,
+    label: route.label,
+  }));
 }

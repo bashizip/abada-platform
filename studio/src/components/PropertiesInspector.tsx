@@ -365,15 +365,51 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
               <input
                 type="range"
-                min="50"
+                min="0"
                 max="99"
-                value={selectedNode.agentConfig.confidenceThreshold}
+                value={selectedNode.agentConfig.confidenceThreshold ?? 0}
                 onChange={(e) => handleAgentChange('confidenceThreshold', Number(e.target.value))}
                 className="w-full accent-[#9D4EDD] bg-[#25201D] h-1.5 rounded-lg cursor-pointer"
               />
               <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                If AI execution confidence falls below <strong className="text-[#9D4EDD]">{selectedNode.agentConfig.confidenceThreshold}%</strong>, execution automatically triggers escalation to human review.
+                {selectedNode.agentConfig.confidenceThreshold
+                  ? <>The engine requires the model to report <code>_confidence</code> of at least <strong className="text-[#9D4EDD]">{selectedNode.agentConfig.confidenceThreshold}%</strong> (declare an output schema). A missing or lower score goes to the low-confidence route below; without a route the attempt is retried and then becomes an incident.</>
+                  : <>0% = no confidence gate.</>}
               </p>
+            </div>
+
+            {/* Outcome routes: the engine-side output contract (T5, T7) */}
+            <div className="space-y-2 p-3 bg-[#1A1614] rounded-xl border border-[#3A322E]">
+              <span className="text-xs text-[#EAE3D9] font-medium block">Outcome routes</span>
+              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+                Where the instance goes when the engine rejects the agent result. Without a route, a rejected
+                result counts as a failed attempt.
+              </p>
+              {([
+                ['onLowConfidence', 'Low confidence (on_low_confidence)'],
+                ['onInvalidOutput', 'Invalid output (on_invalid_output)'],
+                ['onError', 'Business error (on_error)'],
+              ] as const).map(([field, label]) => (
+                <div key={field} className="space-y-1">
+                  <label className="text-[10px] text-[#A89F91] block">{label}</label>
+                  {Array.isArray(selectedNode.agentConfig?.[field]) ? (
+                    <p className="text-[10px] text-[#A89F91]">Routed by error code — edit in APL.</p>
+                  ) : (
+                    <select
+                      value={(selectedNode.agentConfig?.[field] as string | undefined) || ''}
+                      onChange={(e) => handleAgentChange(field, e.target.value || undefined)}
+                      className="w-full bg-[#25201D] border border-[#3A322E] rounded-lg px-2 py-1.5 text-xs font-mono text-[#EAE3D9] focus:outline-none"
+                    >
+                      <option value="">— no route —</option>
+                      {workflow?.nodes
+                        .filter((n) => n.id !== selectedNode.id)
+                        .map((n) => (
+                          <option key={n.id} value={n.id}>{n.title || n.id}</option>
+                        ))}
+                    </select>
+                  )}
+                </div>
+              ))}
             </div>
 
             {/* Temperature Slider */}
@@ -610,8 +646,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               <p className="text-[10px] text-[#A89F91] leading-relaxed">
                 When the engine task fails, the instance routes here instead of the normal successor. Drawn as an error edge.
               </p>
+              {Array.isArray(selectedNode.engineTaskConfig?.onError) ? (
+                <p className="text-[10px] text-[#A89F91]">Routed by error code — edit in APL.</p>
+              ) : (
               <select
-                value={selectedNode.engineTaskConfig?.onError || ''}
+                value={(selectedNode.engineTaskConfig?.onError as string | undefined) || ''}
                 onChange={(e) => onUpdateNode({
                   ...selectedNode,
                   engineTaskConfig: {
@@ -628,6 +667,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     <option key={n.id} value={n.id}>{n.title || n.id}</option>
                   ))}
               </select>
+              )}
             </div>
           </div>
         )}
@@ -932,7 +972,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">SLA Timer (Hours)</label>
+              <label className="text-xs text-[#A89F91] block">SLA (Hours) · monitoring hint, not enforced until 1.1</label>
               <input
                 type="number"
                 value={humanConfig.slaHours}
@@ -941,17 +981,6 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               />
             </div>
 
-            <div className="p-3 bg-[#1A1614] rounded-xl border border-[#E76F51]/30 space-y-2">
-              <label className="flex items-center justify-between text-xs text-[#EAE3D9] cursor-pointer">
-                <span>Require Dual Manager Sign-off</span>
-                <input
-                  type="checkbox"
-                  checked={humanConfig.requireDoubleSignOff || false}
-                  onChange={(e) => handleHumanChange('requireDoubleSignOff', e.target.checked)}
-                  className="accent-[#E76F51] rounded"
-                />
-              </label>
-            </div>
           </div>
         )}
       </div>

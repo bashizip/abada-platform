@@ -25,7 +25,7 @@ services:
       start_period: 10s
 
   abada-engine:
-    image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.0.0-rc.5}
+    image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.0.0-rc.6}
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: "5601"
@@ -50,6 +50,8 @@ services:
       ABADA_LLM_API_KEY: ${ABADA_LLM_API_KEY:-}
       ABADA_LLM_MODEL: ${ABADA_LLM_MODEL:-gemini-3.6-flash}
       ABADA_AGENT_ALLOWED_MODELS: ${ABADA_AGENT_ALLOWED_MODELS:-gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini}
+      ABADA_SCRIPTS_ENABLED: ${ABADA_SCRIPTS_ENABLED:-false}
+      ABADA_DELEGATES_ALLOWED_CLASSES: ${ABADA_DELEGATES_ALLOWED_CLASSES:-}
       ABADA_KEYCLOAK_URL: ${ABADA_KEYCLOAK_URL:-http://keycloak.localhost}
       ABADA_KEYCLOAK_REALM: ${ABADA_KEYCLOAK_REALM:-abada-dev}
       ABADA_KEYCLOAK_ADMIN_CLIENT_ID: ${ABADA_KEYCLOAK_ADMIN_CLIENT_ID:-abada-admin-api}
@@ -76,7 +78,7 @@ services:
       start_period: 30s
 
   abada-studio:
-    image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.5}
+    image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.6}
     environment:
       ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
       ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
@@ -122,6 +124,7 @@ services:
       ABADA_AGENT_POLL_INTERVAL_MS: ${ABADA_AGENT_POLL_INTERVAL_MS:-1000}
       ABADA_AGENT_MAX_TASKS: ${ABADA_AGENT_MAX_TASKS:-4}
       ABADA_AGENT_LOCK_DURATION_MS: ${ABADA_AGENT_LOCK_DURATION_MS:-120000}
+      ABADA_AGENT_MAX_TIMEOUT_MS: ${ABADA_AGENT_MAX_TIMEOUT_MS:-120000}
     networks:
       - edge
     restart: unless-stopped
@@ -142,7 +145,7 @@ services:
         condition: service_healthy
 
   abada-docs:
-    image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.5}
+    image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.6}
     networks:
       - edge
     restart: unless-stopped

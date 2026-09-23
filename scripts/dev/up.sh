@@ -7,7 +7,7 @@
 #   ./scripts/dev/up.sh --no-agent    # build all images + core stack only (diagnostics)
 #   ./scripts/dev/up.sh --no-build    # skip builds, just stack up (images must exist)
 #   ./scripts/dev/up.sh --no-cache    # rebuild images from scratch (no Docker layer cache)
-#   ./scripts/dev/up.sh --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.5
+#   ./scripts/dev/up.sh --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.6
 #                                      # use a pinned remote agent image instead of the local build
 #   ./scripts/dev/up.sh --telemetry   # also enable the bundled telemetry overlay
 #   ./scripts/dev/up.sh --telemetry --no-agent

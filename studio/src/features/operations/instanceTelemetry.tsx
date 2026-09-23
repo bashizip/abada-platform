@@ -346,7 +346,7 @@ export const NodeTelemetry: React.FC<{
                 <InfoRow label="Model">
                   <span className="font-mono text-[#9D4EDD]">{node.agentConfig.model}</span>
                 </InfoRow>
-                <InfoRow label="Confidence threshold">{node.agentConfig.confidenceThreshold}%</InfoRow>
+                <InfoRow label="Confidence threshold">{node.agentConfig.confidenceThreshold ? `${node.agentConfig.confidenceThreshold}%` : 'none'}</InfoRow>
                 <InfoRow label="Temperature">{node.agentConfig.temperature}</InfoRow>
                 <InfoRow label="Result variable">
                   <span className="font-mono">{node.agentConfig.resultVariable ?? '—'}</span>
@@ -378,6 +378,19 @@ export const NodeTelemetry: React.FC<{
               {telemetry.agent.durationMs !== undefined && <InfoRow label="Latency">{formatDuration(telemetry.agent.durationMs)}</InfoRow>}
               {telemetry.agent.resultVariable && <InfoRow label="Result variable"><span className="font-mono">{telemetry.agent.resultVariable}</span></InfoRow>}
               {telemetry.agent.errorType && <InfoRow label="Error type"><span className="text-[#E76F51]">{telemetry.agent.errorType}</span></InfoRow>}
+              {telemetry.agent.outcome && (
+                <InfoRow label="Output contract">
+                  <span className={telemetry.agent.outcome === 'OK' ? 'text-[#2A9D8F]' : 'text-[#E76F51]'}>
+                    {telemetry.agent.outcome}
+                  </span>
+                </InfoRow>
+              )}
+              {telemetry.agent.outcomeReason && <InfoRow label="Rejection reason">{telemetry.agent.outcomeReason}</InfoRow>}
+              {(telemetry.agent.promptTokens !== undefined || telemetry.agent.completionTokens !== undefined) && (
+                <InfoRow label="Tokens">
+                  {`${telemetry.agent.promptTokens ?? '—'} in · ${telemetry.agent.completionTokens ?? '—'} out`}
+                </InfoRow>
+              )}
               {telemetry.agent.promptHash && <InfoRow label="Prompt hash"><span className="font-mono text-[10px]">{telemetry.agent.promptHash.slice(0, 16)}…</span></InfoRow>}
               {telemetry.workerIds.length > 0 && <InfoRow label="Workers">{telemetry.workerIds.join(', ')}</InfoRow>}
               {telemetry.retries > 0 && <InfoRow label="Retries left">{telemetry.retries}</InfoRow>}
@@ -400,7 +413,6 @@ export const NodeTelemetry: React.FC<{
               </div>
               <InfoRow label="Assignees">{node.humanConfig.assignees.join(', ')}</InfoRow>
               <InfoRow label="SLA">{node.humanConfig.slaHours}h</InfoRow>
-              {node.humanConfig.escalationRole && <InfoRow label="Escalation">{node.humanConfig.escalationRole}</InfoRow>}
             </div>
           )}
           {nodeEvents.length === 0 && (

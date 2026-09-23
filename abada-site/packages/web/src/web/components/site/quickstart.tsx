@@ -87,7 +87,7 @@ export function Quickstart() {
                 href={DEMO_URL}
                 className="inline-flex items-center gap-1.5 text-[14px] text-t2 transition-colors hover:text-t1"
               >
-                Or watch the 84-second demo
+                Or read the quickstart below
               </a>
             </div>
           </div>

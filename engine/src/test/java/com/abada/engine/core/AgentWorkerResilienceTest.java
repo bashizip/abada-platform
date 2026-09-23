@@ -74,7 +74,7 @@ class AgentWorkerResilienceTest {
             });
 
             // The surviving worker completes exactly one transition.
-            commands.complete(taskId, "worker-2", Map.of("handled", true),
+            commands.complete(taskId, "worker-2", Map.of("notify_result", Map.of("handled", true, "_confidence", 91)),
                     new AgentAttemptMetadata("gemini-3.6-flash", "google-gemini", 2, 2_345L,
                             List.of("crm.read"), "notify_result", "abc123", null, 91.0));
             assertThat(engine.getProcessInstanceById(instanceId).isCompleted()).isTrue();
@@ -82,7 +82,7 @@ class AgentWorkerResilienceTest {
             // A late completion by the dead worker cannot duplicate the
             // transition: the consumed task is terminal and history keeps one
             // completion event.
-            commands.complete(taskId, "worker-1", Map.of("handled", true));
+            commands.complete(taskId, "worker-1", Map.of("notify_result", Map.of("handled", true, "_confidence", 91)));
             assertThat(completedHistoryCount(context, instanceId)).isEqualTo(1);
             assertThat(taskState(context, taskId).getStatus()).isEqualTo(ExternalTaskEntity.Status.COMPLETED);
         }
@@ -118,7 +118,7 @@ class AgentWorkerResilienceTest {
             assertThat(task.getExceptionMessage()).contains("HTTP 429");
             assertThat(task.getAgentMetadataJson()).contains("\"errorType\":\"RateLimitException\"");
 
-            commands.complete(taskId, "worker-2", Map.of("handled", true));
+            commands.complete(taskId, "worker-2", Map.of("notify_result", Map.of("handled", true, "_confidence", 91)));
             assertThat(engine.getProcessInstanceById(instanceId).isCompleted()).isTrue();
             assertThat(completedHistoryCount(context, instanceId)).isEqualTo(1);
         }
@@ -142,7 +142,7 @@ class AgentWorkerResilienceTest {
             // The worker finishes late while the instance is suspended: the
             // completion command rolls back atomically — no task state change,
             // no variables, no history, no advancement.
-            assertThatThrownBy(() -> commands.complete(taskId, "worker-1", Map.of("handled", true)))
+            assertThatThrownBy(() -> commands.complete(taskId, "worker-1", Map.of("notify_result", Map.of("handled", true, "_confidence", 91))))
                     .isInstanceOf(ProcessEngineException.class)
                     .hasMessageContaining("suspended");
             assertThat(taskState(context, taskId).getStatus()).isEqualTo(ExternalTaskEntity.Status.LOCKED);
@@ -154,7 +154,7 @@ class AgentWorkerResilienceTest {
             // Deterministic late completion: resume re-admits the same worker
             // completion command, and it advances exactly once.
             engine.suspendProcessInstance(instanceId, false);
-            commands.complete(taskId, "worker-1", Map.of("handled", true));
+            commands.complete(taskId, "worker-1", Map.of("notify_result", Map.of("handled", true, "_confidence", 91)));
             assertThat(engine.getProcessInstanceById(instanceId).isCompleted()).isTrue();
             assertThat(completedHistoryCount(context, instanceId)).isEqualTo(1);
         }
@@ -175,7 +175,7 @@ class AgentWorkerResilienceTest {
 
             engine.cancelProcessInstance(instanceId, "lead rejected upstream");
 
-            assertThatThrownBy(() -> commands.complete(taskId, "worker-1", Map.of("handled", true)))
+            assertThatThrownBy(() -> commands.complete(taskId, "worker-1", Map.of("notify_result", Map.of("handled", true, "_confidence", 91))))
                     .isInstanceOf(ProcessEngineException.class)
                     .hasMessageContaining("terminal state");
             assertThat(taskState(context, taskId).getStatus()).isEqualTo(ExternalTaskEntity.Status.LOCKED);
@@ -190,7 +190,7 @@ class AgentWorkerResilienceTest {
                     "worker-2", List.of("abada:agent"), 10_000L));
             assertThat(reclaimed).singleElement();
             assertThatThrownBy(() -> commands.complete(reclaimed.getFirst().id(), "worker-2",
-                    Map.of("handled", true)))
+                    Map.of("notify_result", Map.of("handled", true, "_confidence", 91))))
                     .isInstanceOf(ProcessEngineException.class)
                     .hasMessageContaining("terminal state");
             assertThat(engine.getProcessInstanceById(instanceId).getStatus()).isEqualTo(ProcessStatus.CANCELLED);
@@ -223,7 +223,7 @@ class AgentWorkerResilienceTest {
 
             // The original worker, still holding its live lease, completes the
             // leased task exactly once.
-            commands.complete(taskId, "worker-1", Map.of("handled", true));
+            commands.complete(taskId, "worker-1", Map.of("notify_result", Map.of("handled", true, "_confidence", 91)));
             AbadaEngine engine = restarted.getBean(AbadaEngine.class);
             assertThat(engine.getProcessInstanceById(instanceId).isCompleted()).isTrue();
             assertThat(completedHistoryCount(restarted, instanceId)).isEqualTo(1);
@@ -256,7 +256,7 @@ class AgentWorkerResilienceTest {
                     "worker-2", List.of("abada:agent"), 10_000L));
             assertThat(recovered).singleElement();
 
-            commands.complete(recovered.getFirst().id(), "worker-2", Map.of("handled", true));
+            commands.complete(recovered.getFirst().id(), "worker-2", Map.of("notify_result", Map.of("handled", true, "_confidence", 91)));
             AbadaEngine engine = restarted.getBean(AbadaEngine.class);
             assertThat(engine.getProcessInstanceById(instanceId).isCompleted()).isTrue();
             assertThat(completedHistoryCount(restarted, instanceId)).isEqualTo(1);

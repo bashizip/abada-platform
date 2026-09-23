@@ -189,7 +189,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
         {data.type === 'agent' && data.agentConfig && (
           <div className="pt-2 border-t border-[#3A322E] flex items-center justify-between text-[10px] text-[#A89F91]">
             <span className="font-mono text-[#9D4EDD]">
-              Threshold: {data.agentConfig.confidenceThreshold}%
+              {data.agentConfig.confidenceThreshold ? `Threshold: ${data.agentConfig.confidenceThreshold}%` : 'No confidence gate'}
             </span>
             <span className="text-[10px] bg-[#9D4EDD]/20 text-[#9D4EDD] px-1.5 py-0.5 rounded font-mono">
               {data.agentConfig.model}
@@ -210,7 +210,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
           <div className="pt-2 border-t border-[#3A322E] flex items-center justify-between text-[10px] text-[#E76F51]">
             <span className="truncate">{data.humanConfig.assignees.join(', ')}</span>
             <span className="bg-[#E76F51]/20 px-1.5 py-0.5 rounded shrink-0">
-              SLA {data.humanConfig.slaHours}h
+              SLA hint {data.humanConfig.slaHours}h
             </span>
           </div>
         )}

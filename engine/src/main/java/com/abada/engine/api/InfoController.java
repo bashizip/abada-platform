@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class InfoController {
 
     private static final String DESCRIPTION =
-            "Open-source, self-hosted BPMN 2.0 workflow orchestration engine";
+            "Open-source, self-hosted runtime for governed AI-driven business processes";
     private static final String SERVICE_NAME = "abada-engine";
 
     private final String appVersion;
@@ -36,7 +36,7 @@ public class InfoController {
                         endpoint("/v3/api-docs"),
                         endpoint("/swagger-ui.html")),
                 new InfoResponse.Engine(
-                        "BPMN 2.0",
+                        "APL + BPMN 2.0 import",
                         "documented-subset",
                         "PostgreSQL"),
                 new InfoResponse.Health(

@@ -85,14 +85,15 @@ class AplRuntimeTest {
                     new FetchAndLockRequest("worker-1", List.of("abada:agent"), 10_000L));
             assertThat(agentJobs).singleElement().satisfies(job ->
                     assertThat(job.activityId()).isEqualTo("notify"));
-            externalTaskService.complete(agentJobs.getFirst().id(), Map.of("handled", true));
+            externalTaskService.complete(agentJobs.getFirst().id(),
+                    Map.of("notify_result", Map.of("handled", true, "_confidence", 91)));
 
             ProcessInstance completed = engine.getProcessInstanceById(instance.getId());
             assertThat(completed.isCompleted()).isTrue();
             assertThat(completed.getVariables())
                     .containsEntry("rating", "pass")
                     .containsEntry("approved", true)
-                    .containsEntry("handled", true);
+                    .containsEntry("notify_result", Map.of("handled", true));
         }
     }
 
@@ -240,7 +241,8 @@ class AplRuntimeTest {
                     .contains("\"confidenceThreshold\":85.0");
 
             // A real worker reports attempt metadata on the durable completion command.
-            externalTaskService.complete(agentJobs.getFirst().id(), "worker-1", Map.of("handled", true),
+            externalTaskService.complete(agentJobs.getFirst().id(), "worker-1",
+                    Map.of("notify_result", Map.of("handled", true, "_confidence", 93)),
                     new AgentAttemptMetadata("gemini-3.6-flash", "google-gemini", 1, 1_234L,
                             List.of("crm.read"), "notify_result", "abc123", null, 93.0));
 

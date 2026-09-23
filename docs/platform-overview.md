@@ -40,4 +40,4 @@ platform.
 Start with the [user guide](../documentation/src/content/docs/user/index.mdx),
 then use the [architecture overview](architecture/overview.md),
 [deployment matrix](reference/deployment-support.md) and
-[roadmap](development/roadmap-to-1.0.md) as the detailed boundaries.
+[roadmap](development/roadmap.md) as the detailed boundaries.

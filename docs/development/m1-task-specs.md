@@ -28,11 +28,11 @@ M1 exit demo (all on a clean `./release/abada-platform up dev`):
 2. The Lead Triage agent returns output that violates its `output_schema` → the instance routes to the human review node via `on_invalid_output`.
 3. The agent returns `_confidence: 40` against a threshold of 85 → the instance routes via `on_low_confidence`.
 4. Four agent tasks with a 90 s simulated model latency complete with exactly four provider calls (verified from worker logs/metrics).
-5. The website and brief contain no claim listed as unsupported in the review.
+5. The website contains no claim listed as unsupported in the review. The outdated PDF brief is removed; a replacement is future work.
 
 ---
 
-## T1 — Replace Nashorn with CEL for conditions and decision tables
+## T1 — Replace Nashorn with CEL for conditions and decision tables ✅ done
 
 **Goal.** No workflow expression can reach the JVM. Conditions, decision-table
 `when` rules and decision-table input expressions are evaluated by CEL
@@ -53,7 +53,7 @@ to an operator allow-list.
   - Nashorn created via `NashornScriptEngineFactory#getScriptEngine(String[] args, ClassLoader, ClassFilter)` with args `--no-java`, `--no-syntax-extensions`, and a `ClassFilter` that denies every class.
   - Disabled unless `abada.scripts.enabled=true` (env `ABADA_SCRIPTS_ENABLED`). When disabled, deployment of a `script` node / `bpmn:scriptTask` fails with a validation error that names the flag.
 - Embedded delegates (`ProcessInstance.advance`, `Class.forName(serviceTaskMeta.className())`) — allowed only when the class is listed in `abada.delegates.allowed-classes` (comma-separated). Validate at deploy; re-check at runtime.
-- New CLI command in `ENGINE/cli/AbadaCli.java`: `migrate-expressions --dry-run <file|dir>` prints every expression that no longer compiles.
+- New CLI command in `ENGINE/cli/AbadaCli.java`: `abada expressions check <file|dir>` prints every expression that no longer compiles (implemented under this name).
 
 **Changes in behaviour.**
 - Accepted forms: comparisons, boolean logic, arithmetic, string equality with single or double quotes, `in`, `has()`, dotted field access on maps (`applicant.creditScore`), `size()`.
@@ -79,7 +79,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T2 — Loud expression failures
+## T2 — Loud expression failures ✅ done (static identifier warnings deferred to M2/E1)
 
 **Goal.** An expression that cannot be evaluated never silently becomes
 `false`.
@@ -91,7 +91,7 @@ release notes with before/after examples and the dry-run command.
 **Changes.**
 - A runtime evaluation error (missing variable, type mismatch) throws `ExpressionEvaluationException(nodeId, expression, reason)` → the command rolls back → API returns HTTP 422 with code `ABADA-RUNTIME-EXPRESSION-001`, the node id and the missing variable name. No variable values in the message.
 - `has(x.y)` remains the supported way to test for optional fields.
-- Deploy-time static check: every top-level identifier referenced by an expression must be (a) the start payload contract if declared, (b) written by an upstream node (`result_variable`, decision-table outputs, script declared outputs), or (c) listed in a new optional `metadata.variables` list. Unknown identifiers produce a **warning** in the deployment response in rc.6 (becomes an error in 1.1).
+- *Deferred to M2/E1 (typed variable schema); without declared start-payload variables the warning would fire on nearly every condition.* Deploy-time static check: every top-level identifier referenced by an expression must be (a) the start payload contract if declared, (b) written by an upstream node (`result_variable`, decision-table outputs, script declared outputs), or (c) listed in a new optional `metadata.variables` list. Unknown identifiers produce a **warning** in the deployment response in rc.6 (becomes an error in 1.1).
 - Metric `abada.expression.failures` tagged by definition key and node id.
 
 **Acceptance tests.**
@@ -105,7 +105,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T3 — Agent worker: concurrency and lock heartbeat
+## T3 — Agent worker: concurrency and lock heartbeat ✅ done
 
 **Goal.** No lock expires while its task is being processed. Tasks fetched together run concurrently.
 
@@ -114,7 +114,7 @@ release notes with before/after examples and the dry-run command.
 **Changes.**
 - Process each locked task on a virtual thread (`Executors.newVirtualThreadPerTaskExecutor()`), bounded by a semaphore of `ABADA_AGENT_MAX_TASKS`. Fetch only as many tasks as there are free permits.
 - For each running task, schedule `extendLock` every `lockDuration / 3` until completion or failure is reported; stop on any extend error and abandon the task quietly (another worker may own it).
-- On startup, reject configuration where `ABADA_AGENT_LOCK_DURATION_MS` < 2 × the maximum `timeout_ms` the worker will honour (`ABADA_AGENT_MAX_TIMEOUT_MS`, default 120000); clamp a descriptor's `timeout_ms` to that maximum.
+- Clamp a descriptor's `timeout_ms` to `ABADA_AGENT_MAX_TIMEOUT_MS` (default 120000). *Implementation note:* the originally planned startup check (lock ≥ 2 × timeout) was dropped: the heartbeat keeps any lock alive, and a short lock gives faster recovery after a worker crash.
 - Graceful shutdown: stop fetching, wait up to 30 s for in-flight tasks.
 
 **Acceptance tests.**
@@ -128,7 +128,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T4 — Engine-side agent output contract
+## T4 — Engine-side agent output contract ✅ done
 
 **Goal.** The engine, not the worker, decides whether an agent result may enter process state.
 
@@ -156,7 +156,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T5 — Outcome routing: `on_low_confidence` and `on_invalid_output`
+## T5 — Outcome routing: `on_low_confidence` and `on_invalid_output` ✅ done
 
 **Goal.** A weak or malformed agent answer goes to a declared node (usually a human), not to an incident.
 
@@ -177,7 +177,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T6 — Default-deny agent inputs and correct prompt rendering
+## T6 — Default-deny agent inputs and correct prompt rendering ✅ done
 
 **Goal.** Only declared data leaves the engine for a model call, `${a.b}` paths work, and workflow data never enters the system prompt.
 
@@ -203,7 +203,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T7 — `on_error` routing for agent and engine-task
+## T7 — `on_error` routing for agent and engine-task ✅ done
 
 **Goal.** A worker can report a business outcome ("cannot decide", "customer not found") that routes the process instead of failing it.
 
@@ -221,7 +221,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T8 — O(V+E) cycle detection
+## T8 — O(V+E) cycle detection ✅ done
 
 **Files.** `ENGINE/parser/AplParser.java` (`rejectCycles`), `ENGINE_TEST/parser/AplParserTest.java`.
 
@@ -231,7 +231,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T9 — Remove or label drifted fields
+## T9 — Remove or label drifted fields ✅ done
 
 **Files.** `studio/src/types.ts`, `studio/src/components/PropertiesInspector.tsx`, `studio/src/features/designer/NodeRenderer.tsx`, `studio/src/features/operations/instanceTelemetry.tsx`, `studio/src/lib/apl/parser.ts`, `ENGINE/parser/AplParser.java` (human-input parsing).
 
@@ -244,7 +244,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T10 — Token usage in attempt metadata
+## T10 — Token usage in attempt metadata ✅ done
 
 **Files.** `ENGINE/core/model/AgentAttemptMetadata.java`, `sdk/java/.../AgentAttemptMetadata.java`, `agent-worker/.../AbstractAgentGateway.java`, `ExternalTaskCommandService.agentDetails`, Studio `instanceTelemetry.tsx`.
 
@@ -254,20 +254,20 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T11 — Truth in the repository
+## T11 — Truth in the repository ✅ done
 
 **Files.** `AGENTS.md`, `README.md`, `docs/README.md`, `docs/platform-overview.md`, roadmap files.
 
 **Changes.**
 - `AGENTS.md`: describe Abada as the governed runtime for AI-driven business processes; APL is the primary language; BPMN is an import and compatibility boundary; list the doctrine (agents advise, rules decide, humans approve, PostgreSQL remembers); keep every runtime invariant; point to `docs/development/roadmap.md` as the only roadmap.
-- Move `roadmap-to-1.0.md`, `roadmap-to-1.1.0-rc.md`, `agentic-engine/abada-studio-execution-plan.md` and `saas-roadmap.md` to `docs/archive/` (they already carry a "superseded" banner).
+- Moved `roadmap-to-1.0.md`, `roadmap-to-1.1.0-rc.md`, `abada-studio-execution-plan.md` and `saas-roadmap.md` to `docs/archive/` with a "superseded" banner; links updated.
 - README: the Lead Triage example must work after T6; replace "What's Implemented" bullets that overstate (e.g. "Natural language authoring … deployable") with bounded wording.
 
 **Acceptance tests.** `documentation/` build passes (links); no document other than `roadmap.md` contains an unchecked roadmap checklist.
 
 ---
 
-## T12 — Truth on the web
+## T12 — Truth on the web ✅ done (outdated PDF brief removed from the site; replacement later)
 
 **Files.** `abada-site/packages/web/src/web/components/site/{hero,gap,comparison,architecture,reliability,vision,quickstart,cta}.tsx`, `pages/vs-camunda.tsx`, `lib/links.ts`, `index.html`, the brief PDF source.
 

@@ -19,9 +19,17 @@ public record AgentAttemptMetadata(
         String resultVariable,
         String promptHash,
         String errorType,
-        Double confidence) implements Serializable {
+        Double confidence,
+        Integer promptTokens,
+        Integer completionTokens) implements Serializable {
 
     public AgentAttemptMetadata {
         tools = tools == null ? List.of() : List.copyOf(tools);
+    }
+
+    /** Protocol-v1 form without token usage (kept for older workers and callers). */
+    public AgentAttemptMetadata(String model, String provider, Integer attempt, Long durationMs, List<String> tools,
+            String resultVariable, String promptHash, String errorType, Double confidence) {
+        this(model, provider, attempt, durationMs, tools, resultVariable, promptHash, errorType, confidence, null, null);
     }
 }

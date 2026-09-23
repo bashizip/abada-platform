@@ -28,10 +28,15 @@ flow:
       model: gemini-3.6-flash
       prompt: |
         Analyze the company size: ${lead.companySize}.
-        Classify the lead priority.
-        Return exactly one value: HIGH, MEDIUM, or LOW.
+        Classify the lead priority as HIGH, MEDIUM or LOW.
       result_variable: lead_priority
+      output_schema:
+        type: object
+        required: [priority]
+        properties:
+          priority: { enum: [HIGH, MEDIUM, LOW] }
       confidence_threshold: 85
+      on_low_confidence: senior-sales-review
       max_attempts: 3
       next: check-priority
 
@@ -39,7 +44,7 @@ flow:
       type: condition
       description: Route the lead according to the classified priority
       rules:
-        - if: "${lead_priority == 'HIGH'}"
+        - if: "${lead_priority.priority == 'HIGH'}"
           then: senior-sales-review
         - else: standard-workflow
           then: standard-workflow
@@ -62,11 +67,11 @@ flow:
       description: Lead triage completed
 ```
 
-**61 lines of YAML.** Equivalent BPMN XML: **~800+ lines.**
+**55 lines of YAML.** Equivalent BPMN XML: **~800+ lines.**
 
 What just happened:
 - A lead arrives via webhook
-- A **Gemini agent** classifies priority with confidence threshold and retry logic
+- A **Gemini agent** classifies priority; the **engine** checks its structured output and confidence, and sends weak answers to a person
 - A **condition** routes HIGH-priority leads to a senior reviewer
 - A **human task** with a form appears for the sales director
 - Standard leads flow automatically to the CRM
@@ -151,14 +156,14 @@ See [`release/README.md`](release/README.md).
 ## What's Implemented
 
 - **Native APL runtime** — YAML parses directly to executable graph; no XML round-trip
-- **Agent nodes** — First-class LLM tasks with `gemini-3.6-flash` as default; prompt, output schema, confidence threshold, retry, backoff
-- **Decision tables** — Deterministic rules executed in-transaction (the "law" that constrains agent "advice")
-- **Human tasks** — Claim, assign, complete with forms and SLA tracking
+- **Agent nodes** — Durable LLM steps (Gemini by default, any OpenAI-compatible model); the **engine** enforces the output schema and confidence threshold and routes weak or invalid answers to a person; agents receive only declared inputs. Single model call per step today; tool execution is on the [roadmap](docs/development/roadmap.md)
+- **Decision tables and conditions** — Deterministic rules executed in-transaction with sandboxed CEL expressions that cannot reach the JVM and fail loudly
+- **Human tasks** — Claim, assign, complete with forms; SLA hours are a monitoring hint until enforced SLAs ship
 - **Event handling** — Messages, signals, timers, event gateways with race semantics
 - **Parallel & inclusive gateways** — Fork/join with restart-safe token bookkeeping
 - **Project envelopes** — PostgreSQL-backed projects, folders, resources, role memberships
 - **Insight Loop** — Engine writes execution facts; AI proposes APL improvements; governed review in Studio
-- **Natural language authoring** — Describe a workflow in plain English; get valid, deployable YAML
+- **Natural language authoring** — Describe a workflow in plain English; get an LLM draft that the engine parser validates, for you to review before deploying
 - **BPMN compatibility** — Import existing BPMN for migration; export for interoperability
 - **Production runtime** — PostgreSQL, Flyway migrations, optimistic locking, durable leases, cluster-safe work acquisition
 - **Observability** — OpenTelemetry, distributed tracing, metrics, structured logging
@@ -181,9 +186,9 @@ See the [BPMN support matrix](docs/reference/bpmn-support.md) for exact semantic
 
 ## Status
 
-**Prepared baseline:** `1.0.0-rc.5` — RC.4 reliability plus the opt-in Lead Triage starter, validated Gemini setup and local demonstration adapters. Publication remains gated by the RC evidence workflow.
+**Prepared baseline:** `1.0.0-rc.6` — M1 "truth and safety": sandboxed CEL expressions, an engine-enforced agent output contract with low-confidence, invalid-output and error routing, default-deny agent inputs, and a concurrent agent worker with lock heartbeats. Breaking changes are listed in the [release notes](docs/release-notes/1.0.0-rc.6-release-notes.md). Publication remains gated by the RC evidence workflow.
 
-**1.1 agentic checkpoint** (in development): native APL runtime, deterministic decision tables, governed Insight Loop, project envelopes, first-party agent worker. Progress tracked in the [1.1 RC roadmap](docs/development/roadmap-to-1.1.0-rc.md).
+**1.1 agentic checkpoint** (in development): native APL runtime, deterministic decision tables, governed Insight Loop, project envelopes, first-party agent worker. Progress tracked in the [roadmap](docs/development/roadmap.md).
 
 ---
 

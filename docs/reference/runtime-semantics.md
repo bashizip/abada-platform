@@ -29,8 +29,14 @@ should use external tasks and an idempotent worker operation.
   supplied variables into the existing map; supplied keys replace old values.
 - Cockpit variable patches use the same merge behavior.
 - Variables staged by a command that rolls back are not visible later.
-- Script tasks receive the variable map as `variables` and individual values
-  as bindings. Script mutations are persisted only when the command commits.
+- Script tasks run only when the operator enables them
+  (`ABADA_SCRIPTS_ENABLED`). They run in a sandbox with no Java access and
+  receive variables by name and through `variables.get/put` as JSON copies;
+  only variables they create or change are written back, and only when the
+  command commits.
+- Embedded Java delegates (`camunda:class`) run only when the class is listed
+  in `ABADA_DELEGATES_ALLOWED_CLASSES`; other classes are rejected at
+  deployment and again at runtime.
 
 ## User tasks
 
@@ -85,6 +91,12 @@ should use external tasks and an idempotent worker operation.
 - An exclusive gateway evaluates outgoing flows in model order and selects the
   first true condition. If none match, it takes the configured default flow;
   absence of a matching/default flow is an execution error.
+- Conditions and decision-table rules are CEL expressions compiled at
+  deployment. If a condition cannot be evaluated (a referenced variable is
+  missing, a map key is absent, types do not compare, or the result is not a
+  boolean), the command fails with `ABADA-RUNTIME-EXPRESSION-001` (HTTP 422
+  `EXPRESSION_EVALUATION_FAILED`) and rolls back. It never falls through to
+  the default flow silently. See `apl-specification.md` §5.2.
 - A parallel fork creates one token per outgoing flow. Its corresponding join
   waits until every expected branch token arrives. Native APL exposes the same
   semantics through the `parallel` node: `branches` become the fork flows, and

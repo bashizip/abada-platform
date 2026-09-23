@@ -21,7 +21,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
-        @Value("${spring.application.version:1.0.0-rc.5}")
+        @Value("${spring.application.version:1.0.0-rc.6}")
         private String appVersion;
 
         @Value("${spring.application.name:Abada Engine}")
@@ -47,7 +47,7 @@ public class OpenApiConfig {
                                                                 .bearerFormat("JWT")))
                                 .info(new Info()
                                                 .title(appName + " API")
-                                                .description("High-performance, modular BPMN 2.0 process automation engine.")
+                                                .description("Open-source, self-hosted runtime for governed AI-driven business processes. APL is the native process language; BPMN 2.0 is a documented import subset.")
                                                 .version(appVersion)
                                                 .contact(new Contact()
                                                                 .name("Abada Platform")

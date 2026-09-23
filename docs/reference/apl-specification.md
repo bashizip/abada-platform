@@ -216,7 +216,42 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `timeout_ms` | integer | no | 1–3,600,000 |
 | `max_attempts` | integer | no | 1–20 durable attempts |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |
+| `on_low_confidence` | nodeId | no | route when `_confidence` is missing or below `confidence_threshold` |
+| `on_invalid_output` | nodeId | no | route when the result violates `output_schema` or the completion shape |
+| `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error, optionally per error code |
 | `next` | nodeId | yes | linear successor |
+
+**Data the agent receives (default-deny).** The locked task carries only the
+node's `inputs`, resolved by the engine and keyed by input name. When `inputs`
+is omitted, the engine derives them from the prompt's `${path}` placeholders
+(for example `${lead.companySize}`). A placeholder that is not a declared input
+(or a path inside one) is rejected at deployment, and placeholders must be
+variable paths, not expressions. The reference worker never puts workflow data
+in the system message: placeholders become `<input name="…"/>` references and
+values travel in the user message.
+
+**Output contract (engine-enforced).** On completion the engine checks, in
+the completion transaction, that:
+
+1. the worker wrote only `result_variable`;
+2. the value matches `output_schema` (JSON Schema 2020-12; a malformed
+   schema is rejected at deployment);
+3. with `confidence_threshold` above 0, the value is an object whose numeric
+   `_confidence` (0–100) meets the threshold. **A missing score fails the
+   threshold**, so declare an `output_schema` whenever you set a threshold.
+
+`_confidence` is removed from the stored value. The outcome is `OK`,
+`INVALID_OUTPUT` or `LOW_CONFIDENCE`. A rejected result with a matching route
+completes the task and follows the route, and the engine writes the
+`<node>_outcome` variable (`-` in node ids becomes `_`). For `LOW_CONFIDENCE`
+the result is kept under `result_variable` for the reviewer; for
+`INVALID_OUTPUT` the raw text is kept in `<node>_raw_output` (at most
+16 KB). Without a route, the rejection counts as a failed attempt: retries
+are decremented, and at zero the task becomes an incident. Every decision is
+recorded in history (`agentOutcome`, `outcomeReason`) without variable values.
+
+Routes compile to a synthetic exclusive gateway `<node>__outcome` (the suffix
+`__outcome` is reserved in node ids) whose default flow is `next`.
 
 Boundary: with no worker deployed, a run pauses in `ACTIVE` at the agent —
 this is intentional (agents must not advance BPMN state outside engine
@@ -242,7 +277,7 @@ integration, webhook sink). It is the deterministic sibling of `agent`.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `service` | string | yes | external task topic |
-| `on_error` | nodeId | no | error path hint consumed by Studio to draw the error edge |
+| `on_error` | nodeId or `[{code?, then}]` | no | route taken when the worker reports a BPMN error: a single target, or per `code` with an optional code-less catch-all. The engine writes `<node>_outcome = 'ERROR'` and `<node>_error_code`. A BPMN error without a matching route still fails the instance |
 | `next` | nodeId | yes | linear successor |
 
 ### 3.4 `script` — in-transaction script step
@@ -267,6 +302,16 @@ workflow transaction with all instance variables bound by name plus the
 | `script` | string | yes | JavaScript/ECMAScript body; a blank body is rejected at deployment |
 | `format` | string | no | engine script engine name; default `javascript` |
 | `next` | nodeId | yes | linear successor |
+
+**Operator opt-in.** Script tasks are rejected at deployment unless the
+operator sets `ABADA_SCRIPTS_ENABLED=true` (`abada.scripts.enabled`; the dev
+profile enables it, production defaults to off). Scripts run in a sandbox:
+`--no-java`, a class filter that denies every Java class, no `load`, and no
+Java object in scope — variables enter and leave as JSON. Variables are
+available by name and through `variables.get/put`; only variables the script
+creates or changes are written back, and numbers come back as doubles.
+There is no CPU time limit, so keep scripts small; prefer a decision table or
+an `engine-task` worker.
 
 Engine semantics: the script runs inside the advance transaction; a throwing
 script rolls the whole command back (state, variables, history and outbox
@@ -589,7 +634,7 @@ rules:
     then: { riskLevel: HIGH, autoApprove: false }
 ```
 
-- `when` — a JavaScript/ECMAScript condition over the input names (§5).
+- `when` — a CEL condition over the input names (§5).
   Optional if `otherwise` is set.
 - `otherwise` — the explicit fallback. Accepted as the flattened form above or
   the wrapper `otherwise: { then: {...} }`.
@@ -648,16 +693,35 @@ the EL conventions of the BPMN ecosystem:
 
 ### 5.2 Evaluator semantics (engine)
 
-Conditions are evaluated by a JavaScript (ECMAScript) engine bound with the
-resolved variables (`ConditionEvaluator`):
+Conditions, decision-table rules and decision-table input expressions are
+evaluated with **CEL** (the [Common Expression Language](https://github.com/google/cel-spec)),
+which is non-Turing-complete, side-effect free and cannot reach the JVM
+(`WorkflowExpressions`):
 
-- `${...}` wrappers are unwrapped; `and`, `or`, `eq`, `ne` are aliased to
-  `&&`, `||`, `==`, `!=` so rule authors can write either style.
-- Bare names and deep dotted paths (`data.score`) resolve against the variable
-  map; nested maps are traversed.
-- A condition that cannot be evaluated yields `false` for branching (safe
-  default) — but a **decision table** with no matching rule still fails loudly
-  per §4.4; `false` on `when` never produces a guess.
+- `${...}` wrappers are unwrapped; `and`, `or`, `eq`, `ne` are rewritten to
+  `&&`, `||`, `==`, `!=` outside string literals, so rule authors can write
+  either style.
+- Supported: comparisons, `&&`, `||`, `!`, arithmetic, `'single'` or
+  `"double"` quoted strings, `in`, `size()`, dotted access into nested maps
+  (`applicant.creditScore`), `has(applicant.creditScore)` for optional fields,
+  and list macros such as `tags.exists(t, t == 'vip')`. Integers and decimals
+  compare with each other (`score >= 750` works for `780.5`).
+- Not supported: JavaScript or Java syntax (functions, `===`, assignments,
+  `Java.type`, method calls on Java objects). Such expressions are rejected
+  **at deployment** with `ABADA-APL-VALIDATION-001` (APL) or
+  `ABADA-BPMN-EXTENSION-001` (BPMN), naming the node.
+- **Failures are loud.** A referenced variable that does not exist, a missing
+  map key, a type mismatch, or a condition that does not return a boolean
+  raises `ABADA-RUNTIME-EXPRESSION-001`: the command rolls back and the API
+  answers HTTP 422 `EXPRESSION_EVALUATION_FAILED` with the node id and the
+  missing variable name (never variable values). Test optional data
+  explicitly, e.g. `has(order.discountCode) && order.discountCode != ''`.
+- A decision-table input that is a plain path (`${applicant.creditScore}`)
+  is read directly and keeps its type; an absent path resolves to `null`.
+  A rule that then compares `null` with a number fails loudly; a table with
+  no matching rule and no `otherwise` still fails loudly per §4.4.
+- `abada expressions check <file-or-directory>` lists expressions in APL or
+  BPMN files that do not compile as CEL, before an upgrade.
 
 ### 5.3 Variable scope
 
@@ -716,7 +780,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
-| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, cycles, non-webhook entry |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, cycles, non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while
@@ -739,7 +803,7 @@ still rejecting execution-relevant directives.
 | --- | --- |
 | `UNIQUE` hit policy, >1 rule matched | `ProcessEngineException`; mutation command rolls back |
 | no rule matched and no `otherwise` | `ProcessEngineException`; mutation command rolls back |
-| condition branch cannot be evaluated | branch treats as `false`; gateway falls to default |
+| condition or rule expression cannot be evaluated (missing variable, type mismatch, non-boolean) | `ExpressionEvaluationException` (`ABADA-RUNTIME-EXPRESSION-001`, HTTP 422); mutation command rolls back |
 
 ---
 

@@ -44,12 +44,18 @@ export interface APLAgentNode extends APLBaseNode {
   timeout_ms?: number;
   max_attempts?: number;
   retry_backoff_ms?: number;
+  on_low_confidence?: string;
+  on_invalid_output?: string;
+  on_error?: APLOnError;
 }
+
+/** `on_error`: a single target node id, or rules routed by BPMN error code. */
+export type APLOnError = string | { code?: string; then: string }[];
 
 export interface APLEngineTaskNode extends APLBaseNode {
   type: 'engine-task';
   service: string;
-  on_error?: string;
+  on_error?: APLOnError;
 }
 
 export interface APLConditionNode extends APLBaseNode {

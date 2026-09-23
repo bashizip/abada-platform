@@ -41,7 +41,7 @@ public final class GatewaySelector {
 
         for (SequenceFlow f : outgoing) {
             String cond = f.getConditionExpression(); // may be null
-            boolean ok = ConditionEvaluator.evaluate(cond, vars);
+            boolean ok = evaluate(gw, cond, vars);
             if (log.isDebugEnabled()) {
                 log.debug("  flow id={} cond='{}' -> {}", f.getId(), cond, ok);
             }
@@ -71,6 +71,14 @@ public final class GatewaySelector {
      * @param vars      Process instance variables for condition evaluation.
      * @return          A list of chosen SequenceFlow IDs.
      */
+    private static boolean evaluate(GatewayMeta gw, String condition, Map<String, Object> vars) {
+        try {
+            return ConditionEvaluator.evaluate(condition, vars);
+        } catch (com.abada.engine.expression.ExpressionEvaluationException exception) {
+            throw exception.atNode(gw.id());
+        }
+    }
+
     public List<String> chooseInclusive(GatewayMeta gw, List<SequenceFlow> outgoing, Map<String, Object> vars) {
         Objects.requireNonNull(gw, "gw");
         Objects.requireNonNull(outgoing, "outgoing");
@@ -91,7 +99,7 @@ public final class GatewaySelector {
 
             String cond = f.getConditionExpression();
             if (cond != null && !cond.isBlank()) {
-                boolean ok = ConditionEvaluator.evaluate(cond, vars);
+                boolean ok = evaluate(gw, cond, vars);
                 if (log.isDebugEnabled()) {
                     log.debug("  flow id={} cond='{}' -> {}", f.getId(), cond, ok);
                 }

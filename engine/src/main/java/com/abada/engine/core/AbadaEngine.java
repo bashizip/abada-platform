@@ -166,6 +166,9 @@ public class AbadaEngine {
                 parseResult = aplParser.parseDetailed(source);
             } else {
                 parseResult = parser.parseDetailed(new java.io.ByteArrayInputStream(source), options);
+                com.abada.engine.expression.DefinitionPolicyValidator.validate(parseResult.definition(),
+                        com.abada.engine.bpmn.compatibility.BpmnErrorCodes.UNSUPPORTED_EXTENSION,
+                        "http://www.omg.org/spec/BPMN/20100524/MODEL");
             }
             ParsedProcessDefinition definition = parseResult.definition();
             ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId);
@@ -625,7 +628,7 @@ public class AbadaEngine {
      * must not change the semantics of running instances (runtime invariant
      * "definitions are immutable once deployed").
      */
-    private static final AplParser definitionReloadParser = new AplParser("");
+    private static final AplParser definitionReloadParser = new AplParser("", false);
 
     private ParsedProcessDefinition cacheDefinition(ProcessDefinitionEntity entity) {
         byte[] source = entity.getBpmnXml().getBytes(StandardCharsets.UTF_8);

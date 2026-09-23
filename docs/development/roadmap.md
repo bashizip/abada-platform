@@ -1,9 +1,8 @@
 # Abada roadmap — 1.0.0-rc.6 → 1.1.0
 
 This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
-`roadmap-to-1.1.0-rc.md`, `agentic-engine/abada-studio-execution-plan.md`
-and `saas-roadmap.md`, which are kept for history and will move to
-`docs/archive/` (task T11). Release publication gates in
+`roadmap-to-1.1.0-rc.md`, `abada-studio-execution-plan.md` and
+`saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
 Last reviewed: 2026-09-23. Horizon: 12 weeks, 2026-09-28 → 2026-12-18.
@@ -28,7 +27,7 @@ telcos, public sector) that must run on their own infrastructure.
 
 | Milestone | Dates | Release | Exit demo |
 | --- | --- | --- | --- |
-| M1 Truth and safety | 09-28 → 10-16 | 1.0.0-rc.6 | Malicious expression rejected at deploy; invalid or low-confidence agent output routes to a human; 4 slow agent tasks, no duplicate model call; site and brief claims match the code |
+| M1 Truth and safety | 09-28 → 10-16 | 1.0.0-rc.6 | Malicious expression rejected at deploy; invalid or low-confidence agent output routes to a human; 4 slow agent tasks, no duplicate model call; site claims match the code |
 | M2 Real process shapes | 10-19 → 11-06 | 1.1.0-rc.1 | Rework loop (agent drafts → human rejects with comment → agent revises → approve) survives an engine kill mid-loop |
 | M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
@@ -37,19 +36,19 @@ telcos, public sector) that must run on their own infrastructure.
 
 Full specifications: [`m1-task-specs.md`](m1-task-specs.md).
 
-- [ ] T1 CEL replaces Nashorn for conditions and decision tables; scripts opt-in in a class-filtered sandbox; delegate allow-list
-- [ ] T2 Loud expression failures (typed rollback, deploy-time checks)
-- [ ] T3 Agent worker concurrency and lock heartbeat
-- [ ] T4 Engine-side agent output contract (JSON Schema, confidence, single result variable)
-- [ ] T5 `on_low_confidence` / `on_invalid_output` routing
-- [ ] T6 Default-deny agent inputs; nested paths; data out of the system prompt
-- [ ] T7 `on_error` routing for agent and engine-task
-- [ ] T8 O(V+E) cycle detection
-- [ ] T9 Remove or label drifted fields
-- [ ] T10 Token usage in attempt metadata
-- [ ] T11 Truth in the repository (AGENTS.md, README, roadmap consolidation)
-- [ ] T12 Truth on the web (site, brief)
-- [ ] rc.6 gate report and exit demo
+- [x] T1 CEL replaces Nashorn for conditions and decision tables; scripts opt-in in a class-filtered sandbox; delegate allow-list
+- [x] T2 Loud expression failures (typed rollback, deploy-time checks)
+- [x] T3 Agent worker concurrency and lock heartbeat
+- [x] T4 Engine-side agent output contract (JSON Schema, confidence, single result variable)
+- [x] T5 `on_low_confidence` / `on_invalid_output` routing
+- [x] T6 Default-deny agent inputs; nested paths; data out of the system prompt
+- [x] T7 `on_error` routing for agent and engine-task
+- [x] T8 O(V+E) cycle detection
+- [x] T9 Remove or label drifted fields
+- [x] T10 Token usage in attempt metadata
+- [x] T11 Truth in the repository (AGENTS.md, README, roadmap consolidation)
+- [x] T12 Truth on the web (site claims corrected; the outdated PDF brief was removed and will be replaced later)
+- [ ] rc.6 gate report and exit demo — [draft report](1.0-rc.6-gate-report-2026-09-23.md): local verification green; exit demo and sign-off open
 
 ## M2 — Real process shapes
 
@@ -85,7 +84,7 @@ The engine never calls tool servers; MCP lives in the worker.
 
 | By end of | Goal |
 | --- | --- |
-| M1 | 10 target organisations shortlisted; corrected site and brief live; one-page pilot offer |
+| M1 | 10 target organisations shortlisted; corrected site live; new brief drafted; one-page pilot offer |
 | M2 | 5 conversations; rework-loop demo shown; 2 candidate processes |
 | M3 | 1 pilot process scoped in APL with the partner's reviewers |
 | M4 | Pilot running on partner infrastructure; first replay-backed proposal reviewed together |

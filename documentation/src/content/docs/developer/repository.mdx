@@ -11,7 +11,6 @@ abada-engine/
 ├── agent-worker/    First-party Java 21 Agent Worker sidecar (abada.agent/v1)
 ├── sdk/java/        Java external-worker protocol v1 client
 ├── studio/          React/TypeScript Studio — the single operator UI
-├── abada-platform/  Supported Compose family, release bundles and launcher
 ├── abada-site/      Marketing site (abadaplatform.com)
 ├── install/         Cloudflare Worker serving install.abadaplatform.com
 ├── documentation/   Astro/Starlight guide (this site)
@@ -19,7 +18,8 @@ abada-engine/
 ├── examples/        Runnable APL examples (examples/apl/*.apl.yaml)
 ├── docker/          Observability and supporting container configuration
 ├── deployment/, k8s/, monitoring/   Ops and infrastructure assets
-├── release/, scripts/  Release tooling and development/verification helpers
+├── compose*.yaml    Supported Compose family (dev, prod, telemetry overlays)
+├── release/, scripts/  Release bundles, launcher and development/verification helpers
 ```
 
 ## Engine packages
@@ -81,7 +81,7 @@ stringify) and the APL↔BPMN compiler/transpiler in `studio/src/lib/bpmn/`.
 | Which row is authoritative? | `persistence/entity/` and the latest Flyway migration |
 | How is a permission granted? | `security/SecurityConfig`, `AbadaRoles`, and project roles in `project/` |
 | What is guaranteed publicly? | `docs/reference/` and executable contract tests |
-| Which release gate owns the work? | `docs/development/roadmap-to-1.1.0-rc.md` and `roadmap-to-1.0.md` |
+| Which release gate owns the work? | `docs/development/roadmap.md` (earlier roadmaps are in `docs/archive/`) |
 
 ## Test layout
 

@@ -60,5 +60,5 @@ Exactly-once applies to committed workflow state. External side effects and
 outbox transport remain at-least-once and require consumer deduplication.
 
 See [Runtime State Architecture](../architecture/runtime-state.md) and the
-[Reliable OSS Core Roadmap](../development/roadmap-to-1.0.md) for the exact migration
+[Reliable OSS Core Roadmap](../archive/roadmap-to-1.0.md) for the exact migration
 boundary and later acceptance gates.

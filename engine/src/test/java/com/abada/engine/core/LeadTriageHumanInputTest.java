@@ -124,7 +124,7 @@ class LeadTriageHumanInputTest {
             assertThat(agentJobs).singleElement()
                     .satisfies(job -> assertThat(job.activityId()).isEqualTo("analyze-lead"));
             externalTasks.complete(agentJobs.getFirst().id(),
-                    Map.of("lead_priority", "HIGH"));
+                    Map.of("lead_priority", Map.of("priority", "HIGH", "_confidence", 92)));
 
             // 5. The human task "senior-sales-review" is now active with formKey.
             List<TaskInstance> tasks = taskManager.getTasksForProcessInstance(instance.getId());
@@ -193,7 +193,7 @@ class LeadTriageHumanInputTest {
             ProcessInstance completed = engine.getProcessInstanceById(instance.getId());
             assertThat(completed.isCompleted()).isTrue();
             assertThat(completed.getVariables())
-                    .containsEntry("lead_priority", "HIGH")
+                    .containsEntry("lead_priority", Map.of("priority", "HIGH"))
                     .containsEntry("decision", "approve")
                     .containsEntry("notes", "High-value enterprise deal")
                     .containsEntry("lead", Map.of(
