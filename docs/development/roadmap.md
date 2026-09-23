@@ -48,7 +48,7 @@ Full specifications: [`m1-task-specs.md`](m1-task-specs.md).
 - [x] T10 Token usage in attempt metadata
 - [x] T11 Truth in the repository (AGENTS.md, README, roadmap consolidation)
 - [x] T12 Truth on the web (site claims corrected; the outdated PDF brief was removed and will be replaced later)
-- [ ] rc.6 gate report and exit demo — [draft report](1.0-rc.6-gate-report-2026-09-23.md): local verification green; exit demo and sign-off open
+- [ ] rc.6 gate report and exit demo — [report](1.0-rc.6-gate-report-2026-09-23.md): verification green, exit demo passed (heartbeat race found and fixed); merge and sign-off open
 
 ## M2 — Real process shapes
 
