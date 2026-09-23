@@ -48,7 +48,7 @@ BPMN *pattern* it replaces with a simpler, safer shape.
 | `end` | End Event | End Event | — |
 | `agent` | AI Agent Node | Service Task (external task on `abada:agent`) | The "AI/LLM service task" pattern: probabilistic work as a durable external task |
 | `engine-task` | Engine Task | Service Task (external task on a worker topic) | Camunda external task / generic service task |
-| `script` | Script Step | Script Task | Embedded Java delegate (`camunda:class`) — in-transaction server-side JavaScript |
+| `script` | Script Step | Script Task | Sandboxed in-transaction JavaScript without Java access; operator opt-in (`ABADA_SCRIPTS_ENABLED`) |
 | `approval-gate` | Approval Gate | User Task | Human review task with candidate groups |
 | `decision-table` | DMN Rule Table | Business Rule Task (DMN table) | Camunda DMN table binding — executed by the engine in-transaction |
 | `condition` | Exclusive Gateway | Exclusive Gateway | BPMN exclusive gateway (exactly one branch, with a default flow) |
@@ -182,7 +182,7 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `prompt` | string | no | The instructions given to the model. Multi-line YAML blocks are fine. |
 | `inputs` | map | no | Named bindings from process variables to prompt inputs, e.g. `payload: ${payload}`. |
 | `result_variable` | string | no | The variable the agent's output is written to. Defaults to `<nodeId>_result`. |
-| `output_schema` | map | no | Expected JSON shape of the response. The worker validates against it. |
+| `output_schema` | map | no | Expected JSON shape of the response. The engine validates the result against it before any state changes; see `on_invalid_output`. |
 | `tools` | string[] | no | Tool identifiers the agent may use (e.g. `database.read`). Enforced against the worker allowlist. |
 | `confidence_threshold` | number | no | 0–100. Below this confidence the output is treated as a low-confidence result. |
 | `temperature` | number | no | 0–2. Higher = more creative, lower = more deterministic. Default 0.2. |
@@ -246,18 +246,21 @@ topic. APL replaces the Camunda external-task pattern with a typed node.
 
 ### 4.5 Script Step — `script`
 
-**What it does.** A small server-side JavaScript snippet the engine runs
-**inside the workflow transaction** — no worker, no network call. All instance
-variables are available by name, plus a `variables` map. This is the APL form
-of an embedded Java delegate.
+**What it does.** A small JavaScript snippet the engine runs **inside the
+workflow transaction** — no worker, no network call. Script steps are rejected
+at deployment unless the operator sets `ABADA_SCRIPTS_ENABLED=true` (the dev
+profile does). The sandbox has no Java access; instance variables enter as JSON
+and are available by name and through a `variables` map, and changed or new
+variables are written back as JSON. Numbers produced by a script are doubles.
+There is no CPU time limit.
 
 **When to use it.** Fast, deterministic, in-process work: derive a value,
 transform data, compute a flag. Do **not** use it for slow or unreliable calls
 (that is what `engine-task` is for) — the transaction stays open while the
 script runs.
 
-**BPMN equivalent.** Script Task. APL replaces `camunda:class` Java delegates
-with inline JavaScript.
+**BPMN equivalent.** Script Task. BPMN `camunda:class` delegates are a
+separate, allow-listed mechanism (`ABADA_DELEGATES_ALLOWED_CLASSES`).
 
 **Properties.**
 
@@ -295,8 +298,8 @@ entry: approving a loan, reviewing a claim, filling in a missing field.
 
  | Property | Type | Required | What it does |
  | --- | --- | --- | --- |
- | `assignees` | string[] | yes | The groups (or users) who may claim the task, e.g. `[risk-officers]`. At least one is required. |
- | `mode` | `serial` \| `parallel` | no | Authoring hint. `parallel` with more than one assignee implies a double sign-off. |
+ | `assignees` | string[] | yes | The candidate groups whose members may claim the task, e.g. `[risk-officers]`. Values are group names, not usernames. At least one is required. |
+ | `mode` | `serial` \| `parallel` | no | Authoring hint only. The engine does not enforce serial or parallel sign-off. |
  | `sla_hours` | number | no | Service-level target for monitoring (e.g. 24 = resolve within 24 h). |
  | `formKey` | string | no | Optional form key for task-form rendering (BPMN `camunda:formKey`). Resolved by bare slug to a project FORM resource. |
  | `next` | nodeId | yes | The step that runs after the task is completed. |
