@@ -21,7 +21,7 @@ export function Insight() {
       <div className="grid gap-14 lg:grid-cols-12">
         <div className="lg:col-span-6">
           <SectionHead
-            eyebrow="Insight engine · the self-optimizing loop"
+            eyebrow="Insight engine · the governed improvement loop"
             title={
               <>
                 Evidence becomes a proposal —

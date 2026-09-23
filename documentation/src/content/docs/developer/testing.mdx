@@ -51,12 +51,15 @@ depends on schema, locking, persistence or recovery.
 | --- | --- |
 | Core logic or REST behavior | Relevant tests and full engine test suite |
 | BPMN behavior | Parser/validation test, executable BPMN fixture, success and rejection semantics |
+| APL behavior | `AplParser` rejection matrix, executable APL fixture, `AplRuntimeTest`; keep the kitchen-sink APL twin 1:1 with the BPMN original and run Studio `verify:kitchen-sink` |
+| Agent worker or external-task behavior | Durable lease/recovery evidence (`AgentWorkerResilienceTest`, `WorkerHealthServiceTest`, `FirstPartyWorkerCapabilityTest`) plus positive/negative global-fetch authorization |
+| Insight behavior | Fact-commit/rollback, analyzer window recovery, proposal lifecycle and policy tests (PostgreSQL), stale-target `SUPERSEDED` checks |
 | Migration or repository lock | PostgreSQL fresh/upgrade, rollback, restart and concurrency tests |
 | Public API | OpenAPI compatibility test, typed errors and documentation |
-| Authentication or authorization | Positive and negative JWT/proxy/role/resource tests |
-| Studio | Lint, tests and production build |
+| Authentication or authorization | Positive and negative JWT/proxy/role/resource/lane tests |
+| Studio | Lint, tests, production build and APL round-trip checks |
 | Documentation | Dependency audit, Astro check, build and internal-link validation |
-| Release metadata | Backend/frontends/SDK/docs, JAR hash, image and Compose validation |
+| Release metadata | Backend/workers/frontends/SDK/docs, JAR hash, image and Compose validation |
 
 ## Failure-injection expectations
 

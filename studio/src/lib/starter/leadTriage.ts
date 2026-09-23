@@ -78,6 +78,8 @@ flow:
       timeout_ms: 60000
       max_attempts: 3
       retry_backoff_ms: 2000
+      on_low_confidence: senior-sales-review
+      on_invalid_output: senior-sales-review
       next: priority-policy
     - id: priority-policy
       type: decision-table

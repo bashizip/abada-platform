@@ -1,6 +1,6 @@
 # Abada Java worker client
 
-`io.abada:abada-worker-client:1.0.0-rc.5` implements Abada external-worker
+`io.abada:abada-worker-client:1.0.0-rc.6` implements Abada external-worker
 protocol version 1. It supports bounded fetch-and-lock, heartbeat and explicit
 lock extension, completion, BPMN error, technical failure/retry, idempotency
 keys, bearer authentication, and W3C trace-context propagation.
@@ -26,3 +26,8 @@ for (var task : tasks) {
 Workers must reuse a stable idempotency key when retrying the same mutation.
 External side effects remain at-least-once and must be deduplicated by the
 worker. The engine URL passed to the client includes the `/api` context path.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE). The rest of Abada is AGPL-3.0-only;
+this SDK is permissive so workers built on it carry no AGPL obligations.

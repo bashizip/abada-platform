@@ -5,6 +5,7 @@ services:
 
   abada-engine:
     environment:
+      ABADA_SCRIPTS_ENABLED: ${ABADA_SCRIPTS_ENABLED:-true}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-abada_dev_password}
       ABADA_SECURITY_MODE: oidc
       OIDC_ISSUER_URI: http://keycloak.localhost/realms/abada-dev

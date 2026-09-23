@@ -3,15 +3,23 @@ export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine
 export type EventSubtype = 'start' | 'end' | 'timer' | 'message' | 'signal';
 export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive' | 'event';
 
+/** A node's `on_error` route: one target, or targets per BPMN error code (a rule without code catches the rest). */
+export type OnErrorRoute = string | { code?: string; then: string }[];
+
 export interface AgentConfig {
   profileVersion?: 'abada.agent/v1';
   model: string;
   systemPrompt: string;
-  confidenceThreshold: number; // 0-100
+  /** 0-100; 0 means no threshold. The engine enforces it against the model's `_confidence`. */
+  confidenceThreshold: number;
   temperature: number;
   tools: string[];
-  fallbackAction?: 'Escalate to Human' | 'Reroute to Secondary Agent' | 'Reject Payload';
-  memoryContext?: string;
+  /** Target node when `_confidence` is missing or below the threshold (`on_low_confidence`). */
+  onLowConfidence?: string;
+  /** Target node when the output violates `output_schema` (`on_invalid_output`). */
+  onInvalidOutput?: string;
+  /** Target(s) when the worker reports a BPMN error (`on_error`). */
+  onError?: OnErrorRoute;
   inputs?: Record<string, string>;
   resultVariable?: string;
   outputSchema?: Record<string, unknown>;
@@ -55,16 +63,14 @@ export interface HumanConfig {
   slaHours: number;
   /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
   formKey?: string;
-  escalationRole?: string;
   formFields: string[];
-  requireDoubleSignOff?: boolean;
 }
 
 export interface EngineTaskConfig {
   /** External-task topic the engine publishes for this activity. */
   service: string;
-  /** Error-handling flow target, emitted as an `on_error` edge. */
-  onError?: string;
+  /** Error-handling route, emitted as `on_error` and drawn as an error edge. */
+  onError?: OnErrorRoute;
 }
 
 export interface ScriptConfig {

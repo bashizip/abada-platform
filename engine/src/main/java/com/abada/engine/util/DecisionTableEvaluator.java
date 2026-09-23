@@ -26,6 +26,14 @@ public final class DecisionTableEvaluator {
     }
 
     public static Result evaluate(DecisionTableMeta table, Map<String, Object> variables) {
+        try {
+            return evaluateTable(table, variables);
+        } catch (com.abada.engine.expression.ExpressionEvaluationException exception) {
+            throw exception.atNode(table.id());
+        }
+    }
+
+    private static Result evaluateTable(DecisionTableMeta table, Map<String, Object> variables) {
         Map<String, Object> inputs = new LinkedHashMap<>();
         for (DecisionTableInput input : table.inputs()) {
             inputs.put(input.name(), resolveInput(input, variables));
@@ -74,9 +82,26 @@ public final class DecisionTableEvaluator {
         return new Result(inputs, List.copyOf(selected), Map.copyOf(outputs));
     }
 
+    private static final java.util.regex.Pattern SIMPLE_PATH =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*");
+
+    /**
+     * A plain variable path ({@code applicant.creditScore}) is read directly, keeping the
+     * variable's Java type; an absent path resolves to {@code null} (an optional input).
+     * Any other input expression is evaluated as CEL and fails loudly when it cannot be.
+     */
     private static Object resolveInput(DecisionTableInput input, Map<String, Object> variables) {
         if (input.expr() == null || input.expr().isBlank()) {
             return variables.get(input.name());
+        }
+        String normalized = com.abada.engine.expression.ExpressionSyntax.normalize(input.expr());
+        if (SIMPLE_PATH.matcher(normalized).matches()) {
+            Object current = variables;
+            for (String segment : normalized.split("\\.")) {
+                if (!(current instanceof Map<?, ?> map)) return null;
+                current = map.get(segment);
+            }
+            return current;
         }
         return ConditionEvaluator.evaluateValue(input.expr(), variables);
     }

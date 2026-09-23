@@ -18,14 +18,14 @@ const COLUMNS = [
   {
     tone: "muted" as const,
     icon: Lock,
-    label: "Legacy process engines",
+    label: "Process engines",
     who: "Camunda · Temporal · Flowable",
-    title: "AI as a REST call",
+    title: "Heavy to run, governance assembled",
     points: [
-      "Durable and transactional — but the model is opaque",
-      "Prompt, schema and confidence sit outside the process version",
-      "No notion of a low-confidence result needing a human",
-      "The process never learns from its own execution",
+      "Durable and transactional, with growing agent support",
+      "Production self-hosting often means a licence and a multi-service cluster",
+      "Validation, evidence and review of AI output are yours to assemble",
+      "Execution analytics rarely become a reviewed change to the process",
     ],
   },
   {
@@ -37,7 +37,7 @@ const COLUMNS = [
     points: [
       "ACID-committed state, work, history and outbox in one transaction",
       "Prompt, output contract, confidence threshold and retry policy are versioned process assets",
-      "Validated output drives deterministic routing to a person or system",
+      "The engine validates model output and routes weak or invalid answers to a person",
       "Execution evidence becomes a reviewable improvement proposal",
     ],
   },
@@ -47,15 +47,15 @@ export function Gap() {
   return (
     <Section id="gap" alt>
       <SectionHead
-        eyebrow="The gap nobody bridged"
+        eyebrow="Where Abada fits"
         title={
           <>
-            Two industries, two failure modes.
+            Autonomy needs guarantees.
             <br />
-            <span className="text-t3">Abada is the bridge.</span>
+            <span className="text-t3">Guarantees need to be light enough to run.</span>
           </>
         }
-        lead="A model response takes seconds. A business process runs for days, touches money and people, and has to be explainable afterwards. Today you either get autonomy without guarantees, or guarantees without autonomy."
+        lead="A model response takes seconds. A business process runs for days, touches money and people, and has to be explainable afterwards. Agent frameworks give autonomy without durable guarantees; process engines give guarantees but leave the governance of model output to you, on a heavy stack."
       />
 
       <div className="mt-14 grid gap-5 lg:grid-cols-3">

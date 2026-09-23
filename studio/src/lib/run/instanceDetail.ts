@@ -125,6 +125,13 @@ export interface AgentTelemetry {
   retries?: number;
   topic?: string;
   errorMessage?: string;
+  /** Provider token usage for the attempt, when reported. */
+  promptTokens?: number;
+  completionTokens?: number;
+  /** Engine-side output contract result: OK, LOW_CONFIDENCE, INVALID_OUTPUT or ERROR. */
+  outcome?: string;
+  /** Why the engine rejected the result (JSON paths and keywords, never values). */
+  outcomeReason?: string;
 }
 
 export function aggregateNodeTelemetry(
@@ -157,6 +164,15 @@ export function aggregateNodeTelemetry(
         confidence: typeof rawAgent.confidence === 'number' ? rawAgent.confidence : undefined,
         confidenceThreshold: typeof rawAgent.confidenceThreshold === 'number'
           ? rawAgent.confidenceThreshold : undefined,
+        promptTokens: typeof rawAgent.promptTokens === 'number' ? rawAgent.promptTokens : undefined,
+        completionTokens: typeof rawAgent.completionTokens === 'number' ? rawAgent.completionTokens : undefined,
+      };
+    }
+    if (typeof details.agentOutcome === 'string') {
+      agent = {
+        ...(agent ?? {}),
+        outcome: details.agentOutcome,
+        outcomeReason: typeof details.outcomeReason === 'string' ? details.outcomeReason : undefined,
       };
     }
     if (typeof details.topic === 'string') agent = { ...(agent ?? {}), topic: details.topic };

@@ -92,3 +92,11 @@ semaflow-ui/
 # Prevent nested project contamination
 agent-worker/**/munganga/
 website/prompt.md
+
+# Local assistant/tool output
+.freebuff/
+Claude outputs/
+
+# Private material kept locally, not published
+submissions/
+prompts/

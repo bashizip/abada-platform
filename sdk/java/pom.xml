@@ -5,8 +5,15 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.abada</groupId>
   <artifactId>abada-worker-client</artifactId>
-  <version>1.0.0-rc.5</version>
+  <version>1.0.0-rc.6</version>
   <name>Abada Java Worker Client</name>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
   <description>Java client for the Abada external-worker protocol v1</description>
 
   <properties>

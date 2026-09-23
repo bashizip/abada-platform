@@ -49,6 +49,10 @@ public class ExternalTaskEntity {
     @Column(name = "agent_metadata", columnDefinition = "TEXT")
     private String agentMetadataJson;
 
+    /** Engine-side output-contract outcome of the last reported agent attempt. */
+    @Column(name = "agent_outcome", length = 32)
+    private String agentOutcome;
+
     /** Required model for agent tasks, matched against worker capabilities. */
     @Column(name = "required_model")
     private String requiredModel;
@@ -168,6 +172,8 @@ public class ExternalTaskEntity {
     public String getTraceParent() { return traceParent; }
     public void setTraceParent(String value) { traceParent = value; }
 
+    public String getAgentOutcome() { return agentOutcome; }
+    public void setAgentOutcome(String value) { agentOutcome = value; }
     public String getAgentMetadataJson() { return agentMetadataJson; }
     public void setAgentMetadataJson(String value) { agentMetadataJson = value; }
 

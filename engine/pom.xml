@@ -11,12 +11,16 @@
     </parent>
     <groupId>dev.abada</groupId>
     <artifactId>abada-engine</artifactId>
-    <version>1.0.0-rc.5</version>
+    <version>1.0.0-rc.6</version>
     <name>Abada Engine</name>
     <description>Lightweight, pluggable BPMN-based workflow engine</description>
     <url />
     <licenses>
-        <license />
+        <license>
+            <name>GNU Affero General Public License v3.0 only</name>
+            <url>https://www.gnu.org/licenses/agpl-3.0.html</url>
+            <distribution>repo</distribution>
+        </license>
     </licenses>
     <developers>
         <developer />
@@ -43,6 +47,21 @@
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Workflow expressions (conditions, decision tables): sandboxed, non-Turing-complete CEL. -->
+        <dependency>
+            <groupId>dev.cel</groupId>
+            <artifactId>cel</artifactId>
+            <version>0.14.0</version>
+        </dependency>
+
+        <!-- Engine-side validation of agent output contracts (JSON Schema 2020-12). -->
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>1.5.9</version>
+        </dependency>
+
+        <!-- Opt-in script tasks only (abada.scripts.enabled); runs inside a class-filtered sandbox. -->
         <dependency>
             <groupId>org.openjdk.nashorn</groupId>
             <artifactId>nashorn-core</artifactId>
@@ -241,6 +260,11 @@
                 <version>3.5.2</version>
                 <configuration>
                     <runOrder>random</runOrder>
+                    <!-- Plain unit tests (no Spring context) see the same execution policy as application-test.yaml. -->
+                    <systemPropertyVariables>
+                        <abada.scripts.enabled>true</abada.scripts.enabled>
+                        <abada.delegates.allowed-classes>com.abada.engine.delegates.TestDelegate,com.abada.engine.test.DoesNotExist</abada.delegates.allowed-classes>
+                    </systemPropertyVariables>
                     <!-- Java 21+ no longer guarantees Mockito can self-attach. -->
                     <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                 </configuration>

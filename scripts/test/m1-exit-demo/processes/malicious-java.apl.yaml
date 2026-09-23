@@ -1,0 +1,18 @@
+version: abada.io/v1
+metadata:
+  name: M1 Demo Malicious Java
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: route
+    - id: route
+      type: condition
+      rules:
+        - if: "Java.type('java.lang.Runtime').getRuntime().exec('touch /tmp/pwned') != null"
+          then: done
+        - else: true
+          then: done
+    - id: done
+      type: end

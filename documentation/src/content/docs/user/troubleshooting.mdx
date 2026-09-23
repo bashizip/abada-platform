@@ -21,6 +21,10 @@ Start with configuration and service state:
 | Engine unhealthy | Check PostgreSQL health and engine logs; telemetry must not be the cause |
 | No Grafana data | Confirm the telemetry overlay is present, then inspect Collector, Alloy and Grafana containers |
 | Workflow succeeds while collector is down | Expected: telemetry export is best-effort and independent of workflow correctness |
+| Instance stays `ACTIVE` at an agent node | Expected without a worker or LLM key; check the Agent Worker is Online and `ABADA_AGENT_LLM_*` is configured in `.env.dev` |
+| Worker shows Error or Offline in Operations | Inspect last rejection and consecutive failures; verify engine URL, OIDC client credentials and LLM endpoint reachability |
+| Agent task fails at deployment with a model error | The node's `model` is outside `ABADA_AGENT_ALLOWED_MODELS`, or requested `tools` are outside `ABADA_AGENT_ALLOWED_TOOLS` |
+| No Insight proposals appear | Confirm `ABADA_INSIGHT_ENABLED=true` and that enough terminal facts exist (thresholds under `abada.insight.*`); proposals are never auto-approved |
 
 Render the merged configuration without starting anything:
 

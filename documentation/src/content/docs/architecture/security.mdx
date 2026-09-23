@@ -34,8 +34,9 @@ sequenceDiagram
 | Process control | `process:control` | `abada-process-controller` | Start, fail and correlate |
 | Tasks | `task:read`, `task:write` | `abada-task-user` | Read and act on visible tasks |
 | Operations | `operations:read`, `operations:write` | `abada-operator` | Inspect state, history, jobs and retries |
-| Workers | `worker:execute` | `abada-worker` | Use worker protocol v1 |
-| Administration | all domains | `abada-admin` | Full engine access |
+| Workers | `worker:execute` | `abada-worker` | Use worker protocol v1; the first-party Agent Worker self-registers global capabilities |
+| Insight | `insight:read`, `insight:review`, `insight:configure` | Project `REVIEWER` role plus a named approval lane | Read proposals/policies; approve or reject; update policies |
+| Administration | all domains | `abada-admin` | Full engine access (cannot satisfy an Insight approval lane) |
 
 Business groups used for BPMN assignment do not grant engine permissions.
 Task actions require both the platform permission and durable

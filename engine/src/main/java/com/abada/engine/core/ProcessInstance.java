@@ -216,6 +216,11 @@ public class ProcessInstance {
                         current = null;
                     }
                 } else if (isEmbeddedServiceTask) {
+                    if (!com.abada.engine.expression.ExecutionPolicy.delegateAllowed(serviceTaskMeta.className())) {
+                        throw new com.abada.engine.core.exception.ProcessEngineException("Java delegate '"
+                                + serviceTaskMeta.className() + "' is not on the operator allow-list ("
+                                + com.abada.engine.expression.ExecutionPolicy.ALLOWED_DELEGATES + ")");
+                    }
                     try {
                         JavaDelegate delegate = (JavaDelegate) Class.forName(serviceTaskMeta.className())
                                 .getConstructor().newInstance();
@@ -334,21 +339,7 @@ public class ProcessInstance {
     }
 
     private void executeScript(ScriptTaskMeta task) {
-        javax.script.ScriptEngine engine = new javax.script.ScriptEngineManager().getEngineByName("JavaScript");
-        if (engine == null) throw new IllegalStateException("JavaScript engine is unavailable");
-        Map<String, Object> scriptVariables = new HashMap<>(variables);
-        javax.script.Bindings bindings = engine.createBindings();
-        bindings.putAll(scriptVariables);
-        bindings.put("variables", scriptVariables);
-        try {
-            engine.eval(task.script(), bindings);
-            variables.putAll(scriptVariables);
-            bindings.forEach((key, value) -> {
-                if (!"variables".equals(key)) variables.put(key, value);
-            });
-        } catch (javax.script.ScriptException ex) {
-            throw new IllegalStateException("Script task failed: " + task.id(), ex);
-        }
+        variables.putAll(com.abada.engine.expression.ScriptSandbox.execute(task.id(), task.script(), variables));
     }
 
     private class DelegateExecutionImpl implements DelegateExecution {

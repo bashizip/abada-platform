@@ -15,6 +15,12 @@ Docker and Compose, checks ports and image availability, and renders the final
 configuration. The stack exposes only Traefik on port 80 and its loopback-only
 dashboard on 8080. PostgreSQL is not published to the host.
 
+Up also starts the **Agent Worker** automatically: it provisions Keycloak and
+the engine idempotently, registers the global `abada:agent` capability and
+begins polling project-agnostically. Pass `--no-agent` only when you need a
+core-stack diagnostic run. See [Agent nodes and the Agent
+Worker](/user/agent-worker/).
+
 ## Development identities
 
 The bundled realm provides accounts for the Studio operator UI:

@@ -1,13 +1,15 @@
 ---
-title: Runtime and transactions
-description: The command-local state model and atomic mutation lifecycle.
+title: The transactional execution core
+description: The command-local state model and atomic mutation lifecycle that carries BPMN, APL, agent work and Insight facts on one ACID rail.
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
 Every mutation follows one rule: committed PostgreSQL rows are the input and
 output of the workflow transition. A replica does not continue from a mutable
-process object retained from an earlier request.
+process object retained from an earlier request. This is the ACID rail that
+carries every workload identically — legacy BPMN, native APL, decision
+tables, agent steps and the Insight loop's terminal facts.
 
 ## Atomic command lifecycle
 
@@ -25,8 +27,8 @@ sequenceDiagram
     Command->>DB: load and lock authoritative rows
     DB-->>Command: committed state
     Command->>Command: authorize and validate
-    Command->>Command: advance canonical BPMN state
-    Command->>DB: persist state, work, history and outbox
+    Command->>Command: advance canonical state
+    Command->>DB: persist state, work, facts, history and outbox
     Command->>DB: commit
     Command-->>Client: deterministic result
     Outbox->>DB: lease committed events
@@ -40,27 +42,47 @@ sequenceDiagram
    for stale-write detection.
 3. **Authorize and validate.** Check the authenticated permission, task
    assignment, current status, lease ownership and command inputs.
-4. **Advance.** Execute the vendor-neutral process model and create successor
-   tokens or durable work.
+4. **Advance.** Execute the canonical process model — APL and BPMN compile to
+   the same graph — and create successor tokens or durable work.
 5. **Persist.** Store variables, tasks, subscriptions, jobs, history,
-   idempotency result and outbox events in the same transaction.
+   terminal Insight facts, idempotency result and outbox events in the same
+   transaction.
 6. **Commit.** Only a successful commit makes the transition visible.
 </Steps>
 
+## Deterministic law, probabilistic advice
+
+The execution core separates what runs *inside* the transaction from what
+must not:
+
+| Concern | Where it runs |
+| --- | --- |
+| Decision tables (`FIRST`/`UNIQUE`/`COLLECT`, `otherwise` fallback) | **Inside** the transaction — reproducible, audited as `DECISION_TABLE_APPLIED` |
+| Scripts and embedded delegates | Inside the transaction, for deterministic local logic |
+| Agent nodes and `engine-task`s | Durable external tasks; a worker reports back through a command |
+| Insight terminal facts | One idempotent row per terminal node visit, written in the command transaction |
+| Model and tool calls | Never inside a workflow transaction |
+
+A probabilistic output is never trusted as an engine decision: agent results
+merge through the normal external-task completion command, and Insight
+proposals are discarded unless `AplParser` validates them and a human
+approves them.
+
 ## Failure semantics
 
-- Failure before commit rolls back workflow state, new work, history and
-  outbox records together.
+- Failure before commit rolls back workflow state, new work, facts, history
+  and outbox records together.
 - Failure after commit leaves durable progress. An idempotency record lets a
   duplicate API mutation replay its logical response.
-- Embedded Java delegates and scripts run inside the transaction, but an
+- Scripts and embedded delegates run inside the transaction, but an
   irreversible external side effect cannot be rolled back by PostgreSQL.
 - External tasks are the preferred boundary for remote effects; workers must
   make at-least-once effects idempotent.
 
 <Aside type="caution" title="Never call a remote service while holding workflow locks">
   A slow or failed remote call lengthens the transaction and increases cluster
-  contention. Model retryable remote work as a durable external task instead.
+  contention. Model retryable remote work — including every LLM call — as a
+  durable external task instead.
 </Aside>
 
 ## Cache policy
@@ -70,9 +92,9 @@ deployment ID. A new process start queries PostgreSQL for the latest version;
 an existing instance reloads its pinned version. Evicting the cache changes
 latency, not semantics.
 
-Mutable instances, tokens, joins, tasks, subscriptions, timers, jobs and
-variables never live in runtime-wide maps. Command-local maps are allowed only
-while materializing and advancing one locked aggregate.
+Mutable instances, tokens, joins, tasks, subscriptions, timers, jobs,
+variables and facts never live in runtime-wide maps. Command-local maps are
+allowed only while materializing and advancing one locked aggregate.
 
 ## Executable boundary
 

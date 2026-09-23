@@ -15,13 +15,13 @@ An entry becomes certified only when its roadmap evidence is checked. The
 table distinguishes an implemented/configuration-valid profile from a
 release-certified one so documentation never broadens the current guarantee.
 
-`1.0.0-rc.5` is prepared as an evaluation release candidate with the
+`1.0.0-rc.6` is prepared as an evaluation release candidate with the
 executable Compose configuration, preflight, archive and
 PostgreSQL/Testcontainers evidence. It does not claim a completed public-cloud
 production certification. Public TLS, external-OIDC reference-host testing,
 multi-host failover, rolling upgrades and supply-chain certification are
 tracked by the
-[1.1 RC roadmap](../development/roadmap-to-1.1.0-rc.md).
+[1.1 RC roadmap](../archive/roadmap-to-1.1.0-rc.md).
 
 Abada release images must publish `linux/amd64` and `linux/arm64` manifests.
 The original `1.0.0-rc.1` images are a documented exception: they contain only

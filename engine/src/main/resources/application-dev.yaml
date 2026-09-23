@@ -50,6 +50,9 @@ logging:
     com.abada.engine: DEBUG
 
 abada:
+  scripts:
+    # Development convenience: sandboxed script tasks are allowed. Production defaults to false.
+    enabled: ${ABADA_SCRIPTS_ENABLED:true}
   telemetry:
     enabled: ${ABADA_TELEMETRY_ENABLED:false}
     otlp:

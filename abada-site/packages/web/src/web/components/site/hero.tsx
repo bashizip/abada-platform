@@ -1,9 +1,10 @@
-import { ArrowUpRight, Play } from "lucide-react";
-import { BRIEF_URL, CALENDAR_URL, GITHUB_URL } from "../../lib/links";
+import { Play } from "lucide-react";
+import { CALENDAR_URL, GITHUB_URL } from "../../lib/links";
+import { RELEASE_LABEL, RELEASE_VERSION } from "../../lib/release";
 
 const FACTS = [
-  { k: "1.0.0-rc.4", v: "Published evaluation release" },
-  { k: "323 tests", v: "Recorded release-gate suite" },
+  { k: RELEASE_VERSION, v: RELEASE_LABEL },
+  { k: "PostgreSQL-tested", v: "Restart, upgrade and concurrency suites" },
   { k: "PostgreSQL", v: "Authoritative runtime state" },
   { k: "Self-hosted", v: "Your infrastructure, your data" },
 ];
@@ -24,7 +25,7 @@ export function Hero() {
             <div className="rise-0 inline-flex items-center gap-2 rounded-full border border-hairline bg-surface/70 px-3 py-1.5">
               <span className="size-1.5 rounded-full bg-signal" />
               <span className="font-mono text-[10px] tracking-[0.16em] text-t2 uppercase">
-                Open source · Self-hosted · 1.0.0-rc.4
+                Open source · Self-hosted · {RELEASE_VERSION}
               </span>
             </div>
 
@@ -35,9 +36,9 @@ export function Hero() {
             </h1>
 
             <p className="rise-160 prose-lead mt-7 text-[1.125rem]">
-              Today&apos;s AI frameworks produce chaotic, unpredictable agent swarms. Legacy process
-              engines treat AI as a simple REST call. Abada bridges that gap—run agents, people,
-              and systems on durable infrastructure that auto-optimizes over time.
+              Run agents, people and systems in one durable process. The engine checks every model
+              answer against its contract and sends weak ones to a person, and every AI-proposed change
+              waits for human approval. Self-hosted, with PostgreSQL as the only dependency.
             </p>
 
             <div className="rise-240 mt-9 flex flex-wrap items-center gap-3">
@@ -53,14 +54,6 @@ export function Hero() {
                 className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3 text-[15px] font-medium text-t1 transition-colors hover:border-signal/50"
               >
                 Talk to the founder
-              </a>
-              <a
-                href={BRIEF_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-1 py-3 text-[14px] text-t2 transition-colors hover:text-t1"
-              >
-                Read the brief (PDF) <ArrowUpRight className="size-3.5" />
               </a>
             </div>
 
@@ -95,7 +88,7 @@ export function Hero() {
               <div className="my-5 h-px bg-hairline" />
               <p className="text-[12.5px] leading-relaxed text-t3">
                 Built by a solo founder in the Democratic Republic of the Congo, on a decade of
-                engineering mission-critical platforms. Gemini-native by design.
+                engineering mission-critical platforms. Gemini by default; any OpenAI-compatible or local model.
               </p>
             </div>
           </div>

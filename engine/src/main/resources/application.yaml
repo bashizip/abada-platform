@@ -44,6 +44,11 @@ management:
         enabled: false
 
 abada:
+  # Code that runs inside workflow transactions. Expressions always use sandboxed CEL.
+  scripts:
+    enabled: ${ABADA_SCRIPTS_ENABLED:false}
+  delegates:
+    allowed-classes: ${ABADA_DELEGATES_ALLOWED_CLASSES:}
   telemetry:
     enabled: ${ABADA_TELEMETRY_ENABLED:false}
     environment: ${ABADA_ENVIRONMENT:${spring.profiles.active:default}}

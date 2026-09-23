@@ -6,7 +6,7 @@ security or observability instructions.
 
 Use these current contracts instead:
 
-- `docs/development/roadmap-to-1.0.md`
+- `docs/archive/roadmap-to-1.0.md`
 - `docs/reference/deployment-support.md`
 - `docs/operations/docker-deployment.md`
 - `docs/operations/observability.md`

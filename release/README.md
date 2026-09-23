@@ -7,7 +7,7 @@ profile you need, then run the preflight before starting containers.
 Release images support `linux/amd64` and `linux/arm64`. The original immutable
 `1.0.0-rc.1` images contain only `linux/amd64`; the current launcher detects
 that exact release on an ARM64 Docker host, prints a notice, and enables
-Docker's compatibility mode. `1.0.0-rc.5` is the prepared release; RC.3 was the first
+Docker's compatibility mode. `1.0.0-rc.6` is the prepared release; RC.3 was the first
 whose manifests are required to contain both native platforms.
 
 Development:

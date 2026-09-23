@@ -10,9 +10,9 @@ public record InfoResponse(
         String service,
         @Schema(
                 description = "Short product description",
-                example = "Open-source, self-hosted BPMN 2.0 workflow orchestration engine")
+                example = "Open-source, self-hosted runtime for governed AI-driven business processes")
         String description,
-        @Schema(description = "Running engine release", example = "1.0.0-rc.5")
+        @Schema(description = "Running engine release", example = "1.0.0-rc.6")
         String version,
         Api api,
         Engine engine,
@@ -29,10 +29,10 @@ public record InfoResponse(
 
     @Schema(description = "Workflow-engine contract")
     public record Engine(
-            @Schema(description = "Process notation interpreted by the engine", example = "BPMN 2.0")
+            @Schema(description = "Process languages the engine accepts: APL natively, BPMN as an import boundary", example = "APL + BPMN 2.0 import")
             String standard,
             @Schema(
-                    description = "Support boundary; see the BPMN support contract for exact semantics",
+                    description = "Support boundary; BPMN import is a documented subset (see the BPMN support contract)",
                     example = "documented-subset")
             String supportLevel,
             @Schema(description = "Authoritative production persistence store", example = "PostgreSQL")

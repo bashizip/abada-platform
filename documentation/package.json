@@ -1,6 +1,6 @@
 {
   "name": "abada-documentation",
-  "version": "1.0.0-rc.5",
+  "version": "1.0.0-rc.6",
   "private": true,
   "type": "module",
   "engines": {
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "0.41.3",
-    "astro": "7.1.1",
+    "astro": "7.3.4",
     "astro-mermaid": "2.1.0",
     "mermaid": "11.16.1"
   },
@@ -25,7 +25,7 @@
   "overrides": {
     "dompurify": "3.4.13",
     "fast-uri": "3.1.6",
-    "js-yaml": "4.3.1",
+    "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
     "postcss": "8.5.23"
   }

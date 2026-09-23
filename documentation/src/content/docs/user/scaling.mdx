@@ -20,3 +20,10 @@ and run a replica-termination test against representative workflows.
 
 Traefik discovers engine replicas through Docker labels. Fixed container names
 are intentionally absent because they prevent Compose scaling.
+
+Agent execution scales independently: the Agent Worker is a stateless
+sidecar that polls `abada:agent` tasks and reports attempt metadata through
+the durable worker protocol. More instances of `abada-agent-worker` claim
+more concurrent model work without changing engine replica semantics; model
+calls still never run inside engine commands. Leases, heartbeats and
+idempotent completion keep duplicate dispatch and duplicate transitions out.
