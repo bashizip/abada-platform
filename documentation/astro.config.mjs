@@ -19,13 +19,13 @@ export default defineConfig({
       favicon: '/favicon.svg',
       lastUpdated: true,
       editLink: {
-        baseUrl: 'https://github.com/bashizip/abada-engine/edit/dev/documentation/',
+        baseUrl: 'https://github.com/bashizip/abada-platform/edit/dev/documentation/',
       },
       social: [
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/bashizip/abada-engine',
+          href: 'https://github.com/bashizip/abada-platform',
         },
       ],
       customCss: ['./src/styles/custom.css'],

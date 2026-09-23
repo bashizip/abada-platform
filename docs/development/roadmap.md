@@ -18,7 +18,7 @@ Abada is the governed runtime for AI-driven business processes:
 - Every AI decision leaves evidence an auditor can read later. Every
   AI-proposed change to a process is backed by replay evidence and approved by
   people under a review policy. Nothing auto-applies.
-- Self-hosted, MIT-licensed, PostgreSQL as the only required infrastructure.
+- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure.
 
 Target users: regulated and sovereignty-sensitive organisations (banks,
 telcos, public sector) that must run on their own infrastructure.

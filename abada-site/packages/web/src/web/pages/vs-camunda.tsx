@@ -41,7 +41,7 @@ const CHOOSE_CAMUNDA = [
 const CHOOSE_ABADA = [
   "Models make or shape decisions inside the process, and you must be able to defend those decisions later.",
   "You need the AI part under the same transactional and versioning discipline as the rest of the workflow.",
-  "Self-hosting and data location are constraints, not preferences, and you want production use without a commercial licence or a multi-service cluster: Abada is MIT-licensed and needs only PostgreSQL.",
+  "Self-hosting and data location are constraints, not preferences, and you want production use without a commercial licence or a multi-service cluster: Abada is open source under AGPL-3.0 and needs only PostgreSQL.",
   "You want the process to get measurably better from its own execution history, with a human in the approval path.",
 ];
 

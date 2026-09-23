@@ -26,3 +26,8 @@ for (var task : tasks) {
 Workers must reuse a stable idempotency key when retrying the same mutation.
 External side effects remain at-least-once and must be deduplicated by the
 worker. The engine URL passed to the client includes the `/api` context path.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE). The rest of Abada is AGPL-3.0-only;
+this SDK is permissive so workers built on it carry no AGPL obligations.

@@ -51,10 +51,10 @@ public class OpenApiConfig {
                                                 .version(appVersion)
                                                 .contact(new Contact()
                                                                 .name("Abada Platform")
-                                                                .url("https://github.com/bashizip/abada-engine"))
+                                                                .url("https://github.com/bashizip/abada-platform"))
                                                 .license(new License()
-                                                                .name("MIT")
-                                                                .url("https://opensource.org/licenses/MIT")));
+                                                                .name("AGPL-3.0-only")
+                                                                .url("https://www.gnu.org/licenses/agpl-3.0.html")));
         }
 
         @Bean
