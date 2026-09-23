@@ -11,7 +11,6 @@ abada-engine/
 ├── agent-worker/    First-party Java 21 Agent Worker sidecar (abada.agent/v1)
 ├── sdk/java/        Java external-worker protocol v1 client
 ├── studio/          React/TypeScript Studio — the single operator UI
-├── abada-platform/  Supported Compose family, release bundles and launcher
 ├── abada-site/      Marketing site (abadaplatform.com)
 ├── install/         Cloudflare Worker serving install.abadaplatform.com
 ├── documentation/   Astro/Starlight guide (this site)
@@ -19,7 +18,8 @@ abada-engine/
 ├── examples/        Runnable APL examples (examples/apl/*.apl.yaml)
 ├── docker/          Observability and supporting container configuration
 ├── deployment/, k8s/, monitoring/   Ops and infrastructure assets
-├── release/, scripts/  Release tooling and development/verification helpers
+├── compose*.yaml    Supported Compose family (dev, prod, telemetry overlays)
+├── release/, scripts/  Release bundles, launcher and development/verification helpers
 ```
 
 ## Engine packages
