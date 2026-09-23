@@ -42,24 +42,34 @@ ordinary service tasks. Protocol-v1 workers that ignore unknown JSON fields
 remain compatible; agent workers must reject a missing or unknown
 `profileVersion`. See [Agent worker](agent-worker.md).
 
+For `abada:agent` tasks, `variables` contains **only the node's declared
+inputs**, resolved by the engine and keyed by input name (default-deny). Other
+topics keep receiving the instance variables.
+
 Completion and failure bodies also accept an optional additive `agent` object
 (`AgentAttemptMetadata`): `model`, `provider`, `attempt`, `durationMs`,
-`tools`, `resultVariable`, `promptHash`, `errorType` and `confidence`. The
-`confidence` value (0–100) is the `_confidence` the agent model reported for
-its structured output, the same value gated against the descriptor's
-`confidence_threshold` before completion. The engine persists it on the
+`tools`, `resultVariable`, `promptHash`, `errorType`, `confidence`,
+`promptTokens` and `completionTokens`. The `confidence` value (0–100) is the
+`_confidence` the agent model reported for its structured output. For
+`abada:agent` tasks the engine, not the worker, applies the node's output
+contract to the completed variables (see `apl-specification.md` §3.2); the
+completion call still succeeds when the engine rejects the result, and the
+decision is visible in history (`EXTERNAL_TASK_COMPLETED` or
+`EXTERNAL_TASK_OUTPUT_REJECTED` with `agentOutcome`). The engine persists it on the
 external-task record and inside the `EXTERNAL_TASK_*` history event details.
 It never contains prompts, tokens, credentials, or complete sensitive
 payloads; ordinary workers that omit it remain fully compatible.
 
 ## BPMN error boundary
 
-Boundary error events are outside the current supported BPMN subset. Therefore
-a protocol-v1 BPMN error is an unhandled business error: Abada records
-`EXTERNAL_TASK_BPMN_ERROR`, persists its code/message, applies its variables,
-and transitions the process instance to `FAILED` atomically. A future
-compatibility profile may add caught boundary-error routing without changing
-the request envelope.
+Native APL `agent` and `engine-task` nodes may declare `on_error`. A BPMN
+error whose code matches a route (or a code-less catch-all) completes the task
+and follows that route in the same transaction, writing
+`<node>_outcome = 'ERROR'` and `<node>_error_code`. Without a matching route,
+the error remains unhandled: Abada records `EXTERNAL_TASK_BPMN_ERROR`,
+persists its code/message, applies its variables, and transitions the process
+instance to `FAILED` atomically. BPMN boundary error events remain outside the
+supported BPMN subset; the request envelope is unchanged.
 
 ## Delivery guarantee
 

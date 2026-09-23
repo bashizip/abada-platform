@@ -216,7 +216,42 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `timeout_ms` | integer | no | 1–3,600,000 |
 | `max_attempts` | integer | no | 1–20 durable attempts |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |
+| `on_low_confidence` | nodeId | no | route when `_confidence` is missing or below `confidence_threshold` |
+| `on_invalid_output` | nodeId | no | route when the result violates `output_schema` or the completion shape |
+| `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error, optionally per error code |
 | `next` | nodeId | yes | linear successor |
+
+**Data the agent receives (default-deny).** The locked task carries only the
+node's `inputs`, resolved by the engine and keyed by input name. When `inputs`
+is omitted, the engine derives them from the prompt's `${path}` placeholders
+(for example `${lead.companySize}`). A placeholder that is not a declared input
+(or a path inside one) is rejected at deployment, and placeholders must be
+variable paths, not expressions. The reference worker never puts workflow data
+in the system message: placeholders become `<input name="…"/>` references and
+values travel in the user message.
+
+**Output contract (engine-enforced).** On completion the engine checks, in
+the completion transaction, that:
+
+1. the worker wrote only `result_variable`;
+2. the value matches `output_schema` (JSON Schema 2020-12; a malformed
+   schema is rejected at deployment);
+3. with `confidence_threshold` above 0, the value is an object whose numeric
+   `_confidence` (0–100) meets the threshold. **A missing score fails the
+   threshold**, so declare an `output_schema` whenever you set a threshold.
+
+`_confidence` is removed from the stored value. The outcome is `OK`,
+`INVALID_OUTPUT` or `LOW_CONFIDENCE`. A rejected result with a matching route
+completes the task and follows the route, and the engine writes the
+`<node>_outcome` variable (`-` in node ids becomes `_`). For `LOW_CONFIDENCE`
+the result is kept under `result_variable` for the reviewer; for
+`INVALID_OUTPUT` the raw text is kept in `<node>_raw_output` (at most
+16 KB). Without a route, the rejection counts as a failed attempt: retries
+are decremented, and at zero the task becomes an incident. Every decision is
+recorded in history (`agentOutcome`, `outcomeReason`) without variable values.
+
+Routes compile to a synthetic exclusive gateway `<node>__outcome` (the suffix
+`__outcome` is reserved in node ids) whose default flow is `next`.
 
 Boundary: with no worker deployed, a run pauses in `ACTIVE` at the agent —
 this is intentional (agents must not advance BPMN state outside engine
@@ -242,7 +277,7 @@ integration, webhook sink). It is the deterministic sibling of `agent`.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `service` | string | yes | external task topic |
-| `on_error` | nodeId | no | error path hint consumed by Studio to draw the error edge |
+| `on_error` | nodeId or `[{code?, then}]` | no | route taken when the worker reports a BPMN error: a single target, or per `code` with an optional code-less catch-all. The engine writes `<node>_outcome = 'ERROR'` and `<node>_error_code`. A BPMN error without a matching route still fails the instance |
 | `next` | nodeId | yes | linear successor |
 
 ### 3.4 `script` — in-transaction script step

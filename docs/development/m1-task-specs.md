@@ -128,7 +128,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T4 — Engine-side agent output contract
+## T4 — Engine-side agent output contract ✅ done
 
 **Goal.** The engine, not the worker, decides whether an agent result may enter process state.
 
@@ -156,7 +156,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T5 — Outcome routing: `on_low_confidence` and `on_invalid_output`
+## T5 — Outcome routing: `on_low_confidence` and `on_invalid_output` ✅ done
 
 **Goal.** A weak or malformed agent answer goes to a declared node (usually a human), not to an incident.
 
@@ -177,7 +177,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T6 — Default-deny agent inputs and correct prompt rendering
+## T6 — Default-deny agent inputs and correct prompt rendering ✅ done
 
 **Goal.** Only declared data leaves the engine for a model call, `${a.b}` paths work, and workflow data never enters the system prompt.
 
@@ -203,7 +203,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T7 — `on_error` routing for agent and engine-task
+## T7 — `on_error` routing for agent and engine-task ✅ done
 
 **Goal.** A worker can report a business outcome ("cannot decide", "customer not found") that routes the process instead of failing it.
 
@@ -231,7 +231,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T9 — Remove or label drifted fields
+## T9 — Remove or label drifted fields ✅ done
 
 **Files.** `studio/src/types.ts`, `studio/src/components/PropertiesInspector.tsx`, `studio/src/features/designer/NodeRenderer.tsx`, `studio/src/features/operations/instanceTelemetry.tsx`, `studio/src/lib/apl/parser.ts`, `ENGINE/parser/AplParser.java` (human-input parsing).
 
@@ -244,7 +244,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T10 — Token usage in attempt metadata
+## T10 — Token usage in attempt metadata ✅ done
 
 **Files.** `ENGINE/core/model/AgentAttemptMetadata.java`, `sdk/java/.../AgentAttemptMetadata.java`, `agent-worker/.../AbstractAgentGateway.java`, `ExternalTaskCommandService.agentDetails`, Studio `instanceTelemetry.tsx`.
 

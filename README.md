@@ -28,10 +28,15 @@ flow:
       model: gemini-3.6-flash
       prompt: |
         Analyze the company size: ${lead.companySize}.
-        Classify the lead priority.
-        Return exactly one value: HIGH, MEDIUM, or LOW.
+        Classify the lead priority as HIGH, MEDIUM or LOW.
       result_variable: lead_priority
+      output_schema:
+        type: object
+        required: [priority]
+        properties:
+          priority: { enum: [HIGH, MEDIUM, LOW] }
       confidence_threshold: 85
+      on_low_confidence: senior-sales-review
       max_attempts: 3
       next: check-priority
 
@@ -39,7 +44,7 @@ flow:
       type: condition
       description: Route the lead according to the classified priority
       rules:
-        - if: "${lead_priority == 'HIGH'}"
+        - if: "${lead_priority.priority == 'HIGH'}"
           then: senior-sales-review
         - else: standard-workflow
           then: standard-workflow
@@ -62,11 +67,11 @@ flow:
       description: Lead triage completed
 ```
 
-**61 lines of YAML.** Equivalent BPMN XML: **~800+ lines.**
+**55 lines of YAML.** Equivalent BPMN XML: **~800+ lines.**
 
 What just happened:
 - A lead arrives via webhook
-- A **Gemini agent** classifies priority with confidence threshold and retry logic
+- A **Gemini agent** classifies priority; the **engine** checks its structured output and confidence, and sends weak answers to a person
 - A **condition** routes HIGH-priority leads to a senior reviewer
 - A **human task** with a form appears for the sales director
 - Standard leads flow automatically to the CRM
