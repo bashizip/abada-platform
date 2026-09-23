@@ -4,6 +4,7 @@ import io.abada.worker.AgentAttemptMetadata;
 import io.abada.worker.AgentWorkDescriptor;
 import io.abada.worker.LockedExternalTask;
 import io.abada.worker.RequestOptions;
+import io.abada.worker.WorkerProtocolException;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
@@ -44,6 +45,50 @@ class AgentWorkerRunnerTest {
         assertTrue(engine.lockViolations.isEmpty(), "no task reported after its lock expired");
         assertTrue(engine.extendCalls.get() >= 4, "every running task sent at least one heartbeat");
         assertTrue(elapsedMs < 2 * MODEL_LATENCY_MS, "tasks ran concurrently, took " + elapsedMs + " ms");
+    }
+
+    @Test
+    void noHeartbeatIsSentWhileTheResultIsBeingReported() throws Exception {
+        FakeEngine engine = new FakeEngine(4, false);
+        // A slow completion call overlaps the next heartbeat tick unless the
+        // worker stops its heartbeat before reporting.
+        engine.completeLatencyMs = 500;
+        var runner = new AgentWorkerMain.Runner(engine, work -> slowGateway(new AtomicInteger()), config(4));
+
+        assertEquals(4, runner.pollOnce());
+        assertTrue(runner.awaitIdle(Duration.ofSeconds(10)));
+        runner.close();
+
+        assertEquals(4, engine.completed.size());
+        assertTrue(engine.heartbeatsAfterReport.isEmpty(),
+                "heartbeats raced the completion for " + engine.heartbeatsAfterReport);
+    }
+
+    @Test
+    void aConcurrentModificationOnCompleteIsRetriedOnceWithoutAnotherModelCall() throws Exception {
+        FakeEngine engine = new FakeEngine(1, false);
+        engine.completeConflicts.set(1);
+        AtomicInteger modelCalls = new AtomicInteger();
+        var runner = new AgentWorkerMain.Runner(engine, work -> slowGateway(modelCalls), config(1));
+
+        assertEquals(1, runner.pollOnce());
+        assertTrue(runner.awaitIdle(Duration.ofSeconds(10)));
+        runner.close();
+
+        assertEquals(1, modelCalls.get(), "the retry reuses the result");
+        assertEquals(List.of("task-0"), engine.completed);
+        assertEquals(2, engine.completeAttempts.get());
+        assertTrue(engine.failed.isEmpty(), "a conflict must not discard the result as a failure");
+    }
+
+    @Test
+    void workerIdIsUniquePerReplicaUnlessConfigured() {
+        assertEquals("abada-agent-worker-3f2a9c1b", WorkerConfig.workerId(Map.of("HOSTNAME", "3f2a9c1b")));
+        assertEquals("billing-worker",
+                WorkerConfig.workerId(Map.of("ABADA_AGENT_WORKER_ID", "billing-worker", "HOSTNAME", "3f2a9c1b")));
+        String generated = WorkerConfig.workerId(Map.of());
+        assertTrue(generated.startsWith("abada-agent-worker-") && !generated.equals(WorkerConfig.workerId(Map.of())),
+                "without a hostname each process generates its own id");
     }
 
     @Test
@@ -120,6 +165,11 @@ class AgentWorkerRunnerTest {
         final List<String> lockViolations = Collections.synchronizedList(new ArrayList<>());
         final List<Integer> requestedBatchSizes = Collections.synchronizedList(new ArrayList<>());
         final AtomicInteger extendCalls = new AtomicInteger();
+        final Set<String> reporting = ConcurrentHashMap.newKeySet();
+        final List<String> heartbeatsAfterReport = Collections.synchronizedList(new ArrayList<>());
+        final AtomicInteger completeConflicts = new AtomicInteger();
+        final AtomicInteger completeAttempts = new AtomicInteger();
+        volatile long completeLatencyMs;
 
         FakeEngine(int tasks, boolean heartbeatFails) {
             this.heartbeatFails = heartbeatFails;
@@ -144,13 +194,20 @@ class AgentWorkerRunnerTest {
         @Override
         public void complete(LockedExternalTask task, Map<String, Object> variables, AgentAttemptMetadata agent,
                 RequestOptions options) {
+            reporting.add(task.id());
+            completeAttempts.incrementAndGet();
             requireLock(task);
+            if (completeConflicts.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+                throw new WorkerProtocolException(409, "CONCURRENT_MODIFICATION", "Runtime state changed concurrently");
+            }
+            sleepQuietly(completeLatencyMs);
             completed.add(task.id());
         }
 
         @Override
         public void fail(LockedExternalTask task, String message, String details, int retries,
                 Duration retryTimeout, AgentAttemptMetadata agent, RequestOptions options) {
+            reporting.add(task.id());
             requireLock(task);
             failed.add(task.id());
         }
@@ -158,9 +215,19 @@ class AgentWorkerRunnerTest {
         @Override
         public void extendLock(LockedExternalTask task, Duration lockDuration) {
             extendCalls.incrementAndGet();
+            if (reporting.contains(task.id())) heartbeatsAfterReport.add(task.id());
             if (heartbeatFails) throw new IllegalStateException("lock owned by another worker");
             requireLock(task);
             lockExpiry.put(task.id(), Instant.now().plus(lockDuration));
+        }
+
+        private static void sleepQuietly(long millis) {
+            if (millis <= 0) return;
+            try {
+                Thread.sleep(millis);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         private void requireLock(LockedExternalTask task) {
