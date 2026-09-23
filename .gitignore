@@ -96,3 +96,7 @@ website/prompt.md
 # Local assistant/tool output
 .freebuff/
 Claude outputs/
+
+# Private material kept locally, not published
+submissions/
+prompts/
