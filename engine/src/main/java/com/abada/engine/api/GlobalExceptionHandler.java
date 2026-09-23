@@ -35,7 +35,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBpmnValidation(
             BpmnValidationException ex, HttpServletRequest request) {
         return ResponseEntity.badRequest().body(ApiErrors.response(HttpStatus.BAD_REQUEST,
-                ApiErrorCode.BPMN_VALIDATION_FAILED, "BPMN validation failed", request.getRequestURI(),
+                ApiErrorCode.BPMN_VALIDATION_FAILED, "Process definition validation failed", request.getRequestURI(),
                 Map.of("issues", ex.getIssues())));
     }
 
