@@ -36,18 +36,18 @@ telcos, public sector) that must run on their own infrastructure.
 
 Full specifications: [`m1-task-specs.md`](m1-task-specs.md).
 
-- [ ] T1 CEL replaces Nashorn for conditions and decision tables; scripts opt-in in a class-filtered sandbox; delegate allow-list
-- [ ] T2 Loud expression failures (typed rollback, deploy-time checks)
-- [ ] T3 Agent worker concurrency and lock heartbeat
-- [ ] T4 Engine-side agent output contract (JSON Schema, confidence, single result variable)
-- [ ] T5 `on_low_confidence` / `on_invalid_output` routing
-- [ ] T6 Default-deny agent inputs; nested paths; data out of the system prompt
-- [ ] T7 `on_error` routing for agent and engine-task
-- [ ] T8 O(V+E) cycle detection
-- [ ] T9 Remove or label drifted fields
-- [ ] T10 Token usage in attempt metadata
-- [ ] T11 Truth in the repository (AGENTS.md, README, roadmap consolidation)
-- [ ] T12 Truth on the web (site, brief)
+- [x] T1 CEL replaces Nashorn for conditions and decision tables; scripts opt-in in a class-filtered sandbox; delegate allow-list
+- [x] T2 Loud expression failures (typed rollback, deploy-time checks)
+- [x] T3 Agent worker concurrency and lock heartbeat
+- [x] T4 Engine-side agent output contract (JSON Schema, confidence, single result variable)
+- [x] T5 `on_low_confidence` / `on_invalid_output` routing
+- [x] T6 Default-deny agent inputs; nested paths; data out of the system prompt
+- [x] T7 `on_error` routing for agent and engine-task
+- [x] T8 O(V+E) cycle detection
+- [x] T9 Remove or label drifted fields
+- [x] T10 Token usage in attempt metadata
+- [x] T11 Truth in the repository (AGENTS.md, README, roadmap consolidation)
+- [x] T12 Truth on the web (site; the PDF brief has no source in the repo and must be corrected by hand)
 - [ ] rc.6 gate report and exit demo
 
 ## M2 — Real process shapes

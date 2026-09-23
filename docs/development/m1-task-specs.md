@@ -254,7 +254,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T11 — Truth in the repository
+## T11 — Truth in the repository ✅ done
 
 **Files.** `AGENTS.md`, `README.md`, `docs/README.md`, `docs/platform-overview.md`, roadmap files.
 
@@ -267,7 +267,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T12 — Truth on the web
+## T12 — Truth on the web ✅ done for the site (PDF brief pending: no source in the repo)
 
 **Files.** `abada-site/packages/web/src/web/components/site/{hero,gap,comparison,architecture,reliability,vision,quickstart,cta}.tsx`, `pages/vs-camunda.tsx`, `lib/links.ts`, `index.html`, the brief PDF source.
 
