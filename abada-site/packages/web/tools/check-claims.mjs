@@ -24,6 +24,10 @@ const RETRACTED = [
   "auto-pr",
   "the only engine that",
   "bashizip@gnail.com",
+  "improves itself",
+  "improves from its own",
+  "autonomous agents",
+  "both are bpmn-based",
 ];
 
 const roots = [new URL("../src", import.meta.url).pathname,

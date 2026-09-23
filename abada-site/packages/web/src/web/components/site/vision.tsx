@@ -6,12 +6,12 @@ const POINTS = [
     body: "Architected high-volume payment switches and national digital platforms where strict state determinism and transactional integrity are non-negotiable.",
   },
   {
-    title: "SRE Discipline for Autonomous Agents",
-    body: "Built from deep Site Reliability Engineering principles to survive network drops, concurrency spikes, and edge-case failures without losing state.",
+    title: "SRE Discipline for AI Agents",
+    body: "Built on Site Reliability Engineering principles: durable leases, bounded retries and restart-safe work acquisition, tested against PostgreSQL for crashes and concurrent workers.",
   },
   {
-    title: "Production Rigor",
-    body: "Complete Abada stack — Engine, Studio, Agent Worker, Insight Loop — released through recorded PostgreSQL release gates covering restart, upgrade and concurrency.",
+    title: "Release Rigor",
+    body: "Every candidate of the Abada stack — Engine, Studio, Agent Worker, Insight Loop — ships only through a recorded release gate with PostgreSQL restart, upgrade and concurrency tests.",
   },
 ];
 

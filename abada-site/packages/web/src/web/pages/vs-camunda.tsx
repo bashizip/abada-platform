@@ -27,7 +27,7 @@ const ABADA_DIFFERENCES = [
     body: "Provider, attempt, duration, confidence, allowed tools, error type, token usage and prompt hash are recorded for every model call, in the same transactional store as the process state.",
   },
   {
-    title: "The process improves from its own execution evidence",
+    title: "Execution evidence becomes a reviewed proposal",
     body: "The Insight loop turns recorded facts into findings, then into a concrete proposal. A human reviews it, and approval produces a new immutable version. Nothing mutates silently.",
   },
 ];
@@ -189,7 +189,7 @@ export default function VsCamundaPage() {
           <div className="mt-8 rounded-xl border border-hairline bg-surface/40 p-6">
             <p className="mono-label">Coexistence, not migration</p>
             <p className="mt-4 max-w-3xl text-[14px] leading-relaxed text-t2">
-              Both are BPMN-based, so the two can run side by side: keep the established engine for
+              Abada imports the documented BPMN subset, so the two can run side by side: keep the established engine for
               the processes it already serves, and put the AI-bearing processes on Abada where every
               model attempt is committed with the state it produced. The evaluation is one command —
               it runs on your own infrastructure, so nothing leaves it.

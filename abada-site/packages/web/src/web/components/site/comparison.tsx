@@ -52,7 +52,8 @@ const ROWS: { capability: string; note?: string; frameworks: Cell; legacy: Cell;
     abada: "yes",
   },
   {
-    capability: "Process improves itself from execution evidence",
+    capability: "Execution evidence becomes a reviewed improvement proposal",
+    note: "Findings become proposals; a human approves every new version",
     frameworks: "no",
     legacy: "no",
     abada: "yes",
