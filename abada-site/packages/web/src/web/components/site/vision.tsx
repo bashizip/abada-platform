@@ -11,7 +11,7 @@ const POINTS = [
   },
   {
     title: "Production Rigor",
-    body: "Complete Abada stack — Engine, Studio, Agent Worker, Insight Loop — governed by pure GitOps and a 323-test automated release gate.",
+    body: "Complete Abada stack — Engine, Studio, Agent Worker, Insight Loop — released through recorded PostgreSQL release gates covering restart, upgrade and concurrency.",
   },
 ];
 

@@ -10,20 +10,21 @@ const CAMUNDA_STRENGTHS = [
   "Large ecosystem: connectors, tooling, integrators, training, certified partners.",
   "Enterprise support organisation and reference deployments at very large scale.",
   "A deep talent pool — hiring for it is a solved problem.",
+  "Native AI agents: an agent loop with tool calling over ad-hoc sub-processes and MCP.",
 ];
 
 const ABADA_DIFFERENCES = [
   {
-    title: "The agent is a process participant, not an integration",
-    body: "A model call is modelled like any other durable participant: it gets work, a lease, retries, a timeout and a recorded outcome. It is not a REST task pointing at an external framework that keeps its own hidden state.",
+    title: "The engine, not the worker, enforces the AI contract",
+    body: "Before a model answer can change process state, the engine checks it in the same transaction: only the declared result variable, the declared output schema, and a reported confidence at or above the threshold. Weak or malformed answers follow a declared route, usually to a person. Expressions are sandboxed CEL that cannot reach the JVM.",
   },
   {
-    title: "Prompt, output schema and confidence threshold are versioned",
-    body: "The instruction given to the model is part of the process definition under version control — not configuration living in someone's application code. A new instruction is a new immutable version.",
+    title: "Prompt, contract and routes are versioned, readable YAML",
+    body: "Prompt, declared inputs, output schema, confidence threshold and fallback routes live in the APL definition a reviewer can read and diff. The model receives only the inputs the definition names. A new instruction is a new immutable version.",
   },
   {
     title: "Per-attempt evidence is persisted",
-    body: "Provider, attempt, duration, confidence, tools used, error type and prompt hash are recorded for every model call, in the same transactional store as the process state.",
+    body: "Provider, attempt, duration, confidence, allowed tools, error type, token usage and prompt hash are recorded for every model call, in the same transactional store as the process state.",
   },
   {
     title: "The process improves from its own execution evidence",
@@ -34,13 +35,13 @@ const ABADA_DIFFERENCES = [
 const CHOOSE_CAMUNDA = [
   "You need wide BPMN 2.0 and DMN semantics today, including the exotic parts.",
   "Your programme depends on a vendor support contract, certifications and a partner network.",
-  "AI is not in the process, or it stays a plain external service call you are happy to own.",
+  "You want an agent to choose freely among many tools today (Abada's tool loop is on the roadmap).",
 ];
 
 const CHOOSE_ABADA = [
   "Models make or shape decisions inside the process, and you must be able to defend those decisions later.",
   "You need the AI part under the same transactional and versioning discipline as the rest of the workflow.",
-  "Self-hosting and data location are constraints, not preferences.",
+  "Self-hosting and data location are constraints, not preferences, and you want production use without a commercial licence or a multi-service cluster: Abada is MIT-licensed and needs only PostgreSQL.",
   "You want the process to get measurably better from its own execution history, with a human in the approval path.",
 ];
 
@@ -71,10 +72,10 @@ export default function VsCamundaPage() {
             </h1>
 
             <p className="rise-160 prose-lead mt-6 max-w-3xl text-[1.0625rem]">
-              Camunda is a mature process engine, and this page does not pretend otherwise. The
-              difference is not features on a list — it is whether an autonomous model is a
-              first-class, versioned participant inside the transaction, or an external call the
-              engine cannot account for.
+              Camunda is a mature process engine with native AI agents, and this page does not
+              pretend otherwise. The difference is weight and governance: how little you need to
+              run it, and whether the engine itself decides when a model answer is good enough to
+              act on.
             </p>
 
             <div className="rise-240 mt-9 flex flex-wrap items-center gap-3">
@@ -128,7 +129,7 @@ export default function VsCamundaPage() {
         <Section>
           <SectionHead
             eyebrow="The actual difference"
-            title="Four things that change when the agent is inside the transaction"
+            title="Four things that change when the agent's result is admitted through the transaction"
             lead="These are architectural choices, not roadmap items. They are what makes an AI decision defensible months later."
           />
 
@@ -158,7 +159,7 @@ export default function VsCamundaPage() {
           <div className="mt-10 grid gap-5 lg:grid-cols-2">
             <Reveal>
               <div className="h-full rounded-xl border border-hairline bg-surface/40 p-6">
-                <p className="mono-label">Stay with a legacy engine</p>
+                <p className="mono-label">Choose Camunda</p>
                 <ul className="mt-5 space-y-3">
                   {CHOOSE_CAMUNDA.map((c) => (
                     <li key={c} className="flex gap-3 text-[14px] leading-relaxed text-t2">

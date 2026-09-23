@@ -22,18 +22,18 @@ const ROWS: { capability: string; note?: string; frameworks: Cell; legacy: Cell;
     capability: "AI agent as a first-class process participant",
     note: "Same durable work model as any external participant",
     frameworks: "yes",
-    legacy: "no",
+    legacy: "yes",
     abada: "yes",
   },
   {
     capability: "Prompt, output schema and confidence under version control",
     frameworks: "no",
-    legacy: "no",
+    legacy: "partial",
     abada: "yes",
   },
   {
     capability: "Deterministic routing from validated model output",
-    note: "Structured outputs, not free text parsing",
+    note: "The engine validates schema and confidence before any state changes",
     frameworks: "partial",
     legacy: "partial",
     abada: "yes",
@@ -46,9 +46,9 @@ const ROWS: { capability: string; note?: string; frameworks: Cell; legacy: Cell;
   },
   {
     capability: "Full attempt evidence persisted per model call",
-    note: "Provider, attempt, duration, confidence, tools, error type, prompt hash",
+    note: "Provider, attempt, duration, confidence, token usage, outcome, prompt hash",
     frameworks: "no",
-    legacy: "no",
+    legacy: "partial",
     abada: "yes",
   },
   {
@@ -108,7 +108,7 @@ export function Comparison({ showVsLink = true }: { showVsLink?: boolean }) {
                 </th>
                 <th className="px-4 py-4 text-center">
                   <span className="block font-mono text-[10.5px] tracking-[0.16em] text-t3 uppercase">
-                    Legacy engines
+                    Process engines
                   </span>
                   <span className="mt-1 block text-[11px] text-t3">Camunda · Temporal</span>
                 </th>

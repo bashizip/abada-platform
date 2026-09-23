@@ -68,7 +68,7 @@ export function Cta() {
               GitHub <ArrowUpRight className="size-3" />
             </a>
             <a href={DEMO_URL} className="text-[13px] text-t2 transition-colors hover:text-t1">
-              Demo
+              Quickstart
             </a>
             <a
               href={`mailto:${EMAIL}`}

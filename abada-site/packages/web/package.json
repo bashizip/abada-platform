@@ -6,7 +6,8 @@
     ".": "./src/api/index.ts"
   },
   "scripts": {
-    "build": "tsc --noEmit && vite build",
+    "build": "node tools/check-claims.mjs && tsc --noEmit && vite build",
+    "check:claims": "node tools/check-claims.mjs",
     "dev": "vite",
     "start": "bun src/__server.ts",
     "typecheck": "tsc --noEmit",

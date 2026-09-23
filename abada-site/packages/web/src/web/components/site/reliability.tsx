@@ -1,4 +1,5 @@
 import { Reveal, Section, SectionHead } from "./primitives";
+import { RELEASE_GATE_TESTS, RELEASE_LABEL, RELEASE_VERSION } from "../../lib/release";
 
 const GUARANTEES = [
   {
@@ -42,12 +43,16 @@ export function Reliability() {
 
       <div className="mt-5 grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline sm:grid-cols-3">
         <div className="bg-surface/40 p-6">
-          <p className="font-mono text-[1.7rem] leading-none font-medium text-t1">1.0.0-rc.4</p>
-          <p className="mt-2 text-[12.5px] text-t3">Published evaluation release candidate</p>
+          <p className="font-mono text-[1.7rem] leading-none font-medium text-t1">{RELEASE_VERSION}</p>
+          <p className="mt-2 text-[12.5px] text-t3">{RELEASE_LABEL}</p>
         </div>
         <div className="bg-surface/40 p-6">
-          <p className="font-mono text-[1.7rem] leading-none font-medium text-signal">323</p>
-          <p className="mt-2 text-[12.5px] text-t3">Tests passed in the recorded release gate</p>
+          <p className="font-mono text-[1.7rem] leading-none font-medium text-signal">
+            {RELEASE_GATE_TESTS ?? "PostgreSQL"}
+          </p>
+          <p className="mt-2 text-[12.5px] text-t3">
+            {RELEASE_GATE_TESTS ? "Tests passed in the recorded release gate" : "Restart, upgrade and concurrency suites"}
+          </p>
         </div>
         <div className="bg-surface/40 p-6">
           <p className="font-mono text-[1.7rem] leading-none font-medium text-t1">At-least-once</p>
