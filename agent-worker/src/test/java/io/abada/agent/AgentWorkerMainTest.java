@@ -3,7 +3,9 @@ package io.abada.agent;
 import com.sun.net.httpserver.HttpServer;
 import io.abada.worker.AgentWorkDescriptor;
 import io.abada.worker.LockedExternalTask;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -269,8 +271,12 @@ class AgentWorkerMainTest {
     }
 
     @Test
-    void unreachableEndpointThrowsAgentUnreachableException() {
-        var unreachableConfig = config(URI.create("http://127.0.0.1:54321/v1"));
+    void unreachableEndpointThrowsAgentUnreachableException() throws Exception {
+        int closedPort;
+        try (var socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closedPort = socket.getLocalPort();
+        }
+        var unreachableConfig = config(URI.create("http://127.0.0.1:" + closedPort + "/v1"));
         var gateway = new GoogleGeminiGateway(unreachableConfig);
 
         var error = assertThrows(AgentGateway.AgentUnreachableException.class,
