@@ -18,7 +18,7 @@ COPY src ./src
 # release gates, so image assembly skips test compilation as well as execution.
 # The BuildKit cache avoids downloading the Maven repository again on
 # subsequent multi-platform builds.
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
     ./mvnw clean package -Dmaven.test.skip=true -B
 
 # Stage 2: Runtime
