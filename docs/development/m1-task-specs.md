@@ -28,7 +28,7 @@ M1 exit demo (all on a clean `./release/abada-platform up dev`):
 2. The Lead Triage agent returns output that violates its `output_schema` → the instance routes to the human review node via `on_invalid_output`.
 3. The agent returns `_confidence: 40` against a threshold of 85 → the instance routes via `on_low_confidence`.
 4. Four agent tasks with a 90 s simulated model latency complete with exactly four provider calls (verified from worker logs/metrics).
-5. The website and brief contain no claim listed as unsupported in the review.
+5. The website contains no claim listed as unsupported in the review. The outdated PDF brief is removed; a replacement is future work.
 
 ---
 
@@ -267,7 +267,7 @@ release notes with before/after examples and the dry-run command.
 
 ---
 
-## T12 — Truth on the web ✅ done for the site (PDF brief pending: no source in the repo)
+## T12 — Truth on the web ✅ done (outdated PDF brief removed from the site; replacement later)
 
 **Files.** `abada-site/packages/web/src/web/components/site/{hero,gap,comparison,architecture,reliability,vision,quickstart,cta}.tsx`, `pages/vs-camunda.tsx`, `lib/links.ts`, `index.html`, the brief PDF source.
 

@@ -1,5 +1,5 @@
-import { ArrowUpRight, Play } from "lucide-react";
-import { BRIEF_URL, CALENDAR_URL, GITHUB_URL } from "../../lib/links";
+import { Play } from "lucide-react";
+import { CALENDAR_URL, GITHUB_URL } from "../../lib/links";
 import { RELEASE_LABEL, RELEASE_VERSION } from "../../lib/release";
 
 const FACTS = [
@@ -54,14 +54,6 @@ export function Hero() {
                 className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3 text-[15px] font-medium text-t1 transition-colors hover:border-signal/50"
               >
                 Talk to the founder
-              </a>
-              <a
-                href={BRIEF_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-1 py-3 text-[14px] text-t2 transition-colors hover:text-t1"
-              >
-                Read the brief (PDF) <ArrowUpRight className="size-3.5" />
               </a>
             </div>
 

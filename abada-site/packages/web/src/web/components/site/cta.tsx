@@ -1,5 +1,5 @@
-import { ArrowUpRight, FileText, Mail, Play } from "lucide-react";
-import { BRIEF_URL, CALENDAR_URL, DEMO_URL, DOCS_URL, EMAIL, GITHUB_URL } from "../../lib/links";
+import { ArrowUpRight, Mail, Play } from "lucide-react";
+import { CALENDAR_URL, DEMO_URL, DOCS_URL, EMAIL, GITHUB_URL } from "../../lib/links";
 
 export function Cta() {
   return (
@@ -25,15 +25,6 @@ export function Cta() {
           >
             <Mail className="size-4" />
             Talk to the founder
-          </a>
-          <a
-            href={BRIEF_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3.5 text-[15px] text-t1 transition-colors hover:border-signal/50"
-          >
-            <FileText className="size-4" />
-            Download the brief
           </a>
           <a
             href="#quickstart"

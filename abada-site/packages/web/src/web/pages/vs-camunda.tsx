@@ -1,9 +1,9 @@
-import { ArrowLeft, ArrowUpRight, Check, FileText, Mail } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Mail } from "lucide-react";
 import { Nav, StickyCta } from "../components/site/nav";
 import { Comparison } from "../components/site/comparison";
 import { Cta } from "../components/site/cta";
 import { Reveal, Section, SectionHead } from "../components/site/primitives";
-import { BRIEF_URL, CALENDAR_URL, DOCS_URL, GITHUB_URL } from "../lib/links";
+import { CALENDAR_URL, DOCS_URL, GITHUB_URL } from "../lib/links";
 
 const CAMUNDA_STRENGTHS = [
   "Broad BPMN 2.0 and DMN execution coverage, refined over more than a decade.",
@@ -84,14 +84,6 @@ export default function VsCamundaPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-signal px-5 py-3 text-[15px] font-medium text-[#04150f] transition-opacity hover:opacity-90"
               >
                 Run it yourself
-              </a>
-              <a
-                href={BRIEF_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3 text-[15px] text-t1 transition-colors hover:border-signal/50"
-              >
-                <FileText className="size-4" /> Read the brief (PDF)
               </a>
               <a
                 href={DOCS_URL}
