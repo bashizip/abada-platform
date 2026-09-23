@@ -236,7 +236,7 @@ export default function App() {
         ? 'Competing catch events — the first to fire advances the instance and the engine cancels every sibling wait state'
         : `Newly instantiated ${type} node`,
       x: 120 + currentWorkflow.nodes.length * 260, y: 220,
-      agentConfig: type === 'agent' ? { model: getDefaultAgentModel(), systemPrompt: 'Evaluate incoming data and perform risk verification.', confidenceThreshold: 85, temperature: 0.2, tools: ['Database Query'] } : undefined,
+      agentConfig: type === 'agent' ? { model: getDefaultAgentModel(), systemPrompt: 'Evaluate incoming data and perform risk verification.', confidenceThreshold: 0, temperature: 0.2, tools: [] } : undefined,
       dmnConfig: type === 'dmn' ? { decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`, hitPolicy: 'FIRST', inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }], outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }], rules: [{ id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } }, { id: 'r2', otherwise: true, then: { AllowPass: false } }] } : undefined,
       humanConfig: type === 'human' ? { assignees: ['Operations Analyst'], slaHours: 24, formKey: '', formFields: ['Review Notes', 'Approval Signature'] } : undefined,
       engineTaskConfig: type === 'engine-task' ? { service: 'abada:service' } : undefined,
@@ -269,7 +269,7 @@ export default function App() {
     const newNode: WorkflowNode = {
       id: newId, type, title: type === 'agent' ? 'Secondary AI Agent' : 'Subsequent Task',
       description: 'Downstream node added from toolbar', x: sourceNode.x + 240, y: sourceNode.y,
-      agentConfig: type === 'agent' ? { model: getDefaultAgentModel(), systemPrompt: 'Downstream agent handling post-processing.', confidenceThreshold: 90, temperature: 0.1, tools: ['API Webhook'] } : undefined,
+      agentConfig: type === 'agent' ? { model: getDefaultAgentModel(), systemPrompt: 'Downstream agent handling post-processing.', confidenceThreshold: 0, temperature: 0.1, tools: [] } : undefined,
     };
     updateActiveWorkflow((wf) => ({
       ...wf, nodes: [...wf.nodes, newNode], edges: [...wf.edges, { id: `e-${Date.now()}`, source: sourceId, target: newId, label: 'Next Step' }],
