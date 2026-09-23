@@ -186,7 +186,7 @@ See the [BPMN support matrix](docs/reference/bpmn-support.md) for exact semantic
 
 ## Status
 
-**Prepared baseline:** `1.0.0-rc.5` — RC.4 reliability plus the opt-in Lead Triage starter, validated Gemini setup and local demonstration adapters. Publication remains gated by the RC evidence workflow.
+**Prepared baseline:** `1.0.0-rc.6` — M1 "truth and safety": sandboxed CEL expressions, an engine-enforced agent output contract with low-confidence, invalid-output and error routing, default-deny agent inputs, and a concurrent agent worker with lock heartbeats. Breaking changes are listed in the [release notes](docs/release-notes/1.0.0-rc.6-release-notes.md). Publication remains gated by the RC evidence workflow.
 
 **1.1 agentic checkpoint** (in development): native APL runtime, deterministic decision tables, governed Insight Loop, project envelopes, first-party agent worker. Progress tracked in the [roadmap](docs/development/roadmap.md).
 

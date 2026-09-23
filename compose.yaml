@@ -25,7 +25,7 @@ services:
       start_period: 10s
 
   abada-engine:
-    image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.0.0-rc.5}
+    image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.0.0-rc.6}
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: "5601"
@@ -78,7 +78,7 @@ services:
       start_period: 30s
 
   abada-studio:
-    image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.5}
+    image: ${ABADA_STUDIO_IMAGE:-ghcr.io/bashizip/abada-studio:1.0.0-rc.6}
     environment:
       ABADA_API_URL: ${ABADA_API_URL:-http://api.localhost/api}
       ABADA_OIDC_URL: ${ABADA_OIDC_URL:-http://keycloak.localhost}
@@ -145,7 +145,7 @@ services:
         condition: service_healthy
 
   abada-docs:
-    image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.5}
+    image: ${ABADA_DOCS_IMAGE:-ghcr.io/bashizip/abada-docs:1.0.0-rc.6}
     networks:
       - edge
     restart: unless-stopped

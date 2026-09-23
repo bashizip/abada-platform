@@ -12,7 +12,7 @@ public record InfoResponse(
                 description = "Short product description",
                 example = "Open-source, self-hosted BPMN 2.0 workflow orchestration engine")
         String description,
-        @Schema(description = "Running engine release", example = "1.0.0-rc.5")
+        @Schema(description = "Running engine release", example = "1.0.0-rc.6")
         String version,
         Api api,
         Engine engine,
