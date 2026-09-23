@@ -1,6 +1,6 @@
 # Abada 1.1 Product & Architecture Execution Plan
 
-> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`../development/roadmap.md`](../development/roadmap.md). It will move to `docs/archive/` under task T11.
+> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`../development/roadmap.md`](../development/roadmap.md). 
 
 - Status: Active implementation — native APL, PostgreSQL Insight facts,
   governed proposals, Studio review, and the Java agent sidecar are delivered
@@ -10,7 +10,7 @@
 - Target: Post-BPMN transpilation engineering & Studio UI roadmap
 - Related: `adr/ADR-002-native-decision-tables-deterministic-wall.md`,
   `adr/ADR-003-insight-loop-engine-otel-apl.md`,
-  `development/studio-app-spec.md`, `development/roadmap-to-1.1.0-rc.md`,
+  `development/studio-app-spec.md`, `archive/roadmap-to-1.1.0-rc.md`,
   `reference/apl-specification.md`, `operations/observability.md`
 
 ## Context

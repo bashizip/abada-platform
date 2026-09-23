@@ -55,8 +55,8 @@ Resources for developers building on or contributing to Abada Engine.
 - [API Documentation](development/api.md) - REST API reference.
 - [Frontend Guide](development/frontend-guide.md) - Guide for frontend development.
 - [Studio App Specification](development/studio-app-spec.md) - Specifications for the Studio authoring application: APL pipeline, deployment, live Run panel and operations.
-- [Roadmap to 1.0](development/roadmap-to-1.0.md) - Release gates and acceptance evidence.
-- [Roadmap to 1.1 RC](development/roadmap-to-1.1.0-rc.md) - Agentic workflow integration and deferred infrastructure certification.
+- [Roadmap](development/roadmap.md) - The only active roadmap (1.0.0-rc.6 → 1.1.0), with [M1 task specifications](development/m1-task-specs.md).
+- Archived: [Roadmap to 1.0](archive/roadmap-to-1.0.md), [Roadmap to 1.1 RC](archive/roadmap-to-1.1.0-rc.md) - superseded, kept for history.
 - [1.0 RC Publication Gates](development/1.0-rc-publication-gates.md) - Candidate-specific GO/NO-GO checklist and evidence record.
 - [BPMN Support](reference/bpmn-support.md) - Guaranteed and rejected BPMN constructs.
 - [APL Specification](reference/apl-specification.md) - The Abada Process Language: YAML syntax, node types, native decision tables, expressions and error codes.

@@ -260,7 +260,7 @@ release notes with before/after examples and the dry-run command.
 
 **Changes.**
 - `AGENTS.md`: describe Abada as the governed runtime for AI-driven business processes; APL is the primary language; BPMN is an import and compatibility boundary; list the doctrine (agents advise, rules decide, humans approve, PostgreSQL remembers); keep every runtime invariant; point to `docs/development/roadmap.md` as the only roadmap.
-- Move `roadmap-to-1.0.md`, `roadmap-to-1.1.0-rc.md`, `agentic-engine/abada-studio-execution-plan.md` and `saas-roadmap.md` to `docs/archive/` (they already carry a "superseded" banner).
+- Moved `roadmap-to-1.0.md`, `roadmap-to-1.1.0-rc.md`, `abada-studio-execution-plan.md` and `saas-roadmap.md` to `docs/archive/` with a "superseded" banner; links updated.
 - README: the Lead Triage example must work after T6; replace "What's Implemented" bullets that overstate (e.g. "Natural language authoring … deployable") with bounded wording.
 
 **Acceptance tests.** `documentation/` build passes (links); no document other than `roadmap.md` contains an unchecked roadmap checklist.

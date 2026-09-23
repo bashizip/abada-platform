@@ -21,7 +21,7 @@ PostgreSQL/Testcontainers evidence. It does not claim a completed public-cloud
 production certification. Public TLS, external-OIDC reference-host testing,
 multi-host failover, rolling upgrades and supply-chain certification are
 tracked by the
-[1.1 RC roadmap](../development/roadmap-to-1.1.0-rc.md).
+[1.1 RC roadmap](../archive/roadmap-to-1.1.0-rc.md).
 
 Abada release images must publish `linux/amd64` and `linux/arm64` manifests.
 The original `1.0.0-rc.1` images are a documented exception: they contain only

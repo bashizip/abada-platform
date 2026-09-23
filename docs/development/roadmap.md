@@ -1,9 +1,8 @@
 # Abada roadmap — 1.0.0-rc.6 → 1.1.0
 
 This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
-`roadmap-to-1.1.0-rc.md`, `agentic-engine/abada-studio-execution-plan.md`
-and `saas-roadmap.md`, which are kept for history and will move to
-`docs/archive/` (task T11). Release publication gates in
+`roadmap-to-1.1.0-rc.md`, `abada-studio-execution-plan.md` and
+`saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
 Last reviewed: 2026-09-23. Horizon: 12 weeks, 2026-09-28 → 2026-12-18.

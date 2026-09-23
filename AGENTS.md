@@ -6,10 +6,29 @@ agreement for Abada. It applies to the whole repository. A more specific
 
 ## Project and release scope
 
-Abada is an open-source, self-hosted BPMN orchestration platform. The 1.0 goal
-is a dependable PostgreSQL-backed core with a documented and executable BPMN
-subset. Agentic workflows are future consumers of this core; do not bypass or
-weaken the BPMN state machine to add agent features.
+Abada is the open-source, self-hosted runtime for governed AI-driven business
+processes: **agents advise, rules decide, humans approve, PostgreSQL
+remembers.** Processes are written in APL (Abada Process Language, YAML), the
+primary format. BPMN is an import and compatibility boundary: keep it working,
+do not expand it unless the roadmap says so.
+
+The doctrine every change must respect:
+
+1. **The model runs outside the transaction.** Agent work is durable external
+   work; its result enters process state only through an engine command.
+2. **The engine enforces the contract.** Output schemas, confidence
+   thresholds, allowed variables and expressions are checked by the engine,
+   never trusted to a worker, a model or the UI.
+3. **Deterministic decisions stay deterministic.** Conditions and decision
+   tables are sandboxed CEL evaluated in-transaction; they cannot reach the
+   JVM and fail loudly instead of guessing.
+4. **Humans own change.** Nothing auto-applies. AI-proposed changes become
+   new immutable versions only after policy-compliant human review.
+5. **Evidence over claims.** Every AI decision leaves an auditable record
+   without leaking prompts, secrets or sensitive values. Documentation, the
+   website and pitch material only claim what code and tests prove.
+
+Do not bypass or weaken the durable state machine to add agent features.
 
 The current release line is 1.0.0-rc.x. Its certified production topology is
 one or more engine instances backed by PostgreSQL. Database-authoritative
@@ -39,10 +58,12 @@ contract and test in the same change.
 
 | Path | Purpose | Stack |
 | --- | --- | --- |
-| `engine/` | BPMN runtime, persistence, REST API and security | Java 21, Spring Boot 3.5, Maven |
-| `studio/` | Operator UI (designer, tasks, operations, insight) | React 19, TypeScript, Vite |
-| `tenda/` | End-user task application (reference only) | React 18, TypeScript, Vite |
-| `orun/` | Operations and workflow-state application (reference only) | React 19, TypeScript, Vite |
+| `engine/` | APL/BPMN runtime, expressions (CEL), agent output contract, persistence, REST API and security | Java 21, Spring Boot 3.5, Maven |
+| `agent-worker/` | First-party `abada:agent` worker (model calls outside the transaction) | Java 21, Maven |
+| `sdk/java/` | External worker client (protocol v1) | Java 21, Maven |
+| `studio/` | Authoring and operator UI (designer, tasks, operations, insight) | React 19, TypeScript, Vite |
+| `examples/` | Example APL and BPMN definitions | YAML, XML |
+| `abada-site/` | Public website | React, Vite, Bun |
 | `documentation/` | Curated user, architecture and developer guide | Astro 7, Starlight 0.41, MDX, Mermaid |
 | `docker/` | Traefik, Keycloak and observability configuration | Docker Compose |
 | `scripts/` | Development, production and test helpers | Shell |
@@ -176,10 +197,16 @@ explicitly requires it and failure behavior is tested.
 - Avoid destructive migrations without documented backup, rollback, and
   upgrade guidance.
 
-## BPMN behavior
+## APL and BPMN behavior
 
-The support matrix is a tested subset, not a claim of full BPMN compliance.
-When changing BPMN behavior:
+APL changes need the same discipline as BPMN changes: a parser validation
+test, an executable fixture under `engine/src/test/resources/apl/`, runtime
+tests (success, invalid input, rollback, restart), the Studio round trip
+(`npm run build` runs the parity and kitchen-sink checks) and updates to
+`docs/reference/apl-specification.md` and `apl-node-reference.md`.
+
+The BPMN support matrix is a tested subset, not a claim of full BPMN
+compliance. When changing BPMN behavior:
 
 - Add or update a deployment-validation test.
 - Add an executable process model under `engine/src/test/resources/bpmn/`.

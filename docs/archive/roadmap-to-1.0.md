@@ -1,6 +1,6 @@
 # Abada Reliable OSS Core Roadmap
 
-> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`roadmap.md`](roadmap.md). It will move to `docs/archive/` under task T11.
+> **Superseded (2026-09-23).** This document is kept for history. The only active roadmap is [`roadmap.md`](../development/roadmap.md). 
 
 This is the authoritative checklist for the Abada 1.0 reliable open-source
 core. The pre-RC architecture and developer documentation foundation is
@@ -205,7 +205,7 @@ Last reviewed: 2026-07-19.
 ### Clients and product integration
 
 - [x] Publish a Java external-worker SDK against the frozen protocol. Source
-  and executable tests: [`sdk/java`](../../sdk/java/).
+  and executable tests: [`sdk/java`](../../sdk/java).
 - [x] Align Tenda with the guaranteed task APIs.
 - [x] Align Orun with durable history, incidents, jobs and instance state.
 
@@ -218,7 +218,7 @@ Last reviewed: 2026-07-19.
 Specification: [BPMN dialects and compatibility](../specifications/bpmn-dialects-and-compatibility.md).
 
 This is a release-blocking 1.0 feature. The repository-grounded delivery plan
-is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
+is [BPMN dialect implementation plan](../development/bpmn-dialects-implementation-plan.md).
 
 ### Canonical model and parsing
 
@@ -318,7 +318,7 @@ is [BPMN dialect implementation plan](bpmn-dialects-implementation-plan.md).
 ## 1.0 RC — Evidence and operations
 
 Every candidate must complete the
-[1.0 RC publication gates](1.0-rc-publication-gates.md). Roadmap completion
+[1.0 RC publication gates](../development/1.0-rc-publication-gates.md). Roadmap completion
 shows that a capability exists; it does not replace candidate-specific
 publication evidence.
 
