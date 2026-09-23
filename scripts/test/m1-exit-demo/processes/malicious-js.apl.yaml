@@ -1,0 +1,18 @@
+version: abada.io/v1
+metadata:
+  name: M1 Demo Malicious Script Expression
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: route
+    - id: route
+      type: condition
+      rules:
+        - if: "(function(){ return this })().constructor.constructor('return process')() != null"
+          then: done
+        - else: true
+          then: done
+    - id: done
+      type: end

@@ -19,7 +19,15 @@ unknown or missing protocol version rather than guessing payload semantics.
 All mutations accept `Idempotency-Key`. Workers should reuse one key for every
 retry of the same logical command. A different body with the same key is
 rejected. Locks are owned by `workerId`; a different worker receives a typed
-403, and an expired lease cannot be completed or extended.
+403, and an expired lease cannot be completed or extended. Give every worker
+process its own `workerId`: replicas that share one cannot be told apart.
+
+A `409 CONCURRENT_MODIFICATION` on completion or failure means the task changed
+between the engine's access check and the command, for example because a
+heartbeat for the same task committed first. While the lock is still owned the
+command is safe to retry with the same `Idempotency-Key`; a failed command
+stores no idempotent response. Stop the task's heartbeat before reporting its
+result.
 
 Fetch responses include task ID, topic, process instance/activity IDs,
 variables, retries, lock expiry, stored W3C `traceParent`, and protocol version.

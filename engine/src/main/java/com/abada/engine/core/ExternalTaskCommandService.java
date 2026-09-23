@@ -17,6 +17,8 @@ import com.abada.engine.core.agent.AgentOutputValidator;
 import com.abada.engine.parser.AplParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -38,10 +40,11 @@ public class ExternalTaskCommandService {
     private final ObjectMapper objectMapper;
     private final WorkerCapabilityService workerCapabilities;
     private final ProjectAccessService access;
+    private final EntityManager entityManager;
 
     public ExternalTaskCommandService(ExternalTaskRepository repository, AbadaEngine engine,
             ActivityHistoryService history, InsightFactWriter insightFactWriter, ObjectMapper objectMapper,
-            WorkerCapabilityService workerCapabilities, ProjectAccessService access) {
+            WorkerCapabilityService workerCapabilities, ProjectAccessService access, EntityManager entityManager) {
         this.repository = repository;
         this.engine = engine;
         this.history = history;
@@ -49,6 +52,7 @@ public class ExternalTaskCommandService {
         this.objectMapper = objectMapper;
         this.workerCapabilities = workerCapabilities;
         this.access = access;
+        this.entityManager = entityManager;
     }
 
     @AtomicRuntimeCommand
@@ -434,8 +438,14 @@ public class ExternalTaskCommandService {
     }
 
     private ExternalTaskEntity loadForUpdate(String id) {
-        return repository.findByIdForUpdate(id)
+        ExternalTaskEntity task = repository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ProcessEngineException("External task not found: " + id));
+        // With open-in-view, an earlier read in the same request (the worker
+        // access check) can leave a managed copy that a concurrent heartbeat
+        // has since superseded. The locking query returns that stale copy, so
+        // reload it from the locked row before validating or saving.
+        entityManager.refresh(task, LockModeType.PESSIMISTIC_WRITE);
+        return task;
     }
 
     private void requireOwnedActiveLock(ExternalTaskEntity task, String workerId) {

@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public record WorkerConfig(
@@ -104,7 +105,7 @@ public record WorkerConfig(
                 URI.create(endpoints.openAiUrl()),
                 endpoints.openAiKey(),
                 env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gemini-3.6-flash"),
-                env.getOrDefault("ABADA_AGENT_WORKER_ID", "abada-agent-worker"),
+                workerId(env),
                 models,
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_POLL_INTERVAL_MS", 1_000, 100, 60_000)),
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_LOCK_DURATION_MS", 120_000, 1_000, 3_600_000)),
@@ -115,6 +116,18 @@ public record WorkerConfig(
                         1_000, 3_600_000)),
                 StructuredOutput.parse(env.get("ABADA_AGENT_STRUCTURED_OUTPUT"))
         );
+    }
+
+    /**
+     * Lock-owner identity sent with every fetch, completion and heartbeat.
+     * Each replica needs its own, or the engine cannot tell which replica
+     * holds a lock; the default adds the container hostname.
+     */
+    static String workerId(Map<String, String> env) {
+        String configured = env.getOrDefault("ABADA_AGENT_WORKER_ID", "").strip();
+        if (!configured.isEmpty()) return configured;
+        String host = env.getOrDefault("HOSTNAME", "").strip();
+        return "abada-agent-worker-" + (host.isEmpty() ? UUID.randomUUID().toString().substring(0, 8) : host);
     }
 
     static Set<String> parseLocalAckTopics(Map<String, String> env) {

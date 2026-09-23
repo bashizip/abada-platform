@@ -5,6 +5,7 @@ import io.abada.worker.AgentAttemptMetadata;
 import io.abada.worker.AgentWorkDescriptor;
 import io.abada.worker.LockedExternalTask;
 import io.abada.worker.RequestOptions;
+import io.abada.worker.WorkerProtocolException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
@@ -21,6 +22,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -176,29 +178,65 @@ public final class AgentWorkerMain {
         }
 
         private void runWithHeartbeat(LockedExternalTask task) {
-            AtomicBoolean lockLost = new AtomicBoolean(false);
-            long interval = Math.max(1, config.lockDuration().toMillis() / 3);
-            ScheduledFuture<?>[] beat = new ScheduledFuture<?>[1];
-            beat[0] = heartbeats.scheduleAtFixedRate(() -> {
-                if (lockLost.get()) return;
+            Heartbeat heartbeat = new Heartbeat(task);
+            try {
+                if (config.localAckTopics().contains(task.topicName())) {
+                    heartbeat.stop();
+                    if (!heartbeat.lockLost()) acknowledgeLocally(task);
+                } else {
+                    process(task, heartbeat);
+                }
+            } finally {
+                heartbeat.stop();
+            }
+        }
+
+        /**
+         * Extends the task lock every third of the lock duration until
+         * stopped. {@link #stop()} waits for an in-flight extension, so the
+         * worker never reports a result while its own heartbeat is writing
+         * the same task.
+         */
+        private final class Heartbeat {
+            private final LockedExternalTask task;
+            private final ReentrantLock guard = new ReentrantLock();
+            private final AtomicBoolean lockLost = new AtomicBoolean(false);
+            private final ScheduledFuture<?> beat;
+            private boolean stopped;
+
+            Heartbeat(LockedExternalTask task) {
+                this.task = task;
+                long interval = Math.max(1, config.lockDuration().toMillis() / 3);
+                this.beat = heartbeats.scheduleAtFixedRate(this::extend, interval, interval, TimeUnit.MILLISECONDS);
+            }
+
+            private void extend() {
+                guard.lock();
                 try {
+                    if (stopped || lockLost.get()) return;
                     engine.extendLock(task, config.lockDuration());
                 } catch (RuntimeException exception) {
                     lockLost.set(true);
                     LOG.log(System.Logger.Level.WARNING,
                             "agent_lock_lost task_id={0} activity_id={1} message={2}",
                             task.id(), task.activityId(), safeMessage(exception));
-                    if (beat[0] != null) beat[0].cancel(false);
+                } finally {
+                    guard.unlock();
                 }
-            }, interval, interval, TimeUnit.MILLISECONDS);
-            try {
-                if (config.localAckTopics().contains(task.topicName())) {
-                    if (!lockLost.get()) acknowledgeLocally(task);
-                } else {
-                    process(task, lockLost);
+            }
+
+            void stop() {
+                guard.lock();
+                try {
+                    stopped = true;
+                } finally {
+                    guard.unlock();
                 }
-            } finally {
-                beat[0].cancel(false);
+                beat.cancel(false);
+            }
+
+            boolean lockLost() {
+                return lockLost.get();
             }
         }
 
@@ -210,7 +248,7 @@ public final class AgentWorkerMain {
                     task.id(), task.topicName(), task.processInstanceId());
         }
 
-        private void process(LockedExternalTask task, AtomicBoolean lockLost) {
+        private void process(LockedExternalTask task, Heartbeat heartbeat) {
             AgentWorkDescriptor work = task.agentWork() == null ? null
                     : withBoundedTimeout(task.agentWork(), config.maxTimeout());
             int configuredAttempts = work == null || work.maxAttempts() == null ? 3 : work.maxAttempts();
@@ -229,22 +267,36 @@ public final class AgentWorkerMain {
                 long startedNanos = System.nanoTime();
                 AgentGateway.AgentResult result = gateway.execute(work, task.variables());
                 long durationMs = TimeUnit.NANOSECONDS.toMillis(Math.max(0, System.nanoTime() - startedNanos));
-                if (lockLost.get()) {
+                heartbeat.stop();
+                if (heartbeat.lockLost()) {
                     abandon(task, "complete");
                     return;
                 }
                 String resultVariable = blankToDefault(work.resultVariable(), task.activityId() + "_result");
-                engine.complete(task, Map.of(resultVariable, result.value()),
-                        new AgentAttemptMetadata(model, gateway.provider(), attempt, durationMs,
-                                List.copyOf(requestedTools), resultVariable, promptHash(work.prompt()), null,
-                                result.confidence(), result.promptTokens(), result.completionTokens()),
-                        taskOptions(task.id(), attempt, "complete", task.traceParent()));
+                Map<String, Object> variables = Map.of(resultVariable, result.value());
+                AgentAttemptMetadata metadata = new AgentAttemptMetadata(model, gateway.provider(), attempt, durationMs,
+                        List.copyOf(requestedTools), resultVariable, promptHash(work.prompt()), null,
+                        result.confidence(), result.promptTokens(), result.completionTokens());
+                RequestOptions options = taskOptions(task.id(), attempt, "complete", task.traceParent());
+                try {
+                    engine.complete(task, variables, metadata, options);
+                } catch (WorkerProtocolException conflict) {
+                    // 409: the task row changed between the engine's access
+                    // check and the command. The lock is still ours, so
+                    // retry once instead of discarding a paid-for result.
+                    if (conflict.status() != 409) throw conflict;
+                    LOG.log(System.Logger.Level.INFO,
+                            "agent_complete_retried task_id={0} activity_id={1} reason=concurrent_modification",
+                            task.id(), task.activityId());
+                    engine.complete(task, variables, metadata, options);
+                }
                 long done = completed.incrementAndGet();
                 LOG.log(System.Logger.Level.INFO,
                         "agent_task_completed task_id={0} activity_id={1} model={2} attempt={3} completed_total={4} failed_total={5}",
                         task.id(), task.activityId(), model, attempt, done, failed.get());
             } catch (Exception exception) {
-                if (lockLost.get()) {
+                heartbeat.stop();
+                if (heartbeat.lockLost()) {
                     abandon(task, "failure");
                     return;
                 }
