@@ -5,6 +5,26 @@ type Cell = "yes" | "no" | "partial";
 
 const ROWS: { capability: string; note?: string; frameworks: Cell; legacy: Cell; abada: Cell }[] = [
   {
+    capability: "Runs entirely on your infrastructure",
+    note: "Engine, UI, workers and database; no vendor cloud or licence server",
+    frameworks: "partial",
+    legacy: "yes",
+    abada: "yes",
+  },
+  {
+    capability: "OSI open-source licence, no enterprise edition",
+    note: "The repository is the whole product",
+    frameworks: "yes",
+    legacy: "partial",
+    abada: "yes",
+  },
+  {
+    capability: "PostgreSQL as the only database",
+    frameworks: "partial",
+    legacy: "partial",
+    abada: "yes",
+  },
+  {
     capability: "Durable, ACID-committed process state",
     note: "State, work, history and outbox commit together",
     frameworks: "no",
@@ -19,22 +39,15 @@ const ROWS: { capability: string; note?: string; frameworks: Cell; legacy: Cell;
     abada: "yes",
   },
   {
-    capability: "AI agent as a first-class process participant",
-    note: "Same durable work model as any external participant",
-    frameworks: "yes",
-    legacy: "yes",
+    capability: "Engine validates AI output before any state changes",
+    note: "Output schema, confidence threshold, single result variable",
+    frameworks: "partial",
+    legacy: "partial",
     abada: "yes",
   },
   {
     capability: "Prompt, output schema and confidence under version control",
     frameworks: "no",
-    legacy: "partial",
-    abada: "yes",
-  },
-  {
-    capability: "Deterministic routing from validated model output",
-    note: "The engine validates schema and confidence before any state changes",
-    frameworks: "partial",
     legacy: "partial",
     abada: "yes",
   },
@@ -52,22 +65,9 @@ const ROWS: { capability: string; note?: string; frameworks: Cell; legacy: Cell;
     abada: "yes",
   },
   {
-    capability: "Execution evidence becomes a reviewed improvement proposal",
-    note: "Findings become proposals; a human approves every new version",
-    frameworks: "no",
-    legacy: "no",
-    abada: "yes",
-  },
-  {
     capability: "No silent mutation — change requires human approval",
     frameworks: "no",
     legacy: "partial",
-    abada: "yes",
-  },
-  {
-    capability: "Self-hosted, data-location control",
-    frameworks: "partial",
-    legacy: "yes",
     abada: "yes",
   },
 ];
@@ -88,9 +88,9 @@ export function Comparison({ showVsLink = true }: { showVsLink?: boolean }) {
   return (
     <Section id="comparison">
       <SectionHead
-        eyebrow="Why not Camunda, why not a swarm"
-        title="The moat is the intersection"
-        lead="Each capability below exists somewhere in the market. The defensible position is holding all of them in one runtime, under one versioned process definition."
+        eyebrow="How it compares"
+        title="Sovereign and governed, in one runtime"
+        lead="Each property below exists somewhere in the market. Abada holds all of them in one self-hosted, open-source runtime, under one versioned process definition."
       />
 
       <Reveal>
@@ -161,7 +161,7 @@ export function Comparison({ showVsLink = true }: { showVsLink?: boolean }) {
       </div>
 
       <p className="mt-8 max-w-3xl text-[13px] leading-relaxed text-t3">
-        Assessment of default capabilities as designed, not a benchmark. Abada does not claim full
+        Ratings describe each category's typical defaults as designed — specific products and editions vary — and are not a benchmark. Abada does not claim full
         BPMN 2.0 coverage: unsupported execution semantics fail explicitly rather than being
         accepted ambiguously.
       </p>

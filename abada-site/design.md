@@ -1,8 +1,13 @@
-# Abada — Investor-facing site design system
+# Abada — site design system
 
 ## Audience & job of the page
-Primary: Google Africa Applied AI Lab reviewers + partner VCs (4DX, Norrsken22, Novastar, Ventures Platform).
-In 30 seconds they must get: the category, the moat, that the software is real and runnable, who the founder is, and how to contact.
+Primary: buyers and design partners in regulated and sovereignty-sensitive organisations — banks, telcos, public sector — and the architects, security and risk people who evaluate for them. Investors are secondary and read the same page.
+In 30 seconds they must get: the moat (AI-driven processes that run entirely on infrastructure they control — AGPL-3.0 open source, PostgreSQL as the only database, their identity provider, the model endpoint they choose), that the engine governs the AI, that the claims are proven and rerunnable, what the release does not do yet, and how to start a pilot.
+
+## Moat, in order
+1. Sovereign and open: self-hosted, AGPL-3.0, PostgreSQL-only, telemetry off by default; say exactly what can cross the boundary.
+2. Governed by the engine: agents advise, rules decide, humans approve, PostgreSQL remembers.
+3. Proof: recorded release gate and the rerunnable exit demo (`scripts/test/m1-exit-demo`).
 
 ## Voice
 Infrastructure-grade, declarative, no hype adjectives. Claims are bounded and verifiable ("implemented", "recorded release gate", "target use cases — not traction"). Never invent metrics or customers.

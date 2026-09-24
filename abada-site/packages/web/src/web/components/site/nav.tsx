@@ -4,12 +4,12 @@ import { cn } from "../../lib/utils";
 import { GITHUB_URL, DOCS_URL } from "../../lib/links";
 
 const LINKS = [
-  { label: "The gap", href: "#gap" },
-  { label: "Comparison", href: "#comparison" },
-  { label: "Quickstart", href: "#quickstart" },
-  { label: "Architecture", href: "#architecture" },
-  { label: "Insight", href: "#insight" },
-  { label: "Vision", href: "#vision" },
+  { label: "Sovereignty", href: "#sovereignty" },
+  { label: "Open source", href: "#open" },
+  { label: "Governance", href: "#governed" },
+  { label: "Proof", href: "#proof" },
+  { label: "Pilot", href: "#pilot" },
+  { label: "Status", href: "#status" },
 ];
 
 export function Nav({ anchorBase = "" }: { anchorBase?: string }) {
