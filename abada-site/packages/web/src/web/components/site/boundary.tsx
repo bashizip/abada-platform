@@ -28,7 +28,7 @@ const CROSSINGS = [
   },
   {
     what: "Studio fonts",
-    how: "Studio still loads its web fonts from Google Fonts. Bundling them is on the list; we say so rather than hide it.",
+    how: "Studio in 1.0.0-rc.6 still loads its web fonts from Google Fonts. They are bundled from the next release, so opening Studio will contact nothing outside your deployment.",
   },
 ];
 
