@@ -1,5 +1,5 @@
-import { ArrowUpRight, Mail, Play } from "lucide-react";
-import { CALENDAR_URL, DEMO_URL, DOCS_URL, EMAIL, GITHUB_URL } from "../../lib/links";
+import { ArrowUpRight, Mail, Terminal } from "lucide-react";
+import { DEMO_URL, DOCS_URL, EMAIL, GITHUB_URL, LICENSE_URL, PILOT_URL } from "../../lib/links";
 
 export function Cta() {
   return (
@@ -7,31 +7,38 @@ export function Cta() {
       <div className="glow-signal pointer-events-none absolute inset-x-0 -bottom-56 h-[520px]" />
       <div className="relative mx-auto w-full max-w-[1200px]">
         <div className="max-w-3xl">
-          <p className="mono-label text-signal!">Open to design partners and investors</p>
+          <p className="mono-label text-signal!">Your processes · your infrastructure · your rules</p>
           <h2 className="h-section mt-4">
-            The rails are built. Now they need real processes running on them.
+            Bring AI into the processes that matter, without giving any of them away.
           </h2>
           <p className="prose-lead mt-5">
-            If you operate high-stakes processes and want AI in them without giving up
-            accountability, or you invest in infrastructure at this stage — the fastest path is a
-            direct conversation with the founder.
+            Start with the source, run it on a laptop, or propose one process for a design-partner
+            pilot on your own infrastructure. Every path starts without a contract.
           </p>
         </div>
 
         <div className="mt-10 flex flex-wrap gap-3">
           <a
-            href={CALENDAR_URL}
+            href={PILOT_URL}
             className="inline-flex items-center gap-2 rounded-lg bg-signal px-5 py-3.5 text-[15px] font-medium text-[#04150f] transition-opacity hover:opacity-90"
           >
             <Mail className="size-4" />
-            Talk to the founder
+            Start a design-partner pilot
           </a>
           <a
             href="#quickstart"
             className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3.5 text-[15px] text-t1 transition-colors hover:border-signal/50"
           >
-            <Play className="size-4" />
-            Show it in action
+            <Terminal className="size-4" />
+            Run it yourself
+          </a>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 px-2 py-3.5 text-[15px] text-t2 transition-colors hover:text-t1"
+          >
+            Read the source <ArrowUpRight className="size-4" />
           </a>
         </div>
 
@@ -41,7 +48,10 @@ export function Cta() {
             <div>
               <p className="text-[15px] font-bold tracking-wide uppercase">Abada Platform</p>
               <p className="font-mono text-[10.5px] text-t3">
-                Open source · Built in the Democratic Republic of the Congo
+                <a href={LICENSE_URL} target="_blank" rel="noreferrer" className="hover:text-t2">
+                  AGPL-3.0
+                </a>{" "}
+                · Built in the Democratic Republic of the Congo
               </p>
             </div>
           </div>
@@ -60,6 +70,9 @@ export function Cta() {
             </a>
             <a href={DEMO_URL} className="text-[13px] text-t2 transition-colors hover:text-t1">
               Quickstart
+            </a>
+            <a href="/vs-camunda" className="text-[13px] text-t2 transition-colors hover:text-t1">
+              Abada vs Camunda
             </a>
             <a
               href={`mailto:${EMAIL}`}

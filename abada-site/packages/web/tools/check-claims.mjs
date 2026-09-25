@@ -28,6 +28,11 @@ const RETRACTED = [
   "improves from its own",
   "autonomous agents",
   "both are bpmn-based",
+  "autonomous ai agents",
+  "acid rails",
+  "zero outbound",
+  "air-gapped certified",
+  "five-year-old",
 ];
 
 const roots = [new URL("../src", import.meta.url).pathname,

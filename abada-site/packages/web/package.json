@@ -14,7 +14,8 @@
     "preview": "bun run build && vite preview",
     "db:generate": "bun --env-file=../../.env drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env drizzle-kit migrate",
-    "db:push": "bun --env-file=../../.env drizzle-kit push"
+    "db:push": "bun --env-file=../../.env drizzle-kit push",
+    "og:image": "bun tools/og-image.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",
@@ -22,7 +23,6 @@
     "@orpc/server": "^1.14.7",
     "@orpc/tanstack-query": "^1.14.7",
     "@radix-ui/react-slot": "^1.2.4",
-
     "@tanstack/react-query": "^5.100.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -1,13 +1,14 @@
 import { Nav, StickyCta } from "../components/site/nav";
 import { Hero } from "../components/site/hero";
-import { Gap } from "../components/site/gap";
+import { Boundary } from "../components/site/boundary";
+import { Open } from "../components/site/open";
+import { Governed } from "../components/site/governed";
+import { Proof } from "../components/site/proof";
 import { Comparison } from "../components/site/comparison";
-import { Quickstart } from "../components/site/quickstart";
-import { Architecture } from "../components/site/architecture";
-import { Insight } from "../components/site/insight";
-import { Reliability } from "../components/site/reliability";
 import { Market } from "../components/site/market";
-import { Vision } from "../components/site/vision";
+import { Pilot } from "../components/site/pilot";
+import { Quickstart } from "../components/site/quickstart";
+import { Limits } from "../components/site/limits";
 import { Cta } from "../components/site/cta";
 
 function Index() {
@@ -16,14 +17,15 @@ function Index() {
       <Nav />
       <main>
         <Hero />
-        <Gap />
+        <Boundary />
+        <Open />
+        <Governed />
+        <Proof />
         <Comparison />
-        <Quickstart />
-        <Architecture />
-        <Insight />
-        <Reliability />
         <Market />
-        <Vision />
+        <Pilot />
+        <Quickstart />
+        <Limits />
         <Cta />
       </main>
       <StickyCta />
