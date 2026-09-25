@@ -1,5 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+// Inter is bundled instead of loaded from Google Fonts, so opening Studio
+// makes no request outside the deployment.
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
+import '@fontsource/inter/700.css'
 import './index.css'
 import App from './App.tsx'
 import { initKeycloak } from '@/auth/keycloakClient';
