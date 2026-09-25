@@ -1,12 +1,13 @@
-import { Play } from "lucide-react";
-import { CALENDAR_URL, GITHUB_URL } from "../../lib/links";
-import { RELEASE_LABEL, RELEASE_VERSION } from "../../lib/release";
+import { ArrowUpRight, Terminal } from "lucide-react";
+import { GITHUB_URL, PILOT_URL } from "../../lib/links";
+import { RELEASE_GATE_TESTS, RELEASE_VERSION } from "../../lib/release";
 
-const FACTS = [
-  { k: RELEASE_VERSION, v: RELEASE_LABEL },
-  { k: "PostgreSQL-tested", v: "Restart, upgrade and concurrency suites" },
-  { k: "PostgreSQL", v: "Authoritative runtime state" },
-  { k: "Self-hosted", v: "Your infrastructure, your data" },
+const KEPT = [
+  { k: "Code", v: "AGPL-3.0 — every line auditable" },
+  { k: "Data", v: "PostgreSQL you operate" },
+  { k: "Identity", v: "Your OIDC provider" },
+  { k: "Models", v: "An OpenAI-compatible endpoint you choose, in your network if you want" },
+  { k: "Telemetry", v: "Off by default" },
 ];
 
 export function Hero() {
@@ -20,75 +21,76 @@ export function Hero() {
       />
 
       <div className="relative mx-auto w-full max-w-[1200px]">
-        <div className="grid items-start gap-12 lg:grid-cols-12">
+        <div className="rise-0 inline-flex items-center gap-2 rounded-full border border-hairline bg-surface/70 px-3 py-1.5">
+          <span className="size-1.5 rounded-full bg-signal" />
+          <span className="font-mono text-[10px] tracking-[0.16em] text-t2 uppercase">
+            Open source · AGPL-3.0 · Self-hosted · {RELEASE_VERSION}
+          </span>
+        </div>
+
+        <h1 className="h-display rise-80 mt-7 text-[clamp(2.4rem,5.4vw,4.5rem)]">
+          AI in your critical processes.
+          <br />
+          <span className="text-signal">On infrastructure you control.</span>
+        </h1>
+
+        <div className="mt-8 grid items-start gap-12 lg:grid-cols-12">
           <div className="lg:col-span-7">
-            <div className="rise-0 inline-flex items-center gap-2 rounded-full border border-hairline bg-surface/70 px-3 py-1.5">
-              <span className="size-1.5 rounded-full bg-signal" />
-              <span className="font-mono text-[10px] tracking-[0.16em] text-t2 uppercase">
-                Open source · Self-hosted · {RELEASE_VERSION}
-              </span>
-            </div>
-
-            <h1 className="h-display rise-80 mt-7 text-[clamp(2.6rem,5.6vw,4.6rem)]">
-              Transactional ACID rails
-              <br />
-              for <span className="text-signal">autonomous AI agents.</span>
-            </h1>
-
-            <p className="rise-160 prose-lead mt-7 text-[1.125rem]">
-              Run agents, people and systems in one durable process. The engine checks every model
-              answer against its contract and sends weak ones to a person, and every AI-proposed change
-              waits for human approval. Self-hosted, with PostgreSQL as the only dependency.
+            <p className="rise-160 prose-lead text-[1.125rem]">
+              Abada is an open-source runtime for business processes where AI agents, rules and
+              people work together. It runs on your servers with PostgreSQL as its only database,
+              signs users in through your identity provider, and calls only the model endpoint you
+              choose. The engine checks every AI answer before it can change anything.
             </p>
 
             <div className="rise-240 mt-9 flex flex-wrap items-center gap-3">
               <a
-                href="#quickstart"
+                href={PILOT_URL}
                 className="inline-flex items-center gap-2 rounded-lg bg-signal px-5 py-3 text-[15px] font-medium text-[#04150f] transition-opacity hover:opacity-90"
               >
-                <Play className="size-4 fill-current" />
-                Show it in action
+                Start a design-partner pilot
               </a>
               <a
-                href={CALENDAR_URL}
+                href="#quickstart"
                 className="inline-flex items-center gap-2 rounded-lg border border-hairline-strong bg-surface/60 px-5 py-3 text-[15px] font-medium text-t1 transition-colors hover:border-signal/50"
               >
-                Talk to the founder
+                <Terminal className="size-4" />
+                Run it yourself
+              </a>
+              <a
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-1 py-3 text-[14px] text-t2 transition-colors hover:text-t1"
+              >
+                Read the source <ArrowUpRight className="size-3.5" />
               </a>
             </div>
-
-            <p className="rise-320 mono-label mt-8">
-              Runs on your own infrastructure ·{" "}
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="underline decoration-hairline-strong underline-offset-4 hover:text-t2">
-                source on GitHub
-              </a>
-            </p>
-            <p className="rise-320 mt-3 text-[12.5px] text-t3">
-              Full video coming soon.
-            </p>
           </div>
 
           <div className="rise-200 lg:col-span-5">
             <div className="rounded-xl border border-hairline bg-surface/70 p-5 backdrop-blur-sm">
-              <p className="mono-label">The category</p>
-              <p className="mt-3 text-[15px] leading-relaxed text-t1">
-                Process orchestration where the AI agent is a{" "}
-                <span className="text-signal">first-class, versioned participant</span> — not an
-                external API call, and not an improvising swarm.
-              </p>
-              <div className="my-5 h-px bg-hairline" />
-              <dl className="space-y-4">
-                {FACTS.map((f) => (
-                  <div key={f.k} className="flex items-baseline justify-between gap-4">
-                    <dt className="font-mono text-[13px] text-t1">{f.k}</dt>
-                    <dd className="text-right text-[12.5px] text-t3">{f.v}</dd>
+              <p className="mono-label">What stays with you</p>
+              <dl className="mt-4 space-y-3.5">
+                {KEPT.map((item) => (
+                  <div key={item.k} className="grid grid-cols-[88px_1fr] gap-4">
+                    <dt className="font-mono text-[12px] text-signal">{item.k}</dt>
+                    <dd className="text-[13.5px] leading-snug text-t1">{item.v}</dd>
                   </div>
                 ))}
               </dl>
               <div className="my-5 h-px bg-hairline" />
-              <p className="text-[12.5px] leading-relaxed text-t3">
-                Built by a solo founder in the Democratic Republic of the Congo, on a decade of
-                engineering mission-critical platforms. Gemini by default; any OpenAI-compatible or local model.
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[13px] text-t1">{RELEASE_VERSION}</span>
+                <span className="text-right text-[12.5px] text-t3">
+                  {RELEASE_GATE_TESTS
+                    ? `${RELEASE_GATE_TESTS} tests in the recorded release gate`
+                    : "Evaluation release candidate"}
+                </span>
+              </div>
+              <p className="mt-4 text-[12.5px] leading-relaxed text-t3">
+                Built in the Democratic Republic of the Congo by a founder with a decade of
+                engineering mission-critical platforms.
               </p>
             </div>
           </div>

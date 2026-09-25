@@ -17,7 +17,7 @@ const STEPS = [
   {
     n: "3",
     title: "Execute a real process",
-    body: "Run the Lead Triage example end to end — Gemini agent, human task, persisted evidence.",
+    body: "Run the Lead Triage example end to end — AI agent (Gemini by default), human task, persisted evidence.",
   },
 ];
 
@@ -57,15 +57,15 @@ export function Quickstart() {
             </div>
 
             <h2 className="h-section mt-6">
-              Don&apos;t take our word for it.
+              Evaluate it on your own machine.
               <br />
-              <span className="text-signal">Run the whole platform.</span>
+              <span className="text-signal">No account, no sales call.</span>
             </h2>
 
             <p className="prose-lead mt-5 text-t2">
               One command brings up Studio, the engine, the agent worker and PostgreSQL on your own
-              machine — then execute a real Gemini-backed process end to end. No sales call, no
-              sandbox account, no waitlist.
+              machine. Then run a real AI-driven process end to end and inspect every decision it
+              recorded — the same components you would deploy on your servers.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -87,7 +87,7 @@ export function Quickstart() {
                 href={DEMO_URL}
                 className="inline-flex items-center gap-1.5 text-[14px] text-t2 transition-colors hover:text-t1"
               >
-                Or read the quickstart below
+                Read the quickstart below
               </a>
             </div>
           </div>

@@ -99,7 +99,7 @@ export default function VsCamundaPage() {
           <SectionHead
             eyebrow="Credit where it is due"
             title="What Camunda is genuinely good at"
-            lead="Any comparison that claims a five-year-old open-source project beats a mature engine on every axis is not worth reading. Here is the honest position."
+            lead="Any comparison that claims a young open-source project beats a mature engine on every axis is not worth reading. Here is the honest position."
           />
 
           <div className="mt-10 grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline md:grid-cols-2">
