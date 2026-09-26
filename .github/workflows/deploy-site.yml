@@ -1,0 +1,53 @@
+name: Deploy website
+
+# Builds abada-site/packages/web and deploys it to the Cloudflare Pages
+# project behind abadaplatform.com whenever main changes the site.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "abada-site/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://abadaplatform.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        working-directory: abada-site
+        run: bun install --frozen-lockfile
+
+      # Runs the claims check and the type check before building.
+      - name: Build
+        working-directory: abada-site/packages/web
+        run: bun run build
+
+      # The project's production branch in Cloudflare Pages is named "dev";
+      # deploying under that name updates abadaplatform.com.
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3.15.0
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          wranglerVersion: "4.127.0"
+          workingDirectory: abada-site/packages/web
+          command: >-
+            pages deploy dist --project-name abada-website --branch dev
+            --commit-hash ${{ github.sha }} --commit-dirty=false
