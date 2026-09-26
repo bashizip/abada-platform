@@ -39,6 +39,21 @@ jobs:
         working-directory: abada-site/packages/web
         run: bun run build
 
+      # Fails early with a readable reason when the token cannot reach the
+      # Pages project. Prints Cloudflare's answers, never the token.
+      - name: Check Cloudflare access
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_PAGES_API_TOKEN || secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          api() { curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4$1"; }
+          echo "Token status: $(api /user/tokens/verify | jq -c '{success, status: .result.status, errors: [.errors[]?.message]}')"
+          echo "Accounts visible to the token: $(api /accounts | jq -c '[.result[]? | .id[0:8]]')"
+          echo "Configured account: ${CLOUDFLARE_ACCOUNT_ID:0:8}"
+          project=$(api "/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/abada-website")
+          echo "Pages project access: $(echo "$project" | jq -c '{success, errors: [.errors[]? | "\(.code) \(.message)"]}')"
+          echo "$project" | jq -e '.success' > /dev/null
+
       # The project's production branch in Cloudflare Pages is named "dev";
       # deploying under that name updates abadaplatform.com. Wrangler runs
       # through bunx: npm cannot install into this Bun workspace.
