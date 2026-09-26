@@ -16,19 +16,19 @@ const NUMBERS = [
 ];
 
 const CRITERIA = [
-  "A malicious expression is rejected at deployment, and nothing executes",
-  "An invalid answer goes to human review and is never written to the process",
-  "A low-confidence answer goes to human review; a reviewer completes the case",
-  "Slow model calls outlive their locks without a single duplicate call",
+  "Unsafe expressions are rejected at deployment",
+  "Invalid answers are routed to a reviewer, never written",
+  "Low-confidence answers are routed to a reviewer",
+  "Slow model calls do not cause duplicate calls",
 ];
 
 export function Proof() {
   return (
     <Section id="proof">
       <SectionHead
-        eyebrow="Proof you can rerun"
-        title="Don't trust the claims. Rerun the evidence."
-        lead={`Release candidates are published only after a recorded gate. For ${RELEASE_VERSION}, the gate included an exit demo that exercises the governance claims end to end on a live stack — and the same script is in the repository for you to run.`}
+        eyebrow="Evidence"
+        title="Verified before release. Rerunnable by you."
+        lead="Release candidates pass a recorded gate, including an end-to-end test of the governance guarantees on a live stack."
       />
 
       <div className="mt-12 grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline sm:grid-cols-2 lg:grid-cols-4">
@@ -44,7 +44,7 @@ export function Proof() {
 
       <div className="mt-8 grid gap-8 lg:grid-cols-12">
         <Reveal className="lg:col-span-7">
-          <p className="mono-label">What the exit demo checks</p>
+          <p className="mono-label">What the release test proves</p>
           <ul className="mt-5 space-y-3">
             {CRITERIA.map((c) => (
               <li key={c} className="flex gap-3">
@@ -53,18 +53,13 @@ export function Proof() {
               </li>
             ))}
           </ul>
-          <p className="mt-5 text-[13px] leading-relaxed text-t3">
-            The first run of this demo found a real race between lock heartbeats and completions.
-            It was fixed, covered by new tests and rerun before the release was signed off — which
-            is what a gate is for.
-          </p>
         </Reveal>
 
         <Reveal className="lg:col-span-5" delay={100}>
           <div className="overflow-hidden rounded-xl border border-hairline bg-surface/60">
             <div className="border-b border-hairline px-4 py-2.5">
               <span className="font-mono text-[10px] tracking-[0.16em] text-t3 uppercase">
-                Against your own dev stack
+                Run it yourself
               </span>
             </div>
             <div className="p-5">
@@ -72,9 +67,6 @@ export function Proof() {
                 <span className="text-signal">$ </span>
                 <span className="text-t1">./scripts/test/m1-exit-demo/run.sh</span>
               </code>
-              <p className="mt-3 font-mono text-[11px] leading-relaxed text-t3">
-                Exits non-zero on the first criterion that fails.
-              </p>
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2">

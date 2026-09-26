@@ -38,9 +38,8 @@ export function Hero() {
           <div className="lg:col-span-7">
             <p className="rise-160 prose-lead text-[1.125rem]">
               Abada is an open-source runtime for business processes where AI agents, rules and
-              people work together. It runs on your servers with PostgreSQL as its only database,
-              signs users in through your identity provider, and calls only the model endpoint you
-              choose. The engine checks every AI answer before it can change anything.
+              people work together — deployed on your servers, with PostgreSQL as its only
+              database. The engine checks every AI answer before it can change anything.
             </p>
 
             <div className="rise-240 mt-9 flex flex-wrap items-center gap-3">
@@ -88,10 +87,6 @@ export function Hero() {
                     : "Evaluation release candidate"}
                 </span>
               </div>
-              <p className="mt-4 text-[12.5px] leading-relaxed text-t3">
-                Built in the Democratic Republic of the Congo by a founder with a decade of
-                engineering mission-critical platforms.
-              </p>
             </div>
           </div>
         </div>

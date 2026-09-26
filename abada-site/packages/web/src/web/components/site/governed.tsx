@@ -3,19 +3,19 @@ import { Reveal, Section, SectionHead } from "./primitives";
 const PILLARS = [
   {
     verb: "Agents advise",
-    body: "The model runs outside the database transaction. Its answer enters the process only through an engine command, and the engine checks it first: the declared output schema, the confidence threshold, and that it writes nothing but its own result variable.",
+    body: "The model runs outside the transaction. Its answer changes nothing until the engine has checked it against the declared schema, confidence threshold and result variable.",
   },
   {
     verb: "Rules decide",
-    body: "Gateways and decision tables use CEL, a sandboxed expression language with no access to the JVM. A malicious expression is rejected at deployment; a failing one rolls the command back instead of guessing a route.",
+    body: "Conditions and decision tables run in sandboxed CEL. Unsafe expressions are rejected at deployment; failures roll back instead of guessing.",
   },
   {
     verb: "Humans approve",
-    body: "An invalid or low-confidence answer goes to a person, not onward. Changes to a process that AI proposes become a new immutable version only after people review them.",
+    body: "Invalid or low-confidence answers go to a person. AI-proposed process changes take effect only after review.",
   },
   {
     verb: "PostgreSQL remembers",
-    body: "Process state, work, history and the event outbox commit in one transaction. Every model attempt records provider, duration, confidence, token usage, outcome and a prompt hash — and it all survives a restart.",
+    body: "State, work, history and events commit in one transaction. Every model call leaves an auditable record.",
   },
 ];
 
@@ -23,7 +23,7 @@ export function Governed() {
   return (
     <Section id="governed" alt>
       <SectionHead
-        eyebrow="Governed by the engine"
+        eyebrow="Governance"
         title={
           <>
             Agents advise. Rules decide.
@@ -31,7 +31,7 @@ export function Governed() {
             <span className="text-signal">Humans approve. PostgreSQL remembers.</span>
           </>
         }
-        lead="Owning the infrastructure only matters if you can trust what runs on it. Abada does not trust the model, the worker or the UI to follow the rules — the engine enforces them."
+        lead="The engine — not the model, the worker or the UI — enforces the rules."
       />
 
       <div className="mt-12 grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline md:grid-cols-2">

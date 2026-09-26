@@ -5,19 +5,19 @@ import { Reveal, Section, SectionHead } from "./primitives";
 const STEPS = [
   {
     title: "Choose one process",
-    body: "One where AI would help, but accountability is non-negotiable: an exception queue, a review step, a case file.",
+    body: "Where AI helps but accountability is non-negotiable.",
   },
   {
     title: "Model it with your reviewers",
-    body: "Write it together in APL — readable YAML that your analysts, risk team and auditors can review and diff.",
+    body: "In APL, readable YAML your analysts and auditors can review.",
   },
   {
     title: "Run it on your infrastructure",
-    body: "Your servers, your PostgreSQL, your identity provider and the model endpoint you choose. Nothing is hosted for you.",
+    body: "Your servers, identity provider and model endpoint.",
   },
   {
     title: "Review the evidence together",
-    body: "What each agent proposed, what the rules decided, where people stepped in — read straight from the process history.",
+    body: "What agents proposed, what rules decided, where people stepped in.",
   },
 ];
 
@@ -28,8 +28,8 @@ export function Pilot() {
         <div className="lg:col-span-5">
           <SectionHead
             eyebrow="Design-partner pilot"
-            title="Put one real process on it. Inside your walls."
-            lead="Abada is looking for a small number of design partners: organisations willing to run one consequential process on their own infrastructure and shape what comes next."
+            title="Put one real process on it."
+            lead="We are working with a small number of design partners to run one consequential process on their own infrastructure."
           />
           <a
             href={PILOT_URL}
@@ -39,8 +39,7 @@ export function Pilot() {
             Propose a pilot process
           </a>
           <p className="mt-4 text-[12.5px] leading-relaxed text-t3">
-            You work directly with the founder. The software itself is AGPL-3.0 — there is no
-            licence to buy.
+            Work directly with the founder. No licence fee.
           </p>
         </div>
 
