@@ -17,3 +17,12 @@ Deployment tools depend on these command names. Their implementations may change
 The web package owns the API, database, and shared web interface. The mobile package is an Expo client. The desktop package is an Electron shell around the web app. Services use the fixed ports defined in `__ports.cjs`, and the web health endpoint is `/api/health`.
 
 Secrets belong in the root `.env` file. Browser values must use the `VITE_` prefix. Commands prefixed with `internal:` are for template maintenance.
+
+## Deployment (abadaplatform.com)
+
+`packages/web` is deployed to the Cloudflare Pages project `abada-website` by
+`.github/workflows/deploy-site.yml` on every push to `main` that touches
+`abada-site/`, and on demand from the Actions tab. The build runs the claims
+check and the type check first, so a retracted claim blocks the deploy. The
+workflow uses the `CF_API_TOKEN` and `CF_ACCOUNT_ID` repository secrets; the
+token needs the Cloudflare Pages edit permission.
