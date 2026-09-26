@@ -1,4 +1,4 @@
-import { ArrowUpRight, Mail, Terminal } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Terminal } from "lucide-react";
 import { DEMO_URL, DOCS_URL, EMAIL, GITHUB_URL, LICENSE_URL, PILOT_URL } from "../../lib/links";
 
 export function Cta() {
@@ -21,8 +21,8 @@ export function Cta() {
             href={PILOT_URL}
             className="inline-flex items-center gap-2 rounded-lg bg-signal px-5 py-3.5 text-[15px] font-medium text-[#04150f] transition-opacity hover:opacity-90"
           >
-            <Mail className="size-4" />
             Start a design-partner pilot
+            <ArrowRight className="size-4" />
           </a>
           <a
             href="#quickstart"
