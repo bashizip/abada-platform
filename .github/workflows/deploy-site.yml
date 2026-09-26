@@ -48,7 +48,6 @@ jobs:
         run: |
           api() { curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4$1"; }
           echo "Token status: $(api /user/tokens/verify | jq -c '{success, status: .result.status, errors: [.errors[]?.message]}')"
-          echo "Accounts visible to the token: $(api /accounts | jq -c '[.result[]? | .id[0:8]]')"
           echo "Configured account: ${CLOUDFLARE_ACCOUNT_ID:0:8}"
           project=$(api "/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/abada-website")
           echo "Pages project access: $(echo "$project" | jq -c '{success, errors: [.errors[]? | "\(.code) \(.message)"]}')"
