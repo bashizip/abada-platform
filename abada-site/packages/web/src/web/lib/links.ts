@@ -3,7 +3,10 @@ export const DOCS_URL = "https://docs.abadaplatform.com";
 export const DEMO_URL = "/#quickstart";
 export const EMAIL = "patrick@abadaplatform.com";
 export const CALENDAR_URL = `mailto:${EMAIL}?subject=Abada%20%E2%80%94%20intro%20call`;
-export const PILOT_URL = `mailto:${EMAIL}?subject=Abada%20%E2%80%94%20design-partner%20pilot`;
+/** Pilot calls to action scroll to the design-partner form. */
+export const PILOT_URL = "/#pilot";
+/** Form endpoint (formemailapi.com); submissions are emailed to the founder. */
+export const PILOT_FORM_ACTION = "https://submit.formemailapi.com/w4ef2mbd";
 export const INSTALL_CMD = "curl -fsSL https://install.abadaplatform.com/install.sh | bash";
 
 /** Links into the public repository; every target is checked to exist on main. */
