@@ -1,130 +1,45 @@
 # Abada
 
-**AI-native workflow orchestration in YAML. Self-hosted, durable, open-source.**
+**Governed AI-driven business processes, on infrastructure you control.**
 
-Abada is an open-source workflow platform where AI agents, human tasks, and system integrations are first-class citizens — not bolt-ons. You define processes in **APL** (Abada Process Language), a YAML-native DSL that compiles directly to a durable execution graph. No XML. No vendor lock-in.
+[![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-34d399)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/bashizip/abada-platform?include_prereleases&color=34d399)](https://github.com/bashizip/abada-platform/releases)
 
-Built for teams that need production-grade orchestration with data sovereignty: banks, telcos, agritech, govtech, and any enterprise where deterministic control over AI-driven workflows matters.
+Abada is an open-source runtime for business processes in which AI agents, deterministic
+rules and people work together. It runs on your servers with PostgreSQL as its only
+database, signs users in through your OIDC provider and calls only the model endpoint you
+configure. The engine — not the model, the worker or the UI — decides what an AI answer
+is allowed to change.
+
+**Agents advise. Rules decide. Humans approve. PostgreSQL remembers.**
+
+- **Sovereign.** No vendor cloud, no licence server, telemetry off by default. Models can
+  run inside your network.
+- **Open.** AGPL-3.0, with no enterprise edition. The worker SDK is Apache-2.0.
+- **Governed.** Model output is validated by the engine against a declared schema and
+  confidence threshold; invalid or low-confidence answers go to a person. Rules are
+  sandboxed CEL.
+- **Evidenced.** Every model call leaves an auditable record, and each release candidate
+  passes a recorded gate, including an end-to-end test you can rerun.
+
+Website: [abadaplatform.com](https://abadaplatform.com) · Documentation:
+[docs.abadaplatform.com](https://docs.abadaplatform.com)
 
 ---
 
-## What Abada Does
+## Quick start
 
-```yaml
-version: abada.io/v1
-metadata:
-  name: Lead Triage Demo
-flow:
-  entry: receive-lead
-  nodes:
-    - id: receive-lead
-      type: webhook
-      description: Receive a new sales lead
-      next: analyze-lead
+Docker is the only prerequisite.
 
-    - id: analyze-lead
-      type: agent
-      description: Classify the lead priority
-      model: gemini-3.6-flash
-      prompt: |
-        Analyze the company size: ${lead.companySize}.
-        Classify the lead priority as HIGH, MEDIUM or LOW.
-      result_variable: lead_priority
-      output_schema:
-        type: object
-        required: [priority]
-        properties:
-          priority: { enum: [HIGH, MEDIUM, LOW] }
-      confidence_threshold: 85
-      on_low_confidence: senior-sales-review
-      max_attempts: 3
-      next: check-priority
-
-    - id: check-priority
-      type: condition
-      description: Route the lead according to the classified priority
-      rules:
-        - if: "${lead_priority.priority == 'HIGH'}"
-          then: senior-sales-review
-        - else: standard-workflow
-          then: standard-workflow
-
-    - id: senior-sales-review
-      type: human-input
-      description: Senior sales director review
-      formKey: lead-triage-review
-      assignees: [sales-director]
-      next: end
-
-    - id: standard-workflow
-      type: engine-task
-      description: Trigger the standard CRM sequence
-      service: trigger-crm-sequence
-      next: end
-
-    - id: end
-      type: end
-      description: Lead triage completed
+```bash
+curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
 
-**55 lines of YAML.** Equivalent BPMN XML: **~800+ lines.**
+The installer pulls the published images and starts Studio, the engine, the agent worker
+and PostgreSQL, then prints the local URLs and development accounts. A Gemini key is
+optional at install time; you can add a model provider later in Studio.
 
-What just happened:
-- A lead arrives via webhook
-- A **Gemini agent** classifies priority; the **engine** checks its structured output and confidence, and sends weak answers to a person
-- A **condition** routes HIGH-priority leads to a senior reviewer
-- A **human task** with a form appears for the sales director
-- Standard leads flow automatically to the CRM
-- The entire process is **durable, versioned, and auditable** in PostgreSQL
-
----
-
-## Why Abada
-
-| Legacy BPMN Tools | Abada |
-|---|---|
-| XML diagrams (2000+ lines) | YAML definitions (60 lines) |
-| AI as external service call | `agent` as native node type |
-| Visual-only authoring | Code + visual hybrid; diffable, reviewable |
-| Cloud-only SaaS | Self-hosted, data sovereign |
-| Black-box execution | Full audit trail, restart recovery |
-| Developer-heavy setup | Natural language → APL authoring |
-
-Abada is built on a simple principle: **autonomous agents may reason dynamically, but production workflows still require deterministic control** over state, sequencing, approvals, timeouts, recovery, and observability.
-
----
-
-## Platform
-
-| Component | What It Does |
-|---|---|
-| **Studio** | Visual + YAML authoring, dry runs, live instance inspection, AI-assisted optimization |
-| **Engine** | Durable PostgreSQL execution core: process, token, task, timer, job, variable state |
-| **Agent Worker** | First-party sidecar that turns `agent` nodes into durable, leased, retryable LLM calls |
-| **SDK** | Typed Java clients for external workers and agent attempt/resume contracts |
-
-```
-        Abada Studio ─── APL YAML / Visual Canvas
-                 │
-                 ▼
-         Abada Engine Core (PostgreSQL)
-                 │
-     ┌───────────┼───────────────┐
-     ▼           ▼               ▼
-  Humans      Services        AI Agents
-     │        (workers)     (agent worker)
-     │           │               │
-     └───────────┴───────────────┘
-                 │
-                 ▼
-   Policies • Tools • Models • APIs
-```
-
-Every component is independently deployable with Docker.
-
----
-
-## Quick Start
+From a clone of this repository:
 
 ```bash
 git clone https://github.com/bashizip/abada-platform.git
@@ -133,85 +48,172 @@ cd abada-platform
 ./release/abada-platform up dev
 ```
 
-The success screen prints every local URL and development starter accounts.
+Add `--telemetry` to start the bundled Grafana, Prometheus, Jaeger and Loki stack. See
+[`release/README.md`](release/README.md) for production deployment.
 
-Add `--telemetry` for the bundled Grafana, Prometheus, Jaeger, and Loki stack.
+---
 
-### Versioned release bundle
+## A process in APL
 
-```bash
-curl -fsSL https://install.abadaplatform.com/install.sh | bash
+Processes are written in **APL**, the Abada Process Language: YAML that you can review,
+diff and keep in your own repository.
+
+```yaml
+version: abada.io/v1
+metadata:
+  key: lead_triage
+  name: Lead Triage
+flow:
+  entry: receive-lead
+  nodes:
+    - id: receive-lead
+      type: webhook
+      next: classify
+
+    - id: classify
+      type: agent
+      model: gemini-3.6-flash
+      prompt: |
+        Company size: ${lead.companySize}.
+        Classify the lead priority as HIGH, MEDIUM or LOW.
+      result_variable: lead_priority
+      output_schema:
+        type: object
+        required: [priority]
+        properties:
+          priority: { enum: [HIGH, MEDIUM, LOW] }
+      confidence_threshold: 85
+      on_low_confidence: sales-review    # weak answers go to a person
+      on_invalid_output: sales-review    # so do malformed ones
+      next: route
+
+    - id: route
+      type: condition
+      rules:
+        - if: "${lead_priority.priority == 'HIGH'}"
+          then: sales-review
+        - else: crm
+          then: crm
+
+    - id: sales-review
+      type: human-input
+      description: Review the lead
+      assignees: [sales-director]
+      next: end
+
+    - id: crm
+      type: engine-task
+      service: crm.sync
+      next: end
+
+    - id: end
+      type: end
 ```
 
-The installer validates a Gemini key, then the first Studio login creates and
-deploys the auto-layouted AI Lead Triage starter. The key stays in the local
-mode-`0600` `.env.dev` and is never bundled or exposed to Studio.
-Alice initializes and runs the process; a HIGH result is reviewed exclusively
-by the bundled `bob` / `bob` user before the local CRM acknowledgement.
+The model receives only the inputs the prompt declares. Its answer changes nothing until
+the engine has checked it against `output_schema` and `confidence_threshold`; a failing
+answer is routed to `sales-review` instead of the CRM. The whole run — state, tasks,
+history and every model attempt — is committed to PostgreSQL and survives a restart.
 
-See [`release/README.md`](release/README.md).
-
----
-
-## What's Implemented
-
-- **Native APL runtime** — YAML parses directly to executable graph; no XML round-trip
-- **Agent nodes** — Durable LLM steps (Gemini by default, any OpenAI-compatible model); the **engine** enforces the output schema and confidence threshold and routes weak or invalid answers to a person; agents receive only declared inputs. Single model call per step today; tool execution is on the [roadmap](docs/development/roadmap.md)
-- **Decision tables and conditions** — Deterministic rules executed in-transaction with sandboxed CEL expressions that cannot reach the JVM and fail loudly
-- **Human tasks** — Claim, assign, complete with forms; SLA hours are a monitoring hint until enforced SLAs ship
-- **Event handling** — Messages, signals, timers, event gateways with race semantics
-- **Parallel & inclusive gateways** — Fork/join with restart-safe token bookkeeping
-- **Project envelopes** — PostgreSQL-backed projects, folders, resources, role memberships
-- **Insight Loop** — Engine writes execution facts; AI proposes APL improvements; governed review in Studio
-- **Natural language authoring** — Describe a workflow in plain English; get an LLM draft that the engine parser validates, for you to review before deploying
-- **BPMN compatibility** — Import existing BPMN for migration; export for interoperability
-- **Production runtime** — PostgreSQL, Flyway migrations, optimistic locking, durable leases, cluster-safe work acquisition
-- **Observability** — OpenTelemetry, distributed tracing, metrics, structured logging
-- **Security** — OIDC JWT validation, backend RBAC, audit history
-
-See the [BPMN support matrix](docs/reference/bpmn-support.md) for exact semantics.
+A fuller version is in [`examples/apl/lead-triage-demo.apl.yaml`](examples/apl/lead-triage-demo.apl.yaml).
+Every node type is described in the [APL node reference](docs/reference/apl-node-reference.md).
 
 ---
 
-## Documentation
+## Architecture
 
-- [Platform Overview](docs/platform-overview.md)
-- [Architecture & Deployment](docs/architecture/overview.md)
-- [APL Specification](docs/reference/apl-specification.md)
-- [API Reference](docs/development/api.md)
-- [Observability Guide](docs/operations/observability.md)
-- [Release Notes](docs/release-notes/)
+```mermaid
+flowchart LR
+  subgraph infra["Your infrastructure"]
+    studio["Studio<br/>design · tasks · operations"]
+    engine["Engine<br/>processes · rules · agent contract"]
+    db[("PostgreSQL")]
+    worker["Agent worker"]
+    workers["Your workers<br/>(Java SDK)"]
+    idp["Your OIDC provider"]
+    model["Model endpoint<br/>(optional: in-network)"]
+  end
+  studio --> engine
+  engine --- db
+  worker -- "fetch · complete" --> engine
+  workers -- "fetch · complete" --> engine
+  worker --> model
+  studio -. sign-in .-> idp
+  engine -. token validation .-> idp
+```
+
+| Component | Role |
+| --- | --- |
+| **Engine** (`engine/`) | Java 21 / Spring Boot. Executes APL and imported BPMN; owns process, task, timer, job and variable state in PostgreSQL; validates agent output; REST API v1. |
+| **Studio** (`studio/`) | React operator UI: visual and YAML authoring, dry runs, tasks, instance inspection, reviewed improvement proposals. |
+| **Agent worker** (`agent-worker/`) | Calls the model outside the database transaction and reports the result back through the engine's worker protocol, with durable leases and lock heartbeats. |
+| **Worker SDK** (`sdk/java/`) | Java client for building your own external workers (Apache-2.0). |
+
+A model call never runs inside a workflow transaction. Its result enters process state
+only through an engine command that validates it — see
+[runtime state](docs/architecture/runtime-state.md) and
+[runtime semantics](docs/reference/runtime-semantics.md).
+
+---
+
+## Capabilities
+
+- **APL runtime:** agents, engine tasks, human tasks with forms, conditions, inclusive and
+  parallel gateways, decision tables, messages, signals, timers and event gateways.
+- **Agent governance:** output schema, confidence threshold and single result variable
+  enforced by the engine; `on_low_confidence`, `on_invalid_output` and `on_error` routes;
+  default-deny inputs; per-attempt evidence including token usage.
+- **Deterministic rules:** CEL for conditions and decision tables, rejected at deployment
+  when unsafe; script steps are opt-in and sandboxed.
+- **Durable execution:** atomic commands, versioned immutable definitions, transactional
+  outbox, durable leases and restart-safe work acquisition across engine replicas.
+- **Governed improvement:** execution facts feed proposals that take effect only as new
+  versions after human review.
+- **Security:** OIDC JWT validation, backend role-based permissions and audit history.
+- **Observability:** OpenTelemetry metrics, traces and structured logs, off by default.
+- **BPMN import:** a [documented subset](docs/reference/bpmn-support.md); unsupported
+  constructs are rejected at deployment.
 
 ---
 
 ## Status
 
-**Prepared baseline:** `1.0.0-rc.6` — M1 "truth and safety": sandboxed CEL expressions, an engine-enforced agent output contract with low-confidence, invalid-output and error routing, default-deny agent inputs, and a concurrent agent worker with lock heartbeats. Breaking changes are listed in the [release notes](docs/release-notes/1.0.0-rc.6-release-notes.md). Publication remains gated by the RC evidence workflow.
+The current release is **`1.0.0-rc.6`**, an evaluation release candidate
+([release notes](docs/release-notes/1.0.0-rc.6-release-notes.md),
+[gate report](docs/development/1.0-rc.6-gate-report-2026-09-23.md)). It targets
+self-hosted Docker Compose deployments with one or more engine instances on PostgreSQL.
 
-**1.1 agentic checkpoint** (in development): native APL runtime, deterministic decision tables, governed Insight Loop, project envelopes, first-party agent worker. Progress tracked in the [roadmap](docs/development/roadmap.md).
+Next on the [roadmap](docs/development/roadmap.md): enforced SLAs, timeouts and bounded
+rework loops (`1.1.0-rc.1`), then tool-using agents with human-approved writes
+(`1.1.0-rc.2`). Public-cloud production certification and an independent security review
+are not yet scheduled; see the [deployment support matrix](docs/reference/deployment-support.md).
+
+---
+
+## Documentation
+
+- [Platform overview](docs/platform-overview.md) and [architecture](docs/architecture/overview.md)
+- [APL specification](docs/reference/apl-specification.md) and [node reference](docs/reference/apl-node-reference.md)
+- [Agent worker](docs/reference/agent-worker.md) and [external worker protocol](docs/reference/external-worker-protocol-v1.md)
+- [API reference](docs/development/api.md) and [runtime semantics](docs/reference/runtime-semantics.md)
+- [Observability](docs/operations/observability.md) · [Release notes](docs/release-notes/)
 
 ---
 
 ## Contributing
 
-- Read [`AGENTS.md`](AGENTS.md) for the repository working agreement
-- Include tests
-- Update documentation
-- Keep pull requests focused
-- Use Conventional Commits: `feat(runtime): ...`, `fix(api): ...`, `feat(studio): ...`
+Read [`AGENTS.md`](AGENTS.md) for the working agreement: tests with every change,
+PostgreSQL as the reference for persistence behaviour, documentation updated alongside
+code, focused pull requests into `dev`, and Conventional Commit messages
+(`feat(runtime): …`, `fix(api): …`).
 
 ---
 
-## License
+## Licence
 
 Copyright © 2025–2026 Patrick Bashizi.
 
-Abada is free software under the [GNU Affero General Public License v3.0 only](LICENSE)
-(`AGPL-3.0-only`). If you run a modified Abada as a network service, you must offer its
-users the corresponding source code.
-
-The Java worker SDK in [`sdk/java`](sdk/java) is licensed under the
-[Apache License 2.0](sdk/java/LICENSE), so workers built on it carry no AGPL obligations.
-
-Releases up to and including `1.0.0-rc.5` were published under the MIT License; that
-grant still applies to those versions.
+Abada is licensed under the [GNU Affero General Public License v3.0 only](LICENSE). The
+Java worker SDK in [`sdk/java`](sdk/java) is licensed under the
+[Apache License 2.0](sdk/java/LICENSE). Releases up to and including `1.0.0-rc.5` were
+published under the MIT License.
