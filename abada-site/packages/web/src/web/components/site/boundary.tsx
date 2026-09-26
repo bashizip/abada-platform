@@ -1,34 +1,29 @@
-import { ArrowRight } from "lucide-react";
 import { Reveal, Section, SectionHead } from "./primitives";
 
 const INSIDE = [
   { name: "Studio", detail: "Design, tasks, operations" },
   { name: "Engine", detail: "Processes, rules, agent contract" },
-  { name: "Agent worker", detail: "Calls the model, outside the transaction" },
+  { name: "Agent worker", detail: "Model calls, outside the transaction" },
   { name: "PostgreSQL", detail: "The only database" },
 ];
 
 const YOURS = [
-  { name: "Identity provider", detail: "The OIDC provider you already run" },
-  { name: "Model endpoint", detail: "OpenAI-compatible — can run inside your network" },
+  { name: "Identity provider", detail: "Your existing OIDC provider" },
+  { name: "Model endpoint", detail: "OpenAI-compatible, in your network or hosted" },
 ];
 
-const CROSSINGS = [
+const CONTROLS = [
   {
     what: "Model calls",
-    how: "Go only to the endpoint you configure. Run the model inside your network and nothing leaves.",
+    how: "Go only to the endpoint you configure, with only the inputs each step declares.",
   },
   {
     what: "Telemetry",
-    how: "Off by default. When you enable it, metrics, traces and logs go to your own collector.",
+    how: "Off by default. When enabled, it goes to your own collector.",
   },
   {
-    what: "Installation",
-    how: "Images come from a public registry. Mirror them into your own registry if your network requires it.",
-  },
-  {
-    what: "Studio fonts",
-    how: "Studio in 1.0.0-rc.6 still loads its web fonts from Google Fonts. They are bundled from the next release, so opening Studio will contact nothing outside your deployment.",
+    what: "Operations",
+    how: "Deploy, back up and upgrade it like any other service in your estate.",
   },
 ];
 
@@ -51,9 +46,9 @@ export function Boundary() {
   return (
     <Section id="sovereignty" alt>
       <SectionHead
-        eyebrow="Sovereignty, concretely"
-        title="Draw the line around your data centre. Abada fits inside it."
-        lead="No vendor cloud, no licence server, no account to create. The whole platform is a few containers and a PostgreSQL database that you deploy, back up and govern like the rest of your estate."
+        eyebrow="Sovereignty"
+        title="The whole platform runs inside your walls."
+        lead="No vendor cloud, no licence server, no external account."
       />
 
       <div className="mt-12 grid gap-8 lg:grid-cols-12">
@@ -67,42 +62,24 @@ export function Boundary() {
                 <Box key={box.name} {...box} />
               ))}
             </div>
-            <div className="mt-5 flex items-center gap-3">
-              <span className="h-px flex-1 bg-hairline" />
-              <span className="font-mono text-[10px] tracking-[0.16em] text-t3 uppercase">
-                Already yours
-              </span>
-              <span className="h-px flex-1 bg-hairline" />
-            </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {YOURS.map((box) => (
                 <Box key={box.name} {...box} tone="wire" />
               ))}
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-3 rounded-lg border border-hairline bg-surface/40 px-4 py-3">
-            <ArrowRight className="size-4 shrink-0 text-t3" />
-            <p className="text-[12.5px] leading-relaxed text-t3">
-              Optional, and only if you choose it: a hosted model API such as Gemini. The agent
-              worker sends it each agent step's prompt and its declared inputs — nothing else.
-            </p>
-          </div>
         </Reveal>
 
         <Reveal className="lg:col-span-5" delay={100}>
-          <p className="mono-label">Everything that can cross the line</p>
+          <p className="mono-label">You decide what leaves</p>
           <ul className="mt-5 divide-y divide-hairline border-y border-hairline">
-            {CROSSINGS.map((item) => (
+            {CONTROLS.map((item) => (
               <li key={item.what} className="py-4">
                 <p className="text-[14px] font-semibold text-t1">{item.what}</p>
                 <p className="mt-1 text-[13.5px] leading-relaxed text-t2">{item.how}</p>
               </li>
             ))}
           </ul>
-          <p className="mt-5 text-[12.5px] leading-relaxed text-t3">
-            Production needs PostgreSQL, a reverse proxy (Traefik is included) and your identity
-            provider. Keycloak ships for development only.
-          </p>
         </Reveal>
       </div>
     </Section>

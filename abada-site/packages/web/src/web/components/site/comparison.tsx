@@ -90,7 +90,7 @@ export function Comparison({ showVsLink = true }: { showVsLink?: boolean }) {
       <SectionHead
         eyebrow="How it compares"
         title="Sovereign and governed, in one runtime"
-        lead="Each property below exists somewhere in the market. Abada holds all of them in one self-hosted, open-source runtime, under one versioned process definition."
+        lead="Each property exists somewhere in the market. Abada holds all of them in one self-hosted, open-source runtime."
       />
 
       <Reveal>
@@ -161,9 +161,7 @@ export function Comparison({ showVsLink = true }: { showVsLink?: boolean }) {
       </div>
 
       <p className="mt-8 max-w-3xl text-[13px] leading-relaxed text-t3">
-        Ratings describe each category's typical defaults as designed — specific products and editions vary — and are not a benchmark. Abada does not claim full
-        BPMN 2.0 coverage: unsupported execution semantics fail explicitly rather than being
-        accepted ambiguously.
+        Typical category defaults, not a benchmark; specific products and editions vary.
       </p>
 
       {showVsLink ? (

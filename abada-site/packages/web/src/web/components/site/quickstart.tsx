@@ -63,9 +63,8 @@ export function Quickstart() {
             </h2>
 
             <p className="prose-lead mt-5 text-t2">
-              One command brings up Studio, the engine, the agent worker and PostgreSQL on your own
-              machine. Then run a real AI-driven process end to end and inspect every decision it
-              recorded — the same components you would deploy on your servers.
+              One command brings up Studio, the engine, the agent worker and PostgreSQL on your
+              machine. Run a real AI-driven process end to end and inspect every decision.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
