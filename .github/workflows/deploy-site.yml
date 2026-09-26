@@ -45,7 +45,8 @@ jobs:
       - name: Deploy to Cloudflare Pages
         working-directory: abada-site/packages/web
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          # Dedicated token with only Cloudflare Pages edit permission.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_PAGES_API_TOKEN || secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: >-
           bunx wrangler@4.127.0 pages deploy dist --project-name abada-website
