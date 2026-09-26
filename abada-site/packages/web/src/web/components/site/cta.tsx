@@ -9,11 +9,10 @@ export function Cta() {
         <div className="max-w-3xl">
           <p className="mono-label text-signal!">Your processes · your infrastructure · your rules</p>
           <h2 className="h-section mt-4">
-            Bring AI into the processes that matter, without giving any of them away.
+            Bring AI into the processes that matter. Keep them yours.
           </h2>
           <p className="prose-lead mt-5">
-            Start with the source, run it on a laptop, or propose one process for a design-partner
-            pilot on your own infrastructure. Every path starts without a contract.
+            Read the source, run it locally, or propose a pilot on your own infrastructure.
           </p>
         </div>
 

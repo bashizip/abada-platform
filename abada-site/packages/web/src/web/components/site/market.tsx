@@ -5,22 +5,22 @@ const SECTORS = [
   {
     icon: Banknote,
     name: "Banks & financial services",
-    body: "KYC review, credit exceptions, fraud escalation. Customer data stays in your data centre, and each decision can be explained to a supervisor months later.",
+    body: "KYC review, credit exceptions, fraud escalation — each decision explainable to a supervisor months later.",
   },
   {
     icon: Radio,
     name: "Telecom operators",
-    body: "Subscriber onboarding, incident escalation, partner settlement disputes — high volumes, with subscriber data that cannot go to a third-party cloud.",
+    body: "Subscriber onboarding, incident escalation and settlement disputes, at volume, on your own infrastructure.",
   },
   {
     icon: Landmark,
     name: "Public sector",
-    body: "Citizen requests and approvals where data location, auditability and independence from a foreign vendor are requirements, not preferences.",
+    body: "Citizen requests and approvals where data location and auditability are requirements.",
   },
   {
     icon: Sprout,
     name: "Agriculture & development programmes",
-    body: "Producer case files, document capture and field-data routing where connectivity is thin and the data belongs to the programme.",
+    body: "Case files, document capture and field-data routing, with the data kept by the programme.",
   },
 ];
 
@@ -29,8 +29,8 @@ export function Market() {
     <Section id="use-cases" alt>
       <SectionHead
         eyebrow="Who it is for"
-        title="Organisations that cannot send their processes to someone else's cloud"
-        lead="Regulated and sovereignty-sensitive institutions want AI in consequential processes, but not at the price of handing their data, their decision logic or their audit trail to a vendor."
+        title="Built for organisations that keep their processes in-house"
+        lead="Regulated institutions that want AI in consequential processes without handing their data, decision logic or audit trail to a vendor."
       />
 
       <div className="mt-12 grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline md:grid-cols-2">
@@ -49,8 +49,7 @@ export function Market() {
       </div>
 
       <p className="mt-6 text-[12.5px] leading-relaxed text-t3">
-        These are the use cases Abada is designed for, not customer references. Abada is looking
-        for its first design partners.
+        Target use cases, not customer references.
       </p>
     </Section>
   );
