@@ -24,5 +24,5 @@ Secrets belong in the root `.env` file. Browser values must use the `VITE_` pref
 `.github/workflows/deploy-site.yml` on every push to `main` that touches
 `abada-site/`, and on demand from the Actions tab. The build runs the claims
 check and the type check first, so a retracted claim blocks the deploy. The
-workflow uses the `CF_API_TOKEN` and `CF_ACCOUNT_ID` repository secrets; the
-token needs the Cloudflare Pages edit permission.
+workflow uses the `CF_PAGES_API_TOKEN` secret (a token with only the Cloudflare
+Pages edit permission) and `CF_ACCOUNT_ID`.
