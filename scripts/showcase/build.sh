@@ -53,6 +53,11 @@ if $PUBLISH; then
     "$ROOT/abada-site/packages/web/public/videos/"
   cp "$WORK/out/abada-studio-showcase-readme.gif" "$ROOT/docs/assets/studio-showcase.gif"
   cp "$WORK/out/abada-studio-showcase-readme.mp4" "$ROOT/docs/assets/studio-showcase.mp4"
-  echo "Copied site videos into abada-site/packages/web/public/videos/ and README assets into docs/assets/"
+  # New URLs for the new take: the edge caches /videos/* for a week.
+  VERSION="$(shasum -a 256 "$WORK/out/abada-studio-showcase.mp4" | cut -c1-10)"
+  sed -i.bak -E "s/^const VIDEO_VERSION = \".*\";/const VIDEO_VERSION = \"$VERSION\";/" \
+    "$ROOT/abada-site/packages/web/src/web/components/site/showcase.tsx"
+  rm -f "$ROOT/abada-site/packages/web/src/web/components/site/showcase.tsx.bak"
+  echo "Copied site videos into abada-site/packages/web/public/videos/ (version $VERSION) and README assets into docs/assets/"
 fi
 ls -lh "$WORK/out"
