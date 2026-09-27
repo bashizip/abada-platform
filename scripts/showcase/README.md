@@ -17,6 +17,12 @@ the prompt bar, so the whole process stays visible and legible.
 `SHOWCASE_POSTER_AT` sets the poster frame time in seconds (default 9).
 `SHOWCASE_WORK` moves the working directory (default `scripts/showcase/.work`).
 
+The website caches `/videos/*` for a week at the edge, so the page requests the
+videos with a content-hash query (`VIDEO_VERSION` in
+`abada-site/packages/web/src/web/components/site/showcase.tsx`). `--publish`
+updates it; if you copy videos by hand, update it too or visitors keep the old
+take.
+
 ## Storyboard
 
 1. **Design** (alice): select the Lead Triage agent node, zoom to its confidence threshold.
