@@ -80,6 +80,9 @@ export function Pilot() {
                 />
               </label>
             </div>
+            {/* FormEmailAPI options: where the visitor lands and the email subject. */}
+            <input type="hidden" name="redirect" value="https://abadaplatform.com/thanks" />
+            <input type="hidden" name="subject" value="Abada — design-partner pilot" />
             {/* Spam honeypot: hidden from people, filled in by bots. */}
             <input
               type="checkbox"
