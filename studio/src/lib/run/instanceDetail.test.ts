@@ -125,3 +125,51 @@ describe('deriveInstancePath', () => {
     expect(path.nextEdgeIds).toEqual([]);
   });
 });
+
+describe('deriveInstancePath outcome routes', () => {
+  // analyze → review normally; on_low_confidence / on_error also go to review.
+  const model = workflow(
+    [node('start', 'event', 'start'), node('analyze', 'agent'), node('review', 'human')],
+    [
+      { id: 'start-analyze', source: 'start', target: 'analyze' },
+      { id: 'analyze-review', source: 'analyze', target: 'review' },
+      { id: 'analyze-review-low', source: 'analyze', target: 'review', label: 'on_low_confidence' },
+      { id: 'analyze-review-invalid', source: 'analyze', target: 'review', label: 'on_invalid_output' },
+      { id: 'analyze-review-error', source: 'analyze', target: 'review', label: 'on_error: TIMEOUT' },
+    ],
+  );
+  const agentCompleted = (outcome: string): ActivityHistoryDTO => ({
+    ...completed('analyze'),
+    details: { agentOutcome: outcome },
+  });
+
+  it('does not light outcome routes when the agent result was accepted', () => {
+    const path = deriveInstancePath(model, instance('review'), [activity('review')],
+      [completed('start'), agentCompleted('OK')]);
+    expect(path.activePathEdgeIds).toEqual(['start-analyze', 'analyze-review']);
+    expect(path.tokenEdgeIds).toEqual(['analyze-review']);
+  });
+
+  it('lights only the outcome route the engine recorded', () => {
+    const path = deriveInstancePath(model, instance('review'), [activity('review')],
+      [completed('start'), agentCompleted('LOW_CONFIDENCE')]);
+    expect(path.activePathEdgeIds).toContain('analyze-review-low');
+    expect(path.activePathEdgeIds).not.toContain('analyze-review-invalid');
+    expect(path.activePathEdgeIds).not.toContain('analyze-review-error');
+  });
+
+  it('lights an error route from the recorded BPMN error and its code', () => {
+    const bpmnError = (errorCode: string): ActivityHistoryDTO => ({
+      ...completed('analyze'),
+      eventType: 'EXTERNAL_TASK_BPMN_ERROR',
+      details: { errorCode, routedTo: 'review' },
+    });
+    const taken = deriveInstancePath(model, instance('review'), [activity('review')],
+      [completed('start'), bpmnError('TIMEOUT')]);
+    expect(taken.activePathEdgeIds).toContain('analyze-review-error');
+    expect(taken.activePathEdgeIds).not.toContain('analyze-review-low');
+    const otherCode = deriveInstancePath(model, instance('review'), [activity('review')],
+      [completed('start'), bpmnError('QUOTA')]);
+    expect(otherCode.activePathEdgeIds).not.toContain('analyze-review-error');
+  });
+});
