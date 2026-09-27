@@ -165,3 +165,47 @@ describe('agent outcome routes', () => {
     expect(summarize.confidence_threshold).toBeUndefined();
   });
 });
+
+describe('inclusive gateway', () => {
+  const apl: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: { key: 'incl', name: 'Inclusive' },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'fork' },
+        {
+          id: 'fork',
+          type: 'inclusive',
+          rules: [
+            { if: "${path == 'C'}", then: 'taskC' },
+            { if: "${path == 'D'}", then: 'taskD' },
+          ],
+        },
+        { id: 'taskC', type: 'engine-task', service: 'c', next: 'join' },
+        { id: 'taskD', type: 'engine-task', service: 'd', next: 'join' },
+        { id: 'join', type: 'inclusive', next: 'end' },
+        { id: 'end', type: 'end' },
+      ],
+    },
+  };
+
+  it('draws every fork rule as a labelled branch edge', () => {
+    const wf = aplToWorkflow(apl);
+    const branches = wf.edges.filter((e) => e.source === 'fork');
+    expect(branches.map((e) => [e.target, e.label])).toEqual([
+      ['taskC', "if ${path == 'C'}"],
+      ['taskD', "if ${path == 'D'}"],
+    ]);
+  });
+
+  it('round-trips the fork rules and the join through the canvas model', () => {
+    const back = workflowToAPL(aplToWorkflow(apl));
+    const fork = back.flow.nodes.find((n) => n.id === 'fork') as { rules?: { if?: string; then: string }[] };
+    expect(fork.rules?.map((r) => [r.if, r.then])).toEqual([
+      ["${path == 'C'}", 'taskC'],
+      ["${path == 'D'}", 'taskD'],
+    ]);
+    expect(back.flow.nodes.find((n) => n.id === 'join')?.next).toBe('end');
+  });
+});

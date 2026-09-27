@@ -328,8 +328,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
     nodes.push(wNode);
 
     // Build edges
-    if (aplNode.type === 'condition') {
-      aplNode.rules.forEach((r) => {
+    if (aplNode.type === 'condition' || (aplNode.type === 'inclusive' && aplNode.rules?.length)) {
+      // Condition and inclusive forks route through their rules; each rule is
+      // one labelled branch (an inclusive join declares `next` instead).
+      (aplNode.rules ?? []).forEach((r) => {
         edges.push({
           id: `e_${aplNode.id}_${r.then}`,
           source: aplNode.id,
