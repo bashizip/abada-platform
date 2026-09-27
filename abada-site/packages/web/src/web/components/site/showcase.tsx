@@ -1,0 +1,75 @@
+import { useEffect, useRef } from "react";
+import { Reveal, Section, SectionHead } from "./primitives";
+
+const STEPS = [
+  { n: "01", label: "Design", body: "The agent node declares its model, output schema and confidence threshold." },
+  { n: "02", label: "Run", body: "The worker calls the model outside the transaction; the engine checks the answer." },
+  { n: "03", label: "Approve", body: "A reviewer who did not author the process claims the task and signs off." },
+  { n: "04", label: "Audit", body: "The audit trail records each lock, rule, claim and completion." },
+];
+
+export function Showcase() {
+  const video = useRef<HTMLVideoElement | null>(null);
+
+  // Play only while on screen, and never for visitors who asked for less motion.
+  useEffect(() => {
+    const node = video.current;
+    if (!node) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) void node.play().catch(() => {});
+        else node.pause();
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <Section id="studio">
+      <SectionHead
+        eyebrow="Studio"
+        title={
+          <>
+            One governed process, <span className="text-signal">end to end.</span>
+          </>
+        }
+        lead="Recorded on a local 1.0.0-rc.6 stack: the Lead Triage starter is deployed, an agent classifies a lead, a second person approves it and the audit trail keeps the record."
+      />
+
+      <Reveal className="mt-12">
+        <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
+          <video
+            ref={video}
+            className="block aspect-video w-full"
+            poster="/videos/abada-studio-showcase-poster.jpg"
+            controls
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-label="Abada Studio walkthrough: design, run, approve and audit a lead-triage process"
+          >
+            <source src="/videos/abada-studio-showcase.webm" type="video/webm" />
+            <source src="/videos/abada-studio-showcase.mp4" type="video/mp4" />
+          </video>
+        </div>
+      </Reveal>
+
+      <div className="mt-8 grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline sm:grid-cols-2 lg:grid-cols-4">
+        {STEPS.map((step, i) => (
+          <Reveal key={step.n} delay={i * 70}>
+            <div className="h-full bg-ink p-5">
+              <p className="font-mono text-[11px] tracking-[0.16em] text-signal uppercase">
+                {step.n} · {step.label}
+              </p>
+              <p className="mt-3 text-[13.5px] leading-relaxed text-t2">{step.body}</p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+    </Section>
+  );
+}

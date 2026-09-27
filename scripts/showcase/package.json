@@ -1,0 +1,12 @@
+{
+  "name": "abada-studio-showcase",
+  "private": true,
+  "type": "module",
+  "description": "Records and renders the Abada Studio showcase video",
+  "scripts": {
+    "build": "./build.sh"
+  },
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

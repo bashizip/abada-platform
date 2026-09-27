@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils";
 import { GITHUB_URL, DOCS_URL } from "../../lib/links";
 
 const LINKS = [
+  { label: "Studio", href: "#studio" },
   { label: "Sovereignty", href: "#sovereignty" },
   { label: "Open source", href: "#open" },
   { label: "Governance", href: "#governed" },

@@ -153,6 +153,8 @@ async function optimizeVideo(
     }
     return;
   }
+  // Already within the target: a second lossy encode would only cost quality.
+  if (size <= VIDEO_WARN_BYTES) return;
 
   const ext = path.extname(file).toLowerCase();
   const input = await fs.readFile(file);
