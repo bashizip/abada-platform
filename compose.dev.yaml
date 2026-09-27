@@ -86,6 +86,7 @@ services:
       KC_HOSTNAME_STRICT: "false"
     volumes:
       - ./docker/keycloak/import/realm-dev.json:/opt/keycloak/data/import/realm-dev.json:ro
+      - ./docker/keycloak/themes/abada:/opt/keycloak/themes/abada:ro
     networks:
       - edge
       - data
