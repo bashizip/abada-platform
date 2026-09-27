@@ -36,7 +36,7 @@ export function Showcase() {
             One governed process, <span className="text-signal">end to end.</span>
           </>
         }
-        lead="Recorded on a local 1.0.0-rc.6 stack with the BPMN-notation canvas: the Lead Triage starter is auto-laid out and deployed, an agent classifies a lead, a second person approves it and the audit trail keeps the record."
+        lead="Recorded on a local 1.0.0-rc.6 stack with the BPMN-notation canvas: the Lead Triage starter is laid out vertically and deployed, an agent classifies a lead, a second person approves it and the audit trail keeps the record."
       />
 
       <Reveal className="mt-12">
@@ -50,7 +50,7 @@ export function Showcase() {
             loop
             playsInline
             preload="metadata"
-            aria-label="Abada Studio walkthrough on the BPMN-notation canvas: design, run, approve and audit a lead-triage process"
+            aria-label="Abada Studio walkthrough on the BPMN-notation canvas in vertical layout: design, run, approve and audit a lead-triage process"
           >
             <source src="/videos/abada-studio-showcase.webm" type="video/webm" />
             <source src="/videos/abada-studio-showcase.mp4" type="video/mp4" />

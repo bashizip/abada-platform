@@ -15,10 +15,10 @@ is allowed to change.
 
 <p align="center">
   <a href="https://abadaplatform.com/#studio">
-    <img src="docs/assets/studio-showcase.gif" alt="Abada Studio: a lead-triage process drawn in BPMN notation; an agent step is designed and deployed, a second person approves, the audit trail keeps the record" width="800">
+    <img src="docs/assets/studio-showcase.gif" alt="Abada Studio: a lead-triage process drawn top to bottom in BPMN notation; an agent step is designed and deployed, a second person approves, the audit trail keeps the record" width="800">
   </a>
   <br>
-  <sub>Studio on a local 1.0.0-rc.6 stack, drawn in BPMN notation: design, run, approve, audit.
+  <sub>Studio on a local 1.0.0-rc.6 stack, vertical layout in BPMN notation: design, run, approve, audit.
   <a href="https://abadaplatform.com/#studio">Watch in HD</a> ·
   <a href="docs/assets/studio-showcase.mp4?raw=true">Download MP4</a></sub>
 </p>
