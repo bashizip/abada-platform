@@ -14,13 +14,13 @@ is allowed to change.
 **Agents advise. Rules decide. Humans approve. PostgreSQL remembers.**
 
 <p align="center">
-  <a href="docs/assets/studio-showcase.mp4">
+  <a href="https://abadaplatform.com/#studio">
     <img src="docs/assets/studio-showcase.gif" alt="Abada Studio: design an agent step, deploy the process, a second person approves, the audit trail keeps the record" width="800">
   </a>
   <br>
   <sub>Studio on a local 1.0.0-rc.6 stack: design, run, approve, audit.
-  <a href="docs/assets/studio-showcase.mp4">MP4</a> ·
-  <a href="https://abadaplatform.com/#studio">HD on abadaplatform.com</a></sub>
+  <a href="https://abadaplatform.com/#studio">Watch in HD</a> ·
+  <a href="docs/assets/studio-showcase.mp4?raw=true">Download MP4</a></sub>
 </p>
 
 - **Sovereign.** No vendor cloud, no licence server, telemetry off by default. Models can
