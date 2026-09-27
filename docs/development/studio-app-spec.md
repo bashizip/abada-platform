@@ -253,6 +253,59 @@ workspace with folders and typed files.
   `completed`, `failed`, `waiting` — applied from engine facts after a live
   run; sample workflows no longer carry hardcoded statuses.
 
+#### Notation
+
+The canvas draws BPMN notation so a process reads without ambiguity:
+
+| Element | Drawn as |
+| --- | --- |
+| Start / end event | Circle with a thin (start) or thick (end) ring; title below |
+| Timer, message, signal catch | Double-ringed circle around the trigger icon |
+| Exclusive / parallel / inclusive / event-based gateway | Diamond with `X` / `+` / `O` / pentagon marker |
+| Agent, human, decision table, engine task, script | Fixed-size card: type accent and icon, title wrapping to two lines, one key-fact line (model and threshold, assignees, rule count, service, first script line) |
+| Sequence flow | Orthogonal edge with an arrowhead at the target |
+| Default flow (`else`) | Sequence flow with the BPMN slash near its source |
+| Outcome route (`on_error`, `on_low_confidence`, `on_invalid_output`) | Dashed edge leaving a boundary marker on the card (lightning for errors, shield for confidence/output); red for errors, saffron otherwise |
+
+- Condition labels drop the `${…}` wrapper, sit on their own branch and are
+  truncated at 32 characters (full text on hover).
+- Semantic zoom: below 55% zoom cards keep only icon and title and edge labels
+  are hidden.
+- Selecting a node highlights its connections and dims the other edges;
+  hovering an edge thickens it. Arrowheads, outlines and badges never change a
+  node's footprint, so edges always end on the shape outline.
+- Connection handles appear only when an editable node is hovered.
+
+#### Auto-layout
+
+The layout engine is ELK `layered` (`elkjs`, loaded on demand in a Web Worker,
+5 s timeout). The toolbar at the top left offers three modes; the last one
+used is remembered per browser:
+
+- **Horizontal** / **Vertical** — full layout, flow left → right or
+  top → bottom. Nodes enter ELK in the reverse post-order of a depth-first
+  walk from the start event, so the result is deterministic and loops are
+  exactly the edges back to an earlier step; ELK routes them around the flow.
+  The happy path gets straightness priority over outcome routes.
+- **Tidy** — keeps the author's arrangement (layers and order come from the
+  current positions) and only aligns, spaces and re-routes it.
+
+Positions are the only layout state that is saved: they become the APL
+`ui: { x, y }` hints. Edge routes are kept in memory. When a node moves, its
+edges fall back to an orthogonal router (loops pass underneath), and on
+reload the layout's routes are recovered when the saved positions are exactly
+what the layout produces. Opening a process keeps its saved positions; only a
+process with none (for example a fresh prompt-generated or pasted APL
+document) is auto-laid-out on open, and nodes APL never persists (event-gateway
+catch children) are placed between their neighbours. Read-only canvases
+(instance preview, AI diff review) lay out as a view only and save nothing.
+
+Canvas shortcuts (focus on the canvas): `Shift+L` re-applies the current
+layout mode, `Shift+1` fits the view, arrow keys nudge the selected node (8 px,
+32 px with `Shift`). Dragging shows alignment guides and snaps a node's centre
+line to the nearest node centre within 6 px on drop. An overview minimap is on
+by default above 12 nodes.
+
 ### 2. APL pipeline
 
 APL is specified in [`docs/reference/apl-specification.md`](../reference/apl-specification.md);
@@ -420,8 +473,9 @@ src/
 ├── data/
 │   └── sampleWorkflows.ts # starter workflows (no hardcoded run statuses)
 ├── features/
-│   ├── designer/        # Canvas, AplEditor, NodeRenderer (status + diff badges),
-│   │                    #   EdgeRenderer, AIDiffModal (full-focus PR review)
+│   ├── designer/        # Canvas (+ useDiagramLayout), nodes/ (event, gateway,
+│   │                    #   task shapes; status + diff badges), EdgeRenderer,
+│   │                    #   AplEditor, AIDiffModal (full-focus PR review)
 │   ├── dmn/             # DmnRuleInspector (matrix editor + APL YAML mirror)
 │   ├── run/             # DryRunPanel + DeployDialog
 │   ├── inbox/TaskInbox.tsx
@@ -433,6 +487,7 @@ src/
 │   │                    #   resolveRuleOutcome, stringifyDecisionTableYaml,
 │   │                    #   parseDecisionTableYaml, dmnConfigToAPLNode)
 │   ├── aiDiff/          # AI optimization proposal types + demo generator
+│   ├── layout/          # ELK auto-layout, node/edge geometry, fallback router
 │   ├── bpmn/            # compiler.ts (APL → BPMN), transpiler.ts (BPMN → APL)
 │   └── run/liveRun.ts   # payload defaults and engine-fact canvas overlays
 ├── components/          # Header (icon-only secondary actions, clean name +

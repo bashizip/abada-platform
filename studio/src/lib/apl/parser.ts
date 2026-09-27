@@ -1,5 +1,4 @@
 import * as yaml from 'yaml';
-import dagre from 'dagre';
 import {
   APLDocument,
   APLDecisionTableInput,
@@ -13,6 +12,7 @@ import {
 } from './types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, DMNConfig } from '@/types';
 import { getDefaultAgentModel } from '@/lib/agentModels';
+import { seedMissingPositions } from '@/lib/layout/seedLayout';
 
 /**
  * Parses an APL YAML string into an APLDocument object.
@@ -139,35 +139,6 @@ export const parseDecisionTableYaml = (node: any): DMNConfig => {
     outputs: [],
     rules: (table.rules || []).map((r, i) => ({ id: `r${i}`, ...resolveRuleOutcome(r) })),
   };
-};
-
-/**
- * Applies Dagre auto-layout to nodes that don't have x,y coordinates
- */
-const applyAutoLayout = (nodes: WorkflowNode[], edges: WorkflowEdge[]) => {
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'LR', align: 'UL', ranksep: 100, nodesep: 60 });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  nodes.forEach((node) => {
-    // React Flow visual size roughly 200x120
-    g.setNode(node.id, { width: 220, height: 120 });
-  });
-
-  edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
-  });
-
-  dagre.layout(g);
-
-  return nodes.map((node) => {
-    const n = g.node(node.id);
-    // Only apply layout if node doesn't have an explicit UI coordinate or if it's 0,0
-    if (node.x === 0 && node.y === 0) {
-      return { ...node, x: n.x - 110, y: n.y - 60 };
-    }
-    return node;
-  });
 };
 
 /** Maps a native APL decision-table block into the studio's DMNConfig model. */
@@ -328,8 +299,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
     nodes.push(wNode);
 
     // Build edges
-    if (aplNode.type === 'condition') {
-      aplNode.rules.forEach((r) => {
+    if (aplNode.type === 'condition' || (aplNode.type === 'inclusive' && aplNode.rules?.length)) {
+      // Condition and inclusive forks route through their rules; each rule is
+      // one labelled branch (an inclusive join declares `next` instead).
+      (aplNode.rules ?? []).forEach((r) => {
         edges.push({
           id: `e_${aplNode.id}_${r.then}`,
           source: aplNode.id,
@@ -378,7 +351,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
     }
   });
 
-  const layoutedNodes = applyAutoLayout(nodes, edges);
+  // Saved `ui` positions are kept as authored; only missing ones are seeded.
+  // With none saved, the canvas runs the full auto-layout (`layoutPending`).
+  const seeded = seedMissingPositions(nodes, edges);
 
   return {
     id: `wf-${Date.now()}`,
@@ -389,8 +364,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
     languageVersion: apl.version,
     version: '1.0.0',
     updatedAt: new Date().toISOString(),
-    nodes: layoutedNodes,
+    nodes: seeded.nodes,
     edges,
+    ...(seeded.layoutPending ? { layoutPending: true } : {}),
   };
 }
 

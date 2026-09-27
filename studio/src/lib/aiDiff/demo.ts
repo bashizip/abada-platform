@@ -88,7 +88,7 @@ export const buildDemoProposal = (wf: WorkflowFile): WorkflowDiffSnapshot => {
     const proposedEdges: WorkflowEdge[] = wf.edges
       .filter((e) => !(e.source === startNode.id && e.target === agentNode.id))
       .concat([
-        { id: `pre-${directEdge?.id || 'direct'}`, source: startNode.id, target: preFormatterId, label: 'Flow Connection' },
+        { id: `pre-${directEdge?.id || 'direct'}`, source: startNode.id, target: preFormatterId },
         { id: `post-${preFormatterId}`, source: preFormatterId, target: agentNode.id, label: 'Normalized' },
       ]);
     void directEdge;
