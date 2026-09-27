@@ -69,9 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Brand + clean file identifier (left, never shrinks) */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#9D4EDD] to-[#25201D] border border-[#9D4EDD]/40 flex items-center justify-center glow-amethyst-subtle overflow-hidden">
-              <img src="/favicon.svg" alt="" className="w-6 h-6" />
-            </div>
+            <img src="/abada-app-icon.svg" alt="" className="w-8 h-8 rounded-[7px] glow-amethyst-subtle" />
             <span className="font-bold text-sm tracking-wide text-[#EAE3D9] hidden lg:inline">
               ABADA
             </span>

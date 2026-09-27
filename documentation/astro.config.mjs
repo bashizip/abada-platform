@@ -17,6 +17,10 @@ export default defineConfig({
       title: 'Abada Platform',
       description: 'Agentic orchestration on a transactional ACID rail — Studio authoring, native APL, the durable Agent Worker and the governed Insight Engine.',
       favicon: '/favicon.svg',
+      logo: {
+        light: './src/assets/abada-mark-deep.svg',
+        dark: './src/assets/abada-mark.svg',
+      },
       lastUpdated: true,
       editLink: {
         baseUrl: 'https://github.com/bashizip/abada-platform/edit/dev/documentation/',
