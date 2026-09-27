@@ -140,13 +140,13 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
 
   return (
     <div
-      className={`abada-node-card relative w-52 bg-[#25201D] rounded-2xl border-2 ${styles.border} shadow-warm-lg z-10 group cursor-pointer transition-all ${
-        isSelected && !isLiveCurrent ? 'border-[#F4A261] ring-2 ring-[#F4A261]/40 ring-offset-2 ring-offset-[#1A1614] scale-[1.03]' : ''
+      className={`abada-node-card relative w-52 bg-[#25201D] rounded-2xl border-2 ${styles.border} shadow-warm-lg z-10 group cursor-pointer transition-shadow ${
+        isSelected && !isLiveCurrent ? 'border-[#F4A261] ring-2 ring-[#F4A261]/40 ring-offset-2 ring-offset-[#1A1614]' : ''
       } ${isAgentGlow ? 'glow-amethyst' : ''} ${
-        isActiveSim ? 'scale-105 transition-transform' : ''
+        isActiveSim ? 'ring-2 ring-[#9D4EDD]/60 ring-offset-2 ring-offset-[#1A1614]' : ''
       } ${
         isLiveCurrent
-          ? 'scale-105 transition-transform ring-2 ring-[#9D4EDD] ring-offset-2 ring-offset-[#1A1614] glow-amethyst'
+          ? 'ring-2 ring-[#9D4EDD] ring-offset-2 ring-offset-[#1A1614] glow-amethyst'
           : ''
       } ${data.diffKind ? diffRing : ''}`}
       title={data.diffAnnotation || undefined}
@@ -157,7 +157,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
           <span className="relative h-3.5 w-3.5 rounded-full border-2 border-[#EAE3D9] bg-[#9D4EDD]" />
         </span>
       )}
-      <Handle type="target" position={Position.Left} className="opacity-0" />
+      <Handle type="target" position={Position.Left} className="abada-handle" />
       
       <div className={`px-3 py-2.5 rounded-t-2xl ${styles.headerBg} border-b border-[#3A322E] flex items-center justify-between`}>
         <div className="flex items-center gap-2 min-w-0">
@@ -271,11 +271,7 @@ export const AbadaNode = memo(({ id, data, selected }: NodeProps<AbadaNodeType>)
         )}
       </div>
 
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        className={`w-5 h-5 rounded-full bg-[#1A1614] border-2 ${styles.border} flex items-center justify-center -mr-2.5 z-20`}
-      />
+      <Handle type="source" position={Position.Right} className="abada-handle" />
     </div>
   );
 });

@@ -10,6 +10,7 @@ import {
   Position,
 } from '@xyflow/react';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
+import { EDGE_COLORS, useMarkerUrl, type EdgeVariant } from './CanvasMarkers';
 
 type AbadaEdgeType = Edge<{
   label?: string;
@@ -89,7 +90,6 @@ export const AbadaEdge = memo(({
   sourcePosition,
   targetPosition,
   style = {},
-  markerEnd,
   data,
   selected
 }: EdgeProps<AbadaEdgeType>) => {
@@ -105,16 +105,11 @@ export const AbadaEdge = memo(({
   const isFlowing = data?.isFlowing;
   const isTakenPath = data?.isTakenPath;
   const hasToken = data?.hasToken;
-  const diffStroke = data?.diffKind === 'added'
-    ? '#90A955'
-    : data?.diffKind === 'modified'
-      ? '#F4A261'
-      : data?.diffKind === 'removed'
-        ? '#E76F51'
-        : null;
-  const strokeColor = diffStroke
-    ?? (isFlowing || isTakenPath ? '#9D4EDD' : (selected ? '#F4A261' : '#3A322E'));
-  const strokeWidth = isFlowing || isTakenPath || selected || diffStroke ? 3 : 2;
+  const variant: EdgeVariant = data?.diffKind
+    ?? (isFlowing || isTakenPath ? 'active' : (selected ? 'selected' : 'default'));
+  const strokeColor = EDGE_COLORS[variant];
+  const strokeWidth = variant === 'default' ? 1.75 : 2.5;
+  const markerEnd = useMarkerUrl(variant);
 
   return (
     <>
@@ -151,6 +146,7 @@ export const AbadaEdge = memo(({
           stroke: strokeColor,
           strokeWidth,
           strokeDasharray: data?.diffKind === 'removed' ? '6 4' : undefined,
+          strokeLinejoin: 'round',
         }}
         className={isFlowing ? 'animate-flow-dash' : ''}
       />

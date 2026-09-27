@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useId, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -15,6 +15,7 @@ import { Bot, Code2, CirclePlay, Trash2, Workflow, Lock, Unlock } from 'lucide-r
 import '@xyflow/react/dist/style.css';
 import { AbadaNode } from './NodeRenderer';
 import { AbadaEdge } from './EdgeRenderer';
+import { CanvasMarkers, MarkerPrefixProvider } from './CanvasMarkers';
 import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { savePreferredLayout, hasSavedLayout } from '@/lib/run/layoutPrefs';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
@@ -84,6 +85,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     abadaEdge: AbadaEdge,
   }), []);
 
+  const markerPrefix = `abada-canvas-${useId().replace(/:/g, '')}`;
+
   const reactFlowNodes: Node[] = useMemo(() =>
     rawNodes.map(node => ({
       id: node.id,
@@ -97,7 +100,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       },
       selected: selectedNodeId === node.id
     })),
-  [rawNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, onSelectNode]);
+  [rawNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId]);
 
   const reactFlowEdges: Edge[] = useMemo(() =>
     rawEdges.map(edge => {
@@ -115,7 +118,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             || (isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target)),
           hasToken,
         },
-        markerEnd: 'url(#arrowhead-saffron)'
       };
     }), [rawEdges, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges]);
 
@@ -144,30 +146,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   return (
     <div className="flex-1 h-full w-full bg-[#1A1614] relative">
-      <svg style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0 }}>
-        <defs>
-          <marker
-            id="arrowhead-saffron"
-            markerWidth="8"
-            markerHeight="8"
-            refX="7"
-            refY="4"
-            orient="auto"
-          >
-            <polygon points="0 0, 8 4, 0 8" fill="#F4A261" />
-          </marker>
-          <marker
-            id="arrowhead-amethyst"
-            markerWidth="8"
-            markerHeight="8"
-            refX="7"
-            refY="4"
-            orient="auto"
-          >
-            <polygon points="0 0, 8 4, 0 8" fill="#9D4EDD" />
-          </marker>
-        </defs>
-      </svg>
+      <CanvasMarkers prefix={markerPrefix} />
+      <MarkerPrefixProvider value={markerPrefix}>
 
       <ReactFlow
         nodes={reactFlowNodes}
@@ -201,6 +181,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           />
         )}
       </ReactFlow>
+      </MarkerPrefixProvider>
 
       {rawNodes.length === 0 && !readOnly && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">

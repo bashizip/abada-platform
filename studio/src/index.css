@@ -149,3 +149,23 @@
 .react-flow__node-abadaNode.dragging .abada-node-card {
   box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.42);
 }
+
+/*
+ * Connection handles are an editing affordance, not part of the diagram: they
+ * stay invisible (edges still anchor on them) and only appear on node hover
+ * while the canvas is editable, so no edge ever appears to start with a dot.
+ */
+.react-flow__handle.abada-handle {
+  width: 10px;
+  height: 10px;
+  min-width: 0;
+  min-height: 0;
+  background: #1A1614;
+  border: 2px solid #F4A261;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.react-flow__node:hover .react-flow__handle.abada-handle.connectable,
+.react-flow__handle.abada-handle.connectingfrom {
+  opacity: 1;
+}
