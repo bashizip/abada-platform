@@ -34,6 +34,10 @@ const B = new Recorder(bobPage, 'bob', out);
 const a = alicePage, b = bobPage;
 
 // ---- Scene 1-3: design, APL, deploy (alice)
+// Lay the starter out first (off camera): the canvas keeps saved positions,
+// and the deterministic auto-layout gives every take the same clean diagram.
+await a.getByRole('button', { name: 'Horizontal', exact: true }).click();
+await sleep(1500);
 await a.getByRole('button', { name: 'Fit View' }).click();
 await sleep(800);
 await A.start();

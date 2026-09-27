@@ -1,4 +1,5 @@
-import { WorkflowFile } from '@/types';
+import { WorkflowEdge, WorkflowFile } from '@/types';
+import { isOutcomeRouteEdge } from '@/lib/apl/parser';
 import {
   ActivityHistoryDTO,
   ActivityInstanceDTO,
@@ -49,6 +50,7 @@ export function deriveInstancePath(
   });
   const activePathEdgeIds = workflow.edges
     .filter((edge) => touched.has(edge.source) && touched.has(edge.target))
+    .filter((edge) => !isOutcomeRouteEdge(edge) || outcomeRouteTaken(edge, history))
     .map((edge) => edge.id);
   const takenIds = new Set(activePathEdgeIds);
   const activeIds = new Set(overlay.activeNodeIds);
@@ -75,6 +77,34 @@ export function deriveInstancePath(
     tokenEdgeIds,
     nextEdgeIds,
   };
+}
+
+/** Engine outcome recorded for each agent outcome-route label. */
+const ROUTE_OUTCOME: Record<string, string> = {
+  on_low_confidence: 'LOW_CONFIDENCE',
+  on_invalid_output: 'INVALID_OUTPUT',
+};
+
+/**
+ * An outcome route (`on_low_confidence`, `on_invalid_output`, `on_error`) is
+ * taken only when the engine recorded that outcome for its source: visiting
+ * both ends is not enough, since the normal successor may lead there too.
+ * Agent verdicts come from `EXTERNAL_TASK_COMPLETED.details.agentOutcome`;
+ * error routes from `EXTERNAL_TASK_BPMN_ERROR.details.routedTo` (and the
+ * error code when the route names one).
+ */
+function outcomeRouteTaken(edge: WorkflowEdge, history: ActivityHistoryDTO[]): boolean {
+  const label = edge.label ?? '';
+  const fromSource = history.filter((event) => event.activityId === edge.source);
+  if (label.startsWith('on_error')) {
+    const code = label.startsWith('on_error:') ? label.slice('on_error:'.length).trim() : null;
+    return fromSource.some((event) => event.eventType === 'EXTERNAL_TASK_BPMN_ERROR'
+      && event.details?.routedTo === edge.target
+      && (!code || event.details?.errorCode === code));
+  }
+  const outcome = ROUTE_OUTCOME[label];
+  return !!outcome && fromSource.some((event) => event.eventType === 'EXTERNAL_TASK_COMPLETED'
+    && event.details?.agentOutcome === outcome);
 }
 
 export type AuditTone = 'success' | 'failure' | 'running' | 'warning' | 'info' | 'external';
