@@ -1,6 +1,8 @@
 {
   "realm": "abada-dev",
   "enabled": true,
+  "displayName": "Abada Studio",
+  "loginTheme": "abada",
   "sslRequired": "none",
   "roles": {
     "realm": [

@@ -1,6 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Reveal, Section, SectionHead } from "./primitives";
 
+// Content hash of the current videos. /videos/* is cached for a week at the
+// edge, so a new take needs new URLs; scripts/showcase/build.sh --publish
+// updates this value.
+const VIDEO_VERSION = "b46893df33";
+const videoUrl = (file: string) => `/videos/${file}?v=${VIDEO_VERSION}`;
+
 const STEPS = [
   { n: "01", label: "Design", body: "The canvas draws the process in BPMN notation. The agent step declares its model, output schema and confidence threshold; its outcome routes are dashed." },
   { n: "02", label: "Run", body: "The worker calls the model outside the transaction and the engine checks the answer. The live view lights only the path the engine took." },
@@ -36,7 +42,7 @@ export function Showcase() {
             One governed process, <span className="text-signal">end to end.</span>
           </>
         }
-        lead="Recorded on a local 1.0.0-rc.6 stack with the BPMN-notation canvas: the Lead Triage starter is auto-laid out and deployed, an agent classifies a lead, a second person approves it and the audit trail keeps the record."
+        lead="Recorded on a local 1.0.0-rc.6 stack with the BPMN-notation canvas: the Lead Triage starter is laid out vertically and deployed, an agent classifies a lead, a second person approves it and the audit trail keeps the record."
       />
 
       <Reveal className="mt-12">
@@ -44,16 +50,16 @@ export function Showcase() {
           <video
             ref={video}
             className="block aspect-video w-full"
-            poster="/videos/abada-studio-showcase-poster.jpg"
+            poster={videoUrl("abada-studio-showcase-poster.jpg")}
             controls
             muted
             loop
             playsInline
             preload="metadata"
-            aria-label="Abada Studio walkthrough on the BPMN-notation canvas: design, run, approve and audit a lead-triage process"
+            aria-label="Abada Studio walkthrough on the BPMN-notation canvas in vertical layout: design, run, approve and audit a lead-triage process"
           >
-            <source src="/videos/abada-studio-showcase.webm" type="video/webm" />
-            <source src="/videos/abada-studio-showcase.mp4" type="video/mp4" />
+            <source src={videoUrl("abada-studio-showcase.webm")} type="video/webm" />
+            <source src={videoUrl("abada-studio-showcase.mp4")} type="video/mp4" />
           </video>
         </div>
       </Reveal>

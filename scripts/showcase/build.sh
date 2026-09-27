@@ -3,7 +3,7 @@
 # Records the Abada Studio showcase against the running dev stack and renders
 # the site and README videos.
 #
-# Usage: ./scripts/showcase/build.sh [--publish]
+# Usage: [SHOWCASE_LAYOUT=Vertical] ./scripts/showcase/build.sh [--publish]
 #   --publish   also copy the site videos and the README assets (docs/assets) into the repo
 #
 set -euo pipefail
@@ -43,7 +43,7 @@ ffmpeg -v error -y -i "$M" -c:v libvpx-vp9 -b:v 0 -crf 34 -row-mt 1 -deadline go
   "$WORK/out/abada-studio-showcase.webm"
 ffmpeg -v error -y -i "$M" -vf "scale=1280:-2:flags=lanczos,fps=30" -c:v libx264 -preset slow -crf 25 \
   -pix_fmt yuv420p -movflags +faststart -an "$WORK/out/abada-studio-showcase-readme.mp4"
-ffmpeg -v error -y -ss 9 -i "$M" -frames:v 1 -q:v 2 "$WORK/out/abada-studio-showcase-poster.jpg"
+ffmpeg -v error -y -ss "${SHOWCASE_POSTER_AT:-9}" -i "$M" -frames:v 1 -q:v 2 "$WORK/out/abada-studio-showcase-poster.jpg"
 # GitHub only plays uploaded video inline, so the README shows an animated GIF.
 ffmpeg -v error -y -i "$M" -vf "fps=8,scale=800:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
   -loop 0 "$WORK/out/abada-studio-showcase-readme.gif"
@@ -53,6 +53,11 @@ if $PUBLISH; then
     "$ROOT/abada-site/packages/web/public/videos/"
   cp "$WORK/out/abada-studio-showcase-readme.gif" "$ROOT/docs/assets/studio-showcase.gif"
   cp "$WORK/out/abada-studio-showcase-readme.mp4" "$ROOT/docs/assets/studio-showcase.mp4"
-  echo "Copied site videos into abada-site/packages/web/public/videos/ and README assets into docs/assets/"
+  # New URLs for the new take: the edge caches /videos/* for a week.
+  VERSION="$(shasum -a 256 "$WORK/out/abada-studio-showcase.mp4" | cut -c1-10)"
+  sed -i.bak -E "s/^const VIDEO_VERSION = \".*\";/const VIDEO_VERSION = \"$VERSION\";/" \
+    "$ROOT/abada-site/packages/web/src/web/components/site/showcase.tsx"
+  rm -f "$ROOT/abada-site/packages/web/src/web/components/site/showcase.tsx.bak"
+  echo "Copied site videos into abada-site/packages/web/public/videos/ (version $VERSION) and README assets into docs/assets/"
 fi
 ls -lh "$WORK/out"

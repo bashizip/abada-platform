@@ -1,0 +1,463 @@
+/*
+ * Abada login theme. Mirrors Studio's canvas (studio/src/index.css): warm
+ * charcoal background with the canvas dot grid, mocha cards, linen text and
+ * the amethyst primary action. Loaded after Keycloak's login.css.
+ */
+
+:root {
+  --abada-bg-charcoal: #1A1614;
+  --abada-surface-mocha: #25201D;
+  --abada-surface-mocha-hover: #2F2926;
+  --abada-surface-mocha-border: #3A322E;
+  --abada-saffron: #F4A261;
+  --abada-amethyst: #9D4EDD;
+  --abada-amethyst-hover: #B56EF2;
+  --abada-desert-rose: #E76F51;
+  --abada-mineral-teal: #2A9D8F;
+  --abada-warm-linen: #EAE3D9;
+  --abada-sand: #A89F91;
+  --abada-font: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'Geist', 'Segoe UI', Roboto, sans-serif;
+  --abada-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Re-point PatternFly 4 tokens so stock components pick up the palette. */
+  --pf-global--FontFamily--sans-serif: var(--abada-font);
+  --pf-global--FontFamily--heading--sans-serif: var(--abada-font);
+  --pf-global--Color--100: var(--abada-warm-linen);
+  --pf-global--Color--200: var(--abada-sand);
+  --pf-global--BackgroundColor--100: var(--abada-surface-mocha);
+  --pf-global--primary-color--100: var(--abada-amethyst);
+  --pf-global--primary-color--200: var(--abada-amethyst-hover);
+  --pf-global--link--Color: var(--abada-saffron);
+  --pf-global--link--Color--hover: #F7B985;
+  --pf-global--danger-color--100: var(--abada-desert-rose);
+  --pf-global--BorderColor--100: var(--abada-surface-mocha-border);
+}
+
+/* ---------- Page: the Studio canvas ---------- */
+
+html.login-pf,
+.login-pf body {
+  background: var(--abada-bg-charcoal);
+}
+
+.login-pf body {
+  min-height: 100%;
+  color: var(--abada-warm-linen);
+  font-family: var(--abada-font);
+  background-color: var(--abada-bg-charcoal);
+  background-image:
+    radial-gradient(ellipse 60% 45% at 50% 0%, rgba(157, 78, 221, 0.14), transparent 70%),
+    radial-gradient(circle, rgba(168, 159, 145, 0.12) 1.2px, transparent 1.2px);
+  background-size: 100% 100%, 24px 24px;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+.login-pf-page {
+  padding: 48px 16px 64px;
+}
+
+/* ---------- Brand header ---------- */
+
+#kc-header {
+  color: var(--abada-warm-linen);
+}
+
+#kc-header-wrapper {
+  padding: 24px 0 28px;
+  font-size: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  text-align: center;
+}
+
+.abada-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.abada-brand-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(157, 78, 221, 0.4);
+  background: linear-gradient(135deg, var(--abada-amethyst), var(--abada-surface-mocha));
+  box-shadow: 0 0 12px rgba(157, 78, 221, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.abada-brand-mark img {
+  width: 36px;
+  height: 36px;
+}
+
+.abada-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+#kc-header .abada-brand-name {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--abada-warm-linen);
+}
+
+#kc-header .abada-brand-product {
+  font-size: 11px;
+  color: var(--abada-sand);
+}
+
+#kc-header .abada-tagline {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--abada-sand);
+}
+
+/* ---------- Card ---------- */
+
+.card-pf {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 28px 28px 24px;
+  color: var(--abada-warm-linen);
+  background: var(--abada-surface-mocha);
+  border: 1px solid var(--abada-surface-mocha-border);
+  border-radius: 16px;
+  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.55), 0 0 1px rgba(244, 162, 97, 0.12);
+}
+
+.login-pf-page .login-pf-header {
+  margin-bottom: 20px;
+}
+
+#kc-page-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--abada-warm-linen);
+  text-align: left;
+}
+
+#kc-content-wrapper {
+  margin-top: 0;
+}
+
+.login-pf-page .login-pf-signup,
+.card-pf p,
+.instruction {
+  font-size: 12px;
+  color: var(--abada-sand);
+}
+
+/* ---------- Form controls ---------- */
+
+.card-pf .form-group {
+  margin-bottom: 16px;
+}
+
+.card-pf label,
+.card-pf .pf-c-form__label,
+.card-pf .pf-c-form__label-text,
+.card-pf .control-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--abada-sand);
+}
+
+.card-pf .pf-c-form-control,
+.card-pf .form-control,
+.card-pf input[type="text"],
+.card-pf input[type="password"],
+.card-pf input[type="email"],
+.card-pf select,
+.card-pf textarea {
+  height: auto;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 12px;
+  font-family: var(--abada-font);
+  font-size: 13px;
+  color: var(--abada-warm-linen);
+  background: var(--abada-bg-charcoal);
+  border: 1px solid var(--abada-surface-mocha-border);
+  border-radius: 8px;
+  box-shadow: none;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.card-pf .pf-c-form-control:hover,
+.card-pf .form-control:hover {
+  border-color: #4A403A;
+}
+
+.card-pf .pf-c-form-control:focus,
+.card-pf .form-control:focus,
+.card-pf input:focus,
+.card-pf select:focus,
+.card-pf textarea:focus {
+  outline: none;
+  border-color: rgba(157, 78, 221, 0.7);
+  box-shadow: 0 0 0 3px rgba(157, 78, 221, 0.18);
+}
+
+/* PatternFly draws focus/invalid state with a background underline. */
+.card-pf .pf-c-form-control,
+.card-pf .pf-c-form-control:focus,
+.card-pf .pf-c-form-control[aria-invalid="true"] {
+  --pf-c-form-control--BorderBottomColor: transparent;
+  --pf-c-form-control--focus--BorderBottomColor: transparent;
+  --pf-c-form-control--invalid--BorderBottomColor: transparent;
+  --pf-c-form-control--invalid--BackgroundUrl: none;
+  background-image: none;
+}
+
+.card-pf .pf-c-form-control[aria-invalid="true"] {
+  border-color: rgba(231, 111, 81, 0.6);
+}
+
+.card-pf input:-webkit-autofill {
+  -webkit-text-fill-color: var(--abada-warm-linen);
+  -webkit-box-shadow: 0 0 0 1000px var(--abada-bg-charcoal) inset;
+  caret-color: var(--abada-warm-linen);
+}
+
+.card-pf input[type="checkbox"],
+.card-pf input[type="radio"] {
+  accent-color: var(--abada-amethyst);
+}
+
+.card-pf .pf-c-form__helper-text.pf-m-error,
+.card-pf .kc-feedback-text.required,
+.card-pf span.required {
+  font-size: 11px;
+  color: var(--abada-desert-rose);
+}
+
+/* ---------- Buttons ---------- */
+
+.card-pf .pf-c-button,
+.card-pf .btn {
+  font-family: var(--abada-font);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 10px 24px;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+}
+
+.card-pf .pf-c-button::after {
+  border: none;
+}
+
+.card-pf .pf-c-button.pf-m-primary,
+.card-pf .btn-primary {
+  color: #fff;
+  background: var(--abada-amethyst);
+  border: 1px solid transparent;
+  box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.45);
+}
+
+.card-pf .pf-c-button.pf-m-primary:hover,
+.card-pf .pf-c-button.pf-m-primary:focus,
+.card-pf .btn-primary:hover,
+.card-pf .btn-primary:focus {
+  background: var(--abada-amethyst-hover);
+}
+
+.card-pf .pf-c-button.pf-m-primary:focus-visible,
+.card-pf .btn:focus-visible {
+  outline: 2px solid rgba(157, 78, 221, 0.6);
+  outline-offset: 2px;
+}
+
+.card-pf .btn-default,
+.card-pf .pf-c-button.pf-m-secondary,
+.card-pf .pf-c-button.pf-m-control {
+  color: var(--abada-warm-linen);
+  background: var(--abada-bg-charcoal);
+  border: 1px solid var(--abada-surface-mocha-border);
+  box-shadow: none;
+}
+
+.card-pf .btn-default:hover,
+.card-pf .pf-c-button.pf-m-secondary:hover,
+.card-pf .pf-c-button.pf-m-control:hover {
+  background: var(--abada-surface-mocha-hover);
+}
+
+#kc-form-buttons {
+  margin-top: 8px;
+}
+
+/* ---------- Links & options ---------- */
+
+.login-pf a,
+.card-pf a {
+  color: var(--abada-saffron);
+}
+
+.login-pf a:hover,
+.card-pf a:hover {
+  color: #F7B985;
+  text-decoration: none;
+}
+
+#kc-form-options,
+.login-pf-settings,
+#kc-form-options .checkbox label {
+  font-size: 12px;
+  color: var(--abada-sand);
+}
+
+#kc-registration,
+#kc-info-wrapper {
+  font-size: 12px;
+  color: var(--abada-sand);
+}
+
+.login-pf-page .login-pf-signup {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--abada-surface-mocha-border);
+}
+
+/* Re-authentication: "alice [restart]" row. */
+#kc-attempted-username {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--abada-warm-linen);
+}
+
+#reset-login .kc-login-tooltip i {
+  color: var(--abada-sand);
+}
+
+#reset-login .kc-tooltip-text {
+  color: var(--abada-warm-linen);
+  background: var(--abada-bg-charcoal);
+  border: 1px solid var(--abada-surface-mocha-border);
+}
+
+/* ---------- Alerts ---------- */
+
+.card-pf .pf-c-alert {
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--abada-warm-linen);
+  background: rgba(42, 157, 143, 0.1);
+  border: 1px solid rgba(42, 157, 143, 0.3);
+  border-radius: 8px;
+  box-shadow: none;
+  --pf-c-alert--BorderTopWidth: 0;
+}
+
+.card-pf .pf-c-alert.pf-m-danger {
+  background: rgba(231, 111, 81, 0.1);
+  border-color: rgba(231, 111, 81, 0.3);
+}
+
+.card-pf .pf-c-alert.pf-m-danger .pf-c-alert__icon,
+.card-pf .pf-c-alert.pf-m-danger .pf-c-alert__title {
+  color: var(--abada-desert-rose);
+}
+
+.card-pf .pf-c-alert.pf-m-warning {
+  background: rgba(244, 162, 97, 0.1);
+  border-color: rgba(244, 162, 97, 0.3);
+}
+
+.card-pf .pf-c-alert.pf-m-warning .pf-c-alert__icon,
+.card-pf .pf-c-alert.pf-m-warning .pf-c-alert__title {
+  color: var(--abada-saffron);
+}
+
+.card-pf .pf-c-alert.pf-m-success .pf-c-alert__icon,
+.card-pf .pf-c-alert.pf-m-info .pf-c-alert__icon {
+  color: var(--abada-mineral-teal);
+}
+
+.card-pf .pf-c-alert__title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--abada-warm-linen);
+}
+
+/* ---------- Social providers & authenticator selection ---------- */
+
+#kc-social-providers hr {
+  border-color: var(--abada-surface-mocha-border);
+}
+
+#kc-social-providers h4 {
+  font-size: 12px;
+  color: var(--abada-sand);
+}
+
+.card-pf .kc-social-item,
+.card-pf .select-auth-box-parent {
+  color: var(--abada-warm-linen);
+  background: var(--abada-bg-charcoal);
+  border: 1px solid var(--abada-surface-mocha-border);
+  border-radius: 12px;
+}
+
+.card-pf .select-auth-box-parent:hover {
+  background: var(--abada-surface-mocha-hover);
+}
+
+.card-pf .select-auth-box-desc,
+.card-pf .kc-social-gray {
+  color: var(--abada-sand);
+}
+
+.card-pf .pf-c-tile {
+  color: var(--abada-warm-linen);
+  background: var(--abada-bg-charcoal);
+  border-radius: 12px;
+}
+
+/* Locale dropdown */
+#kc-locale-dropdown a,
+#kc-current-locale-link {
+  color: var(--abada-sand);
+}
+
+#kc-locale-dropdown ul {
+  background: var(--abada-surface-mocha);
+  border: 1px solid var(--abada-surface-mocha-border);
+  border-radius: 8px;
+}
+
+/* Keycloak's small-screen rules left-align a bold grey header and flatten
+ * the card; keep the Studio look instead. */
+@media (max-width: 767px) {
+  .login-pf-page {
+    padding-top: 24px;
+  }
+
+  #kc-header {
+    text-align: center;
+  }
+
+  #kc-header-wrapper {
+    padding: 16px 0 24px;
+    font-size: inherit;
+    font-weight: 400;
+    color: var(--abada-warm-linen);
+  }
+
+  .login-pf-page .card-pf {
+    padding: 24px 20px 20px;
+    border: 1px solid var(--abada-surface-mocha-border);
+    box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.55);
+  }
+}

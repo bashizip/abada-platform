@@ -2,12 +2,28 @@
 // Usage: node record.mjs <outDir>
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
-import { Recorder, signIn, nodesBox } from './recorder.mjs';
+import { Recorder, signIn, nodesBox, frameGraph } from './recorder.mjs';
+
+// Canvas layout for the take: Horizontal (default) or Vertical.
+const LAYOUT = process.env.SHOWCASE_LAYOUT || 'Horizontal';
+const VERTICAL = LAYOUT === 'Vertical';
 
 const out = process.argv[2] || 'take';
 fs.rmSync(out, { recursive: true, force: true });
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--force-device-scale-factor=2'] });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Frames the diagram in the live-instance view, clear of its banner and status bar. */
+async function frameLive(page) {
+  const flow = await page.locator('.react-flow').first().boundingBox();
+  const banner = await page.getByText('Live Instance', { exact: true }).first()
+    .evaluate((el) => el.closest('[class*="absolute"]')?.getBoundingClientRect().bottom ?? null).catch(() => null);
+  const status = await page.getByText('Current activity', { exact: false }).first()
+    .evaluate((el) => el.closest('[class*="absolute"], footer, [class*="border-t"]')?.getBoundingClientRect().top ?? null).catch(() => null);
+  const insetTop = banner ? Math.max(24, banner - flow.y + 12) : 64;
+  const insetBottom = status && status < flow.y + flow.height ? flow.y + flow.height - status + 12 : 24;
+  return { flow, banner, status, ...(await frameGraph(page, { insetTop, insetBottom })) };
+}
 
 // ---- Prep: Bob's inbox must be empty so the recorded task is the only one.
 {
@@ -36,10 +52,18 @@ const a = alicePage, b = bobPage;
 // ---- Scene 1-3: design, APL, deploy (alice)
 // Lay the starter out first (off camera): the canvas keeps saved positions,
 // and the deterministic auto-layout gives every take the same clean diagram.
-await a.getByRole('button', { name: 'Horizontal', exact: true }).click();
+await a.getByRole('button', { name: LAYOUT, exact: true }).click();
 await sleep(1500);
 await a.getByRole('button', { name: 'Fit View' }).click();
 await sleep(800);
+// Fit View also fills the canvas under the floating prompt bar; keep the whole
+// diagram in the clear area instead.
+if (VERTICAL) {
+  const barTop = await a.getByRole('button', { name: 'Architect Workflow' })
+    .evaluate((el) => el.closest('[class*="absolute"]')?.getBoundingClientRect().top ?? 790);
+  const flow = await a.locator('.react-flow').first().boundingBox();
+  console.log('design frame', JSON.stringify(await frameGraph(a, { insetTop: 56, insetBottom: flow.y + flow.height - barTop + 14 })));
+}
 await A.start();
 A.mark('s1');
 await A.hold(900);
@@ -76,6 +100,7 @@ A.mark('deployed');
 await sleep(1200);
 // The audit stream panel overlaps the inspector; dismiss it.
 await a.getByText('Real-Time Audit Stream').locator('xpath=ancestor::div[.//button][1]').getByRole('button').last().click().catch(() => {});
+if (VERTICAL) console.log('live frame', JSON.stringify(await frameLive(a)));
 await A.camera(await nodesBox(a), { pad: 30 });
 A.speed(2.5);
 // Wait for the agent to finish and the human task to open.
@@ -151,6 +176,7 @@ await A.moveTo(row, { offset: { x: 0.2, y: 0.5 } });
 await A.hold(1400);
 await A.camera('full');
 await A.click(row.locator('button[title="View Canvas"]'), { after: 1500 });
+if (VERTICAL) console.log('done frame', JSON.stringify(await frameLive(a)));
 await A.click(a.getByRole('button', { name: 'Audit Trail' }), { after: 800 });
 await A.camera({ x: 1170, y: 95, width: 430, height: 420 }, { pad: 10 });
 await A.moveTo({ x: 1380, y: 520 });

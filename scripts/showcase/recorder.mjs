@@ -124,6 +124,49 @@ export async function nodesBox(page) {
   });
 }
 
+/**
+ * Zooms and pans the React Flow canvas so every node fits the clear part of
+ * the canvas: `insetTop`/`insetBottom` (CSS px) keep it off the toolbars that
+ * float over the canvas. Fit View would hide nodes behind them.
+ */
+export async function frameGraph(page, { insetTop = 56, insetBottom = 24, insetX = 40, maxZoom = 1 } = {}) {
+  const flow = await page.locator('.react-flow').first().boundingBox();
+  const area = {
+    top: flow.y + insetTop,
+    bottom: flow.y + flow.height - insetBottom,
+    left: flow.x + insetX,
+    right: flow.x + flow.width - insetX,
+  };
+  const zoomOf = () => page.evaluate(() => {
+    const m = getComputedStyle(document.querySelector('.react-flow__viewport')).transform.match(/matrix\(([^,]+)/);
+    return m ? parseFloat(m[1]) : 1;
+  });
+  for (let i = 0; i < 4; i++) {
+    const box = await nodesBox(page);
+    const current = await zoomOf();
+    const fit = Math.min((area.bottom - area.top) / box.height, (area.right - area.left) / box.width);
+    const target = Math.min(maxZoom, current * fit);
+    if (Math.abs(target / current - 1) < 0.01) break;
+    // d3-zoom scales by 2^(-deltaY * 0.002) per wheel event (pixel mode).
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -Math.log2(target / current) / 0.002);
+    await page.waitForTimeout(350);
+  }
+  // Pan by dragging empty canvas so the diagram sits centred in the clear area.
+  const box = await nodesBox(page);
+  const dx = (area.left + area.right) / 2 - (box.x + box.width / 2);
+  const dy = (area.top + area.bottom) / 2 - (box.y + box.height / 2);
+  if (Math.hypot(dx, dy) > 1) {
+    const start = { x: flow.x + 24, y: flow.y + flow.height / 2 };
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + dx, start.y + dy, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+  }
+  return { area, box: await nodesBox(page), zoom: await zoomOf() };
+}
+
 export async function signIn(browser, user, { viewport = { width: 1600, height: 900 }, scale = 2 } = {}) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: scale, colorScheme: 'dark' });
   const page = await ctx.newPage();

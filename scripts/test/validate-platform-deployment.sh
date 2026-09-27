@@ -42,6 +42,14 @@ jq -e '
     and (.credentials | any(.type == "password" and .value == "alice" and .temporary == false))
   ))
 ' "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null
+# The development realm signs in through the Studio-styled login theme, which
+# the dev stack mounts and the release bundle ships.
+jq -e '.loginTheme == "abada"' "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null
+for theme_file in theme.properties template.ftl resources/css/abada.css resources/img/logo.svg messages/messages_en.properties; do
+  test -f "$ROOT_DIR/docker/keycloak/themes/abada/login/$theme_file"
+done
+grep -q 'docker/keycloak/themes/abada:/opt/keycloak/themes/abada' "$ROOT_DIR/compose.dev.yaml"
+grep -q 'docker/keycloak/themes/abada' "$ROOT_DIR/release/build-bundle.sh"
 if jq -e '.clients[]? | select(.clientId == "abada-frontend") | (.redirectUris + .webOrigins) | any(test("5602|5603|tenda|orun"))' \
   "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null; then
   echo "Development realm still trusts retired Tenda/Orun frontend origins" >&2
