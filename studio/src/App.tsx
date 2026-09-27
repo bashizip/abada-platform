@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
 import { Canvas } from '@/features/designer/Canvas';
@@ -37,7 +37,6 @@ import { useDryRunSimulation } from '@/hooks/useDryRunSimulation';
 import { useAplAuthoringState } from '@/hooks/useAplAuthoringState';
 import { deriveDefaultPayload } from '@/lib/run/liveRun';
 import { getDefaultAgentModel, initAgentModel } from '@/lib/agentModels';
-import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
@@ -117,17 +116,6 @@ export default function App() {
     };
   }, []);
 
-  const laidOutWorkflowIds = useRef(new Set<string>());
-  useLayoutEffect(() => {
-    if (!activeWorkflowId && workflows.length === 0) return;
-    if (laidOutWorkflowIds.current.has(activeWorkflowId)) return;
-    laidOutWorkflowIds.current.add(activeWorkflowId);
-    updateActiveWorkflow((wf) => ({
-      ...wf,
-      nodes: autoLayoutWorkflow(wf.nodes, wf.edges),
-    }));
-  }, [activeWorkflowId, workflows.length, updateActiveWorkflow]);
-
   const handleNodeMove = (id: string, x: number, y: number) => {
     updateActiveWorkflow((wf) => ({
       ...wf,
@@ -175,7 +163,7 @@ export default function App() {
   };
 
   const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
-    updateActiveWorkflow((wf) => ({ ...wf, nodes: layoutedNodes }));
+    updateActiveWorkflow((wf) => ({ ...wf, nodes: layoutedNodes, layoutPending: false }));
   };
 
   const handleUpdateNode = (updatedNode: WorkflowNode) => {
@@ -258,7 +246,7 @@ export default function App() {
     if (currentWorkflow.edges.some((e) => e.source === sourceId && e.target === targetId)) return;
     updateActiveWorkflow((wf) => ({
       ...wf,
-      edges: [...wf.edges, { id: `e-${Date.now()}`, source: sourceId, target: targetId, label: 'Flow Connection' }],
+      edges: [...wf.edges, { id: `e-${Date.now()}`, source: sourceId, target: targetId }],
     }));
   };
 
@@ -583,6 +571,7 @@ export default function App() {
                       key={displayedWorkflow.id}
                       nodes={displayedWorkflow.nodes}
                       edges={displayedWorkflow.edges}
+                      layoutPending={displayedWorkflow.layoutPending}
                       selectedNodeId={liveSelectedNodeId}
                       onSelectNode={setLiveSelectedNodeId}
                       onNodeMove={handleNodeMove}
@@ -627,6 +616,7 @@ export default function App() {
                     key={displayedWorkflow.id}
                     nodes={displayedWorkflow.nodes}
                     edges={displayedWorkflow.edges}
+                    layoutPending={displayedWorkflow.layoutPending}
                     selectedNodeId={selectedNodeId}
                     onSelectNode={handleSelectNode}
                     onNodeMove={handleNodeMove}

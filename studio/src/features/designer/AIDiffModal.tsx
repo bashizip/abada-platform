@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  ConnectionMode,
   Node,
   Edge,
 } from '@xyflow/react';
@@ -11,9 +12,12 @@ import '@xyflow/react/dist/style.css';
 import { WorkflowDiffSnapshot, getChangeKindForNode, getAnnotationForNode, getChangeKindForEdge } from '@/lib/aiDiff/types';
 import { workflowToAPL, stringifyAPLYaml } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
-import { AbadaNode } from './NodeRenderer';
+import { canvasNodeTypes, outcomeKindsBySource, toCanvasNode } from './nodes';
 import { AbadaEdge } from './EdgeRenderer';
-import { CanvasMarkers, MarkerPrefixProvider } from './CanvasMarkers';
+import { CanvasMarkers } from './CanvasMarkers';
+import { CanvasViewContext, MarkerPrefixProvider, type CanvasView } from './canvasContext';
+import { edgeKindOf, inferDirection, outcomeSlots, parallelLanes } from '@/lib/layout/edgeGeometry';
+import { type LayoutResult, applyPositions, computeLayout } from '@/lib/layout/elkLayout';
 
 interface AIDiffModalProps {
   snapshot: WorkflowDiffSnapshot;
@@ -68,42 +72,61 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [onExit]);
 
-  const nodeTypes = useMemo(() => ({ abadaNode: AbadaNode as any }), []);
   const edgeTypes = useMemo(() => ({ abadaEdge: AbadaEdge }), []);
   const markerPrefix = `abada-diff-${useId().replace(/:/g, '')}`;
+  // Proposals add nodes wherever the generator put them: the review graph is
+  // auto-laid-out for reading (view only — nothing is saved from here).
+  const [laid, setLaid] = useState<LayoutResult | null>(null);
+  useEffect(() => {
+    let live = true;
+    computeLayout(proposedNodes, proposedEdges, inferDirection(proposedNodes, proposedEdges))
+      .then((result) => { if (live) setLaid(result); })
+      .catch(() => { if (live) setLaid(null); });
+    return () => { live = false; };
+  }, [proposedNodes, proposedEdges]);
 
-  const graphNodes: Node[] = useMemo(
-    () =>
-      proposedNodes.map((node) => ({
-        id: node.id,
-        type: 'abadaNode',
-        position: { x: node.x, y: node.y },
-        data: {
-          ...node,
-          isActiveSim: false,
-          diffKind: getChangeKindForNode(snapshot, node.id),
-          diffAnnotation: getChangeKindForNode(snapshot, node.id) ? getAnnotationForNode(snapshot, node.id) : undefined,
-        },
+  const view: CanvasView = useMemo(
+    () => ({
+      direction: laid?.direction ?? inferDirection(proposedNodes, proposedEdges),
+      readOnly: true,
+      layout: laid ? { positions: laid.positions, routes: laid.routes } : null,
+    }),
+    [laid, proposedNodes, proposedEdges],
+  );
+
+  const graphNodes: Node[] = useMemo(() => {
+    const outcomeKinds = outcomeKindsBySource(proposedEdges);
+    const nodes = laid ? applyPositions(proposedNodes, laid.positions) : proposedNodes;
+    return nodes.map((node) => {
+      const diffKind = getChangeKindForNode(snapshot, node.id);
+      return toCanvasNode(node, {
+        isActiveSim: false,
+        diffKind,
+        diffAnnotation: diffKind ? getAnnotationForNode(snapshot, node.id) : undefined,
+        outcomeKinds: outcomeKinds.get(node.id),
         selectable: false,
-      })),
-    [snapshot, proposedNodes]
-  );
+      });
+    });
+  }, [snapshot, proposedNodes, proposedEdges, laid]);
 
-  const graphEdges: Edge[] = useMemo(
-    () =>
-      proposedEdges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        type: 'abadaEdge',
-        data: {
-          label: edge.label,
-          isFlowing: false,
-          diffKind: getChangeKindForEdge(snapshot, edge.id),
-        },
-      })),
-    [snapshot, proposedEdges]
-  );
+  const graphEdges: Edge[] = useMemo(() => {
+    const slots = outcomeSlots(proposedEdges);
+    const lanes = parallelLanes(proposedEdges);
+    return proposedEdges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: 'abadaEdge',
+      data: {
+        label: edge.label,
+        kind: edgeKindOf(edge),
+        outcomeSlot: slots.get(edge.id),
+        lane: lanes.get(edge.id),
+        isFlowing: false,
+        diffKind: getChangeKindForEdge(snapshot, edge.id),
+      },
+    }));
+  }, [snapshot, proposedEdges]);
 
   const baseYaml = useMemo(
     () => stringifyAPLYaml(workflowToAPL({ ...baseWorkflow, nodes: baseNodes, edges: baseEdges })),
@@ -217,10 +240,13 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
               <div className="flex-1 relative mt-2">
                 <CanvasMarkers prefix={markerPrefix} />
                 <MarkerPrefixProvider value={markerPrefix}>
+                <CanvasViewContext.Provider value={view}>
                 <ReactFlow
+                  key={laid ? 'laid-out' : 'as-proposed'}
                   nodes={graphNodes}
                   edges={graphEdges}
-                  nodeTypes={nodeTypes}
+                  nodeTypes={canvasNodeTypes}
+                  connectionMode={ConnectionMode.Loose}
                   edgeTypes={edgeTypes}
                   fitView
                   minZoom={0.2}
@@ -232,6 +258,7 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
                 >
                   <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />
                 </ReactFlow>
+                </CanvasViewContext.Provider>
                 </MarkerPrefixProvider>
               </div>
             ) : (

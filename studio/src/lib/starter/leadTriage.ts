@@ -1,6 +1,6 @@
 import { Project, ProjectAPI, ProjectDocument, ProjectTreeNode } from '@/api/projects';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
-import { autoLayoutWorkflow } from '@/lib/layout/autoLayout';
+import { applyPositions, computeLayout } from '@/lib/layout/elkLayout';
 
 export const STARTER_PROJECT_SLUG = 'abada-starter';
 export const STARTER_PROCESS_KEY = 'lead_triage';
@@ -262,9 +262,15 @@ export async function ensureLeadTriageStarter(available: Project[]): Promise<Sta
   let document = documents.find((candidate) => candidate.processKey === STARTER_PROCESS_KEY);
   if (!document) {
     const parsed = aplToWorkflow(parseAPLYaml(LEAD_TRIAGE_APL));
+    // Save the starter with auto-laid-out `ui` positions; if the layout
+    // cannot run, the parser's seeded grid is still a legible start.
+    const nodes = await computeLayout(parsed.nodes, parsed.edges, 'horizontal')
+      .then((laid) => applyPositions(parsed.nodes, laid.positions))
+      .catch(() => parsed.nodes);
     const workflow = {
       ...parsed,
-      nodes: autoLayoutWorkflow(parsed.nodes, parsed.edges),
+      nodes,
+      layoutPending: false,
       fileName: 'lead-triage.apl.yaml',
     };
     document = await ProjectAPI.createDocument(

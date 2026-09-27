@@ -1,127 +1,133 @@
 import React, { memo } from 'react';
-import type { 
-  Edge,
-  EdgeProps 
-} from '@xyflow/react';
-import {
-  BaseEdge, 
-  EdgeLabelRenderer, 
-  getBezierPath,
-  Position,
-} from '@xyflow/react';
+import type { Edge, EdgeProps, InternalNode } from '@xyflow/react';
+import { BaseEdge, EdgeLabelRenderer, useInternalNode } from '@xyflow/react';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
-import { EDGE_COLORS, useMarkerUrl, type EdgeVariant } from './CanvasMarkers';
+import {
+  type EdgeKind,
+  type EdgeRoute,
+  type OutcomeSlot,
+  cleanEdgeLabel,
+  defaultFlowSlash,
+  isOutcomeKind,
+  labelAnchor,
+  roundedPath,
+  routeFallback,
+  truncateLabel,
+} from '@/lib/layout/edgeGeometry';
+import {
+  type FlowDirection,
+  type NodeShape,
+  type Rect,
+  outcomePortPoint,
+  sizeOfShape,
+} from '@/lib/layout/nodeGeometry';
+import { EDGE_COLORS, type EdgeVariant } from './edgeStyle';
+import { type CanvasLayoutSnapshot, useCanvasView, useCompactZoom, useMarkerUrl } from './canvasContext';
 
-type AbadaEdgeType = Edge<{
+export type AbadaEdgeData = {
   label?: string;
+  kind?: EdgeKind;
+  /** Boundary-marker slot of an outcome route on its source node. */
+  outcomeSlot?: OutcomeSlot;
+  /** Lane among parallel edges between the same pair of nodes. */
+  lane?: number;
   /** Animated flow dash — token edges, next edges, or dry-run-adjacent edges. */
   isFlowing?: boolean;
   /** Taken execution path — static purple highlight, no animation. */
   isTakenPath?: boolean;
   /** Draws the token dot that arrives into the currently active node. */
   hasToken?: boolean;
+  /** Incident to the selected node. */
+  isHighlighted?: boolean;
+  /** Another node is selected and this edge is not incident to it. */
+  isDimmed?: boolean;
   diffKind?: DiffChangeKind | null;
-}, 'abadaEdge'>;
+};
+
+type AbadaEdgeType = Edge<AbadaEdgeData, 'abadaEdge'>;
 
 /** Duration of one token pass along the edge into the active node. */
 const TOKEN_DURATION_S = 1.6;
 
-/**
- * Vertical offset tolerance (px) for treating a forward edge as connecting
- * directly-adjacent rows. Nodes are 128px tall; anything within the top
- * quarter-bands of the target is still "next to" it and reads best as a
- * clean horizontal line. Larger offsets — merging far-apart branch rows —
- * fall back to a bezier so convergence stays visible instead of slashing
- * diagonally across the canvas.
- */
-const ADJACENT_ROW_TOLERANCE_PX = 48;
-
-/**
- * Straight-line edge by default: directly adjacent nodes (same row flowing
- * rightwards, or same column flowing downwards) connect with a single clean
- * horizontal/vertical segment, snapped to the source port's level. Any
- * larger offset or backward edge becomes a bezier so branches, loops and
- * convergence stay clearly readable instead of slashing across the canvas.
- */
-function buildEdgePath(
-  sourceX: number,
-  sourceY: number,
-  targetX: number,
-  targetY: number,
-  sourcePosition: Position,
-  targetPosition: Position,
-): { path: string; labelX: number; labelY: number } {
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-
-  if (Math.abs(dy) <= ADJACENT_ROW_TOLERANCE_PX && dx > 0) {
-    return {
-      path: `M ${sourceX} ${sourceY} L ${targetX} ${sourceY}`,
-      labelX: (sourceX + targetX) / 2,
-      labelY: sourceY - 14,
-    };
-  }
-
-  if (Math.abs(dx) <= ADJACENT_ROW_TOLERANCE_PX && dy > 0) {
-    return {
-      path: `M ${sourceX} ${sourceY} L ${sourceX} ${targetY}`,
-      labelX: sourceX - 14,
-      labelY: (sourceY + targetY) / 2,
-    };
-  }
-
-  const [path, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
-  return { path, labelX, labelY };
+function rectOf(node: InternalNode): Rect {
+  const size = sizeOfShape((node.type ?? 'task') as NodeShape);
+  return { x: node.internals.positionAbsolute.x, y: node.internals.positionAbsolute.y, ...size };
 }
 
-export const AbadaEdge = memo(({
-  id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  style = {},
-  data,
-  selected
-}: EdgeProps<AbadaEdgeType>) => {
-  const { path: edgePath, labelX, labelY } = buildEdgePath(
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-  );
+const near = (a: number, b: number) => Math.abs(a - b) <= 1;
 
-  const isFlowing = data?.isFlowing;
-  const isTakenPath = data?.isTakenPath;
-  const hasToken = data?.hasToken;
-  const variant: EdgeVariant = data?.diffKind
-    ?? (isFlowing || isTakenPath ? 'active' : (selected ? 'selected' : 'default'));
-  const strokeColor = EDGE_COLORS[variant];
-  const strokeWidth = variant === 'default' ? 1.75 : 2.5;
+/**
+ * The route to draw: the auto-layout's own route while both nodes still sit
+ * where the layout put them, otherwise an orthogonal fallback computed from
+ * the current geometry.
+ */
+function resolveRoute(
+  edgeId: string,
+  source: Rect,
+  target: Rect,
+  sourceId: string,
+  targetId: string,
+  data: AbadaEdgeData | undefined,
+  direction: FlowDirection,
+  layout: CanvasLayoutSnapshot | null,
+): EdgeRoute {
+  const laid = layout?.routes.get(edgeId);
+  const sPos = layout?.positions.get(sourceId);
+  const tPos = layout?.positions.get(targetId);
+  if (laid && sPos && tPos
+    && near(sPos.x, source.x) && near(sPos.y, source.y)
+    && near(tPos.x, target.x) && near(tPos.y, target.y)) {
+    return laid;
+  }
+  const kind = data?.kind ?? 'flow';
+  const slot = data?.outcomeSlot;
+  let outcomeStart;
+  if (slot && isOutcomeKind(kind)) {
+    const p = outcomePortPoint(source, direction, slot.index, slot.count);
+    outcomeStart = { x: source.x + p.x, y: source.y + p.y };
+  }
+  const points = routeFallback({ source, target, kind, direction, outcomeStart, lane: data?.lane });
+  return { points, label: labelAnchor(points, direction) };
+}
+
+function variantOf(data: AbadaEdgeData | undefined, selected: boolean | undefined): EdgeVariant {
+  if (data?.diffKind) return data.diffKind;
+  if (data?.isFlowing || data?.isTakenPath) return 'active';
+  if (selected || data?.isHighlighted) return 'selected';
+  if (data?.kind === 'outcome-error') return 'error';
+  if (data?.kind === 'outcome-warn') return 'warn';
+  return 'default';
+}
+
+export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps<AbadaEdgeType>) => {
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  const { direction, layout } = useCanvasView();
+  const compact = useCompactZoom();
+  const variant = variantOf(data, selected);
   const markerEnd = useMarkerUrl(variant);
+
+  if (!sourceNode || !targetNode) return null;
+
+  const route = resolveRoute(id, rectOf(sourceNode), rectOf(targetNode), source, target, data, direction, layout);
+  const edgePath = roundedPath(route.points);
+  const labelAt = route.label ?? labelAnchor(route.points, direction);
+
+  const kind = data?.kind ?? 'flow';
+  const isFlowing = data?.isFlowing;
+  const hasToken = data?.hasToken;
+  const strokeColor = EDGE_COLORS[variant];
+  const strokeWidth = variant === 'default' || variant === 'error' || variant === 'warn' ? 1.75 : 2.5;
+  const dash = data?.diffKind === 'removed' ? '6 4' : isOutcomeKind(kind) && !isFlowing ? '5 4' : undefined;
+  const opacity = data?.isDimmed ? 0.3 : 1;
+
+  const fullLabel = cleanEdgeLabel(data?.label);
+  const shortLabel = truncateLabel(fullLabel);
 
   return (
     <>
       {isFlowing && (
-        <path
-          d={edgePath}
-          fill="none"
-          stroke="#9D4EDD"
-          strokeWidth="6"
-          opacity="0.3"
-          className="blur-xs"
-        />
+        <path d={edgePath} fill="none" stroke="#9D4EDD" strokeWidth="6" opacity="0.3" className="blur-xs" />
       )}
       {hasToken && (
         <g>
@@ -142,52 +148,63 @@ export const AbadaEdge = memo(({
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          ...style,
           stroke: strokeColor,
           strokeWidth,
-          strokeDasharray: data?.diffKind === 'removed' ? '6 4' : undefined,
+          strokeDasharray: dash,
           strokeLinejoin: 'round',
+          opacity,
+          transition: 'opacity 150ms ease-out',
         }}
         className={isFlowing ? 'animate-flow-dash' : ''}
       />
-      
+      {fullLabel && (
+        <path d={edgePath} fill="none" stroke="transparent" strokeWidth="14">
+          <title>{fullLabel}</title>
+        </path>
+      )}
+      {kind === 'default' && (
+        <path d={defaultFlowSlash(route.points)} stroke={strokeColor} strokeWidth="1.75" strokeLinecap="round" opacity={opacity} />
+      )}
+
       {data?.diffKind && (
         <EdgeLabelRenderer>
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: 'all',
+              transform: `translate(-50%, -50%) translate(${labelAt.x}px,${labelAt.y + (shortLabel ? 22 : 0)}px)`,
             }}
-            className="nodrag nopan"
+            className="nodrag nopan pointer-events-none"
           >
             <span
-              className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full border ${
-                data.diffKind === 'added'
-                  ? 'text-[#90A955] bg-[#1A1614] border-[#90A955]/50'
-                  : data.diffKind === 'modified'
-                    ? 'text-[#F4A261] bg-[#1A1614] border-[#F4A261]/50'
-                    : 'text-[#E76F51] bg-[#1A1614] border-[#E76F51]/50'
-              }`}
+              className="inline-block rounded-full border bg-[#1A1614] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+              style={{ color: strokeColor, borderColor: `${strokeColor}80` }}
             >
-              {data.diffKind.toUpperCase()}
+              {data.diffKind}
             </span>
           </div>
         </EdgeLabelRenderer>
       )}
 
-      {data?.label && (
+      {/* Zoomed out, labels would be unreadable clutter: the full text stays on hover. */}
+      {shortLabel && !compact && (
         <EdgeLabelRenderer>
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY - (data?.diffKind ? 26 : 0)}px)`,
-              pointerEvents: 'all',
+              transform: `translate(-50%, -50%) translate(${labelAt.x}px,${labelAt.y}px)`,
+              opacity,
             }}
             className="nodrag nopan"
+            title={fullLabel !== shortLabel ? fullLabel : undefined}
           >
-            <span className="text-[10px] font-mono text-[#A89F91] bg-[#1A1614] px-2 py-0.5 rounded-full border border-[#3A322E] shadow-warm-md whitespace-nowrap">
-              {String(data.label)}
+            <span
+              className="block whitespace-nowrap rounded-full border bg-[#1A1614] px-2 py-0.5 font-mono text-[10px] shadow-warm-md"
+              style={{
+                color: isOutcomeKind(kind) ? strokeColor : '#C9C0B4',
+                borderColor: variant === 'default' ? '#3A322E' : `${strokeColor}66`,
+              }}
+            >
+              {shortLabel}
             </span>
           </div>
         </EdgeLabelRenderer>
