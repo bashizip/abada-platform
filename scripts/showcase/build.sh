@@ -4,7 +4,7 @@
 # the site and README videos.
 #
 # Usage: ./scripts/showcase/build.sh [--publish]
-#   --publish   also copy the site files into abada-site/packages/web/public/videos
+#   --publish   also copy the site videos and the README assets (docs/assets) into the repo
 #
 set -euo pipefail
 
@@ -44,10 +44,15 @@ ffmpeg -v error -y -i "$M" -c:v libvpx-vp9 -b:v 0 -crf 34 -row-mt 1 -deadline go
 ffmpeg -v error -y -i "$M" -vf "scale=1280:-2:flags=lanczos,fps=30" -c:v libx264 -preset slow -crf 25 \
   -pix_fmt yuv420p -movflags +faststart -an "$WORK/out/abada-studio-showcase-readme.mp4"
 ffmpeg -v error -y -ss 9 -i "$M" -frames:v 1 -q:v 2 "$WORK/out/abada-studio-showcase-poster.jpg"
+# GitHub only plays uploaded video inline, so the README shows an animated GIF.
+ffmpeg -v error -y -i "$M" -vf "fps=8,scale=800:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
+  -loop 0 "$WORK/out/abada-studio-showcase-readme.gif"
 
 if $PUBLISH; then
   cp "$WORK/out/abada-studio-showcase."{mp4,webm} "$WORK/out/abada-studio-showcase-poster.jpg" \
     "$ROOT/abada-site/packages/web/public/videos/"
-  echo "Copied site videos into abada-site/packages/web/public/videos/"
+  cp "$WORK/out/abada-studio-showcase-readme.gif" "$ROOT/docs/assets/studio-showcase.gif"
+  cp "$WORK/out/abada-studio-showcase-readme.mp4" "$ROOT/docs/assets/studio-showcase.mp4"
+  echo "Copied site videos into abada-site/packages/web/public/videos/ and README assets into docs/assets/"
 fi
 ls -lh "$WORK/out"
