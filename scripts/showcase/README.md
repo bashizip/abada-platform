@@ -6,7 +6,7 @@ re-cut whenever the Studio changes.
 
 ```bash
 ./scripts/showcase/build.sh            # render into scripts/showcase/.work/out
-./scripts/showcase/build.sh --publish  # also copy the site files into the website
+./scripts/showcase/build.sh --publish  # also refresh the website videos and docs/assets
 ```
 
 ## Storyboard
@@ -52,5 +52,6 @@ the capture frame rate.
 | --- | --- |
 | `abada-studio-showcase.mp4` / `.webm` | Website (`abada-site/packages/web/public/videos`) |
 | `abada-studio-showcase-poster.jpg` | Website poster frame |
-| `abada-studio-showcase-readme.mp4` | 720p30 cut for the GitHub README (upload it through GitHub to get a playable URL) |
+| `abada-studio-showcase-readme.gif` | Animated preview shown in the repository README (`docs/assets/studio-showcase.gif`) |
+| `abada-studio-showcase-readme.mp4` | 720p30 cut linked from the README (`docs/assets/studio-showcase.mp4`) |
 | `abada-studio-showcase-master.mp4` | High-quality master for further editing |
