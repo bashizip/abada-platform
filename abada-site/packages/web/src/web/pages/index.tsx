@@ -1,5 +1,6 @@
 import { Nav, StickyCta } from "../components/site/nav";
 import { Hero } from "../components/site/hero";
+import { Showcase } from "../components/site/showcase";
 import { Boundary } from "../components/site/boundary";
 import { Open } from "../components/site/open";
 import { Governed } from "../components/site/governed";
@@ -17,6 +18,7 @@ function Index() {
       <Nav />
       <main>
         <Hero />
+        <Showcase />
         <Boundary />
         <Open />
         <Governed />

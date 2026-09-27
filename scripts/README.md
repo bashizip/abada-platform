@@ -34,6 +34,12 @@ tags.
 | `scripts/dev/build-agent-worker.sh` | Stand-alone rebuild of the first-party agent worker (e.g. `--no-cache`). Not needed on the happy path — `up.sh` already builds and provisions it. |
 | `scripts/dev/provision-agent-worker.sh` | Provision the Keycloak client, group membership, and global capability registration for the agent worker. |
 
+## Showcase video
+
+`scripts/showcase/build.sh` records and renders the Studio walkthrough used on
+the website from the running dev stack. See
+[`showcase/README.md`](showcase/README.md).
+
 ## Agent worker provisioning
 
 The agent-worker client is **not** part of the Keycloak realm import because it

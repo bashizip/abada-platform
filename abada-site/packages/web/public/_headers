@@ -5,3 +5,5 @@
   Cache-Control: public, max-age=3600
 /api/*
   Cache-Control: no-store
+/videos/*
+  Cache-Control: public, max-age=604800
