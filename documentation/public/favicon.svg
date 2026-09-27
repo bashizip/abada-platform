@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Abada">
-  <rect width="64" height="64" rx="14" fill="#151a2d"/>
-  <path d="M14 48 28 14h8l14 34h-9l-3-8H25l-3 8Zm14-16h7l-3.5-10Z" fill="#79e2b7"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Abada">
+  <rect width="48" height="48" rx="11" fill="#05070A"/>
+  <g transform="translate(24 24) scale(0.7) translate(-24 -25.5)">
+  <path d="M9 42 24 9 39 42" fill="none" stroke="#34D399" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M24 24.5 29.5 30 24 35.5 18.5 30Z" fill="#34D399"/></g>
 </svg>

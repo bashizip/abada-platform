@@ -11,9 +11,7 @@ import { keycloak } from '@/auth/keycloakClient';
 export const SignInGate: React.FC = () => (
   <div className="flex flex-col items-center justify-center h-screen w-screen bg-[#1A1614] text-[#EAE3D9]">
     <div className="flex items-center gap-3 mb-8">
-      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#9D4EDD] to-[#25201D] border border-[#9D4EDD]/40 flex items-center justify-center glow-amethyst-subtle overflow-hidden">
-        <img src="/favicon.svg" alt="" className="w-9 h-9" />
-      </div>
+      <img src="/abada-app-icon.svg" alt="" className="w-12 h-12 rounded-[11px] glow-amethyst-subtle" />
       <div>
         <h1 className="font-bold text-xl tracking-wide">ABADA</h1>
         <p className="text-[11px] text-[#A89F91]">Studio</p>

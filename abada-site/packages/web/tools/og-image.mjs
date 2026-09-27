@@ -15,6 +15,14 @@ const T3 = "#5B6675";
 const SANS = "Helvetica Neue, Helvetica, Arial, sans-serif";
 const MONO = "Menlo, SF Mono, monospace";
 
+// The Abada mark (brand/export.mjs), drawn in ink on the signal tile.
+const MARK = `
+      <path d="M11 40 24 11 37 40" fill="none" stroke="${INK}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M24 24.2 28.8 29 24 33.8 19.2 29Z" fill="${INK}"/>
+      <circle cx="24" cy="10.5" r="4.6" fill="${INK}"/>
+      <circle cx="11" cy="40" r="3.2" fill="${INK}"/>
+      <circle cx="37" cy="40" r="3.2" fill="${INK}"/>`;
+
 const grid = Array.from({ length: 20 }, (_, i) => i * 64)
   .map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="630" stroke="#ffffff" stroke-opacity="0.035"/>`)
   .concat(Array.from({ length: 10 }, (_, i) => i * 64)
@@ -32,8 +40,10 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
   ${grid}
   <rect width="1200" height="630" fill="url(#glow)"/>
 
-  <rect x="72" y="68" width="40" height="40" rx="9" fill="${SIGNAL}"/>
-  <text x="92" y="96" text-anchor="middle" font-family="${SANS}" font-size="22" font-weight="700" fill="${INK}">A</text>
+  <g transform="translate(72 68) scale(${40 / 48})">
+    <rect width="48" height="48" rx="11" fill="${SIGNAL}"/>
+    <g transform="translate(24 24) scale(0.72) translate(-24 -24.5)">${MARK}</g>
+  </g>
   <text x="126" y="97" font-family="${SANS}" font-size="26" font-weight="700" fill="${T1}">Abada</text>
 
   <rect x="700" y="70" width="428" height="36" rx="18" fill="#0D1117" stroke="#ffffff" stroke-opacity="0.12"/>
