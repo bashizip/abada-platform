@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
-import { INITIAL_WORKFLOWS } from '@/data/sampleWorkflows';
 import type { WorkflowFile, WorkflowNode } from '@/types';
 import {
   type LayoutMode,
@@ -82,7 +81,6 @@ const FIXTURES: Record<string, () => WorkflowFile> = {
   'kyc-onboarding': () => apl(kycOnboarding),
   'lead-triage-demo': () => apl(leadTriageDemo),
   loop: () => apl(LOOP_APL),
-  ...Object.fromEntries(INITIAL_WORKFLOWS.map((wf) => [`sample:${wf.name}`, () => structuredClone(wf)])),
 };
 
 beforeAll(() => setLayoutEngineFactory(async () => new ELK()));
