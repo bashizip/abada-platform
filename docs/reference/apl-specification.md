@@ -113,6 +113,8 @@ Every node in `flow.nodes` is a mapping with the following common keys:
 - `next` wires the linear sequence flow (`sourceRef → targetRef`). `condition`
   and `parallel` nodes must **not** set `next` together with their
   branching key (`rules` / `branches`); see §3.4 and §3.8.
+- `ui` is a Studio layout hint with no runtime meaning. Studio keeps saved
+  positions as authored and auto-lays-out a document that has none.
 
 ### 2.3 Formatting conventions
 
