@@ -181,3 +181,8 @@
 .react-flow__handle.abada-handle.connectingfrom {
   opacity: 1;
 }
+
+/* Hovering an edge makes it easier to follow across the diagram. */
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3px !important;
+}

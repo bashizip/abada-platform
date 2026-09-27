@@ -1,4 +1,4 @@
-import React, { useCallback, useId, useMemo, useState } from 'react';
+import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,7 +11,10 @@ import {
   Edge,
   Node,
   BackgroundVariant,
-  Panel
+  MiniMap,
+  Panel,
+  ViewportPortal,
+  useReactFlow,
 } from '@xyflow/react';
 import {
   ArrowDownFromLine,
@@ -21,6 +24,7 @@ import {
   CirclePlay,
   Loader2,
   Lock,
+  Map as MapIcon,
   Trash2,
   Unlock,
   Wand2,
@@ -32,7 +36,10 @@ import { AbadaEdge, type AbadaEdgeData } from './EdgeRenderer';
 import { CanvasMarkers } from './CanvasMarkers';
 import { CanvasViewContext, MarkerPrefixProvider, type CanvasView } from './canvasContext';
 import { useDiagramLayout } from './useDiagramLayout';
+import { NODE_ACCENT, eventAccent } from './nodes/nodeStyle';
+import type { CanvasNode } from './nodes';
 import { edgeKindOf, outcomeSlots, parallelLanes } from '@/lib/layout/edgeGeometry';
+import { type Alignment, alignTo } from '@/lib/layout/alignment';
 import type { LayoutMode } from '@/lib/layout/elkLayout';
 import { savePreferredLayout, hasSavedLayout } from '@/lib/run/layoutPrefs';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
@@ -76,6 +83,17 @@ interface CanvasProps {
 
 const edgeTypes = { abadaEdge: AbadaEdge };
 
+const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as const;
+const MINIMAP_AUTO_NODES = 12;
+
+const minimapColor = (node: { data: unknown }) => {
+  const data = (node as CanvasNode).data;
+  return data.type === 'event' ? eventAccent(data.subtype) : NODE_ACCENT[data.type];
+};
+
+const isTextInput = (target: EventTarget | null) =>
+  target instanceof HTMLElement && !!target.closest('input, textarea, select, [contenteditable="true"]');
+
 export const Canvas: React.FC<CanvasProps> = (props) => (
   <ReactFlowProvider>
     <CanvasInner {...props} />
@@ -107,6 +125,11 @@ const CanvasInner: React.FC<CanvasProps> = ({
   readOnly = false,
 }) => {
   const markerPrefix = `abada-canvas-${useId().replace(/:/g, '')}`;
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const { fitView } = useReactFlow();
+  const [guides, setGuides] = useState<Alignment | null>(null);
+  const [minimapChoice, setMinimapChoice] = useState<boolean | null>(null);
+  const showMinimap = minimapChoice ?? rawNodes.length > MINIMAP_AUTO_NODES;
 
   const layout = useDiagramLayout({
     nodes: rawNodes,
@@ -167,9 +190,46 @@ const CanvasInner: React.FC<CanvasProps> = ({
     }
   }, [onConnectNodes]);
 
+  const onNodeDrag = useCallback((_: unknown, node: Node) => {
+    const next = alignTo(layout.displayNodes, node.id, node.position);
+    setGuides((current) => (current?.guideX === next.guideX && current?.guideY === next.guideY ? current : next));
+  }, [layout.displayNodes]);
+
   const onNodeDragStop = useCallback((_: unknown, node: Node) => {
-    if (!readOnly) onNodeMove(node.id, node.position.x, node.position.y);
-  }, [onNodeMove, readOnly]);
+    setGuides(null);
+    if (readOnly) return;
+    const { snapped } = alignTo(layout.displayNodes, node.id, node.position);
+    onNodeMove(node.id, Math.round(snapped.x), Math.round(snapped.y));
+  }, [onNodeMove, readOnly, layout.displayNodes]);
+
+  /**
+   * Canvas shortcuts (while focus is on the canvas, never in a text field):
+   * Shift+L re-applies the current layout mode, Shift+1 fits the view and the
+   * arrow keys nudge the selected node (8px, 32px with Shift).
+   */
+  const onKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (isTextInput(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.shiftKey && event.code === 'KeyL') {
+      event.preventDefault();
+      void layout.runLayout(layout.mode);
+      return;
+    }
+    if (event.shiftKey && event.code === 'Digit1') {
+      event.preventDefault();
+      void fitView({ padding: 0.15, duration: 200 });
+      return;
+    }
+    const nudge = NUDGE[event.key as keyof typeof NUDGE];
+    if (nudge && !readOnly && selectedNodeId) {
+      const node = rawNodes.find((n) => n.id === selectedNodeId);
+      if (!node) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 32 : 8;
+      onNodeMove(node.id, node.x + nudge[0] * step, node.y + nudge[1] * step);
+    }
+  }, [layout, fitView, readOnly, selectedNodeId, rawNodes, onNodeMove]);
+
+  const focusCanvas = useCallback(() => wrapperRef.current?.focus({ preventScroll: true }), []);
 
   const onNodesDelete = useCallback((deletedNodes: Node[]) => {
     if (readOnly) return;
@@ -178,14 +238,22 @@ const CanvasInner: React.FC<CanvasProps> = ({
 
   const onNodeClick = useCallback((_: unknown, node: Node) => {
     onSelectNode(node.id);
-  }, [onSelectNode]);
+    focusCanvas();
+  }, [onSelectNode, focusCanvas]);
 
   const onPaneClick = useCallback(() => {
     onSelectNode(null);
-  }, [onSelectNode]);
+    focusCanvas();
+  }, [onSelectNode, focusCanvas]);
 
   return (
-    <div className="flex-1 h-full w-full bg-[#1A1614] relative">
+    <div
+      ref={wrapperRef}
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
+      aria-label="Process diagram"
+      className="flex-1 h-full w-full bg-[#1A1614] relative outline-none"
+    >
       <CanvasMarkers prefix={markerPrefix} />
       <MarkerPrefixProvider value={markerPrefix}>
         <CanvasViewContext.Provider value={view}>
@@ -196,6 +264,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
             edgeTypes={edgeTypes}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
             onNodesDelete={onNodesDelete}
             onPaneClick={onPaneClick}
@@ -214,6 +283,22 @@ const CanvasInner: React.FC<CanvasProps> = ({
             className={`transition-opacity duration-150 ${layout.ready ? 'opacity-100' : 'opacity-0'}`}
           >
             <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />
+            {guides && <AlignmentGuides guides={guides} />}
+            {showMinimap && rawNodes.length > 0 && (
+              <MiniMap
+                position="bottom-right"
+                className={readOnly ? undefined : 'mb-16'}
+                pannable
+                zoomable
+                nodeColor={minimapColor}
+                nodeStrokeWidth={0}
+                nodeBorderRadius={4}
+                maskColor="rgba(26, 22, 20, 0.72)"
+                bgColor="#25201D"
+                style={{ border: '1px solid #3A322E', borderRadius: 12, overflow: 'hidden' }}
+                ariaLabel="Diagram overview"
+              />
+            )}
             {rawNodes.length > 0 && (
               <LayoutToolbar mode={layout.mode} busy={layout.busy} onLayout={layout.runLayout} />
             )}
@@ -222,6 +307,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
               selectedNodeId={selectedNodeId}
               processKey={readOnly ? undefined : processKey}
               readOnly={readOnly}
+              showMinimap={showMinimap}
+              onToggleMinimap={() => setMinimapChoice(!showMinimap)}
               onDeleteNode={onDeleteNode}
               onToast={onToast}
             />
@@ -264,10 +351,28 @@ const CanvasInner: React.FC<CanvasProps> = ({
   );
 };
 
+/** Guide lines (flow space) for the centre line a dragged node will snap to. */
+const AlignmentGuides: React.FC<{ guides: Alignment }> = ({ guides }) => (
+  <ViewportPortal>
+    {guides.guideX !== undefined && (
+      <div
+        className="pointer-events-none absolute left-0 top-0 border-l border-dashed border-[#F4A261]/70"
+        style={{ transform: `translate(${guides.guideX}px, -10000px)`, height: 20000 }}
+      />
+    )}
+    {guides.guideY !== undefined && (
+      <div
+        className="pointer-events-none absolute left-0 top-0 border-t border-dashed border-[#F4A261]/70"
+        style={{ transform: `translate(-10000px, ${guides.guideY}px)`, width: 20000 }}
+      />
+    )}
+  </ViewportPortal>
+);
+
 const LAYOUT_BUTTONS: { mode: LayoutMode; label: string; hint: string; Icon: typeof Wand2 }[] = [
-  { mode: 'horizontal', label: 'Horizontal', hint: 'Auto-layout left → right, loops routed around the flow', Icon: ArrowRightFromLine },
-  { mode: 'vertical', label: 'Vertical', hint: 'Auto-layout top → bottom, loops routed around the flow', Icon: ArrowDownFromLine },
-  { mode: 'tidy', label: 'Tidy', hint: 'Keep your arrangement: align, space evenly and re-route edges', Icon: Wand2 },
+  { mode: 'horizontal', label: 'Horizontal', hint: 'Auto-layout left → right, loops routed around the flow (Shift+L repeats)', Icon: ArrowRightFromLine },
+  { mode: 'vertical', label: 'Vertical', hint: 'Auto-layout top → bottom, loops routed around the flow (Shift+L repeats)', Icon: ArrowDownFromLine },
+  { mode: 'tidy', label: 'Tidy', hint: 'Keep your arrangement: align, space evenly and re-route edges (Shift+L repeats)', Icon: Wand2 },
 ];
 
 /** Auto-layout modes. The last mode used is highlighted and remembered per browser. */
@@ -308,17 +413,19 @@ const LayoutToolbar: React.FC<{
 );
 
 /**
- * Zoom and fit controls, plus the lock-layout and delete-node actions on
- * editable canvases.
+ * Zoom, fit (Shift+1) and overview-map controls, plus the lock-layout and
+ * delete-node actions on editable canvases.
  */
 const CanvasControls: React.FC<{
   nodes: WorkflowNode[];
   selectedNodeId: string | null;
   processKey?: string;
   readOnly: boolean;
+  showMinimap: boolean;
+  onToggleMinimap: () => void;
   onDeleteNode: (id: string) => void;
   onToast?: (message: string) => void;
-}> = ({ nodes, selectedNodeId, processKey, readOnly, onDeleteNode, onToast }) => {
+}> = ({ nodes, selectedNodeId, processKey, readOnly, showMinimap, onToggleMinimap, onDeleteNode, onToast }) => {
   const [locked, setLocked] = useState(() => (processKey ? hasSavedLayout(processKey) : false));
 
   const handleLockLayout = useCallback(() => {
@@ -334,7 +441,15 @@ const CanvasControls: React.FC<{
 
   return (
     <Panel position="bottom-left" className={readOnly ? undefined : 'mb-16'}>
-      <Controls showInteractive={false}>
+      <Controls showInteractive={false} fitViewOptions={{ padding: 0.15, duration: 200 }}>
+        <ControlButton
+          onClick={onToggleMinimap}
+          title={showMinimap ? 'Hide overview map' : 'Show overview map'}
+          aria-label="Toggle overview map"
+          aria-pressed={showMinimap}
+        >
+          <MapIcon className={`w-4 h-4 ${showMinimap ? 'text-[#F4A261]' : ''}`} />
+        </ControlButton>
         {processKey && (
           <ControlButton
             onClick={handleLockLayout}
