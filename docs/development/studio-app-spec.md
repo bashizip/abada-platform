@@ -251,7 +251,7 @@ workspace with folders and typed files.
     edges emits `branches`; a single outgoing edge makes it the join's `next`)
 - Canvas node badges reflect **real run state only**: `idle`, `running`,
   `completed`, `failed`, `waiting` — applied from engine facts after a live
-  run; sample workflows no longer carry hardcoded statuses.
+  run, never hardcoded.
 
 #### Notation
 
@@ -470,8 +470,6 @@ src/
 │   └── keycloakClient.ts# OIDC (Keycloak) init, token, getUserFromToken
 ├── config/
 │   └── runtime.ts       # runtime-config (public/config.js) API URL etc.
-├── data/
-│   └── sampleWorkflows.ts # starter workflows (no hardcoded run statuses)
 ├── features/
 │   ├── designer/        # Canvas (+ useDiagramLayout), nodes/ (event, gateway,
 │   │                    #   task shapes; status + diff badges), EdgeRenderer,
@@ -486,7 +484,7 @@ src/
 │   │                    #   parseAPLYaml, stringifyAPLYaml, normalizeTableInputs,
 │   │                    #   resolveRuleOutcome, stringifyDecisionTableYaml,
 │   │                    #   parseDecisionTableYaml, dmnConfigToAPLNode)
-│   ├── aiDiff/          # AI optimization proposal types + demo generator
+│   ├── aiDiff/          # AI optimization proposal types
 │   ├── layout/          # ELK auto-layout, node/edge geometry, fallback router
 │   ├── bpmn/            # compiler.ts (APL → BPMN), transpiler.ts (BPMN → APL)
 │   └── run/liveRun.ts   # payload defaults and engine-fact canvas overlays
@@ -589,9 +587,8 @@ npm run build
 - Per-run diff of instance variables (before/after each decision table).
 - Decision-table outcome preview before deploy (client-side evaluation of the
   compiled table against the current payload).
-- Enrich the AI Diff overlay with true engine telemetry (OTel spans and API
-  failure signals) instead of the demo proposal generator
-  (`lib/aiDiff/demo.ts`), per Phase 2 of the 1.1 execution plan.
+- Feed the AI Diff overlay from true engine telemetry (OTel spans and API
+  failure signals), per Phase 2 of the 1.1 execution plan.
 - Wire the Governance Engine approval gates (Phase 3) so Approve commits the
   versioned definition to PostgreSQL instead of only updating the local
   canvas.
