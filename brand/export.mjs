@@ -30,23 +30,23 @@ export const COLORS = {
 // The "governed A" on a 48-unit grid: two flow edges rise to an approval node,
 // a gateway diamond sits between them, agent terminals end the feet.
 const full = (stroke, gate) => `
-  <path d="M11 40 24 11 37 40" fill="none" stroke="${stroke}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M24 24.2 28.8 29 24 33.8 19.2 29Z" fill="${gate}"/>
-  <circle cx="24" cy="10.5" r="4.6" fill="${stroke}"/>
-  <circle cx="11" cy="40" r="3.2" fill="${stroke}"/>
-  <circle cx="37" cy="40" r="3.2" fill="${stroke}"/>`;
+  <path d="M9 41.5 24 11 39 41.5" fill="none" stroke="${stroke}" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M24 27.7 28.8 32.5 24 37.3 19.2 32.5Z" fill="${gate}"/>
+  <circle cx="24" cy="11" r="6.5" fill="${stroke}"/>
+  <circle cx="9" cy="41.5" r="4.8" fill="${stroke}"/>
+  <circle cx="39" cy="41.5" r="4.8" fill="${stroke}"/>`;
 
 // Cut for 24px and below: heavier edges, no terminals, the gateway bridges the legs.
 const small = (stroke, gate) => `
-  <path d="M9 42 24 9 39 42" fill="none" stroke="${stroke}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M24 24.5 29.5 30 24 35.5 18.5 30Z" fill="${gate}"/>`;
+  <path d="M9 42 24 9 39 42" fill="none" stroke="${stroke}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M24 25 29.5 30.5 24 36 18.5 30.5Z" fill="${gate}"/>`;
 
 const svg = (body, title = "Abada") =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="${title}">${body}\n</svg>\n`;
 
 // Mark centred on a tile. `rx` 0 gives a full-bleed square for store icons.
 const tile = ({ mark, fill, rx = 11, scale }) => {
-  const [cx, cy] = mark === full ? [24, 24.5] : [24, 25.5];
+  const [cx, cy] = mark === full ? [24, 25.4] : [24, 25.5];
   return (stroke, gate, defs = "") => `${defs}
   <rect width="48" height="48" rx="${rx}" fill="${fill}"/>
   <g transform="translate(24 24) scale(${scale}) translate(${-cx} ${-cy})">${mark(stroke, gate)}</g>`;
@@ -67,9 +67,9 @@ const SVGS = {
   "abada-mark-mono-light.svg": svg(full(c.white, c.white)),
   "abada-mark-small.svg": svg(small(c.emerald, c.emerald)),
   // App icons: the mark on its product tile
-  "abada-app-icon.svg": svg(tile({ mark: full, fill: c.ink, scale: 0.72 })(c.emerald, c.emerald)),
+  "abada-app-icon.svg": svg(tile({ mark: full, fill: c.ink, scale: 0.66 })(c.emerald, c.emerald)),
   "abada-app-icon-studio.svg": svg(
-    tile({ mark: full, fill: "url(#abada-studio-tile)", scale: 0.72 })(c.onTile, c.saffron, studioGradient),
+    tile({ mark: full, fill: "url(#abada-studio-tile)", scale: 0.66 })(c.onTile, c.saffron, studioGradient),
     "Abada Studio",
   ),
   // Favicons use the small cut, which stays legible in a 16px browser tab
@@ -79,9 +79,9 @@ const SVGS = {
     "Abada Studio",
   ),
   // Store icon (square, the platform masks the corners) and Android adaptive foreground
-  "abada-store-icon.svg": svg(tile({ mark: full, fill: c.ink, rx: 0, scale: 0.62 })(c.emerald, c.emerald)),
+  "abada-store-icon.svg": svg(tile({ mark: full, fill: c.ink, rx: 0, scale: 0.56 })(c.emerald, c.emerald)),
   "abada-adaptive-foreground.svg": svg(
-    `<g transform="translate(24 24) scale(0.5) translate(-24 -24.5)">${full(c.emerald, c.emerald)}</g>`,
+    `<g transform="translate(24 24) scale(0.46) translate(-24 -25.4)">${full(c.emerald, c.emerald)}</g>`,
   ),
 };
 
