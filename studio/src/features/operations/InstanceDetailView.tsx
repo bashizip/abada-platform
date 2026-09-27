@@ -400,6 +400,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             <Canvas
               nodes={workflow.nodes}
               edges={workflow.edges}
+              layoutPending={workflow.layoutPending}
               selectedNodeId={selectedNodeId}
               onSelectNode={(id) => setSelectedNodeId(id)}
               onNodeMove={() => undefined}

@@ -134,18 +134,55 @@
  * compositor layer and simplify the large decorative shadow only while a node
  * is moving; the full visual treatment returns immediately on drop.
  */
-.react-flow__node-abadaNode,
-.react-flow__node-abadaNode.selectable,
-.react-flow__node-abadaNode.draggable,
-.react-flow__node-abadaNode.draggable.dragging {
+.react-flow__node-event,
+.react-flow__node-gateway,
+.react-flow__node-task,
+.react-flow__node.draggable.dragging {
   cursor: default !important;
-}
-
-.react-flow__node-abadaNode {
   will-change: transform;
   backface-visibility: hidden;
 }
 
-.react-flow__node-abadaNode.dragging .abada-node-card {
-  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.42);
+.react-flow__node.dragging .abada-task-card {
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.42) !important;
+}
+
+/* The live instance position breathes; everything else stays still. */
+@keyframes abadaLiveOutline {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.35; }
+}
+.abada-live-outline {
+  animation: abadaLiveOutline 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .abada-live-outline,
+  .animate-flow-dash {
+    animation: none;
+  }
+}
+
+/*
+ * Connection handles are an editing affordance, not part of the diagram: they
+ * stay invisible (edges still anchor on them) and only appear on node hover
+ * while the canvas is editable, so no edge ever appears to start with a dot.
+ */
+.react-flow__handle.abada-handle {
+  width: 10px;
+  height: 10px;
+  min-width: 0;
+  min-height: 0;
+  background: #1A1614;
+  border: 2px solid #F4A261;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.react-flow__node:hover .react-flow__handle.abada-handle.connectable,
+.react-flow__handle.abada-handle.connectingfrom {
+  opacity: 1;
+}
+
+/* Hovering an edge makes it easier to follow across the diagram. */
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3px !important;
 }

@@ -80,3 +80,23 @@ export function getSavedLayoutTime(processKey: string): string | null {
   const store = readStore();
   return store[processKey]?.savedAt ?? null;
 }
+
+const MODE_KEY = 'abada_layout_mode';
+
+/** Auto-layout mode the user last applied (a per-browser convenience). */
+export function getPreferredLayoutMode(): 'horizontal' | 'vertical' | 'tidy' {
+  try {
+    const value = localStorage.getItem(MODE_KEY);
+    return value === 'vertical' || value === 'tidy' ? value : 'horizontal';
+  } catch {
+    return 'horizontal';
+  }
+}
+
+export function setPreferredLayoutMode(mode: 'horizontal' | 'vertical' | 'tidy'): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    // Storage unavailable (private mode, blocked site data): the mode just isn't remembered.
+  }
+}

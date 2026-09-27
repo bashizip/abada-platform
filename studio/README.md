@@ -6,7 +6,7 @@ Visual workflow designer for the Abada BPMN orchestration platform.
 
 Abada Studio is a React-based authoring environment for building, editing, and deploying BPMN process definitions. It supports:
 
-- **Visual flow editing** with drag-and-drop nodes and auto-layout
+- **Visual flow editing** in BPMN notation with drag-and-drop nodes and ELK auto-layout (horizontal, vertical, tidy)
 - **APL (Abada Process Language)** — a native YAML DSL that compiles to BPMN 2.0
 - **BPMN round-trip** — import existing BPMN files, edit visually, export back to BPMN
 - **Form binding** — attach Camunda forms to user tasks
@@ -47,11 +47,11 @@ The build includes a kitchen-sink round-trip test that verifies APL → BPMN →
 ```
 src/
   components/          # React UI components (canvas, sidebar, inspectors)
-  features/           # Domain features (DMN inspector)
+  features/           # Domain features (designer canvas, DMN inspector)
   lib/
     apl/              # APL parser and type system
     bpmn/             # BPMN compiler (APL → BPMN) and transpiler (BPMN → APL)
-    autoLayout.ts     # Dagre-based node layout
+    layout/           # ELK auto-layout, node/edge geometry, fallback router
   types.ts            # Studio domain types
 ```
 

@@ -133,6 +133,11 @@ export interface WorkflowFile {
   /** Project file-tree location: target folder id and file name. */
   folderId?: string;
   fileName?: string;
+  /**
+   * No node had a saved `ui` position: the canvas runs the auto-layout when it
+   * opens this process. View state only — never serialized to APL.
+   */
+  layoutPending?: boolean;
 }
 
 export const LANGUAGE_VERSION_ABADA_IO_V1 = 'abada.io/v1';
