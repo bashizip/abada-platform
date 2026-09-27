@@ -5,7 +5,7 @@ This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
-Last reviewed: 2026-09-23. Horizon: 12 weeks, 2026-09-28 → 2026-12-18.
+Last reviewed: 2026-09-27. Horizon: 12 weeks, 2026-09-28 → 2026-12-18.
 
 ## Product definition
 
@@ -29,7 +29,7 @@ telcos, public sector) that must run on their own infrastructure.
 | --- | --- | --- | --- |
 | M1 Truth and safety | 09-28 → 10-16 | 1.0.0-rc.6 | Malicious expression rejected at deploy; invalid or low-confidence agent output routes to a human; 4 slow agent tasks, no duplicate model call; site claims match the code |
 | M2 Real process shapes | 10-19 → 11-06 | 1.1.0-rc.1 | Rework loop (agent drafts → human rejects with comment → agent revises → approve) survives an engine kill mid-loop |
-| M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible |
+| M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible; a triage agent delegates a sub-case to a governed child process, the parent resumes with its result and the lineage is visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
 
 ## M1 — Truth and safety
@@ -53,7 +53,7 @@ Full specifications: [`m1-task-specs.md`](m1-task-specs.md).
 ## M2 — Real process shapes
 
 - [ ] E1 One APL contract: `GET /v1/apl/schema`, `POST /v1/apl/validate`; Studio types generated from the schema; Studio parser reduced to YAML ↔ canvas mapping
-- [ ] E2 Token entity: `process_tokens` table (id, instance, activity, scope, parent, loop counter, state); migrate active tokens and join bookkeeping; upgrade tests from every prior schema
+- [ ] E2 Token entity: Flyway `V22` `process_tokens` table (id, instance, activity, scope, parent, loop counter, state); migrate active tokens and join bookkeeping; joins count token ids; upgrade tests from V1–V21 schemas
 - [ ] E3 Bounded loops: back-edges allowed only with `max_iterations`; `on_exhausted` route or incident
 - [ ] E4 Boundaries: `on_error`, `on_timeout` as real boundary events on agent, engine-task and human-input; enforced `sla_hours` with escalation; migrate M1 synthetic outcome gateways
 - [ ] E5 Human review primitive: `outcomes: [approve, reject]`, required reject comment written to a variable
@@ -68,6 +68,7 @@ Full specifications: [`m1-task-specs.md`](m1-task-specs.md).
 - [ ] E11 Evidence and cost: `agent_steps` with retention/redaction policy, encrypted at rest; per-model price table
 - [ ] E12 Studio: SSE from the outbox; agent-step inspector
 - [ ] E13 Routing agents: `routes:` validated by the engine
+- [ ] E20 Governed delegation: `call-process` node on the E2 token model (child linked by `parent_instance_id` / `parent_token_id`, typed inputs and outputs, `max_depth`); agents may declare `delegates:` and propose a delegation admitted only through an engine command (declared target, schema-checked inputs, optional `approval: required`); agent identity (id, prompt version, model) recorded on every step and delegation. Done when an engine kill mid-child neither duplicates nor orphans it and lineage shows in audit and Studio
 
 The engine never calls tool servers; MCP lives in the worker.
 
@@ -77,6 +78,7 @@ The engine never calls tool servers; MCP lives in the worker.
 - [ ] E15 Replay before approval: sandboxed replay on the last N cases, outcome diff, policy can require it
 - [ ] E16 One-click rollback to a prior immutable version
 - [ ] E17 Schema-driven NL authoring with patch-mode refine
+- [ ] E21 Bounded for-each: `for_each` over a list variable with `max_items` and `max_parallel`; each item a child token (or E20 child process); results gathered into one variable; a failed item routes through `on_error` without failing the others
 - [ ] E18 Static site, `/investors` page, 3-minute video
 - [ ] E19 1.1.0 gate report, upgrade notes, pilot runbook
 
@@ -97,13 +99,18 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 | --- | --- | --- |
 | M1 | T10, T9 labelling | T1, T3, T4, T12 |
 | M2 | E6 polish | E2, E3 |
-| M3 | E13, E12 SSE | E9, E10 |
-| M4 | E17, E18 Astro migration | E14, E15 |
+| M3 | E13, E12 SSE (keep polling), then agent-proposed delegation in E20 (keep plain call-process) | E9, E10 |
+| M4 | E21, E17, E18 Astro migration | E14, E15 |
 
 ## Deferred (1.2 or later)
 
-For-each/map and call-process; TypeScript and Python worker SDKs; Abada MCP
+TypeScript and Python worker SDKs; Abada MCP
 server; SaaS track (multi-tenancy, billing); BPMN coverage beyond import;
 `tenda/` and `orun/` (archive); identity-administration UI beyond the IdP;
 infrastructure certification (Track B of the former 1.1 roadmap) — kept as a
 release-notes limitation until scheduled.
+
+Call-process and for-each moved out of this list on 2026-09-27 into M3 (E20)
+and M4 (E21): governed delegation lets agents coordinate without leaving the
+engine's control. Both reuse the E2 token model and the E9 journal rather than
+new machinery.
