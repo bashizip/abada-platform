@@ -122,8 +122,9 @@ certificates.
 
 Then connect to the VM and run `sudo /opt/abada/release/abada-platform up server`.
 After a VM reboot the containers restart on their own within about two
-minutes; the Agent Worker may restart several times until the engine is
-ready.
+minutes; the Agent Worker waits for the engine and Keycloak, retrying its
+registration with backoff for up to five minutes
+(`ABADA_AGENT_STARTUP_RETRY_MS`).
 
 The full procedure, including the static address, firewall rules, DNS, the
 verification checks, reboot recovery, backups and upgrades, is in the

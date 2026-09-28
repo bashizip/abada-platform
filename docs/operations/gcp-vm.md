@@ -207,10 +207,15 @@ or host maintenance without running `up server`. On boot the startup script
 only confirms the installed release; it starts nothing unless
 `abada-autostart=true`.
 
-Allow about two minutes for everything to become healthy. The agent worker
-starts at the same time as the engine and Keycloak, exits while they are not
-ready yet and is restarted by Docker until it registers; several restarts
-after a reboot are expected and harmless. Check the result with:
+Allow about two minutes for everything to become healthy. Docker starts all
+containers at once after a reboot, so the agent worker usually comes up
+before the engine and Keycloak are ready. It waits for them: registration is
+retried with backoff (log lines `agent_startup_retry`) for up to
+`ABADA_AGENT_STARTUP_RETRY_MS`, five minutes by default, and the worker
+container is not restarted. If the engine is still not ready after that, the
+worker exits and Docker restarts it. Workers older than `1.0.0-rc.8` exit on
+the first failed registration instead and show several restarts after a
+reboot. Check the result with:
 
 ```bash
 cd /opt/abada && sudo docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml --profile agent ps
@@ -291,4 +296,5 @@ before going live.
 | Engine returns 401 for valid users | The issuer is `https://auth.$ABADA_DOMAIN/realms/abada`; check that `KC_HOSTNAME_URL` and the engine's `OIDC_ISSUER_URI` agree in `docker compose ... config`. |
 | `up server` stops at a port check | Another process holds 80 or 443 on the VM. |
 | Certificates never arrive but DNS is right | The firewall rule on the VM's tag restricts source ranges, so Let's Encrypt cannot reach port 80; use a public rule (section 1). |
-| Agent worker shows many restarts after a reboot | Expected while the engine starts; it is healthy once it registers (see *Reboots and recovery*). |
+| Agent worker logs `agent_startup_retry` after a reboot | Expected while the engine and Keycloak start; it stops once the worker registers (see *Reboots and recovery*). |
+| Agent worker exits with `agent_startup_gave_up` or HTTP 401/403 | The engine was not ready within `ABADA_AGENT_STARTUP_RETRY_MS`, or the worker client secret is wrong (401/403 is never retried). Check the engine and Keycloak logs and `ABADA_AGENT_OIDC_CLIENT_SECRET`. |
