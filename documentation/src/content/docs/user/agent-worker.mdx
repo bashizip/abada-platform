@@ -19,9 +19,9 @@ sequenceDiagram
     participant W as Agent Worker (abada-agent-worker)
     participant M as LLM provider
 
-    E->>DB: instance reaches agent node; write external task
+    E->>DB: instance reaches agent node, writes external task
     W->>E: fetch-and-lock abada:agent
-    E->>DB: lock task, extend lease; heartbeat loop
+    E->>DB: lock task and extend lease (heartbeat loop)
     W->>M: model call (outside any workflow transaction)
     M-->>W: structured output (+ _confidence)
     W->>E: complete with attempt metadata
