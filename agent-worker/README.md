@@ -15,6 +15,8 @@ prefer `ABADA_AGENT_OIDC_TOKEN_URL`, `ABADA_AGENT_OIDC_CLIENT_ID`, and
 `ABADA_AGENT_OIDC_CLIENT_SECRET`; `ABADA_ENGINE_TOKEN` remains available for a
 pre-issued token. The worker's global capabilities may be restricted with the
 comma-separated `ABADA_AGENT_MODELS` list (empty means all models in the
-engine allow-list). No project binding is required. Optional
+engine allow-list). No project binding is required. Startup registration
+retries an engine or identity provider that is not ready yet for up to
+`ABADA_AGENT_STARTUP_RETRY_MS` (default 300000). Optional
 bounds and the tool allow-list are documented in
 `docs/reference/agent-worker.md`.
