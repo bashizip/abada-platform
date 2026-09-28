@@ -115,8 +115,7 @@ cd engine
 For the production artifact:
 
 ```bash
-cd engine
-docker build -f Dockerfile.prod.engine -t abada-engine:local .
+docker build -f engine/Dockerfile.prod.engine -t abada-engine:local .
 ```
 
 ### Studio

@@ -114,9 +114,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build immutable platform images
         run: |
-          docker build -f engine/Dockerfile.prod.engine -t "$ABADA_ENGINE_IMAGE" engine
+          docker build -f engine/Dockerfile.prod.engine -t "$ABADA_ENGINE_IMAGE" .
           docker build -f studio/Dockerfile.prod -t "$ABADA_STUDIO_IMAGE" .
-          docker build -f documentation/Dockerfile.prod -t "$ABADA_DOCS_IMAGE" documentation
+          docker build -f documentation/Dockerfile.prod -t "$ABADA_DOCS_IMAGE" .
       - name: Start telemetry-disabled development platform
         run: docker compose --env-file release/.env.dev.example -f compose.yaml -f compose.dev.yaml up -d --wait
       - name: Verify workflow persistence and telemetry-disabled behavior

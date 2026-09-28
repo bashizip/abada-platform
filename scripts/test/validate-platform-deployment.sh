@@ -50,6 +50,16 @@ for theme_file in theme.properties template.ftl resources/css/abada.css resource
 done
 grep -q 'docker/keycloak/themes/abada:/opt/keycloak/themes/abada' "$ROOT_DIR/compose.dev.yaml"
 grep -q 'docker/keycloak/themes/abada' "$ROOT_DIR/release/build-bundle.sh"
+
+# Every published image ships the licence text and builds from the repository
+# root, the only context that contains LICENSE.
+for dockerfile in engine/Dockerfile.prod.engine studio/Dockerfile.prod documentation/Dockerfile.prod agent-worker/Dockerfile; do
+  grep -q '^COPY LICENSE /licenses/LICENSE$' "$ROOT_DIR/$dockerfile"
+done
+if grep -Eq 'context: (engine|documentation)$' "$ROOT_DIR/.github/workflows/docker-publish-ghcr.yml"; then
+  echo "Image publication must build from the repository root so LICENSE ships" >&2
+  exit 1
+fi
 if jq -e '.clients[]? | select(.clientId == "abada-frontend") | (.redirectUris + .webOrigins) | any(test("5602|5603|tenda|orun"))' \
   "$ROOT_DIR/docker/keycloak/import/realm-dev.json" >/dev/null; then
   echo "Development realm still trusts retired Tenda/Orun frontend origins" >&2
@@ -270,6 +280,7 @@ grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.3-test\.tar\.gz$' \
   "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz.sha256"
 tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
 test -x "$TMP_DIR/scripts/dev/provision-agent-worker.sh"
+cmp -s "$ROOT_DIR/LICENSE" "$TMP_DIR/LICENSE"
 test -f "$TMP_DIR/deployment/telemetry/config.alloy"
 test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"
 grep -q 'grafana/alloy:v1.18.0' "$TMP_DIR/compose.telemetry.yaml"

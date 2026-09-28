@@ -543,8 +543,8 @@ cd studio && npm ci && npm run dev
 ### Rebuilding the served image
 
 ```bash
-cd studio && docker build -f Dockerfile.prod -t abada-studio:local .
-cd .. && ABADA_STUDIO_IMAGE=abada-studio:local \
+docker build -f studio/Dockerfile.prod -t abada-studio:local .
+ABADA_STUDIO_IMAGE=abada-studio:local \
   docker compose -f compose.yaml -f compose.dev.yaml up -d abada-studio
 ```
 

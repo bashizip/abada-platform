@@ -47,7 +47,7 @@ build_flags=()
 $NO_CACHE && build_flags+=(--no-cache)
 
 echo "Building $ENGINE_IMAGE..."
-docker build "${build_flags[@]+"${build_flags[@]}"}" -f "$ROOT_DIR/engine/Dockerfile.prod.engine" -t "$ENGINE_IMAGE" "$ROOT_DIR/engine"
+docker build "${build_flags[@]+"${build_flags[@]}"}" -f "$ROOT_DIR/engine/Dockerfile.prod.engine" -t "$ENGINE_IMAGE" "$ROOT_DIR"
 
 echo "Building $STUDIO_IMAGE..."
 docker build "${build_flags[@]+"${build_flags[@]}"}" -f "$ROOT_DIR/studio/Dockerfile.prod" -t "$STUDIO_IMAGE" "$ROOT_DIR"

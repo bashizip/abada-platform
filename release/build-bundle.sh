@@ -15,6 +15,7 @@ ARCHIVE="$OUTPUT_DIR/$BUNDLE_NAME.tar.gz"
 rm -rf "$STAGING" "$ARCHIVE" "$ARCHIVE.sha256"
 mkdir -p "$STAGING/release" "$STAGING/deployment" "$STAGING/docker/keycloak/import" "$STAGING/docker/keycloak/themes" "$STAGING/docker/grafana" "$STAGING/scripts/dev"
 
+cp "$ROOT_DIR/LICENSE" "$STAGING/"
 cp "$ROOT_DIR/compose.yaml" "$ROOT_DIR/compose.dev.yaml" "$ROOT_DIR/compose.prod.yaml" "$ROOT_DIR/compose.telemetry.yaml" "$STAGING/"
 cp -R "$ROOT_DIR/deployment/telemetry" "$STAGING/deployment/"
 cp -R "$ROOT_DIR/docker/grafana/provisioning" "$ROOT_DIR/docker/grafana/dashboards" "$STAGING/docker/grafana/"
