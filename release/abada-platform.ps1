@@ -252,11 +252,27 @@ function Show-SuccessPanel {
   Write-Host ""
 }
 
+# Keycloak imports realm-dev.json only into an empty database, so a realm
+# created before the Abada login theme existed never selects it. Apply it on
+# every dev start; the update is idempotent and a failure only warns.
+function Set-DevLoginTheme {
+  $User = Get-EnvValue 'KEYCLOAK_ADMIN_USERNAME'; if (-not $User) { $User = 'admin' }
+  $Password = Get-EnvValue 'KEYCLOAK_ADMIN_PASSWORD'; if (-not $Password) { $Password = 'admin' }
+  $Kcadm = '/opt/keycloak/bin/kcadm.sh'
+  & docker @Compose exec -T keycloak $Kcadm config credentials --server http://127.0.0.1:8080 --realm master --user $User --password $Password *> $null
+  if ($LASTEXITCODE -eq 0) {
+    & docker @Compose exec -T keycloak $Kcadm update realms/abada-dev -s loginTheme=abada -s 'displayName=Abada Studio' *> $null
+  }
+  if ($LASTEXITCODE -eq 0) { Write-Host 'Applied the Abada login theme to the abada-dev realm.' }
+  else { Write-Warning 'Could not apply the Abada login theme; see docker/keycloak/themes/README.md' }
+}
+
 switch ($Command) {
   "doctor" { Invoke-Doctor }
   "up" {
     Invoke-Doctor
     Invoke-Compose @("up", "-d", "--wait")
+    if ($Profile -eq 'dev') { Set-DevLoginTheme }
     Show-SuccessPanel
   }
   "down" { Invoke-Compose @("down") }

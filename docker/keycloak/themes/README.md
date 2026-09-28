@@ -19,14 +19,18 @@ primary button. The palette mirrors `studio/src/index.css`.
 `realm-dev.json` selects it with `"loginTheme": "abada"`. `start-dev` disables
 theme caching, so CSS and template edits show on the next page reload.
 
-Keycloak only imports `realm-dev.json` into an empty database. To switch an
-already-provisioned dev realm to the theme, pick **abada** under
-*Realm settings → Themes → Login theme* in the admin console, or run:
+Keycloak only imports `realm-dev.json` into an empty database, so a dev realm
+created before the theme existed does not select it on its own. The dev
+launcher (`release/abada-platform up dev`, which `scripts/dev/up.sh` also uses)
+therefore sets the realm's login theme on every start. For a stack started any
+other way, pick **abada** under *Realm settings → Themes → Login theme* in the
+admin console, or run:
 
 ```bash
-docker compose exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
-  --server http://localhost:8080 --realm master --user admin --password admin
-docker compose exec keycloak /opt/keycloak/bin/kcadm.sh update realms/abada-dev \
+C="docker compose --env-file .env.dev -f compose.yaml -f compose.dev.yaml"
+$C exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+  --server http://127.0.0.1:8080 --realm master --user admin --password admin
+$C exec keycloak /opt/keycloak/bin/kcadm.sh update realms/abada-dev \
   -s loginTheme=abada -s 'displayName=Abada Studio'
 ```
 
