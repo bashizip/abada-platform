@@ -7,8 +7,6 @@
   ],
   "scripts": {
     "dev": "cd packages/web && bunx vite",
-    "dev:desktop": "cd packages/desktop && bunx vite",
-    "dev:mobile": "cd packages/mobile && bunx expo start --port $(bun --print \"require('../../__ports.cjs').mobile\")",
     "build": "turbo build",
     "build:web": "cd packages/web && bunx vite build",
     "lint": "echo 'lint not configured'",
