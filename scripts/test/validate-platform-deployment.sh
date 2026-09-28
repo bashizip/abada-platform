@@ -19,7 +19,7 @@ grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/abada-platform.ps1"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.sh"
 grep -q 'DOCKER_DEFAULT_PLATFORM.*linux/amd64' "$ROOT_DIR/release/quickstart.ps1"
-grep -q '\[\[ "$MODE" == "dev" \]\] && AGENT=true' "$ROOT_DIR/release/abada-platform"
+grep -q '\[\[ "$MODE" == "dev" || "$MODE" == "server" \]\] && AGENT=true' "$ROOT_DIR/release/abada-platform"
 grep -q -- '--no-agent' "$ROOT_DIR/release/abada-platform"
 grep -q 'AGENT=true' "$ROOT_DIR/scripts/dev/up.sh"
 for launcher in "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1"; do
@@ -220,6 +220,77 @@ if grep -qx 'otel-collector' "$TMP_DIR/external-services"; then
   exit 1
 fi
 
+# Server profile: one public domain, TLS, bundled production-mode Keycloak.
+jq -e '.realm == "abada" and .sslRequired == "external" and .loginTheme == "abada"
+  and ([.users[]?.username] == ["service-account-abada-admin-api"])
+  and ([.users[]? | has("credentials")] | any | not)
+  and ([.clients[] | has("secret")] | any | not)
+  and (.clients[] | select(.clientId == "abada-frontend") | (.redirectUris + .webOrigins) == [])' \
+  "$ROOT_DIR/docker/keycloak/import/realm-server.json" >/dev/null
+cp "$ROOT_DIR/release/.env.server.example" "$TMP_DIR/server.env"
+sed -i.bak \
+  -e 's|^ABADA_DOMAIN=.*|ABADA_DOMAIN=demo.abada.test|' \
+  -e 's|^ABADA_ACME_EMAIL=.*|ABADA_ACME_EMAIL=operations@abada.test|' \
+  "$TMP_DIR/server.env"
+if docker compose --env-file "$TMP_DIR/server.env" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.server.yaml" \
+  config --quiet >"$TMP_DIR/server-missing.out" 2>&1; then
+  echo "Server configuration unexpectedly accepted missing secrets" >&2
+  exit 1
+fi
+"$ROOT_DIR/release/abada-platform" doctor server --env-file "$TMP_DIR/server.env" --no-pull >"$TMP_DIR/server-doctor.out" 2>&1 || {
+  cat "$TMP_DIR/server-doctor.out" >&2
+  exit 1
+}
+grep -q 'Generated POSTGRES_PASSWORD' "$TMP_DIR/server-doctor.out"
+[[ "$(ls -l "$TMP_DIR/server.env" | cut -c1-10)" == "-rw-------" ]]
+SERVER=(docker compose --env-file "$TMP_DIR/server.env" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.server.yaml")
+assert_config_clean "${SERVER[@]}"
+assert_config_clean "${SERVER[@]}" --profile agent
+"${SERVER[@]}" --profile agent config --format json >"$TMP_DIR/server-config.json"
+jq -e '
+  .services.keycloak.command == ["start", "--import-realm"]
+  and .services.keycloak.environment.KC_HOSTNAME_URL == "https://auth.demo.abada.test"
+  and .services["abada-engine"].environment.OIDC_ISSUER_URI == "https://auth.demo.abada.test/realms/abada"
+  and .services["abada-engine"].environment.ABADA_ALLOWED_ORIGINS == "https://demo.abada.test"
+  and .services["abada-studio"].environment.ABADA_API_URL == "https://demo.abada.test/api"
+  and ([.services.traefik.ports[] | .published] | sort) == ["443", "80"]
+  and ([.services.traefik.ports[] | .host_ip // ""] | all(. == "" or . == "0.0.0.0"))
+  and (.services.traefik.command | index("--api.insecure=true") | not)
+  and .services.postgres.ports == null and .services["keycloak-db"].ports == null
+  and .services.keycloak.ports == null
+  and ([.services[] | has("build")] | any | not)' \
+  "$TMP_DIR/server-config.json" >/dev/null
+if grep -Eq 'abada-dev|abada_dev_|realm-dev.json|\.localhost' "$TMP_DIR/server-config.json"; then
+  echo "Server profile leaks development identities, secrets or hostnames" >&2
+  exit 1
+fi
+
+expect_server_failure() {
+  local env_file="$1" expected="$2"
+  if "$ROOT_DIR/release/abada-platform" doctor server --env-file "$env_file" --no-pull >"$TMP_DIR/server-preflight.out" 2>&1; then
+    echo "Server preflight unexpectedly accepted invalid configuration" >&2
+    exit 1
+  fi
+  grep -q "$expected" "$TMP_DIR/server-preflight.out" || {
+    echo "Server preflight failed for the wrong reason; expected: $expected" >&2
+    cat "$TMP_DIR/server-preflight.out" >&2
+    exit 1
+  }
+}
+cp "$TMP_DIR/server.env" "$TMP_DIR/server-localhost.env"
+sed -i.bak 's|^ABADA_DOMAIN=.*|ABADA_DOMAIN=studio.localhost|' "$TMP_DIR/server-localhost.env"
+expect_server_failure "$TMP_DIR/server-localhost.env" 'ABADA_DOMAIN must be a DNS hostname'
+cp "$TMP_DIR/server.env" "$TMP_DIR/server-nodomain.env"
+sed -i.bak 's|^ABADA_DOMAIN=.*|ABADA_DOMAIN=|' "$TMP_DIR/server-nodomain.env"
+expect_server_failure "$TMP_DIR/server-nodomain.env" 'set ABADA_DOMAIN'
+cp "$TMP_DIR/server.env" "$TMP_DIR/server-weak.env"
+sed -i.bak 's|^ABADA_OPERATOR_PASSWORD=.*|ABADA_OPERATOR_PASSWORD=short|' "$TMP_DIR/server-weak.env"
+expect_server_failure "$TMP_DIR/server-weak.env" 'ABADA_OPERATOR_PASSWORD must contain at least 16 characters'
+cp "$TMP_DIR/server.env" "$TMP_DIR/server-latest.env"
+sed -i.bak 's|^ABADA_ENGINE_IMAGE=.*|ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:latest|' "$TMP_DIR/server-latest.env"
+expect_server_failure "$TMP_DIR/server-latest.env" 'ABADA_ENGINE_IMAGE must pin an exact immutable semantic version'
+bash -n "$ROOT_DIR/deployment/gcp/startup.sh"
+
 "${DEV_TELEMETRY[@]}" config --format json >"$TMP_DIR/telemetry-config.json"
 jq -e '.services.grafana.ports | all(.host_ip == "127.0.0.1")' "$TMP_DIR/telemetry-config.json" >/dev/null
 jq -e '[.services.alloy.volumes[]?.source] | index("/var/run/docker.sock") | not' \
@@ -280,6 +351,10 @@ grep -Eq '^[0-9a-fA-F]{64}  abada-platform-1\.0\.0-rc\.3-test\.tar\.gz$' \
   "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz.sha256"
 tar -xzf "$ROOT_DIR/release/dist/abada-platform-1.0.0-rc.3-test.tar.gz" --strip-components=1 -C "$TMP_DIR"
 test -x "$TMP_DIR/scripts/dev/provision-agent-worker.sh"
+test -f "$TMP_DIR/compose.server.yaml"
+test -f "$TMP_DIR/docker/keycloak/import/realm-server.json"
+test -x "$TMP_DIR/deployment/gcp/startup.sh"
+grep -q '^ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:1.0.0-rc.3-test$' "$TMP_DIR/release/.env.server.example"
 cmp -s "$ROOT_DIR/LICENSE" "$TMP_DIR/LICENSE"
 test -f "$TMP_DIR/deployment/telemetry/config.alloy"
 test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"
