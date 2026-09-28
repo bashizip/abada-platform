@@ -10,7 +10,8 @@ Compose distribution. The reader-oriented procedures are published in the
 | --- | --- |
 | `compose.yaml` + `compose.dev.yaml` | PostgreSQL, Engine, Studio, Docs, bundled Keycloak and local HTTP routing |
 | `compose.yaml` + `compose.prod.yaml` | PostgreSQL, versioned application images, external OIDC and Traefik TLS |
-| either profile + `compose.telemetry.yaml` | Optional bundled metrics, traces and logs |
+| `compose.yaml` + `compose.server.yaml` | One public VM: versioned images, Traefik TLS for one domain, bundled production-mode Keycloak, agent worker |
+| any profile + `compose.telemetry.yaml` | Optional bundled metrics, traces and logs |
 
 The older `docker-compose*.yml` and generated release Compose files are
 removed. H2 is not a certified platform deployment.
@@ -40,6 +41,22 @@ version, API/Studio hostnames, ACME email, explicit CORS origins and OIDC
 settings. Missing values fail during `docker compose config`, before a
 container is created. Only Traefik publishes 80/443. Production identity is
 external; bundled Keycloak is development-only.
+
+## Server (single VM)
+
+```bash
+./release/abada-platform up server
+```
+
+The first run creates `.env.server` from `release/.env.server.example`. Set
+`ABADA_DOMAIN` and `ABADA_ACME_EMAIL` and run the command again; the launcher
+generates every secret (mode `600`), validates the domain and pinned images,
+configures the bundled `abada` realm (redirect URI, admin-API secret, the
+`alice` operator and `bob` reviewer accounts) and provisions the agent worker.
+Studio is served at `https://$ABADA_DOMAIN`, the API at `api.`, Keycloak at
+`auth.` and the docs at `docs.` of that domain. The server launcher is
+Bash-only. See [single-VM server on Google Cloud](gcp-vm.md) for the full
+procedure.
 
 ## Release artifact
 
@@ -83,7 +100,7 @@ contract.
 ./scripts/test/validate-platform-deployment.sh
 ```
 
-This validates dev and production configuration with telemetry disabled,
+This validates dev, production and server configuration with telemetry disabled,
 bundled and external, required-variable failure, frontend startup validation,
 release checksums and execution of preflight from a clean temporary directory.
 Live release certification additionally runs authentication, deployment, task

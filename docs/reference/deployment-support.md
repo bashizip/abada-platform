@@ -8,6 +8,7 @@
 | Production | External OIDC, direct JWT validation and RBAC | Disabled | Core + production Compose | Configuration contract passes; reference-host smoke pending |
 | Production | External OIDC, direct JWT validation and RBAC | Bundled stack | Core + production + telemetry Compose | Configuration contract passes; reference-host signal smoke pending |
 | Production | External OIDC, direct JWT validation and RBAC | External OTLP | Core + production Compose and explicit endpoint | Configuration contract passes; external collector smoke pending |
+| Server (single VM) | Bundled Keycloak in production mode, direct JWT validation and RBAC | Disabled | Core + server Compose | Configuration contract and local end-to-end start pass; public reference host (`demo.abadaplatform.com`) smoke pending |
 | H2 convenience | Disabled or controlled local mode | Disabled | Engine process only | Not a certified platform topology |
 | Trusted proxy compatibility | Authenticating proxy headers | Independently configurable | Custom controlled deployment | Not part of the certified Compose family; engine must be unreachable except through the proxy |
 
@@ -44,8 +45,14 @@ production may instead set explicit OTLP endpoints for an external collector.
 Telemetry delivery is diagnostic and cannot participate in workflow-state
 transactions or engine readiness.
 
+The server profile runs every component on one host for one public domain
+(`ABADA_DOMAIN` plus its `api.`, `auth.` and `docs.` subdomains) with Let's
+Encrypt certificates. It is intended for evaluations and public demos on a
+single VM; it is not a multi-replica or high-availability topology. See
+[single-VM server on Google Cloud](../operations/gcp-vm.md).
+
 The authoritative deployment files are `compose.yaml`, `compose.dev.yaml`,
-`compose.prod.yaml` and `compose.telemetry.yaml`. Downloadable deployments use
+`compose.prod.yaml`, `compose.server.yaml` and `compose.telemetry.yaml`. Downloadable deployments use
 a versioned release bundle containing those files and every referenced
 configuration asset; a standalone downloaded Compose file is not supported.
 

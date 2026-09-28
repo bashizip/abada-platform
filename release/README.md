@@ -41,7 +41,19 @@ cp release/.env.prod.example .env.prod
 ./release/abada-platform up prod
 ```
 
-Add `--telemetry` to either command to run the bundled Grafana, Prometheus,
+Single public VM (bundled Keycloak, Let's Encrypt, agent worker):
+
+```bash
+./release/abada-platform up server
+# First run creates .env.server: set ABADA_DOMAIN and ABADA_ACME_EMAIL, rerun.
+```
+
+Secrets are generated into `.env.server`. Studio is served at
+`https://$ABADA_DOMAIN`; point both the domain and `*.$ABADA_DOMAIN` at the
+host. `deployment/gcp/startup.sh` bootstraps a Compute Engine VM; see
+`docs/operations/gcp-vm.md`. The server profile is Bash-only.
+
+Add `--telemetry` to any of these commands to run the bundled Grafana, Prometheus,
 Jaeger, Loki, Grafana Alloy, and OpenTelemetry Collector stack. To export to an
 external collector, omit the overlay and set `ABADA_TELEMETRY_ENABLED=true`,
 `ABADA_TELEMETRY_OTLP_ENDPOINT`, and `OTEL_SDK_DISABLED=false` in the profile
