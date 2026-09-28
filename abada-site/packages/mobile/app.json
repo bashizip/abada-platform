@@ -4,8 +4,8 @@
     "android": {
       "package": "com.appId.runable",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#05070A"
       },
       "edgeToEdgeEnabled": true
     },
@@ -21,7 +21,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "cover",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#05070A"
     },
     "name": "mobile",
     "slug": "mobile",
