@@ -26,7 +26,7 @@ class InfoControllerTest {
                 .andExpect(jsonPath("$.service").value("abada-engine"))
                 .andExpect(jsonPath("$.description")
                         .value("Open-source, self-hosted runtime for governed AI-driven business processes"))
-                .andExpect(jsonPath("$.version").value("1.0.0-rc.6"))
+                .andExpect(jsonPath("$.version").value("1.0.0-rc.7"))
                 .andExpect(jsonPath("$.api.version").value("v1"))
                 .andExpect(jsonPath("$.api.openApi").value("/api/v3/api-docs"))
                 .andExpect(jsonPath("$.api.swaggerUi").value("/api/swagger-ui.html"))

@@ -11,7 +11,7 @@ FROM eclipse-temurin:21-jre-alpine
 ENV JAVA_TOOL_OPTIONS="-Djava.net.preferIPv4Stack=true"
 RUN addgroup -S abada && adduser -S -G abada abada
 WORKDIR /app
-COPY --from=build /build/agent-worker/target/abada-agent-worker-1.0.0-rc.6.jar /app/agent-worker.jar
+COPY --from=build /build/agent-worker/target/abada-agent-worker-1.0.0-rc.7.jar /app/agent-worker.jar
 COPY LICENSE /licenses/LICENSE
 USER abada
 ENTRYPOINT ["java", "-jar", "/app/agent-worker.jar"]
