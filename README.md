@@ -188,9 +188,9 @@ only through an engine command that validates it — see
 
 ## Status
 
-The current release is **`1.0.0-rc.6`**, an evaluation release candidate
-([release notes](docs/release-notes/1.0.0-rc.6-release-notes.md),
-[gate report](docs/development/1.0-rc.6-gate-report-2026-09-23.md)). It targets
+The current release is **`1.0.0-rc.7`**, an evaluation release candidate
+([release notes](docs/release-notes/1.0.0-rc.7-release-notes.md),
+[gate report](docs/development/1.0-rc.7-gate-report-2026-09-28.md)). It targets
 self-hosted Docker Compose deployments with one or more engine instances on PostgreSQL.
 
 Next on the [roadmap](docs/development/roadmap.md): enforced SLAs, timeouts and bounded

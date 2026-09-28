@@ -15,7 +15,7 @@ OpenAPI document, Swagger UI and operational health probes.
   "name": "Abada Engine",
   "service": "abada-engine",
   "description": "Open-source, self-hosted runtime for governed AI-driven business processes",
-  "version": "1.0.0-rc.6",
+  "version": "1.0.0-rc.7",
   "api": {
     "version": "v1",
     "openApi": "/api/v3/api-docs",

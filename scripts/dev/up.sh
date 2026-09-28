@@ -7,7 +7,7 @@
 #   ./scripts/dev/up.sh --no-agent    # build all images + core stack only (diagnostics)
 #   ./scripts/dev/up.sh --no-build    # skip builds, just stack up (images must exist)
 #   ./scripts/dev/up.sh --no-cache    # rebuild images from scratch (no Docker layer cache)
-#   ./scripts/dev/up.sh --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.6
+#   ./scripts/dev/up.sh --agent-image ghcr.io/bashizip/abada-agent-worker:1.0.0-rc.7
 #                                      # use a pinned remote agent image instead of the local build
 #   ./scripts/dev/up.sh --telemetry   # also enable the bundled telemetry overlay
 #   ./scripts/dev/up.sh --telemetry --no-agent
@@ -99,7 +99,7 @@ $NO_CACHE && build_flags+=(--no-cache)
 build_images() {
   echo "Building $ENGINE_IMAGE..."
   docker build "${build_flags[@]+"${build_flags[@]}"}" \
-    -f "$ROOT_DIR/engine/Dockerfile.prod.engine" -t "$ENGINE_IMAGE" "$ROOT_DIR/engine"
+    -f "$ROOT_DIR/engine/Dockerfile.prod.engine" -t "$ENGINE_IMAGE" "$ROOT_DIR"
 
   echo "Building $STUDIO_IMAGE..."
   docker build "${build_flags[@]+"${build_flags[@]}"}" \
@@ -107,7 +107,7 @@ build_images() {
 
   echo "Building $DOCS_IMAGE..."
   docker build "${build_flags[@]+"${build_flags[@]}"}" \
-    -f "$ROOT_DIR/documentation/Dockerfile.prod" -t "$DOCS_IMAGE" "$ROOT_DIR/documentation"
+    -f "$ROOT_DIR/documentation/Dockerfile.prod" -t "$DOCS_IMAGE" "$ROOT_DIR"
 
   if $AGENT && [[ -z "$AGENT_IMAGE_OPT" ]]; then
     echo "Building $AGENT_IMAGE..."

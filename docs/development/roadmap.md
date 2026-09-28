@@ -49,6 +49,7 @@ Full specifications: [`m1-task-specs.md`](m1-task-specs.md).
 - [x] T11 Truth in the repository (AGENTS.md, README, roadmap consolidation)
 - [x] T12 Truth on the web (site claims corrected; the outdated PDF brief was removed and will be replaced later)
 - [x] rc.6 gate report and exit demo — [report](1.0-rc.6-gate-report-2026-09-23.md): exit demo passed (heartbeat race found and fixed); GO signed off and published 2026-09-23
+- [ ] 1.0.0-rc.7 — Studio and packaging follow-up to M1, no engine or schema change: BPMN-notation canvas with ELK layout and four canvas fixes, bundled fonts (no Google Fonts), dev login theme, `LICENSE` in the archive and images — [report](1.0-rc.7-gate-report-2026-09-28.md)
 
 ## M2 — Real process shapes
 

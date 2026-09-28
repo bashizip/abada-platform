@@ -7,7 +7,7 @@ profile you need, then run the preflight before starting containers.
 Release images support `linux/amd64` and `linux/arm64`. The original immutable
 `1.0.0-rc.1` images contain only `linux/amd64`; the current launcher detects
 that exact release on an ARM64 Docker host, prints a notice, and enables
-Docker's compatibility mode. `1.0.0-rc.6` is the prepared release; RC.3 was the first
+Docker's compatibility mode. `1.0.0-rc.7` is the prepared release; RC.3 was the first
 whose manifests are required to contain both native platforms.
 
 Development:
@@ -41,7 +41,19 @@ cp release/.env.prod.example .env.prod
 ./release/abada-platform up prod
 ```
 
-Add `--telemetry` to either command to run the bundled Grafana, Prometheus,
+Single public VM (bundled Keycloak, Let's Encrypt, agent worker):
+
+```bash
+./release/abada-platform up server
+# First run creates .env.server: set ABADA_DOMAIN and ABADA_ACME_EMAIL, rerun.
+```
+
+Secrets are generated into `.env.server`. Studio is served at
+`https://$ABADA_DOMAIN`; point both the domain and `*.$ABADA_DOMAIN` at the
+host. `deployment/gcp/startup.sh` bootstraps a Compute Engine VM; see
+`docs/operations/gcp-vm.md`. The server profile is Bash-only.
+
+Add `--telemetry` to any of these commands to run the bundled Grafana, Prometheus,
 Jaeger, Loki, Grafana Alloy, and OpenTelemetry Collector stack. To export to an
 external collector, omit the overlay and set `ABADA_TELEMETRY_ENABLED=true`,
 `ABADA_TELEMETRY_OTLP_ENDPOINT`, and `OTEL_SDK_DISABLED=false` in the profile

@@ -17,13 +17,13 @@ jobs:
       matrix:
         include:
           - image: abada-engine
-            context: engine
+            context: .
             dockerfile: engine/Dockerfile.prod.engine
           - image: abada-studio
             context: .
             dockerfile: studio/Dockerfile.prod
           - image: abada-docs
-            context: documentation
+            context: .
             dockerfile: documentation/Dockerfile.prod
           - image: abada-agent-worker
             context: .

@@ -115,8 +115,7 @@ cd engine
 For the production artifact:
 
 ```bash
-cd engine
-docker build -f Dockerfile.prod.engine -t abada-engine:local .
+docker build -f engine/Dockerfile.prod.engine -t abada-engine:local .
 ```
 
 ### Studio
@@ -297,7 +296,7 @@ documents claiming to be the authoritative roadmap.
 The curated Starlight site under `documentation/` explains and connects the
 authoritative contracts under `docs/`; it does not replace them. Use MDX for
 structured components and Mermaid only where a diagram materially clarifies a
-relationship or sequence. Keep the user guide deferred until its roadmap
-milestone is explicitly started.
+relationship or sequence. Update the user guide in the same change as the
+deployment, operational or user-facing behavior it describes.
 
 @RTK.md

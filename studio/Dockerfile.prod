@@ -43,6 +43,9 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 COPY studio/docker-entrypoint.sh /usr/local/bin/abada-studio-entrypoint
 RUN chmod +x /usr/local/bin/abada-studio-entrypoint
 
+# Ship the licence text with the bundle (AGPL-3.0-only)
+COPY LICENSE /licenses/LICENSE
+
 # Expose port 5605
 EXPOSE 5605
 

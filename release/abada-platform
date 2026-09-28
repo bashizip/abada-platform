@@ -7,28 +7,33 @@ MODE="${2:-dev}"
 
 if [[ -z "$COMMAND" || "$COMMAND" == "--help" || "$COMMAND" == "-h" ]]; then
   cat <<'USAGE'
-Usage: ./release/abada-platform <doctor|up|down|status|logs> <dev|prod> [options]
+Usage: ./release/abada-platform <doctor|up|down|status|logs> <dev|prod|server> [options]
+
+Profiles:
+  dev      Local HTTP on *.localhost with bundled Keycloak and demo accounts
+  prod     Public TLS hostnames with an external OIDC provider
+  server   Single public VM: TLS for one ABADA_DOMAIN, bundled Keycloak
 
 Options:
   --telemetry        Add the bundled metrics, traces and logs stack
   --env-file PATH    Use an explicit environment file
   --no-pull          Skip image availability/pull checks during doctor
-  --agent            Start the first-party agent worker (default in dev)
-  --no-agent         Skip the agent worker (dev diagnostics only)
+  --agent            Start the first-party agent worker (default in dev and server)
+  --no-agent         Skip the agent worker
 USAGE
   exit 0
 fi
 
 case "$MODE" in
-  dev|prod) ;;
-  *) echo "Error: profile must be 'dev' or 'prod'" >&2; exit 64 ;;
+  dev|prod|server) ;;
+  *) echo "Error: profile must be 'dev', 'prod' or 'server'" >&2; exit 64 ;;
 esac
 
 shift 2 || true
 TELEMETRY=false
 SKIP_PULL=false
 AGENT=false
-[[ "$MODE" == "dev" ]] && AGENT=true
+[[ "$MODE" == "dev" || "$MODE" == "server" ]] && AGENT=true
 ENV_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -47,7 +52,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$AGENT" == true && "$MODE" == "prod" ]]; then
-  echo "Error: --agent is only supported in dev mode" >&2
+  echo "Error: --agent is only supported in dev and server modes" >&2
   exit 64
 fi
 
@@ -59,11 +64,21 @@ if [[ "$MODE" == "dev" && ! -f "$ENV_FILE" ]]; then
   cp "$ROOT_DIR/release/.env.dev.example" "$ENV_FILE"
   echo "Created $ENV_FILE from the safe development defaults."
 fi
+if [[ "$MODE" == "server" && ! -f "$ENV_FILE" ]]; then
+  (umask 077 && cp "$ROOT_DIR/release/.env.server.example" "$ENV_FILE")
+  echo "Created $ENV_FILE; set ABADA_DOMAIN and ABADA_ACME_EMAIL, then run this command again."
+fi
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Error: environment file not found: $ENV_FILE" >&2
   [[ "$MODE" == "prod" ]] && echo "Copy release/.env.prod.example to .env.prod and replace every placeholder." >&2
   exit 66
 fi
+
+# Secrets the server profile generates on first use, so an operator only ever
+# edits the domain and ACME email.
+SERVER_SECRETS=(POSTGRES_PASSWORD KEYCLOAK_DB_PASSWORD KEYCLOAK_ADMIN_PASSWORD
+  ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET ABADA_AGENT_OIDC_CLIENT_SECRET
+  ABADA_OPERATOR_PASSWORD ABADA_REVIEWER_PASSWORD)
 
 BASE_COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.$MODE.yaml")
 if [[ "$TELEMETRY" == "true" ]]; then
@@ -129,6 +144,83 @@ validate_production_values() {
   fi
 }
 
+validate_server_values() {
+  if awk -F= '
+    /^[[:space:]]*#/ || NF < 2 { next }
+    /change-me|example\.com/ { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$ENV_FILE"; then
+    echo "Error: server environment still contains change-me/example.com placeholders" >&2
+    exit 65
+  fi
+  local domain acme_email key value
+  domain="$(env_value ABADA_DOMAIN)"
+  acme_email="$(env_value ABADA_ACME_EMAIL)"
+  [[ -n "$domain" ]] || { echo "Error: set ABADA_DOMAIN in $ENV_FILE (for example demo.example.org or 34-56-78-90.sslip.io)" >&2; exit 65; }
+  validate_hostname ABADA_DOMAIN "$domain"
+  [[ "$acme_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || {
+    echo "Error: ABADA_ACME_EMAIL must be a valid email address" >&2; exit 65;
+  }
+  validate_https_url ABADA_ACME_CA_SERVER "$(env_value ABADA_ACME_CA_SERVER)"
+  for key in "${SERVER_SECRETS[@]}"; do
+    value="$(env_value "$key")"
+    [[ ${#value} -ge 16 ]] || { echo "Error: $key must contain at least 16 characters" >&2; exit 65; }
+  done
+  for key in ABADA_ENGINE_IMAGE ABADA_STUDIO_IMAGE ABADA_DOCS_IMAGE ABADA_AGENT_WORKER_IMAGE; do
+    value="$(env_value "$key")"
+    [[ "$value" =~ :[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || {
+      echo "Error: $key must pin an exact immutable semantic version" >&2; exit 65;
+    }
+  done
+  if [[ "$TELEMETRY" == "true" ]]; then
+    value="$(env_value GRAFANA_ADMIN_PASSWORD)"
+    [[ ${#value} -ge 16 ]] || {
+      echo "Error: telemetry requires a non-placeholder GRAFANA_ADMIN_PASSWORD with at least 16 characters" >&2; exit 65;
+    }
+  fi
+}
+
+generate_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24
+  elif [[ -r /dev/urandom ]]; then
+    od -An -N24 -tx1 /dev/urandom | tr -d ' \n'
+  else
+    echo "Error: cannot securely generate secrets" >&2
+    exit 69
+  fi
+}
+
+set_env_value() {
+  local key="$1" value="$2" temp_file
+  temp_file="$(umask 077 && mktemp "${ENV_FILE}.tmp.XXXXXX")"
+  awk -v key="$key" -v value="$value" '
+    index($0, key "=") == 1 {
+      if (!updated) print key "=" value
+      updated = 1
+      next
+    }
+    { print }
+    END { if (!updated) print key "=" value }
+  ' "$ENV_FILE" >"$temp_file"
+  mv "$temp_file" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+}
+
+generate_server_secrets() {
+  local key generated=()
+  for key in "${SERVER_SECRETS[@]}"; do
+    if [[ -z "$(env_value "$key")" ]]; then
+      set_env_value "$key" "$(generate_secret)"
+      generated+=("$key")
+    fi
+  done
+  if [[ ${#generated[@]} -gt 0 ]]; then
+    echo "Generated ${generated[*]} in $ENV_FILE."
+  fi
+  chmod 600 "$ENV_FILE"
+}
+
 validate_telemetry_values() {
   local telemetry_enabled endpoint sdk_disabled
   telemetry_enabled="$(env_value ABADA_TELEMETRY_ENABLED)"
@@ -190,7 +282,7 @@ check_ports() {
     return 0
   fi
   local ports=(80)
-  [[ "$MODE" == "prod" ]] && ports+=(443)
+  [[ "$MODE" == "prod" || "$MODE" == "server" ]] && ports+=(443)
   if [[ "$TELEMETRY" == "true" ]]; then
     local grafana_port
     grafana_port="$(env_value GRAFANA_PORT)"
@@ -250,6 +342,10 @@ NOTICE
 doctor() {
   require_command docker
   [[ "$MODE" == "prod" ]] && validate_production_values
+  if [[ "$MODE" == "server" ]]; then
+    generate_server_secrets
+    validate_server_values
+  fi
   validate_telemetry_values
   docker info >/dev/null
   configure_rc1_arm64_compatibility
@@ -293,6 +389,91 @@ print_value() {
   printf '  %b%-12s%b %s\n' "$DIM" "$1" "$RESET" "$2"
 }
 
+# Keycloak imports realm-dev.json only into an empty database, so a realm
+# created before the Abada login theme existed never selects it. Apply it on
+# every dev start; the update is idempotent and a failure only warns.
+apply_dev_login_theme() {
+  local user password
+  user="$(env_value KEYCLOAK_ADMIN_USERNAME)"
+  password="$(env_value KEYCLOAK_ADMIN_PASSWORD)"
+  if "${BASE_COMPOSE[@]}" exec -T keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+      --server http://127.0.0.1:8080 --realm master \
+      --user "${user:-admin}" --password "${password:-admin}" >/dev/null 2>&1 \
+    && "${BASE_COMPOSE[@]}" exec -T keycloak /opt/keycloak/bin/kcadm.sh update realms/abada-dev \
+      -s loginTheme=abada -s 'displayName=Abada Studio' >/dev/null 2>&1; then
+    echo "Applied the Abada login theme to the abada-dev realm."
+  else
+    echo "Warning: could not apply the Abada login theme; see docker/keycloak/themes/README.md" >&2
+  fi
+}
+
+# The server realm is imported without users, secrets or public URLs. Apply the
+# domain, client secret and the two Studio accounts on every start; each step
+# is idempotent, so a rerun converges a changed .env.server onto Keycloak.
+kc_server() {
+  "${BASE_COMPOSE[@]}" exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"
+}
+
+ensure_realm_user() {
+  local username="$1" password="$2" enabled="$3" user_id group group_id
+  shift 3
+  user_id="$(kc_server get users -r abada -q username="$username" -q exact=true --fields id --format csv --noquotes)"
+  if [[ -z "$user_id" ]]; then
+    kc_server create users -r abada -s username="$username" -s enabled="$enabled" >/dev/null
+    user_id="$(kc_server get users -r abada -q username="$username" -q exact=true --fields id --format csv --noquotes)"
+  else
+    kc_server update "users/$user_id" -r abada -s enabled="$enabled" >/dev/null
+  fi
+  [[ "$enabled" == "true" ]] || return 0
+  kc_server set-password -r abada --userid "$user_id" --new-password "$password" >/dev/null
+  for group in "$@"; do
+    group_id="$(kc_server get groups -r abada -q search="$group" --fields id,name --format csv --noquotes \
+      | awk -F, -v name="$group" '$2 == name { print $1; exit }')"
+    kc_server update "users/$user_id/groups/$group_id" -r abada -n >/dev/null
+  done
+}
+
+configure_server_realm() {
+  local domain frontend_id admin_api_id reviewer_enabled
+  domain="$(env_value ABADA_DOMAIN)"
+  kc_server config credentials --server http://127.0.0.1:8080 --realm master \
+    --user "$(env_value KEYCLOAK_ADMIN_USERNAME)" --password "$(env_value KEYCLOAK_ADMIN_PASSWORD)" >/dev/null
+
+  frontend_id="$(kc_server get clients -r abada -q clientId=abada-frontend --fields id --format csv --noquotes)"
+  kc_server update "clients/$frontend_id" -r abada \
+    -s "redirectUris=[\"https://$domain/*\"]" \
+    -s "webOrigins=[\"https://$domain\"]" >/dev/null
+  admin_api_id="$(kc_server get clients -r abada -q clientId=abada-admin-api --fields id --format csv --noquotes)"
+  kc_server update "clients/$admin_api_id" -r abada \
+    -s "secret=$(env_value ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET)" >/dev/null
+
+  # The AI Lead Triage starter is wired to alice (operator) and bob (reviewer).
+  ensure_realm_user alice "$(env_value ABADA_OPERATOR_PASSWORD)" true \
+    abada-task-user abada-process-controller abada-deployer abada-operator \
+    abada-insight-reviewer abada-project-creator abada-admin
+  reviewer_enabled="$(env_value ABADA_REVIEWER_ENABLED)"
+  [[ "$reviewer_enabled" == "false" ]] || reviewer_enabled=true
+  ensure_realm_user bob "$(env_value ABADA_REVIEWER_PASSWORD)" "$reviewer_enabled" \
+    abada-task-user abada-process-controller
+  echo "Configured the abada realm for https://$domain."
+}
+
+provision_server_agent() {
+  local domain
+  domain="$(env_value ABADA_DOMAIN)"
+  # Provisioning runs on the VM itself: resolve the public names to the local
+  # Traefik so it does not depend on DNS propagation or NAT hairpinning.
+  ABADA_ENV_FILE="$ENV_FILE" \
+  ABADA_KEYCLOAK_REALM=abada \
+  ABADA_KEYCLOAK_CONTAINER="$("${BASE_COMPOSE[@]}" ps -q keycloak)" \
+  ABADA_PROVISION_API_URL="https://api.$domain/api" \
+  ABADA_PROVISION_OIDC_URL="https://auth.$domain" \
+  ABADA_PROVISION_CURL_RESOLVE="${ABADA_PROVISION_CURL_RESOLVE:-api.$domain:443:127.0.0.1,auth.$domain:443:127.0.0.1}" \
+  KEYCLOAK_ADMIN_USERNAME="$(env_value KEYCLOAK_ADMIN_USERNAME)" \
+  KEYCLOAK_ADMIN_PASSWORD="$(env_value KEYCLOAK_ADMIN_PASSWORD)" \
+    "$ROOT_DIR/scripts/dev/provision-agent-worker.sh"
+}
+
 print_success_panel() {
   local telemetry_status management_env management_telemetry root_quoted env_quoted grafana_port
   configure_console_style
@@ -308,6 +489,8 @@ print_success_panel() {
   printf '  %bABADA PLATFORM%b\n' "$BOLD" "$RESET"
   if [[ "$MODE" == "dev" ]]; then
     printf '  %b✓ Ready%b  Development · Telemetry %s\n' "$GREEN" "$RESET" "$telemetry_status"
+  elif [[ "$MODE" == "server" ]]; then
+    printf '  %b✓ Ready%b  Server · Telemetry %s\n' "$GREEN" "$RESET" "$telemetry_status"
   else
     printf '  %b✓ Ready%b  Production · Telemetry %s\n' "$GREEN" "$RESET" "$telemetry_status"
   fi
@@ -319,6 +502,13 @@ print_success_panel() {
     print_url "Docs" "http://docs.localhost"
     print_url "Engine API" "http://api.localhost/api/v1/info"
     print_url "Keycloak" "http://keycloak.localhost"
+  elif [[ "$MODE" == "server" ]]; then
+    local domain
+    domain="$(env_value ABADA_DOMAIN)"
+    print_url "Studio" "https://$domain"
+    print_url "Docs" "https://docs.$domain"
+    print_url "Engine API" "https://api.$domain/api/v1/info"
+    print_url "Keycloak" "https://auth.$domain"
   else
     print_url "Studio" "https://$(env_value ABADA_STUDIO_HOST)"
     print_url "Docs" "https://$(env_value ABADA_DOCS_HOST)"
@@ -339,6 +529,16 @@ print_success_panel() {
     printf '  1. Open %bStudio%b and sign in as %balice%b.\n' "$BOLD" "$RESET" "$BOLD" "$RESET"
     printf '  2. Open the pre-deployed %bAI Lead Triage%b process in the Designer.\n' "$BOLD" "$RESET"
     printf '  3. Start HIGH, MEDIUM or LOW examples, then inspect %bTasks%b, %bOperations%b and %bInsight%b.\n' "$BOLD" "$RESET" "$BOLD" "$RESET" "$BOLD" "$RESET"
+  elif [[ "$MODE" == "server" ]]; then
+    print_section "Accounts"
+    print_value "Operator" "alice (ABADA_OPERATOR_PASSWORD)"
+    [[ "$(env_value ABADA_REVIEWER_ENABLED)" == "false" ]] || print_value "Reviewer" "bob (ABADA_REVIEWER_PASSWORD)"
+    print_value "Keycloak" "$(env_value KEYCLOAK_ADMIN_USERNAME) (KEYCLOAK_ADMIN_PASSWORD)"
+    print_value "Passwords" "$ENV_FILE"
+
+    print_section "First run"
+    printf '  1. Sign in to %bStudio%b once as %balice%b; this seeds the AI Lead Triage starter.\n' "$BOLD" "$RESET" "$BOLD" "$RESET"
+    printf '  2. Certificates are issued on the first request to each host; allow a minute.\n'
   fi
 
   printf -v root_quoted '%q' "$ROOT_DIR"
@@ -363,12 +563,19 @@ case "$COMMAND" in
     doctor
     if [[ "$AGENT" == "true" ]]; then
       "${BASE_COMPOSE[@]}" up -d --wait
+      [[ "$MODE" == "server" ]] && configure_server_realm
       echo "Provisioning the first-party agent worker..."
-      ABADA_ENV_FILE="$ENV_FILE" "$ROOT_DIR/scripts/dev/provision-agent-worker.sh"
+      if [[ "$MODE" == "server" ]]; then
+        provision_server_agent
+      else
+        ABADA_ENV_FILE="$ENV_FILE" "$ROOT_DIR/scripts/dev/provision-agent-worker.sh"
+      fi
       "${COMPOSE[@]}" up -d --wait abada-agent-worker
     else
       "${COMPOSE[@]}" up -d --wait
+      [[ "$MODE" == "server" ]] && configure_server_realm
     fi
+    if [[ "$MODE" == "dev" ]]; then apply_dev_login_theme; fi
     print_success_panel
     ;;
   down) "${COMPOSE[@]}" down ;;
