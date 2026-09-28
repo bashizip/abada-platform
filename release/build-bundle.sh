@@ -16,10 +16,10 @@ rm -rf "$STAGING" "$ARCHIVE" "$ARCHIVE.sha256"
 mkdir -p "$STAGING/release" "$STAGING/deployment" "$STAGING/docker/keycloak/import" "$STAGING/docker/keycloak/themes" "$STAGING/docker/grafana" "$STAGING/scripts/dev"
 
 cp "$ROOT_DIR/LICENSE" "$STAGING/"
-cp "$ROOT_DIR/compose.yaml" "$ROOT_DIR/compose.dev.yaml" "$ROOT_DIR/compose.prod.yaml" "$ROOT_DIR/compose.telemetry.yaml" "$STAGING/"
+cp "$ROOT_DIR/compose.yaml" "$ROOT_DIR/compose.dev.yaml" "$ROOT_DIR/compose.prod.yaml" "$ROOT_DIR/compose.server.yaml" "$ROOT_DIR/compose.telemetry.yaml" "$STAGING/"
 cp -R "$ROOT_DIR/deployment/telemetry" "$STAGING/deployment/"
 cp -R "$ROOT_DIR/docker/grafana/provisioning" "$ROOT_DIR/docker/grafana/dashboards" "$STAGING/docker/grafana/"
-cp "$ROOT_DIR/docker/keycloak/import/realm-dev.json" "$STAGING/docker/keycloak/import/"
+cp "$ROOT_DIR/docker/keycloak/import/realm-dev.json" "$ROOT_DIR/docker/keycloak/import/realm-server.json" "$STAGING/docker/keycloak/import/"
 cp -R "$ROOT_DIR/docker/keycloak/themes/abada" "$STAGING/docker/keycloak/themes/"
 sed \
   -e "s|^ABADA_ENGINE_IMAGE=.*|ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:$VERSION|" \
@@ -29,9 +29,17 @@ sed \
   "$ROOT_DIR/release/.env.dev.example" >"$STAGING/release/.env.dev.example"
 sed "s|^ABADA_VERSION=.*|ABADA_VERSION=$VERSION|" \
   "$ROOT_DIR/release/.env.prod.example" >"$STAGING/release/.env.prod.example"
+sed \
+  -e "s|^ABADA_ENGINE_IMAGE=.*|ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:$VERSION|" \
+  -e "s|^ABADA_STUDIO_IMAGE=.*|ABADA_STUDIO_IMAGE=ghcr.io/bashizip/abada-studio:$VERSION|" \
+  -e "s|^ABADA_DOCS_IMAGE=.*|ABADA_DOCS_IMAGE=ghcr.io/bashizip/abada-docs:$VERSION|" \
+  -e "s|^ABADA_AGENT_WORKER_IMAGE=.*|ABADA_AGENT_WORKER_IMAGE=ghcr.io/bashizip/abada-agent-worker:$VERSION|" \
+  "$ROOT_DIR/release/.env.server.example" >"$STAGING/release/.env.server.example"
 cp "$ROOT_DIR/release/abada-platform" "$ROOT_DIR/release/abada-platform.ps1" "$ROOT_DIR/release/README.md" "$STAGING/release/"
 cp "$ROOT_DIR/scripts/dev/provision-agent-worker.sh" "$STAGING/scripts/dev/"
 cp -R "$ROOT_DIR/release/samples" "$STAGING/release/"
+mkdir -p "$STAGING/deployment/gcp"
+cp "$ROOT_DIR/deployment/gcp/startup.sh" "$STAGING/deployment/gcp/"
 
 # Normalize archive metadata so rerunning publication for the same immutable
 # tag produces byte-identical assets instead of silently changing the checksum.
