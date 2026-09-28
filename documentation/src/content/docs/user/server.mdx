@@ -111,12 +111,22 @@ domain and email from instance metadata into `.env.server`. It starts the
 platform only when the metadata attribute `abada-autostart` is `true`.
 
 ```bash
-gcloud compute instances create abada-demo --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --address abada-demo-ip --tags abada-web --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain=demo.example.org,abada-acme-email=ops@example.org,abada-version=1.0.0-rc.7
+gcloud compute instances create abada-demo --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --address abada-demo-ip --tags http-server,https-server --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain=demo.example.org,abada-acme-email=ops@example.org,abada-version=1.0.0-rc.7
 ```
 
+The `http-server` and `https-server` tags match the `default-allow-http` and
+`default-allow-https` rules of a project's default network. Ports 80 and 443
+must be open to everyone: Let's Encrypt validates each hostname over port 80,
+so a rule restricted to admin addresses leaves the platform without
+certificates.
+
 Then connect to the VM and run `sudo /opt/abada/release/abada-platform up server`.
-The full procedure, including the static address, firewall rule, DNS, backups
-and upgrades, is in the
+After a VM reboot the containers restart on their own within about two
+minutes; the Agent Worker may restart several times until the engine is
+ready.
+
+The full procedure, including the static address, firewall rules, DNS, the
+verification checks, reboot recovery, backups and upgrades, is in the
 [GCP operations guide](https://github.com/bashizip/abada-platform/blob/main/docs/operations/gcp-vm.md).
 
 ## Running a public demo
