@@ -1,7 +1,9 @@
 package io.abada.agent;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -33,20 +35,33 @@ final class ClientCredentialsTokenSupplier implements Supplier<String> {
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(body)).build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) {
-                throw new IllegalStateException("OIDC token endpoint returned HTTP " + response.statusCode());
+            int status = response.statusCode();
+            if (status / 100 != 2) {
+                throw new TokenRequestException("OIDC token endpoint returned HTTP " + status, status,
+                        TokenRequestException.transientStatus(status), null);
             }
             JsonNode json = JSON.readTree(response.body());
             token = json.path("access_token").asText();
-            if (token.isBlank()) throw new IllegalStateException("OIDC response has no access token");
+            if (token.isBlank()) {
+                throw new TokenRequestException("OIDC response has no access token", status, false, null);
+            }
             long lifetime = Math.max(30, json.path("expires_in").asLong(300));
             refreshAt = Instant.now().plusSeconds(Math.max(1, lifetime - 30));
             return token;
+        } catch (TokenRequestException exception) {
+            throw exception;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("OIDC token request interrupted");
+            throw new TokenRequestException("OIDC token request interrupted", 0, false, null);
+        } catch (JsonProcessingException exception) {
+            throw new TokenRequestException("OIDC token response is not valid JSON", 0, false, null);
+        } catch (IOException exception) {
+            // Connection refused, DNS not yet resolvable, timeout: the
+            // identity provider is not reachable (yet).
+            throw new TokenRequestException("OIDC token endpoint unreachable ("
+                    + exception.getClass().getSimpleName() + ")", 0, true, exception);
         } catch (Exception exception) {
-            throw new IllegalStateException("Could not obtain OIDC worker token", exception);
+            throw new TokenRequestException("Could not obtain OIDC worker token", 0, false, exception);
         }
     }
 

@@ -49,7 +49,10 @@ public final class AgentWorkerMain {
         AbadaWorkerClient client = new AbadaWorkerClient(config.engineUrl(), tokens);
         AgentGatewayFactory gateways = new AgentGatewayFactory(config);
         List<String> topics = topics(config);
-        client.registerCapabilities(topics, List.copyOf(config.allowedModels()));
+        // The engine and identity provider may still be starting (Docker
+        // starts every container at once after a host reboot).
+        new StartupRetry(config.startupRetryBudget()).run("register_capabilities",
+                () -> client.registerCapabilities(topics, List.copyOf(config.allowedModels())));
         LOG.log(System.Logger.Level.INFO,
                 "agent_worker_started worker_id={0} topics={1} models={2} max_tasks={3} lock_ms={4}",
                 config.workerId(), String.join(",", topics),
