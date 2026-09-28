@@ -14,6 +14,9 @@ Start with configuration and service state:
 | Symptom | Check |
 | --- | --- |
 | Production config exits immediately | Replace every required placeholder in `.env.prod`; validate DNS, CORS and OIDC URLs |
+| Server start stops at `set ABADA_DOMAIN` | Set `ABADA_DOMAIN` and `ABADA_ACME_EMAIL` in `.env.server`; the secrets are generated |
+| Browser shows `TRAEFIK DEFAULT CERT` on the server profile | DNS for the domain and its wildcard does not reach the VM yet, port 80 is closed, or the records are proxied; see `./release/abada-platform logs server` |
+| Server sign-in returns "Invalid redirect uri" | `ABADA_DOMAIN` changed after the first start; rerun `./release/abada-platform up server` |
 | Port 80/443 already used | Stop the conflicting service or move Abada to a dedicated host |
 | `no matching manifest for linux/arm64/v8` with `1.0.0-rc.1` | Use the current repository launcher; it detects the immutable amd64-only RC.1 images and enables Docker compatibility mode |
 | Studio shows configuration error | Inspect the generated `/config.js`; all four runtime values are mandatory and URLs must be HTTP(S) |
