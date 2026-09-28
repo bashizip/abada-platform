@@ -1,5 +1,9 @@
 # Production Dockerfile for Abada Engine
-# This uses a multi-stage build for optimized production images
+# This uses a multi-stage build for optimized production images.
+#
+# The build context is the repository root (`./`), not `engine/`, so the
+# image can ship the repository LICENSE text:
+#   docker build -f engine/Dockerfile.prod.engine -t abada-engine:local .
 
 # Stage 1: Build with Maven
 FROM maven:3.9.6-eclipse-temurin-21 AS builder
@@ -7,12 +11,12 @@ FROM maven:3.9.6-eclipse-temurin-21 AS builder
 WORKDIR /app
 
 # Copy only pom.xml first to leverage Docker layer caching for dependencies
-COPY pom.xml .
-COPY .mvn .mvn
-COPY mvnw .
+COPY engine/pom.xml .
+COPY engine/.mvn .mvn
+COPY engine/mvnw .
 
 # Copy source code
-COPY src ./src
+COPY engine/src ./src
 
 # Build the executable application. Tests belong to the repository CI and
 # release gates, so image assembly skips test compilation as well as execution.
@@ -36,7 +40,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=builder /app/target/abada-engine-*.jar app.jar
 
 # Copy entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
+COPY engine/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create logs directory and log file
@@ -50,6 +54,9 @@ RUN mkdir -p /app/data && \
 
 # Change ownership to the new user
 RUN chown appuser:appgroup app.jar
+
+# Ship the licence text with the binary (AGPL-3.0-only)
+COPY LICENSE /licenses/LICENSE
 
 # Note: We stay as root so entrypoint can fix volume permissions
 # The entrypoint script will switch to appuser before running the app

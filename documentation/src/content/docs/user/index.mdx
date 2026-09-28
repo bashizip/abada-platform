@@ -21,6 +21,11 @@ bundle — see the [quickstart](/user/quickstart/).
     externally managed OIDC provider, public DNS and secrets. Agent workers
     and the Insight Engine are operator-managed and opt-in.
   </Card>
+  <Card title="Server" icon="cloud-download">
+    One public VM with TLS for a single domain, a bundled production-mode
+    Keycloak and the Agent Worker. Secrets are generated for you. Suited to
+    evaluations and public demos.
+  </Card>
   <Card title="Telemetry" icon="seti">
     Disabled by default. Add the bundled overlay, or configure an external
     OTLP collector without changing the core deployment.
@@ -31,13 +36,16 @@ bundle — see the [quickstart](/user/quickstart/).
 | --- | --- |
 | Evaluate Abada on one workstation | Development, telemetry off |
 | Develop dashboards or instrumentation | Development, bundled telemetry |
+| Run a public demo or evaluation on one cloud VM | [Server](/user/server/), telemetry off |
 | Operate the platform | Production, telemetry off or external OTLP |
 | Self-host the complete monitoring stack | Production, bundled telemetry |
 
 <Aside type="caution" title="Not certified platform profiles">
-  H2, the old `docker-compose*.yml` files, bundled production Keycloak and an
-  embedded Java engine are not supported deployment contracts.
+  H2, the old `docker-compose*.yml` files, bundled Keycloak in the production
+  profile and an embedded Java engine are not supported deployment contracts.
+  The server profile bundles Keycloak for a single host only.
 </Aside>
 
-Continue with the [quickstart](/user/quickstart/) or the full
+Continue with the [quickstart](/user/quickstart/), the
+[single-VM server](/user/server/) or the full
 [production deployment](/user/production/).

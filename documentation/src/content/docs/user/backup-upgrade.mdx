@@ -13,6 +13,15 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
 shasum -a 256 abada-engine.dump > abada-engine.dump.sha256
 ```
 
+On the [single-VM server](/user/server/), use `--env-file .env.server` and
+`compose.server.yaml`, and also back up the Keycloak database and
+`.env.server`, which holds the only copy of the generated secrets:
+
+```bash
+docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml \
+  exec -T keycloak-db pg_dump -U keycloak -d keycloak -Fc > keycloak.dump
+```
+
 Test restore into a separate environment. For an in-place restore, stop the
 engine first, verify the checksum, and stream the backup to PostgreSQL:
 
@@ -30,6 +39,8 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
 3. Copy your `.env.prod`, set `ABADA_VERSION` to the exact new version, and run
    `./release/abada-platform doctor prod --env-file .env.prod`.
 4. Pull the images, then run the explicit production `up` command.
+   On the server profile, set the four `ABADA_*_IMAGE` tags in `.env.server`
+   to the new version and run `./release/abada-platform up server`.
 5. Wait for health, verify Flyway, start and complete a canary workflow, and
    inspect the Studio Operations tab history before removing the prior archive.
 

@@ -1,16 +1,20 @@
 # Production Dockerfile for Abada Documentation
+#
+# The build context is the repository root (`./`), not `documentation/`, so
+# the image can ship the repository LICENSE text:
+#   docker build -f documentation/Dockerfile.prod -t abada-docs:local .
 FROM node:24.18.0-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY documentation/package.json documentation/package-lock.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy the rest of the application source code
-COPY . .
+COPY documentation/ ./
 
 # Build the production bundle
 RUN npm run build
@@ -19,10 +23,13 @@ RUN npm run build
 FROM nginx:1.28.0-alpine
 
 # Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY documentation/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Ship the licence text with the site (AGPL-3.0-only)
+COPY LICENSE /licenses/LICENSE
 
 # Expose port 5606
 EXPOSE 5606

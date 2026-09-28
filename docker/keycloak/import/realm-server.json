@@ -1,0 +1,119 @@
+{
+  "realm": "abada",
+  "enabled": true,
+  "displayName": "Abada Studio",
+  "loginTheme": "abada",
+  "sslRequired": "external",
+  "roles": {
+    "realm": []
+  },
+  "groups": [
+    {
+      "name": "abada-task-user"
+    },
+    {
+      "name": "abada-process-controller"
+    },
+    {
+      "name": "abada-deployer"
+    },
+    {
+      "name": "abada-operator"
+    },
+    {
+      "name": "abada-worker"
+    },
+    {
+      "name": "abada-insight-reviewer"
+    },
+    {
+      "name": "abada-project-creator"
+    },
+    {
+      "name": "abada-admin"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "abada-admin-api",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "abada-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "abada-frontend",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-abada-admin-api",
+      "enabled": true,
+      "serviceAccountClientId": "abada-admin-api",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "query-users",
+          "view-users",
+          "query-groups",
+          "view-groups",
+          "manage-groups",
+          "view-realm"
+        ]
+      }
+    }
+  ],
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10
+}

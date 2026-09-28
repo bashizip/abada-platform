@@ -1,0 +1,185 @@
+# Self-contained single-VM profile: public TLS, bundled Keycloak in production
+# mode and the first-party agent worker, all derived from one ABADA_DOMAIN.
+#
+#   https://${ABADA_DOMAIN}          Studio (and /api -> engine, same origin)
+#   https://api.${ABADA_DOMAIN}      Engine API for workers and SDK clients
+#   https://auth.${ABADA_DOMAIN}     Keycloak
+#   https://docs.${ABADA_DOMAIN}     Documentation
+#
+# Start it with ./release/abada-platform up server; the launcher generates the
+# secrets and configures the realm. See docs/operations/gcp-vm.md.
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the server environment file}
+    restart: always
+
+  abada-engine:
+    environment:
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the server environment file}
+      ABADA_SECURITY_MODE: oidc
+      OIDC_ISSUER_URI: https://auth.${ABADA_DOMAIN:?Set ABADA_DOMAIN}/realms/abada
+      OIDC_AUDIENCE: abada-frontend
+      # Keys and admin calls stay on the private network; Keycloak still issues
+      # tokens under the public issuer because KC_HOSTNAME_URL pins the frontend URL.
+      OIDC_JWK_SET_URI: http://keycloak:8080/realms/abada/protocol/openid-connect/certs
+      ABADA_ALLOWED_ORIGINS: https://${ABADA_DOMAIN:?Set ABADA_DOMAIN}
+      ABADA_KEYCLOAK_URL: http://keycloak:8080
+      ABADA_KEYCLOAK_REALM: abada
+      ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET:?Set ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET}
+      ABADA_TELEMETRY_ENABLED: ${ABADA_TELEMETRY_ENABLED:-false}
+      ABADA_TELEMETRY_OTLP_ENDPOINT: ${ABADA_TELEMETRY_OTLP_ENDPOINT:-}
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
+    restart: always
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.engine-server.rule: Host(`api.${ABADA_DOMAIN:?Set ABADA_DOMAIN}`) || (Host(`${ABADA_DOMAIN:?Set ABADA_DOMAIN}`) && PathPrefix(`/api`))
+      traefik.http.routers.engine-server.entrypoints: websecure
+      traefik.http.routers.engine-server.tls.certresolver: letsencrypt
+      traefik.http.services.engine-server.loadbalancer.server.port: "5601"
+
+  abada-studio:
+    environment:
+      ABADA_API_URL: https://${ABADA_DOMAIN:?Set ABADA_DOMAIN}/api
+      ABADA_OIDC_URL: https://auth.${ABADA_DOMAIN:?Set ABADA_DOMAIN}
+      ABADA_OIDC_REALM: abada
+      ABADA_OIDC_CLIENT_ID: abada-frontend
+      ABADA_CONFIG_PATH: /usr/share/nginx/html/config.js
+      ABADA_STARTER_WORKFLOW_ENABLED: ${ABADA_STARTER_WORKFLOW_ENABLED:-true}
+    restart: always
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.studio-server.rule: Host(`${ABADA_DOMAIN:?Set ABADA_DOMAIN}`)
+      traefik.http.routers.studio-server.entrypoints: websecure
+      traefik.http.routers.studio-server.tls.certresolver: letsencrypt
+      traefik.http.services.studio-server.loadbalancer.server.port: "5605"
+
+  abada-docs:
+    restart: always
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.docs-server.rule: Host(`docs.${ABADA_DOMAIN:?Set ABADA_DOMAIN}`)
+      traefik.http.routers.docs-server.entrypoints: websecure
+      traefik.http.routers.docs-server.tls.certresolver: letsencrypt
+      traefik.http.services.docs-server.loadbalancer.server.port: "5606"
+
+  abada-agent-worker:
+    image: ${ABADA_AGENT_WORKER_IMAGE:?Set ABADA_AGENT_WORKER_IMAGE in the server environment file}
+    # A server runs the published image only; never build from source here.
+    build: !reset null
+    environment:
+      ABADA_AGENT_OIDC_TOKEN_URL: http://keycloak:8080/realms/abada/protocol/openid-connect/token
+      ABADA_AGENT_OIDC_CLIENT_ID: abada-agent-worker
+    restart: always
+
+  keycloak-db:
+    image: postgres:15.13-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set KEYCLOAK_DB_PASSWORD in the server environment file}
+    volumes:
+      - keycloak_data:/var/lib/postgresql/data
+    networks:
+      - data
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:21.1.1
+    command: ["start", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in the server environment file}
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-db
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set KEYCLOAK_DB_PASSWORD in the server environment file}
+      # A full frontend URL (not just a host) so tokens fetched over the private
+      # http://keycloak:8080 back channel still carry the public HTTPS issuer.
+      KC_HOSTNAME_URL: https://auth.${ABADA_DOMAIN:?Set ABADA_DOMAIN}
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
+      KC_PROXY: edge
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./docker/keycloak/import/realm-server.json:/opt/keycloak/data/import/realm-server.json:ro
+      - ./docker/keycloak/themes/abada:/opt/keycloak/themes/abada:ro
+    networks:
+      - edge
+      - data
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.keycloak-server.rule: Host(`auth.${ABADA_DOMAIN:?Set ABADA_DOMAIN}`)
+      traefik.http.routers.keycloak-server.entrypoints: websecure
+      traefik.http.routers.keycloak-server.tls.certresolver: letsencrypt
+      traefik.http.services.keycloak-server.loadbalancer.server.port: "8080"
+
+  traefik:
+    image: traefik:v3.6.2
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=${COMPOSE_PROJECT_NAME:-abada}_edge
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.email=${ABADA_ACME_EMAIL:?Set ABADA_ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.caserver=${ABADA_ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --ping=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt_data:/letsencrypt
+    networks:
+      - edge
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  keycloak_data:
+  letsencrypt_data:
