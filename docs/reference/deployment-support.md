@@ -8,7 +8,7 @@
 | Production | External OIDC, direct JWT validation and RBAC | Disabled | Core + production Compose | Configuration contract passes; reference-host smoke pending |
 | Production | External OIDC, direct JWT validation and RBAC | Bundled stack | Core + production + telemetry Compose | Configuration contract passes; reference-host signal smoke pending |
 | Production | External OIDC, direct JWT validation and RBAC | External OTLP | Core + production Compose and explicit endpoint | Configuration contract passes; external collector smoke pending |
-| Server (single VM) | Bundled Keycloak in production mode, direct JWT validation and RBAC | Disabled | Core + server Compose | Configuration contract and local end-to-end start pass; public reference host (`demo.abadaplatform.com`) smoke pending |
+| Server (single VM) | Bundled Keycloak in production mode, direct JWT validation and RBAC | Disabled | Core + server Compose | Configuration contract and local end-to-end start pass; public reference host `demo.abadaplatform.com` (GCP): TLS, routing, OIDC, exposure and reboot checks pass 2026-09-28; Studio sign-in and agent run pending |
 | H2 convenience | Disabled or controlled local mode | Disabled | Engine process only | Not a certified platform topology |
 | Trusted proxy compatibility | Authenticating proxy headers | Independently configurable | Custom controlled deployment | Not part of the certified Compose family; engine must be unreachable except through the proxy |
 
