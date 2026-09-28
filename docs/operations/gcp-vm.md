@@ -40,18 +40,42 @@ Reserve a static address so DNS survives VM restarts:
 gcloud compute addresses create "$VM-ip" --project "$PROJECT" --region "$REGION"
 ```
 
-Open only HTTP and HTTPS to the tagged VM:
+Open HTTP and HTTPS to the VM **from anywhere**. Port 80 must be public even
+for a private demo: Let's Encrypt validates each hostname over it, so a rule
+limited to office or admin addresses leaves Traefik without certificates.
+Check what the project already has:
 
 ```bash
-gcloud compute firewall-rules create abada-web --project "$PROJECT" --allow tcp:80,tcp:443 --target-tags abada-web
+gcloud compute firewall-rules list --project "$PROJECT" --format 'table(name,sourceRanges.list(),allowed[].map().firewall_rule().list(),targetTags.list())'
 ```
+
+If `default-allow-http` and `default-allow-https` exist with source
+`0.0.0.0/0` (the defaults of the `default` network), reuse their tags:
+
+```bash
+export TAGS=http-server,https-server
+```
+
+Otherwise create a dedicated public rule and use its tag:
+
+```bash
+gcloud compute firewall-rules create abada-web-public --project "$PROJECT" --allow tcp:80,tcp:443 --source-ranges 0.0.0.0/0 --target-tags abada-web-public
+```
+
+```bash
+export TAGS=abada-web-public
+```
+
+Do not reuse a tag whose rule restricts source ranges. Nothing else needs to
+be reachable: PostgreSQL, Keycloak's port and the Traefik dashboard are not
+published.
 
 Create the VM with the bootstrap script. `e2-standard-2` (2 vCPU, 8 GB) fits
 the stack's memory limits (about 6 GB with the agent worker); use
 `e2-standard-4` if you add `--telemetry`.
 
 ```bash
-gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags abada-web --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.0.0-rc.7
+gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags "$TAGS" --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.0.0-rc.7
 ```
 
 On every boot, [`deployment/gcp/startup.sh`](../../deployment/gcp/startup.sh)
@@ -130,6 +154,74 @@ first page load can take up to a minute.
 3. Start the HIGH, MEDIUM and LOW examples, then show Tasks, Operations and
    Insight. Sign in as `bob` to complete the human review.
 
+## 5. Verify
+
+Run these from your workstation after `up server`. Every check must pass
+before you share the URL.
+
+Certificates are issued by Let's Encrypt for all four hostnames (the first
+request to a hostname can take up to a minute):
+
+```bash
+for h in "$DOMAIN" "api.$DOMAIN" "auth.$DOMAIN" "docs.$DOMAIN"; do echo | openssl s_client -connect "$h:443" -servername "$h" 2>/dev/null | openssl x509 -noout -subject -issuer; done
+```
+
+The engine answers with the expected version, and plain HTTP redirects:
+
+```bash
+curl -fsS "https://api.$DOMAIN/api/v1/info" | jq -r .version
+```
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' "http://$DOMAIN/"
+```
+
+Keycloak issues tokens under the public issuer, accepts only Studio's
+redirect URI, and the API rejects anonymous calls (expect the issuer URL,
+then `200`, `400` and `401`):
+
+```bash
+curl -fsS "https://auth.$DOMAIN/realms/abada/.well-known/openid-configuration" | jq -r .issuer
+```
+
+```bash
+AUTH="https://auth.$DOMAIN/realms/abada/protocol/openid-connect/auth?client_id=abada-frontend&response_type=code&scope=openid"
+curl -sS -o /dev/null -w '%{http_code}\n' "$AUTH&redirect_uri=https://$DOMAIN/"
+curl -sS -o /dev/null -w '%{http_code}\n' "$AUTH&redirect_uri=https://example.invalid/"
+curl -sS -o /dev/null -w '%{http_code}\n' "https://$DOMAIN/api/v1/projects"
+```
+
+Only 80 and 443 are reachable (expect every other port to be refused or to
+time out):
+
+```bash
+for p in 5432 8080 8443; do nc -z -G 3 "$DOMAIN" "$p" && echo "port $p OPEN" || echo "port $p closed"; done
+```
+
+Finally sign in to Studio as `alice` and complete one agent run (section 4).
+
+## Reboots and recovery
+
+The containers use `restart: always`, so the stack returns after a VM reboot
+or host maintenance without running `up server`. On boot the startup script
+only confirms the installed release; it starts nothing unless
+`abada-autostart=true`.
+
+Allow about two minutes for everything to become healthy. The agent worker
+starts at the same time as the engine and Keycloak, exits while they are not
+ready yet and is restarted by Docker until it registers; several restarts
+after a reboot are expected and harmless. Check the result with:
+
+```bash
+cd /opt/abada && sudo docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml --profile agent ps
+```
+
+To rehearse recovery, reset the VM and rerun the checks in section 5:
+
+```bash
+gcloud compute instances reset "$VM" --project "$PROJECT" --zone "$ZONE"
+```
+
 ## Running a public demo
 
 - **Model spend.** Every started instance calls the model. Use a provider key
@@ -198,3 +290,5 @@ before going live.
 | Studio sign-in returns "Invalid redirect uri" | `ABADA_DOMAIN` changed after the first start; rerun `up server` to reapply it. |
 | Engine returns 401 for valid users | The issuer is `https://auth.$ABADA_DOMAIN/realms/abada`; check that `KC_HOSTNAME_URL` and the engine's `OIDC_ISSUER_URI` agree in `docker compose ... config`. |
 | `up server` stops at a port check | Another process holds 80 or 443 on the VM. |
+| Certificates never arrive but DNS is right | The firewall rule on the VM's tag restricts source ranges, so Let's Encrypt cannot reach port 80; use a public rule (section 1). |
+| Agent worker shows many restarts after a reboot | Expected while the engine starts; it is healthy once it registers (see *Reboots and recovery*). |
