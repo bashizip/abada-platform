@@ -102,6 +102,17 @@ is rendered against the declared threshold.
   reports nothing. A descriptor `timeout_ms` above `ABADA_AGENT_MAX_TIMEOUT_MS`
   (default 120000) is clamped to it. On shutdown the worker stops fetching and
   waits up to 30 seconds for in-flight tasks.
+- Startup registration (`PUT /v1/workers/me`, and the OIDC token request it
+  triggers) retries transient failures, so a worker that starts before the
+  engine or identity provider is ready (for example after a host reboot, when
+  Docker starts every container at once) waits instead of exiting. Transient
+  means no connection, a timeout, or HTTP 408, 429 or 5xx from either
+  endpoint. Delays grow exponentially from 1 to 30 seconds with jitter, for at
+  most `ABADA_AGENT_STARTUP_RETRY_MS` (default 300000, five minutes; `0`
+  disables the retry); after that the worker exits with the last error.
+  Rejected credentials (401/403), invalid capabilities (400) and other
+  configuration errors fail on the first attempt. Each retry is logged as
+  `agent_startup_retry` with the source, HTTP status and error code only.
 - Model timeouts and task concurrency are bounded. Technical failures consume
   durable engine retries with a bounded retry delay; zero retries creates the
   normal incident. Agent-task retries are seeded from the APL `max_attempts`
