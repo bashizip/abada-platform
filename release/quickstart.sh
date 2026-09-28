@@ -15,8 +15,8 @@ fi
   echo "Error: version must be an immutable semantic version" >&2
   exit 64
 }
-[[ "$PROFILE" == "dev" || "$PROFILE" == "prod" ]] || {
-  echo "Error: ABADA_PROFILE must be dev or prod" >&2
+[[ "$PROFILE" == "dev" || "$PROFILE" == "prod" || "$PROFILE" == "server" ]] || {
+  echo "Error: ABADA_PROFILE must be dev, prod or server" >&2
   exit 64
 }
 
@@ -75,6 +75,20 @@ echo "Verified and installed Abada at $INSTALL_DIR"
 if [[ "$PROFILE" == "dev" ]]; then
   echo "Starting the local HTTP development platform..."
   exec "$INSTALL_DIR/release/abada-platform" up dev
+fi
+
+if [[ "$PROFILE" == "server" ]]; then
+  SERVER_ENV="$INSTALL_DIR/.env.server"
+  if [[ ! -f "$SERVER_ENV" ]]; then
+    (umask 077 && cp "$INSTALL_DIR/release/.env.server.example" "$SERVER_ENV")
+  fi
+  cat <<EOF
+Server files are ready, but no services were started.
+1. Set ABADA_DOMAIN and ABADA_ACME_EMAIL in $SERVER_ENV (secrets are generated).
+2. Point ABADA_DOMAIN and *.ABADA_DOMAIN at this host, and open ports 80 and 443.
+3. Start: $INSTALL_DIR/release/abada-platform up server
+EOF
+  exit 0
 fi
 
 PROD_ENV="$INSTALL_DIR/.env.prod"

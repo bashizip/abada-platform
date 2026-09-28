@@ -25,6 +25,15 @@ OIDC_URL="${ABADA_PROVISION_OIDC_URL:-http://keycloak.localhost}"
 ADMIN_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
 kcadm="/opt/keycloak/bin/kcadm.sh"
+# Optional comma-separated host:port:address pins (curl --resolve), used by the
+# server profile to reach its public hostnames through the local Traefik.
+CURL_RESOLVE=()
+if [[ -n "${ABADA_PROVISION_CURL_RESOLVE:-}" ]]; then
+  IFS=',' read -r -a resolve_entries <<<"$ABADA_PROVISION_CURL_RESOLVE"
+  for entry in "${resolve_entries[@]}"; do
+    CURL_RESOLVE+=(--resolve "$entry")
+  done
+fi
 
 env_value() {
   awk -v key="$1" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
@@ -154,7 +163,7 @@ echo "Assigning $WORKER_USER to $GROUP_NAME..."
 kc update "users/$WORKER_USER_ID/groups/$GROUP_ID" -r "$REALM" -n >/dev/null
 
 # --- 3. Worker token, then global capability registration --------------------
-TOKEN_RESPONSE="$(curl --fail --silent --show-error \
+TOKEN_RESPONSE="$(curl --fail --silent --show-error ${CURL_RESOLVE[@]+"${CURL_RESOLVE[@]}"} \
   -X POST "$OIDC_URL/realms/$REALM/protocol/openid-connect/token" \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   --data-urlencode "client_id=$CLIENT_ID" \
@@ -170,14 +179,14 @@ fi
 echo "Triggering engine principal observation for $WORKER_USER..."
 # The identity interceptor observes the service principal on first
 # authenticated call; registration below both observes and registers.
-curl --fail --silent --show-error -o /dev/null \
+curl --fail --silent --show-error ${CURL_RESOLVE[@]+"${CURL_RESOLVE[@]}"} -o /dev/null \
   -X PUT "$API_URL/v1/workers/me" \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H 'Content-Type: application/json' \
   --data "{\"topics\":[\"$TOPIC\"],\"models\":[]}"
 
 echo "Verifying global registration of $WORKER_USER..."
-REGISTERED="$(curl --fail --silent --show-error \
+REGISTERED="$(curl --fail --silent --show-error ${CURL_RESOLVE[@]+"${CURL_RESOLVE[@]}"} \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   "$API_URL/v1/workers/me")"
 if ! printf '%s' "$REGISTERED" | grep -Eq '"topic"[[:space:]]*:[[:space:]]*"abada:agent"'; then
