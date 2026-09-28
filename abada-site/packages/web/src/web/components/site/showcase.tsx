@@ -4,7 +4,7 @@ import { Reveal, Section, SectionHead } from "./primitives";
 // Content hash of the current videos. /videos/* is cached for a week at the
 // edge, so a new take needs new URLs; scripts/showcase/build.sh --publish
 // updates this value.
-const VIDEO_VERSION = "b46893df33";
+const VIDEO_VERSION = "e6f9d7a5bd";
 const videoUrl = (file: string) => `/videos/${file}?v=${VIDEO_VERSION}`;
 
 const STEPS = [
