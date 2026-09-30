@@ -166,7 +166,7 @@ public abstract class AbstractAgentGateway implements AgentGateway {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             String detail = extractErrorDetail(response.body());
             int status = response.statusCode();
-            if (status == 401 || status == 403) {
+            if (status == 401 || status == 403 || rejectsKey(status, detail)) {
                 throw new AgentAuthenticationException(provider() + " API authentication failed: Invalid or expired API key (HTTP " + status + (detail.isBlank() ? "" : ": " + detail) + ")");
             } else if (status == 404) {
                 throw new AgentModelNotFoundException(provider() + " model or endpoint not found: '" + model + "' (HTTP 404" + (detail.isBlank() ? "" : ": " + detail) + ")");
@@ -188,6 +188,18 @@ public abstract class AbstractAgentGateway implements AgentGateway {
         Integer completionTokens = usage.path("completion_tokens").isNumber()
                 ? usage.path("completion_tokens").asInt() : null;
         return new AgentResult(decoded.value(), decoded.confidence(), promptTokens, completionTokens);
+    }
+
+    /**
+     * Gemini answers an invalid key with HTTP 400 (API_KEY_INVALID) instead of
+     * 401; treat it as an authentication failure so a key rotated in Studio
+     * is refetched.
+     */
+    static boolean rejectsKey(int status, String detail) {
+        if (status != 400 || detail == null) return false;
+        String normalized = detail.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("api_key_invalid") || normalized.contains("valid api key")
+                || normalized.contains("api key not valid") || normalized.contains("invalid api key");
     }
 
     private static String extractErrorDetail(String responseBody) {

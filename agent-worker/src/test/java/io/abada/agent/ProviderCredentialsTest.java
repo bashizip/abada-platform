@@ -140,6 +140,15 @@ class ProviderCredentialsTest {
     }
 
     @Test
+    void geminiRejectingAKeyWithHttp400CountsAsAnAuthenticationFailure() {
+        assertTrue(AbstractAgentGateway.rejectsKey(400,
+                "[{ \"error\": { \"code\": 400, \"message\": \"Please pass a valid API key\" } }]"));
+        assertTrue(AbstractAgentGateway.rejectsKey(400, "INVALID_ARGUMENT - API key not valid. API_KEY_INVALID"));
+        assertFalse(AbstractAgentGateway.rejectsKey(400, "Invalid JSON payload received"));
+        assertFalse(AbstractAgentGateway.rejectsKey(500, "invalid api key"));
+    }
+
+    @Test
     void endpointsNeverPrintTheirKey() {
         var endpoint = provider("gemini", "gemini", "super-secret", List.of("gemini"), true);
         assertFalse(endpoint.toString().contains("super-secret"));
