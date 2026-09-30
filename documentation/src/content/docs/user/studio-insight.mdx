@@ -106,9 +106,11 @@ Endpoints live under `/api/v1/insight`; reviews carry `expectedUpdatedAt`
 
 ## Configuration
 
-Insight is disabled by default. Key settings: `ABADA_INSIGHT_ENABLED`,
-`ABADA_LLM_BASE_URL`, `ABADA_LLM_API_KEY` and `ABADA_LLM_MODEL` (the LLM
-connection is shared with Studio APL authoring; the flag controls only the
+Insight is disabled by default. Enable it with `ABADA_INSIGHT_ENABLED`. It
+uses the provider marked **Used by Insight** in Studio → Settings → AI
+Providers, with the same keys as agent tasks; without one it falls back to the
+server's `ABADA_LLM_*` variables (the LLM connection is shared with Studio APL
+authoring; the flag controls only the
 scheduled Insight worker). Thresholds and scheduling live under
 `abada.insight.*`. On the development profile, four LOW runs of the AI Lead
 Triage starter generate the first evidence; proposals are never approved

@@ -148,9 +148,11 @@ first page load can take up to a minute.
 1. Open `https://$ABADA_DOMAIN` and sign in as `alice`. This first sign-in
    creates and deploys the **AI Lead Triage** starter and adds `bob` as its
    reviewer. The starter is wired to these two usernames.
-2. Add the model provider key in Studio → Settings (stored encrypted in the
-   database), or set `ABADA_AGENT_LLM_API_KEY` in `.env.server` and rerun
-   `up server`.
+2. Add the model provider and its key in Studio → Settings → AI Providers
+   (stored encrypted with the `ABADA_ENCRYPTION_KEY` that `up server`
+   generated). Agent tasks and Insight use it at once. Setting
+   `ABADA_LLM_GEMINI_API_KEY` in `.env.server` and rerunning `up server` also
+   works, but a key saved in Studio wins.
 3. Start the HIGH, MEDIUM and LOW examples, then show Tasks, Operations and
    Insight. Sign in as `bob` to complete the human review.
 
@@ -256,7 +258,8 @@ gcloud compute instances reset "$VM" --project "$PROJECT" --zone "$ZONE"
 ## Backup and upgrade
 
 Back up both databases and the environment file (it holds the only copy of the
-generated secrets):
+generated secrets, including `ABADA_ENCRYPTION_KEY`, without which the AI
+provider keys saved in Studio cannot be read):
 
 ```bash
 cd /opt/abada && sudo docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml exec -T postgres pg_dump -U abada -Fc abada_engine > abada_engine.dump
