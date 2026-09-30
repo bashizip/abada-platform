@@ -37,6 +37,17 @@ export interface ProjectJob {
   retries?: number | null;
 }
 
+/** The error last reported for a job: message and the worker's redacted stack trace. */
+export interface JobError {
+  jobId: string;
+  processInstanceId: string;
+  activityId: string;
+  status: string | null;
+  retries: number | null;
+  errorMessage: string | null;
+  errorDetails: string | null;
+}
+
 export interface InstancePage {
   items: ProcessInstanceDTO[];
   page: number;
@@ -293,6 +304,18 @@ export class EngineAPI {
       { headers: this.getHeaders() },
     );
     if (!res.ok) throw new Error(`Failed to fetch jobs: ${res.statusText}`);
+    // The engine names the id `jobId`.
+    const jobs = await res.json() as (ProjectJob & { jobId?: string })[];
+    return jobs.map(({ jobId, ...job }) => ({ ...job, id: job.id ?? jobId ?? '' }));
+  }
+
+  /** Message and stack trace last reported for a job, also while it is still retrying. */
+  static async getJobError(projectId: string, jobId: string): Promise<JobError> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/jobs/${encodeURIComponent(jobId)}/error`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(res.status === 404 ? 'No error details are available for this job.' : `Failed to fetch error details: ${res.statusText}`);
     return res.json();
   }
 

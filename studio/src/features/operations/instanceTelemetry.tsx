@@ -21,6 +21,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { ActivityHistoryDTO, ProjectJob } from '@/api/engine';
+import { ErrorDetailsDialog } from '@/features/operations/ErrorDetailsDialog';
+import { failureOf, type FailureContext } from '@/lib/run/errorReport';
 import { WorkflowFile } from '@/types';
 import { aggregateNodeTelemetry, eventMeta } from '@/lib/run/instanceDetail';
 import { formatDuration, humanize, unwrapVariable } from '@/lib/run/instanceFormat';
@@ -310,12 +312,30 @@ export const NodeTelemetry: React.FC<{
   jobs: ProjectJob[];
   variables: Record<string, unknown> | null;
   onRetry: (job: ProjectJob) => void;
-}> = ({ nodeId, workflow, history, jobs, variables, onRetry }) => {
+  /** Enables the error details dialog (stack traces are project-scoped). */
+  projectId?: string;
+}> = ({ nodeId, workflow, history, jobs, variables, onRetry, projectId }) => {
+  const [openFailure, setOpenFailure] = useState<{ jobId: string; context: FailureContext } | null>(null);
   const node = workflow.nodes.find((item) => item.id === nodeId);
   const telemetry = aggregateNodeTelemetry(history, nodeId, jobs);
   if (!node) return <p className="text-[11px] text-[#A89F91]">Unknown node.</p>;
 
   const nodeEvents = history.filter((event) => event.activityId === nodeId);
+  const failures = nodeEvents
+    .map((event) => ({ event, failure: failureOf(event, node.title, telemetry.workerIds) }))
+    .filter((item) => item.failure !== null);
+  const latestFailure = failures.length > 0 ? failures[failures.length - 1].failure : null;
+  const detailsButton = (failure: { jobId: string; context: FailureContext } | null, label = 'Details') =>
+    projectId && failure ? (
+      <button
+        type="button"
+        onClick={() => setOpenFailure(failure)}
+        className="shrink-0 rounded-lg border border-[#E76F51]/40 bg-[#E76F51]/10 px-2 py-0.5 text-[10px] font-semibold text-[#E76F51] transition-all hover:bg-[#E76F51]/20"
+        title="Show the error message and full stack trace"
+      >
+        {label}
+      </button>
+    ) : null;
 
   return (
     <div className="space-y-4">
@@ -377,7 +397,19 @@ export const NodeTelemetry: React.FC<{
               {telemetry.agent.attempt !== undefined && <InfoRow label="Attempt">{telemetry.agent.attempt}</InfoRow>}
               {telemetry.agent.durationMs !== undefined && <InfoRow label="Latency">{formatDuration(telemetry.agent.durationMs)}</InfoRow>}
               {telemetry.agent.resultVariable && <InfoRow label="Result variable"><span className="font-mono">{telemetry.agent.resultVariable}</span></InfoRow>}
-              {telemetry.agent.errorType && <InfoRow label="Error type"><span className="text-[#E76F51]">{telemetry.agent.errorType}</span></InfoRow>}
+              {telemetry.agent.errorType && (
+                <InfoRow label="Error type">
+                  <span className="flex items-center justify-end gap-2">
+                    <span className="text-[#E76F51]">{telemetry.agent.errorType}</span>
+                    {detailsButton(latestFailure)}
+                  </span>
+                </InfoRow>
+              )}
+              {telemetry.agent.errorType && telemetry.errorMessage && (
+                <div className="mt-1.5 rounded-lg border border-[#E76F51]/30 bg-[#E76F51]/10 p-2 text-[10px] leading-relaxed text-[#E76F51]">
+                  {telemetry.errorMessage}
+                </div>
+              )}
               {telemetry.agent.outcome && (
                 <InfoRow label="Output contract">
                   <span className={telemetry.agent.outcome === 'OK' ? 'text-[#2A9D8F]' : 'text-[#E76F51]'}>
@@ -463,6 +495,7 @@ export const NodeTelemetry: React.FC<{
                   </div>
                 )}
               </div>
+              {detailsButton({ jobId: job.id, context: { activityTitle: node.title } })}
               <button
                 type="button"
                 onClick={() => onRetry(job)}
@@ -528,17 +561,45 @@ export const NodeTelemetry: React.FC<{
           <div className="space-y-1">
             {nodeEvents.map((event) => {
               const meta = eventMeta(event.eventType);
+              const failure = projectId ? failureOf(event, node.title, telemetry.workerIds) : null;
+              const time = new Date(event.occurredAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              if (failure) {
+                return (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => setOpenFailure(failure)}
+                    title="Show the error message and full stack trace"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#E76F51]/30 bg-[#1A1614] px-2.5 py-1.5 text-left transition-colors hover:bg-[#E76F51]/10"
+                  >
+                    <span className={`text-[10px] font-semibold ${TONE_TEXT[meta.tone]}`}>
+                      {meta.label}{failure.context.errorType ? ` · ${failure.context.errorType}` : ''}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-[10px] text-[#E76F51] underline decoration-dotted">Details</span>
+                      <span className="font-mono text-[10px] text-[#A89F91]">{time}</span>
+                    </span>
+                  </button>
+                );
+              }
               return (
                 <div key={event.id} className="flex items-center justify-between gap-2 rounded-lg border border-[#3A322E] bg-[#1A1614] px-2.5 py-1.5">
                   <span className={`text-[10px] font-semibold ${TONE_TEXT[meta.tone]}`}>{meta.label}</span>
-                  <span className="font-mono text-[10px] text-[#A89F91]">
-                    {new Date(event.occurredAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
+                  <span className="font-mono text-[10px] text-[#A89F91]">{time}</span>
                 </div>
               );
             })}
           </div>
         </div>
+      )}
+
+      {openFailure && projectId && (
+        <ErrorDetailsDialog
+          projectId={projectId}
+          jobId={openFailure.jobId}
+          context={openFailure.context}
+          onClose={() => setOpenFailure(null)}
+        />
       )}
     </div>
   );
