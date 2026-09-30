@@ -68,6 +68,13 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; result: AiConnectionTestResult } | null>(null);
   const [addType, setAddType] = useState(AI_PROVIDER_PRESETS[0].type);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  const edit = (next: Draft | null) => {
+    setTestResult(null);
+    setConfirmRemove(null);
+    setDraft(next);
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -105,7 +112,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
         insightDefault: draft.insightDefault,
       });
       if (saved.insightDefault && saved.defaultModel) setCachedModel(saved.defaultModel);
-      setDraft(null);
+      edit(null);
       await load();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Failed to save AI provider');
@@ -134,8 +141,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
   };
 
   const remove = async (provider: AiProvider) => {
-    const followUp = provider.environmentConfigured ? ' The environment key for this provider will apply again.' : '';
-    if (!window.confirm(`Remove the saved ${provider.displayName} provider and its key?${followUp}`)) return;
+    setConfirmRemove(null);
     onError(null);
     try {
       await AiProvidersAPI.remove(provider.id);
@@ -209,7 +215,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
         </div>
         {testBanner(draft.id)}
         <div className="flex gap-2">
-          <button type="button" onClick={() => setDraft(null)}
+          <button type="button" onClick={() => edit(null)}
             className="flex-1 rounded-lg border border-[#3A322E] py-2 text-xs text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]">Cancel</button>
           <button type="button" onClick={() => void test(draft.id, draft)} disabled={testing !== null}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[#3A322E] py-2 text-xs text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:opacity-50">
@@ -245,10 +251,10 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
                 className="rounded-md p-1.5 text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:opacity-40">
                 {testing === provider.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
               </button>
-              <button type="button" onClick={() => setDraft(draftFrom(provider))} title={provider.saved ? 'Edit' : 'Save a key in Studio for this provider'}
+              <button type="button" onClick={() => edit(draftFrom(provider))} title={provider.saved ? 'Edit' : 'Save a key in Studio for this provider'}
                 className="rounded-md p-1.5 text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]"><Pencil className="h-3.5 w-3.5" /></button>
               {provider.saved && (
-                <button type="button" onClick={() => void remove(provider)} title="Remove"
+                <button type="button" onClick={() => { setTestResult(null); setConfirmRemove(provider.id); }} title="Remove"
                   className="rounded-md p-1.5 text-[#A89F91] hover:bg-[#2F2926] hover:text-[#E76F51]"><Trash2 className="h-3.5 w-3.5" /></button>
               )}
             </div>
@@ -259,6 +265,17 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
             <span title="Agent models routed to this provider">→ {provider.modelPatterns.join(', ')}</span>
           </div>
           {testBanner(provider.id)}
+          {confirmRemove === provider.id && (
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-[#E76F51]/30 bg-[#E76F51]/10 px-3 py-2 text-xs text-[#E76F51]">
+              <span className="min-w-0 flex-1">
+                Remove the saved key?{provider.environmentConfigured ? ' The environment key applies again.' : ''}
+              </span>
+              <button type="button" onClick={() => setConfirmRemove(null)}
+                className="rounded-md border border-[#3A322E] px-2 py-1 text-[11px] text-[#A89F91] hover:text-[#EAE3D9]">Cancel</button>
+              <button type="button" onClick={() => void remove(provider)}
+                className="rounded-md border border-[#E76F51]/50 bg-[#E76F51]/15 px-2 py-1 text-[11px] font-medium text-[#E76F51]">Remove</button>
+            </div>
+          )}
         </div>
       ))}
 
@@ -268,7 +285,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
           {AI_PROVIDER_PRESETS.map((preset) => <option key={preset.type} value={preset.type}>{preset.label}</option>)}
         </select>
         <button type="button"
-          onClick={() => setDraft(draftForPreset(addType, providers.map((provider) => provider.id), hasInsightDefault))}
+          onClick={() => edit(draftForPreset(addType, providers.map((provider) => provider.id), hasInsightDefault))}
           className="flex items-center gap-1.5 rounded-lg border border-[#2A9D8F]/50 bg-[#2A9D8F]/15 px-3 py-2 text-xs font-medium text-[#2A9D8F]">
           <Plus className="h-3.5 w-3.5" /> Add provider
         </button>
