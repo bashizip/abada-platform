@@ -47,12 +47,18 @@ public final class AgentWorkerMain {
                 ? () -> config.engineToken()
                 : new ClientCredentialsTokenSupplier(config);
         AbadaWorkerClient client = new AbadaWorkerClient(config.engineUrl(), tokens);
-        AgentGatewayFactory gateways = new AgentGatewayFactory(config);
         List<String> topics = topics(config);
         // The engine and identity provider may still be starting (Docker
         // starts every container at once after a host reboot).
         new StartupRetry(config.startupRetryBudget()).run("register_capabilities",
                 () -> client.registerCapabilities(topics, List.copyOf(config.allowedModels())));
+        // Provider keys come from the engine (Studio settings over engine
+        // environment); the worker's own ABADA_AGENT_LLM_* / ABADA_AGENT_OPENAI_*
+        // variables are a deprecated fallback.
+        ProviderCredentials credentials = new ProviderCredentials(client::aiCredentials,
+                ProviderCredentials.fromEnvironment(config), config.credentialsTtl(), System::currentTimeMillis);
+        credentials.logSource();
+        AgentGatewayFactory gateways = new AgentGatewayFactory(config, credentials);
         LOG.log(System.Logger.Level.INFO,
                 "agent_worker_started worker_id={0} topics={1} models={2} max_tasks={3} lock_ms={4}",
                 config.workerId(), String.join(",", topics),

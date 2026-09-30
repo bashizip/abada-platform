@@ -118,10 +118,20 @@ public abstract class AbstractAgentGateway implements AgentGateway {
         }
     }
 
+    /** The endpoint's base URL, or a configuration error naming where to add one. */
+    static URI requireBaseUrl(ProviderEndpoint endpoint) {
+        if (endpoint.baseUrl() == null || endpoint.baseUrl().toString().isBlank()) {
+            throw new AgentConfigurationException("No base URL is configured for AI provider '" + endpoint.id()
+                    + "'. Add the provider in Studio Settings > AI Providers.");
+        }
+        return endpoint.baseUrl();
+    }
+
     protected AgentResult executeChatCompletion(URI targetUri, String apiKey, String model,
                                                  AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new AgentConfigurationException(provider() + " API key is not configured (ABADA_AGENT_LLM_API_KEY / ABADA_LLM_API_KEY is unset or blank)");
+            throw new AgentConfigurationException(provider() + " API key is not configured for model '" + model
+                    + "'. Add the provider and its API key in Studio Settings > AI Providers.");
         }
         long timeoutMs = work.timeoutMs() == null ? 60_000L : work.timeoutMs();
         String prompt = renderPrompt(work, variables);
