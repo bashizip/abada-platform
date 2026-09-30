@@ -34,11 +34,12 @@ fi
 # Verify Docker daemon is reachable
 docker info >/dev/null 2>&1 || fail "Docker daemon is not running. Start Docker Desktop or the Docker service and try again."
 
-# The provider key is optional. Headless installs may set ABADA_AGENT_LLM_API_KEY;
-# everyone else can add the key after startup in Studio → Settings, which stores
-# it AES-encrypted in the database — the recommended path. Installation must
-# never block on it.
-GEMINI_KEY="${ABADA_AGENT_LLM_API_KEY:-}"
+# The provider key is optional. Headless installs may set ABADA_LLM_GEMINI_API_KEY
+# (ABADA_AGENT_LLM_API_KEY is still accepted); everyone else can add the key
+# after startup in Studio → Settings → AI Providers, which stores it
+# AES-encrypted in the database and serves agents and Insight alike — the
+# recommended path. Installation must never block on it.
+GEMINI_KEY="${ABADA_LLM_GEMINI_API_KEY:-${ABADA_AGENT_LLM_API_KEY:-}}"
 if [[ -n "$GEMINI_KEY" ]]; then
   # Trim whitespace, quotes and carriage returns that terminals and editors
   # commonly introduce when pasting keys.
@@ -146,11 +147,9 @@ set_env_value() {
   mv "$temporary" "$ENV_FILE"
 }
 if [[ -n "$GEMINI_KEY" ]]; then
-  set_env_value ABADA_AGENT_LLM_API_KEY "$GEMINI_KEY"
-  set_env_value ABADA_AGENT_OPENAI_API_KEY "$GEMINI_KEY"
-  set_env_value ABADA_LLM_API_KEY "$GEMINI_KEY"
+  # One key, read by the engine for agents, Insight and authoring.
+  set_env_value ABADA_LLM_GEMINI_API_KEY "$GEMINI_KEY"
 fi
-set_env_value ABADA_LLM_BASE_URL "https://generativelanguage.googleapis.com/v1beta/openai"
 set_env_value ABADA_LLM_MODEL "gemini-3.6-flash"
 set_env_value ABADA_INSIGHT_ENABLED "true"
 set_env_value ABADA_INSIGHT_LLM_TIMEOUT_MS "90000"

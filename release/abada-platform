@@ -115,6 +115,9 @@ validate_production_values() {
   cors="$(env_value ABADA_ALLOWED_ORIGINS)"
 
   [[ ${#postgres_password} -ge 16 ]] || { echo "Error: POSTGRES_PASSWORD must contain at least 16 characters" >&2; exit 65; }
+  [[ "$(env_value ABADA_ENCRYPTION_KEY)" =~ ^[A-Za-z0-9+/]{43}=$ ]] || {
+    echo "Error: ABADA_ENCRYPTION_KEY must be a base64-encoded 32-byte key (openssl rand -base64 32)" >&2; exit 65;
+  }
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ && "$version" != "latest" ]] || {
     echo "Error: ABADA_VERSION must be an exact immutable semantic version" >&2; exit 65;
   }
@@ -207,6 +210,17 @@ set_env_value() {
   chmod 600 "$ENV_FILE"
 }
 
+generate_encryption_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 32
+  elif [[ -r /dev/urandom ]]; then
+    head -c 32 /dev/urandom | base64 | tr -d '\n'
+  else
+    echo "Error: cannot securely generate secrets" >&2
+    exit 69
+  fi
+}
+
 generate_server_secrets() {
   local key generated=()
   for key in "${SERVER_SECRETS[@]}"; do
@@ -215,6 +229,11 @@ generate_server_secrets() {
       generated+=("$key")
     fi
   done
+  # Encrypts the AI provider keys saved in Studio; must stay stable.
+  if [[ -z "$(env_value ABADA_ENCRYPTION_KEY)" ]]; then
+    set_env_value ABADA_ENCRYPTION_KEY "$(generate_encryption_key)"
+    generated+=(ABADA_ENCRYPTION_KEY)
+  fi
   if [[ ${#generated[@]} -gt 0 ]]; then
     echo "Generated ${generated[*]} in $ENV_FILE."
   fi
