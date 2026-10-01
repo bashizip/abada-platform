@@ -47,3 +47,9 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
 Never edit a released Flyway migration or downgrade a database without a
 release-specific rollback procedure. Image rollback alone cannot undo a schema
 migration.
+
+**1.1.0-rc.1 (migration V23).** Execution tokens move to their own table.
+Running processes need no action: each one is converted the first time it
+moves after the upgrade. Until 1.1.0 the engine still writes the token state
+1.0.0-rc.8 reads, so going back to the rc.8 images works without restoring the
+backup. Details: `docs/operations/upgrading.md` in the repository.

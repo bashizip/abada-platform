@@ -77,9 +77,9 @@ should use external tasks and an idempotent worker operation.
 ## Process control
 
 - Cancellation changes a non-terminal instance to `CANCELLED`, records its end
-  time and removes active tokens. Cancellation is not reversible.
+  time and cancels every live token. Cancellation is not reversible.
 - Failure changes a non-terminal instance to `FAILED`, records its end time and
-  removes active tokens.
+  cancels every live token.
 - Suspension changes a running instance to `SUSPENDED`. Task completion and
   event advancement are rejected while suspended. Activation restores
   `RUNNING`; terminal instances cannot be activated.
@@ -97,13 +97,24 @@ should use external tasks and an idempotent worker operation.
   boolean), the command fails with `ABADA-RUNTIME-EXPRESSION-001` (HTTP 422
   `EXPRESSION_EVALUATION_FAILED`) and rolls back. It never falls through to
   the default flow silently. See `apl-specification.md` §5.2.
-- A parallel fork creates one token per outgoing flow. Its corresponding join
-  waits until every expected branch token arrives. Native APL exposes the same
-  semantics through the `parallel` node: `branches` become the fork flows, and
-  a node several upstream `next` flows converge on becomes the join.
+- A parallel fork creates one token per outgoing flow; the forking token waits.
+  The join that closes the fork fires when every live branch token has arrived,
+  counted by token id; the forking token then continues past the join. Native
+  APL exposes the same semantics through the `parallel` node: `branches` become
+  the fork flows, and a node several upstream `next` flows converge on becomes
+  the join.
 - An inclusive fork selects every true conditional flow, or its default when
   none match. The join waits only for branches selected by that fork.
-- Join-arrival and expected-token sets are durable and restored after restart.
+- Branches that reach a join within the same command are all counted (before
+  1.1.0-rc.1 the second arrival in one command was dropped and the steps after
+  the join did not run). A branch that ends at an end event before the join no
+  longer counts toward it.
+- A join with no fork in scope (a merge) fires after one arrival per logical
+  incoming stream, or with the arrivals it has once no other live token can
+  still reach it.
+- Tokens are durable rows (`process_tokens`) and survive restart; tasks, jobs,
+  external tasks and subscriptions name the token they resume. See
+  `docs/architecture/runtime-state.md` §Execution tokens.
 
 ## Decision tables
 
@@ -141,10 +152,11 @@ should use external tasks and an idempotent worker operation.
   forks one durable wait state per outgoing catch child (message, timer or
   signal) in the same transaction as the fork. When the first child fires, its
   advancement and the cancellation of every sibling wait state commit
-  together: sibling tokens leave the active set, sibling message/signal
+  together: sibling tokens are cancelled, sibling message/signal
   subscriptions are locked and marked consumed, and sibling timer jobs
   (available or leased) become `CANCELLED` so a late loser can never produce a
-  duplicate transition. Pending races persist across restart. A join counts an
+  duplicate transition. The token parked at the gateway continues on the
+  winner's path. Pending races persist across restart. A join counts an
   event gateway as one logical incoming stream no matter how many of its
   children converge on the join. Evidence:
   [`EventGatewayTest`](../../engine/src/test/java/com/abada/engine/core/EventGatewayTest.java)
