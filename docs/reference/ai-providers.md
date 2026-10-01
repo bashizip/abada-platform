@@ -6,12 +6,17 @@ all three, managed in Studio and resolved by the engine.
 
 ## Where keys come from
 
-For each provider id the engine uses, in order:
+For each provider id:
 
-1. **Studio** (Settings > AI Providers): a saved, enabled provider with a key.
-   Keys are write-only in the API (responses carry a hint such as `****abcd`)
-   and stored AES-256-GCM encrypted with `ABADA_ENCRYPTION_KEY`.
-2. **Engine environment**, a developer/bootstrap default:
+- A provider **saved in Studio** (Settings > AI Providers) always keeps its
+  settings: name, base URL, the model prefixes it serves, default model and
+  whether it is the default. Its **key** is the key saved in Studio, or else
+  the environment key of the same provider (shown as *Key from server*).
+  A provider **disabled** in Studio is not used, even if the environment has
+  a key for it. Keys are write-only in the API (responses carry a hint such as
+  `****abcd`) and stored AES-256-GCM encrypted with `ABADA_ENCRYPTION_KEY`.
+- A provider configured **only in the environment** is used with its preset
+  settings. The environment variables are:
    - per provider: `ABADA_LLM_<PROVIDER>_API_KEY`, optionally
      `ABADA_LLM_<PROVIDER>_BASE_URL`, for `GEMINI`, `OPENAI`, `ANTHROPIC`,
      `DEEPSEEK` and `OPENROUTER`;
@@ -52,9 +57,13 @@ and Dry Run say the same before deploying. A node without a model uses the
 Insight provider. Namespaces (`google/`, `openai/`, `anthropic/`) are stripped
 before the model id is sent to that provider.
 
-Insight and APL authoring use the provider marked *Used by Insight*
-(`insight_default`), else the environment default provider, else the first
-configured Studio provider. Their model is that provider's default model.
+**Default model.** Insight, APL authoring and new agent nodes use the
+*Default model* chosen at the top of Settings > AI Providers (stored as the
+provider's `insight_default` and `default_model`). The first provider saved
+becomes the default. If the chosen provider cannot run (no key anywhere),
+the environment default provider, else the first Studio provider, stands in,
+and `GET /v1/ai-providers/status` reports `insightFallback: true` with the
+`requestedInsightProviderId` so Studio can say so.
 
 ## API
 
