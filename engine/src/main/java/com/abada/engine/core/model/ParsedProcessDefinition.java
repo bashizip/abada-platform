@@ -136,6 +136,22 @@ public class ParsedProcessDefinition implements Serializable {
         return null; // No join gateway found
     }
 
+    /**
+     * The fork gateway whose structural join is {@code joinGatewayId}: a
+     * parallel or inclusive gateway with one incoming flow, of the join's type.
+     * Null when no fork closes at that join.
+     */
+    public String findForkOf(String joinGatewayId) {
+        GatewayMeta join = gateways.get(joinGatewayId);
+        if (join == null) return null;
+        for (Map.Entry<String, GatewayMeta> entry : gateways.entrySet()) {
+            String candidate = entry.getKey();
+            if (entry.getValue().type() != join.type() || getIncoming(candidate).size() != 1) continue;
+            if (joinGatewayId.equals(findJoinGateway(candidate, join.type()))) return candidate;
+        }
+        return null;
+    }
+
     public String getId() {
         return id;
     }

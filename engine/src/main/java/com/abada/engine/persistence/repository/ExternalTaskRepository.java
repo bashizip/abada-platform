@@ -69,6 +69,13 @@ public interface ExternalTaskRepository extends JpaRepository<ExternalTaskEntity
     boolean existsByProcessInstanceIdAndActivityIdAndStatusIn(
             String processInstanceId, String activityId, List<ExternalTaskEntity.Status> statuses);
 
+    boolean existsByProcessInstanceIdAndTokenIdAndStatusIn(
+            String processInstanceId, String tokenId, List<ExternalTaskEntity.Status> statuses);
+
+    /** Open work created before V23 (no token) for this activity. */
+    boolean existsByProcessInstanceIdAndActivityIdAndTokenIdIsNullAndStatusIn(
+            String processInstanceId, String activityId, List<ExternalTaskEntity.Status> statuses);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select task from ExternalTaskEntity task where task.id = :id")
     Optional<ExternalTaskEntity> findByIdForUpdate(@Param("id") String id);

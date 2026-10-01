@@ -42,7 +42,7 @@ public class TimerJobCommandService {
                 || !leaseOwner.equals(job.getLeaseOwner()) || job.getLeaseExpiresAt() == null
                 || !job.getLeaseExpiresAt().isAfter(now)) return false;
 
-        engine.resumeFromEvent(job.getProcessInstanceId(), job.getEventId(), Map.of());
+        engine.resumeFromEvent(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(), Map.of());
         job.setStatus(JobEntity.Status.COMPLETED);
         job.setLeaseOwner(null);
         job.setLeaseExpiresAt(null);

@@ -14,6 +14,10 @@ public class ExternalTaskEntity {
 
     private String processInstanceId;
 
+    /** Token this work resumes; null for rows created before V23. */
+    @Column(name = "token_id", length = 36)
+    private String tokenId;
+
     private String topicName;
 
     @Enumerated(EnumType.STRING)
@@ -184,4 +188,7 @@ public class ExternalTaskEntity {
     public void setCreatedAt(Instant value) { createdAt = value; }
 
     public long getEntityVersion() { return entityVersion; }
+
+    public String getTokenId() { return tokenId; }
+    public void setTokenId(String tokenId) { this.tokenId = tokenId; }
 }
