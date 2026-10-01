@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { X, Settings, Server, Key, Cpu, Globe, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Plug } from 'lucide-react';
 import { InsightAPI, InsightLlmConfig, InsightApprovalPolicy } from '@/api/insight';
 import { AiProvidersSettings } from '@/components/settings/AiProvidersSettings';
+import { presetFor } from '@/lib/aiProviders';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -133,7 +134,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
 
         {/* Content */}
         <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
-          {isLoading && (
+          {isLoading && activeTab !== 'ai' && (
             <div className="flex items-center gap-2 text-xs text-[#A89F91] py-3">
               <div className="w-3.5 h-3.5 border-2 border-[#2A9D8F] border-t-transparent rounded-full animate-spin" />
               Loading configuration...
@@ -175,7 +176,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
 
               <div className="space-y-2">
                 <h3 className="text-[10px] uppercase tracking-wider text-[#A89F91] font-medium">LLM Provider</h3>
-                {configRow('Provider', config.providerId ? `${config.providerId} (${config.source === 'STUDIO' ? 'Studio key' : 'environment'})` : config.providerType, Server)}
+                {configRow('Provider', config.providerId ? `${presetFor(config.providerType).label} (${config.source === 'STUDIO' ? 'key saved in Studio' : 'key from server'})` : 'Not configured', Server)}
                 {configRow('Base URL', config.baseUrl || 'Not configured', Globe)}
                 {configRow('Model', config.model || 'Not configured', Cpu)}
                 <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-[#1A1614] border border-[#3A322E]">
@@ -199,7 +200,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
                 </div>
               </div>
 
-              {config.openRouterEnabled && (
+              {config.openRouterEnabled && config.providerType === 'openrouter' && (
                 <div className="space-y-2">
                   <h3 className="text-[10px] uppercase tracking-wider text-[#A89F91] font-medium">OpenRouter Headers</h3>
                   {configRow('HTTP-Referer', config.openRouterReferer, Globe)}
@@ -209,7 +210,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
 
               <div className="text-[10px] text-[#A89F91] bg-[#25201D] rounded-lg p-3 space-y-1.5">
                 <p className="font-medium text-[#EAE3D9]">Where this comes from</p>
-                <p>Insight uses the provider marked "Used by Insight" in the AI Providers tab, with the same keys as agent tasks. Without one it falls back to the server's <code className="text-[#F4A261]">ABADA_LLM_*</code> environment variables.</p>
+                <p>Insight uses the <strong>Default model</strong> chosen in the AI Providers tab, with the same keys as agent tasks. Change it there.</p>
               </div>
             </div>
           )}
