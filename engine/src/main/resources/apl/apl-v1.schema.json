@@ -1,0 +1,1015 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://abada.io/schemas/apl/v1.json",
+  "title": "APLDocument",
+  "description": "Abada Process Language (APL) abada.io/v1. Owned by the engine; Studio types are generated from it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "metadata",
+    "flow"
+  ],
+  "properties": {
+    "version": {
+      "const": "abada.io/v1"
+    },
+    "metadata": {
+      "title": "APLMetadata",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,127}$",
+          "description": "Stable process key; derived from name when omitted."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variableDeclaration"
+          },
+          "description": "Declared instance variables (start payload and variables written by engine-task, script or human-input nodes). Enables unknown-identifier warnings."
+        }
+      }
+    },
+    "flow": {
+      "title": "APLFlow",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry",
+        "nodes"
+      ],
+      "properties": {
+        "entry": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nodeId": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+      "minLength": 1
+    },
+    "nodeRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id of a node declared in flow.nodes."
+    },
+    "variableName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "agentModel": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Model id; the served schema lists this engine's allowed models as an enum."
+    },
+    "uiPosition": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Studio canvas position; ignored by the engine.",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "isoDuration": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^-?P",
+      "description": "ISO-8601 duration accepted by java.time.Duration (PT1H, P2D)."
+    },
+    "onError": {
+      "description": "Error route: a node id, or a list of {code?, then}; at most one entry may omit code.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/nodeRef"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "then"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              },
+              "then": {
+                "$ref": "#/$defs/nodeRef"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "variableDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/variableName"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "object",
+            "list",
+            "any"
+          ],
+          "default": "any"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "webhookNode": {
+      "title": "APLWebhookNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "webhook"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Start event; flow.entry must reference the single webhook."
+    },
+    "endNode": {
+      "title": "APLEndNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "end"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": false,
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "agentNode": {
+      "title": "APLAgentNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "agent"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "profile": {
+          "const": "abada.agent/v1",
+          "default": "abada.agent/v1"
+        },
+        "model": {
+          "$ref": "#/$defs/agentModel"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Placeholders ${path} must be variable paths."
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Input name -> CEL expression. Omit to derive inputs from prompt placeholders."
+        },
+        "result_variable": {
+          "$ref": "#/$defs/variableName"
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "JSON Schema 2020-12 the agent output must satisfy."
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 0
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0.2
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000,
+          "default": 2048,
+          "description": "Maximum completion tokens."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000,
+          "default": 60000,
+          "description": "Model call timeout."
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 3,
+          "description": "Worker attempts before the task fails."
+        },
+        "retry_backoff_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000,
+          "default": 2000,
+          "description": "Delay between attempts."
+        },
+        "on_low_confidence": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "on_invalid_output": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "engineTaskNode": {
+      "title": "APLEngineTaskNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "engine-task"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "service": {
+          "type": "string",
+          "minLength": 1,
+          "description": "External-task topic."
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "service"
+      ],
+      "additionalProperties": false
+    },
+    "decisionTableNode": {
+      "title": "APLDecisionTableNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "decision-table"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "decisionKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hitPolicy": {
+          "enum": [
+            "FIRST",
+            "UNIQUE",
+            "COLLECT"
+          ],
+          "default": "FIRST"
+        },
+        "inputs": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "expr": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "description": "CEL over the table inputs."
+              },
+              "otherwise": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "then": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": [
+                            "string",
+                            "number",
+                            "boolean",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "description": "Output variables written to the instance."
+              }
+            }
+          }
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "scriptNode": {
+      "title": "APLScriptNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "script"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "script": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "type": "string",
+          "minLength": 1,
+          "default": "javascript"
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "script"
+      ],
+      "additionalProperties": false,
+      "description": "In-transaction script; deployable only when the operator enables scripts."
+    },
+    "approvalGateNode": {
+      "title": "APLApprovalGateNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "approval-gate"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "assignees": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Candidate groups allowed to claim the task."
+        },
+        "mode": {
+          "enum": [
+            "serial",
+            "parallel"
+          ],
+          "description": "Authoring hint only; the engine does not enforce serial or parallel sign-off."
+        },
+        "sla_hours": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Service-level target for monitoring; not enforced by the engine yet."
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "assignees"
+      ],
+      "additionalProperties": false,
+      "description": "Deprecated alias of human-input.",
+      "deprecated": true
+    },
+    "humanInputNode": {
+      "title": "APLHumanInputNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "human-input"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "assignees": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Candidate groups allowed to claim the task."
+        },
+        "formKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formId": {
+          "type": "string",
+          "minLength": 1,
+          "deprecated": true,
+          "description": "Deprecated alias of formKey."
+        },
+        "mode": {
+          "enum": [
+            "serial",
+            "parallel"
+          ],
+          "description": "Authoring hint only; the engine does not enforce serial or parallel sign-off."
+        },
+        "sla_hours": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Service-level target for monitoring; not enforced by the engine yet."
+        },
+        "slaHours": {
+          "type": "number",
+          "minimum": 0,
+          "deprecated": true,
+          "description": "Deprecated alias of sla_hours."
+        },
+        "requireDoubleSignOff": {
+          "type": "boolean",
+          "description": "Reserved; currently has no runtime effect."
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "assignees"
+      ],
+      "additionalProperties": false
+    },
+    "conditionNode": {
+      "title": "APLConditionNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "condition"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": false,
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "if": {
+                "type": "string",
+                "description": "CEL condition, usually written ${...}."
+              },
+              "else": {
+                "type": [
+                  "boolean",
+                  "string"
+                ],
+                "description": "true (with then) or the target node id; marks the default route."
+              },
+              "then": {
+                "$ref": "#/$defs/nodeRef"
+              }
+            }
+          }
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "description": "Exclusive gateway; the else rule (or the last rule) is the default route."
+    },
+    "inclusiveNode": {
+      "title": "APLInclusiveNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "inclusive"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "if": {
+                "type": "string",
+                "description": "CEL condition, usually written ${...}."
+              },
+              "else": {
+                "type": [
+                  "boolean",
+                  "string"
+                ],
+                "description": "true (with then) or the target node id; marks the default route."
+              },
+              "then": {
+                "$ref": "#/$defs/nodeRef"
+              }
+            }
+          }
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Fork when it declares rules, join when it declares next."
+    },
+    "parallelNode": {
+      "title": "APLParallelNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "parallel"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "branches": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nodeRef"
+          }
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Fork when it declares branches, join when it declares next."
+    },
+    "eventGatewayNode": {
+      "title": "APLEventGatewayNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "event-gateway"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": false,
+        "events": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/eventGatewayChild"
+          }
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "events"
+      ],
+      "additionalProperties": false
+    },
+    "eventGatewayChild": {
+      "title": "APLEventGatewayChild",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "next"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "message-catch",
+            "timer",
+            "signal"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration": {
+          "$ref": "#/$defs/isoDuration"
+        },
+        "signal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        }
+      }
+    },
+    "messageCatchNode": {
+      "title": "APLMessageCatchNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "message-catch"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "timerNode": {
+      "title": "APLTimerNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "timer"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "duration": {
+          "$ref": "#/$defs/isoDuration"
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "duration"
+      ],
+      "additionalProperties": false
+    },
+    "signalNode": {
+      "title": "APLSignalNode",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "signal"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "signal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "signal"
+      ],
+      "additionalProperties": false
+    },
+    "node": {
+      "title": "APLNode",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/webhookNode"
+        },
+        {
+          "$ref": "#/$defs/endNode"
+        },
+        {
+          "$ref": "#/$defs/agentNode"
+        },
+        {
+          "$ref": "#/$defs/engineTaskNode"
+        },
+        {
+          "$ref": "#/$defs/decisionTableNode"
+        },
+        {
+          "$ref": "#/$defs/scriptNode"
+        },
+        {
+          "$ref": "#/$defs/approvalGateNode"
+        },
+        {
+          "$ref": "#/$defs/humanInputNode"
+        },
+        {
+          "$ref": "#/$defs/conditionNode"
+        },
+        {
+          "$ref": "#/$defs/inclusiveNode"
+        },
+        {
+          "$ref": "#/$defs/parallelNode"
+        },
+        {
+          "$ref": "#/$defs/eventGatewayNode"
+        },
+        {
+          "$ref": "#/$defs/messageCatchNode"
+        },
+        {
+          "$ref": "#/$defs/timerNode"
+        },
+        {
+          "$ref": "#/$defs/signalNode"
+        }
+      ]
+    },
+    "nodeType": {
+      "enum": [
+        "webhook",
+        "end",
+        "agent",
+        "engine-task",
+        "decision-table",
+        "script",
+        "approval-gate",
+        "human-input",
+        "condition",
+        "inclusive",
+        "parallel",
+        "event-gateway",
+        "message-catch",
+        "timer",
+        "signal"
+      ]
+    }
+  }
+}

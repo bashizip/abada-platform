@@ -71,6 +71,14 @@ APL closes and tightens holes relative to XML:
 - `event-gateway` requires ≥2 competing children; the first to fire advances
   the instance and every sibling subscription/timer/token is cancelled in the
   same transaction.
+- Every error in every node is reported at once, each with its node id and a
+  JSON Pointer path. The engine-owned JSON Schema
+  (`engine/src/main/resources/apl/apl-v1.schema.json`, served at
+  `GET /api/v1/apl/schema`) additionally reports unknown fields and wrong
+  value types — warnings in the 1.1.0 release candidates, errors from 1.1.0.
+- `POST /api/v1/apl/validate` runs this whole pipeline without persisting
+  anything; Studio uses it instead of keeping its own rules, and generates its
+  APL types from the same schema.
 
 ## Immutable versions
 

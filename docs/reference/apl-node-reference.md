@@ -30,6 +30,12 @@ Each node section contains:
   Optional fields have sensible engine defaults when omitted.
 - **Example** — a minimal YAML snippet.
 
+The same rules are machine-readable: `GET /api/v1/apl/schema` serves the APL
+JSON Schema (the source of Studio's types), and `POST /api/v1/apl/validate`
+checks a draft exactly as deployment would. A field that is not listed for a
+node is reported as an `ABADA-APL-SCHEMA-001` warning (an error from 1.1.0);
+see [the APL specification §6.1](apl-specification.md#61-the-apl-contract-endpoints).
+
 The vocabulary table in §2 gives the one-glance summary; §3 covers the
 properties every node shares; §4 walks each node type; §5 summarizes the
 gateway fork/join forms.
@@ -49,7 +55,7 @@ BPMN *pattern* it replaces with a simpler, safer shape.
 | `agent` | AI Agent Node | Service Task (external task on `abada:agent`) | The "AI/LLM service task" pattern: probabilistic work as a durable external task |
 | `engine-task` | Engine Task | Service Task (external task on a worker topic) | Camunda external task / generic service task |
 | `script` | Script Step | Script Task | Sandboxed in-transaction JavaScript without Java access; operator opt-in (`ABADA_SCRIPTS_ENABLED`) |
-| `approval-gate` | Approval Gate | User Task | Human review task with candidate groups |
+| `human-input` (alias `approval-gate`) | Human Input | User Task | Human review task with candidate groups |
 | `decision-table` | DMN Rule Table | Business Rule Task (DMN table) | Camunda DMN table binding — executed by the engine in-transaction |
 | `condition` | Exclusive Gateway | Exclusive Gateway | BPMN exclusive gateway (exactly one branch, with a default flow) |
 | `inclusive` | Inclusive Gateway | Inclusive Gateway | BPMN inclusive gateway (every matching branch, zero or more) |
@@ -283,7 +289,7 @@ separate, allow-listed mechanism (`ABADA_DELEGATES_ALLOWED_CLASSES`).
 
 ---
 
-### 4.6 Approval Gate — `approval-gate`
+### 4.6 Human Input — `human-input` (alias `approval-gate`)
 
 **What it does.** A human review step. The engine creates a task that a person
 (or the listed groups) must complete before the flow continues. The task name
@@ -294,24 +300,29 @@ entry: approving a loan, reviewing a claim, filling in a missing field.
 
 **BPMN equivalent.** User Task with candidate groups.
 
+`approval-gate` is a deprecated alias that still deploys. It accepts
+`assignees`, `mode` and `sla_hours` but not `formKey`; use `human-input` for
+new documents (Studio always writes `human-input`).
+
 **Properties.**
 
  | Property | Type | Required | What it does |
  | --- | --- | --- | --- |
  | `assignees` | string[] | yes | The candidate groups whose members may claim the task, e.g. `[risk-officers]`. Values are group names, not usernames. At least one is required. |
+ | `formKey` | string | no | Form key for task-form rendering (BPMN `camunda:formKey`). Resolved by bare slug to a project FORM resource. `formId` is a deprecated alias. |
  | `mode` | `serial` \| `parallel` | no | Authoring hint only. The engine does not enforce serial or parallel sign-off. |
- | `sla_hours` | number | no | Service-level target for monitoring (e.g. 24 = resolve within 24 h). |
- | `formKey` | string | no | Optional form key for task-form rendering (BPMN `camunda:formKey`). Resolved by bare slug to a project FORM resource. |
+ | `sla_hours` | number | no | Service-level target for monitoring (e.g. 24 = resolve within 24 h). Not enforced by the engine yet. `slaHours` is a deprecated alias. |
+ | `requireDoubleSignOff` | boolean | no | Reserved; it currently has no runtime effect. |
  | `next` | nodeId | yes | The step that runs after the task is completed. |
 
 **Example.**
 
 ```yaml
 - id: approvalGate
-  type: approval-gate
+  type: human-input
   description: Senior credit officer sign-off
   assignees: [risk-officers]
-  mode: serial
+  formKey: credit-sign-off
   sla_hours: 24
   next: routing
 ```

@@ -4,7 +4,7 @@ import { AiConnectionTestResult, AiProvider, AiProvidersAPI, AiProvidersStatus }
 import {
   AI_PROVIDER_PRESETS, describeRouting, isValidProviderId, keyStatusOf, modelsFor, parsePatterns, presetFor,
 } from '@/lib/aiProviders';
-import { AGENT_MODEL_OPTIONS, setCachedModel } from '@/lib/agentModels';
+import { agentModelOptions, setCachedModel } from '@/lib/agentModels';
 
 interface Draft {
   id: string;
@@ -235,7 +235,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
             onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })}
             placeholder={preset.defaultModel ?? 'model id'} className={`${inputClass} font-mono`} />
           <datalist id="ai-provider-draft-models">
-            {modelsFor(parsePatterns(draft.patterns), null, AGENT_MODEL_OPTIONS).map((model) => <option key={model} value={model} />)}
+            {modelsFor(parsePatterns(draft.patterns), null, agentModelOptions()).map((model) => <option key={model} value={model} />)}
           </datalist>
         </label>
         <details className="rounded-lg border border-[#3A322E] px-3 py-2 text-[10px] text-[#A89F91]" open={draft.providerType === 'openai-compatible'}>
@@ -313,7 +313,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
                 aria-label="Default model" placeholder="model id"
                 className="rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 font-mono text-xs text-[#EAE3D9]" />
               <datalist id="ai-default-models">
-                {chosenForDefault && modelsFor(chosenForDefault.modelPatterns, chosenForDefault.defaultModel, AGENT_MODEL_OPTIONS)
+                {chosenForDefault && modelsFor(chosenForDefault.modelPatterns, chosenForDefault.defaultModel, agentModelOptions())
                   .map((model) => <option key={model} value={model} />)}
               </datalist>
               <button type="button" onClick={() => void saveDefault()} disabled={!defaultChanged || savingDefault}

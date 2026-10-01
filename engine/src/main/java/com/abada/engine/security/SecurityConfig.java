@@ -71,6 +71,9 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.GET, "/v1/projects/*/forms/**").authenticated()
                 .requestMatchers("/v1/projects/**").authenticated()
+                // The APL contract is read-only: any signed-in user may read the schema or validate a draft.
+                .requestMatchers(HttpMethod.GET, "/v1/apl/schema").authenticated()
+                .requestMatchers(HttpMethod.POST, "/v1/apl/validate").authenticated()
                 .requestMatchers(HttpMethod.POST, "/v1/processes/deploy")
                         .hasAnyAuthority("SCOPE_process:deploy", AbadaRoles.DEPLOYER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/processes/start", "/v1/processes/instance/*/fail",

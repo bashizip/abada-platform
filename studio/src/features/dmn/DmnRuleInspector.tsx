@@ -10,6 +10,14 @@ import {
   Braces,
 } from 'lucide-react';
 import { WorkflowNode, DMNValue } from '@/types';
+import type { APLHitPolicy } from '@/lib/apl/types';
+
+/** Exhaustive over the schema-generated hit policies: a schema change fails the build here. */
+const HIT_POLICY_LABELS: Record<APLHitPolicy, string> = {
+  FIRST: 'FIRST (First matching rule applies)',
+  UNIQUE: 'UNIQUE (Only one rule can match)',
+  COLLECT: 'COLLECT (Accumulate all outcomes)',
+};
 import {
   stringifyDecisionTableYaml,
   parseDecisionTableYaml,
@@ -170,9 +178,9 @@ export const DmnRuleInspector: React.FC<DmnRuleInspectorProps> = ({ node, onUpda
           onChange={(e) => handleChange({ hitPolicy: e.target.value as typeof config.hitPolicy })}
           className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
         >
-          <option value="FIRST">FIRST (First matching rule applies)</option>
-          <option value="UNIQUE">UNIQUE (Only one rule can match)</option>
-          <option value="COLLECT">COLLECT (Accumulate all outcomes)</option>
+          {Object.entries(HIT_POLICY_LABELS).map(([policy, label]) => (
+            <option key={policy} value={policy}>{label}</option>
+          ))}
         </select>
       </div>
 

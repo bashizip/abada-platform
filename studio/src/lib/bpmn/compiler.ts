@@ -162,7 +162,7 @@ export function compileAPLToBPMN(apl: APLDocument): string {
             '@_id': node.id,
             '@_name': node.description || 'Human Input',
             '@_camunda:candidateGroups': node.assignees.join(','),
-            ...(node.formKey ? { '@_camunda:formKey': node.formKey } : {}),
+            ...('formKey' in node && node.formKey ? { '@_camunda:formKey': node.formKey } : {}),
           }
         };
       case 'condition': {

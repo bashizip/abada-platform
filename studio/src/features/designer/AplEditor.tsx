@@ -1,5 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Code2, Minus, Plus, RotateCcw, Type, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Code2, Loader2, Minus, Plus, RotateCcw, Type, X } from 'lucide-react';
+import { AplAPI, type AplValidationIssue, type AplValidationResult } from '@/api/apl';
+import { issueLine, sortIssues } from '@/lib/apl/issues';
+import type { APLDocument } from '@/lib/apl/types';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
 
@@ -16,30 +19,25 @@ interface AplEditorProps {
   onDiscard?: () => void;
 }
 
-const validateSource = (source: string): WorkflowFile => {
-  const document = parseAPLYaml(source);
-  if (!document || document.version !== 'abada.io/v1') {
-    throw new Error('version must be abada.io/v1');
+type EngineCheck =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'done'; result: AplValidationResult }
+  | { state: 'unavailable'; message: string };
+
+const VALIDATION_DEBOUNCE_MS = 600;
+
+/** Local YAML syntax check only; every APL rule is checked by the engine. */
+const parseLocally = (source: string): { document?: APLDocument; error?: string } => {
+  try {
+    const document = parseAPLYaml(source);
+    if (!document || typeof document !== 'object' || Array.isArray(document)) {
+      return { error: 'APL source must be a YAML mapping' };
+    }
+    return { document };
+  } catch (reason) {
+    return { error: `YAML syntax: ${reason instanceof Error ? reason.message.split('\n')[0] : String(reason)}` };
   }
-  if (!document.metadata?.name?.trim()) throw new Error('metadata.name is required');
-  if (!document.metadata?.key?.match(/^[a-z][a-z0-9_-]{0,127}$/)) {
-    throw new Error('metadata.key must match [a-z][a-z0-9_-]{0,127}');
-  }
-  if (!document.flow || !Array.isArray(document.flow.nodes)) throw new Error('flow.nodes must be an array');
-  const rawNodes = document.flow.nodes as Array<{ id?: string; type?: string; next?: string }>;
-  for (const node of rawNodes) {
-    if (!node?.id?.match(/^[a-zA-Z][a-zA-Z0-9_-]*$/)) throw new Error('every node requires a valid unique id');
-    if (!node.type) throw new Error(`node ${node.id} requires a type`);
-  }
-  const ids = new Set(rawNodes.map((node) => node.id));
-  if (ids.size !== rawNodes.length) throw new Error('flow.nodes contains duplicate ids');
-  if (document.flow.nodes.length && !ids.has(document.flow.entry)) {
-    throw new Error('flow.entry must reference an existing node');
-  }
-  for (const node of rawNodes) {
-    if (node.next && !ids.has(node.next)) throw new Error(`node ${node.id} references unknown next node ${node.next}`);
-  }
-  return aplToWorkflow(document);
 };
 
 const valueToken = (value: string) => {
@@ -118,9 +116,67 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
     }
   };
 
-  const apply = () => {
+  const [check, setCheck] = useState<EngineCheck>({ state: 'idle' });
+  const validationSequence = useRef(0);
+
+  /** Validates with the engine; stale responses (an older keystroke) are ignored. */
+  const validateWithEngine = useCallback(async (text: string): Promise<AplValidationResult | null> => {
+    const sequence = ++validationSequence.current;
+    setCheck({ state: 'checking' });
     try {
-      const parsed = validateSource(source);
+      const result = await AplAPI.validate(text);
+      if (sequence === validationSequence.current) setCheck({ state: 'done', result });
+      return result;
+    } catch (reason) {
+      if (sequence === validationSequence.current) {
+        setCheck({ state: 'unavailable', message: reason instanceof Error ? reason.message : String(reason) });
+      }
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (parseLocally(source).error) {
+      validationSequence.current++;
+      setCheck({ state: 'idle' });
+      return undefined;
+    }
+    const timer = window.setTimeout(() => { void validateWithEngine(source); }, VALIDATION_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [source, validateWithEngine]);
+
+  const issues = useMemo(() => check.state === 'done' ? sortIssues(check.result.issues) : [],
+    [check]);
+  const errorCount = issues.filter((issue) => issue.severity === 'ERROR').length;
+
+  /** Moves the cursor to the YAML lines an issue points at. */
+  const revealIssue = (issue: AplValidationIssue) => {
+    const editor = editorRef.current;
+    const line = issueLine(source, issue);
+    if (!editor || line < 0) return;
+    const start = lines.slice(0, line).reduce((offset, text) => offset + text.length + 1, 0);
+    editor.focus();
+    editor.setSelectionRange(start, start + lines[line].length);
+    editor.scrollTop = Math.max(0, line * (fontSize + 8) - editor.clientHeight / 3);
+    syncScroll(editor);
+  };
+
+  const apply = async () => {
+    const { document, error: syntaxError } = parseLocally(source);
+    if (!document) {
+      setError(syntaxError ?? 'APL source is empty');
+      return;
+    }
+    // The engine is the validator; when it is unreachable the diagram still
+    // applies and the same checks run again when the document is saved or deployed.
+    const result = await validateWithEngine(source);
+    if (result && !result.valid) {
+      const errors = result.issues.filter((issue) => issue.severity === 'ERROR').length;
+      setError(`${errors} error${errors === 1 ? '' : 's'} must be fixed before applying`);
+      return;
+    }
+    try {
+      const parsed = aplToWorkflow(document);
       onApply({
         ...parsed,
         id: workflow.id,
@@ -191,7 +247,7 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
             className="px-2.5 py-1.5 rounded-lg border border-[#3A322E] text-[11px] text-[#A89F91] hover:text-[#EAE3D9] flex items-center gap-1.5">
             <RotateCcw className="w-3 h-3" /> Reset
           </button>
-          <button onClick={apply}
+          <button onClick={() => { void apply(); }}
             className="px-3 py-1.5 rounded-lg bg-[#F4A261] text-[#1A1614] text-[11px] font-semibold flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" /> Apply to diagram
           </button>
@@ -223,7 +279,7 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
             onScroll={(event) => syncScroll(event.currentTarget)}
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-                event.preventDefault(); apply();
+                event.preventDefault(); void apply();
               }
               if (event.key === 'Tab') {
                 event.preventDefault();
@@ -246,10 +302,44 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
         </div>
       </div>
 
-      <div className="h-10 px-4 border-t border-[#3A322E] flex items-center text-[11px]">
+      {issues.length > 0 && (
+        <ul className="mx-4 mb-2 max-h-36 overflow-y-auto rounded-xl border border-[#3A322E] bg-[#151210] divide-y divide-[#2A2421]"
+          aria-label="APL validation issues">
+          {issues.map((issue, index) => (
+            <li key={`${issue.code}-${issue.path}-${index}`}>
+              <button type="button" onClick={() => revealIssue(issue)}
+                className="w-full text-left px-3 py-1.5 flex items-start gap-2 text-[11px] hover:bg-[#211C19]">
+                {issue.severity === 'ERROR'
+                  ? <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#E76F51]" aria-label="Error" />
+                  : <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#F4A261]" aria-label="Warning" />}
+                <span className="min-w-0">
+                  <span className="text-[#EAE3D9]">{issue.message}</span>
+                  {issue.suggestedResolution && (
+                    <span className="block text-[#737D69]">{issue.suggestedResolution}</span>
+                  )}
+                </span>
+                {issue.elementId && (
+                  <span className="ml-auto shrink-0 font-mono text-[10px] text-[#A89F91]">{issue.elementId}</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="h-10 px-4 border-t border-[#3A322E] flex items-center gap-3 text-[11px]">
         {error ? <span className="text-[#E76F51] flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{error}</span>
-          : candidate?.warnings.length ? <span className="text-[#F4A261]">{candidate.warnings.join(' · ')}</span>
+          : check.state === 'checking' ? <span className="text-[#A89F91] flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Validating with the engine…</span>
+          : check.state === 'done' && errorCount > 0 ? <span className="text-[#E76F51]">{errorCount} error{errorCount === 1 ? '' : 's'} · {issues.length - errorCount} warning{issues.length - errorCount === 1 ? '' : 's'}</span>
+          : check.state === 'done' && issues.length > 0 ? <span className="text-[#F4A261]">Valid with {issues.length} warning{issues.length === 1 ? '' : 's'}; warnings become errors in 1.1.0</span>
+          : check.state === 'done' ? <span className="text-[#90A955] flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" />Valid APL</span>
+          : check.state === 'unavailable' ? <span className="text-[#A89F91]">Engine validation unavailable; the engine checks again on save and deploy.</span>
           : <span className="text-[#737D69]">Paste or edit canonical APL YAML. Press Ctrl/⌘+S to validate and apply.</span>}
+        {candidate?.warnings.length ? (
+          <span className="ml-auto truncate text-[#F4A261]" title={candidate.warnings.join(' · ')}>
+            {candidate.warnings.join(' · ')}
+          </span>
+        ) : null}
       </div>
     </section>
   );
