@@ -232,6 +232,98 @@ class ProcessInstanceTokenTest {
     }
 
     @Test
+    void aLoopWithoutWaitStatesIsBoundedByItsMaxIterations() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { spin: true } }
+                      loop: { max_iterations: 3, on_exhausted: after }
+                      next: again
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${spin == true}"
+                          then: fork
+                        - else: done
+                """ + flag("after", "stopped", "done")));
+
+        instance.advance();
+
+        assertThat(instance.isCompleted()).isTrue();
+        assertThat(instance.getVariables()).containsEntry("fork_iteration", 3).containsEntry("stopped", true);
+        assertThat(instance.takeLoopExhaustions()).singleElement()
+                .satisfies(exhausted -> assertThat(exhausted.routedTo()).isEqualTo("after"));
+    }
+
+    @Test
+    void anExhaustedLoopWithoutRouteStopsItsTokenInTheIncidentState() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { spin: true } }
+                      loop: { max_iterations: 2 }
+                      next: again
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${spin == true}"
+                          then: fork
+                        - else: done
+                """));
+
+        instance.advance();
+
+        assertThat(instance.isCompleted()).isFalse();
+        assertThat(instance.getTokens().get(0).state()).isEqualTo(State.INCIDENT);
+        assertThat(instance.getTokens().get(0).activityId()).isEqualTo("fork");
+        assertThat(instance.takeLoopExhaustions()).singleElement()
+                .satisfies(exhausted -> assertThat(exhausted.routedTo()).isNull());
+    }
+
+    @Test
+    void enteringAnInnerLoopForwardStartsANewPass() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { outerPass: true } }
+                      loop: { max_iterations: 3, on_exhausted: done }
+                      next: inner
+                    - id: inner
+                      type: engine-task
+                      service: work
+                      loop: { max_iterations: 2, on_exhausted: done }
+                      next: innerGate
+                    - id: innerGate
+                      type: condition
+                      rules:
+                        - if: "${innerAgain == true}"
+                          then: inner
+                        - else: outerGate
+                    - id: outerGate
+                      type: condition
+                      rules:
+                        - if: "${outerAgain == true}"
+                          then: fork
+                        - else: done
+                """));
+        instance.putAllVariables(Map.of("innerAgain", true, "outerAgain", false));
+        instance.advance();
+        instance.advance(waitingAt(instance, "inner").id());
+        assertThat(instance.getVariables()).containsEntry("inner_iteration", 2);
+
+        // Leave the inner loop and take the outer one: the inner step is
+        // entered forward again, so its count restarts.
+        instance.putAllVariables(Map.of("innerAgain", false, "outerAgain", true));
+        instance.advance(waitingAt(instance, "inner").id());
+
+        assertThat(instance.getVariables()).containsEntry("fork_iteration", 2).containsEntry("inner_iteration", 1);
+        assertThat(waitingAt(instance, "inner").loopCounter()).isEqualTo(1);
+    }
+
+    @Test
     void cancellingAnInstanceCancelsEveryLiveToken() {
         ProcessInstance instance = new ProcessInstance(define("""
                     - { id: fork, type: parallel, branches: [a, b] }

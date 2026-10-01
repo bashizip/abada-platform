@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("23");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("24");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -230,6 +230,16 @@ class PostgresSchemaUpgradeTest {
                 try (var columns = metadata.getColumns(null, schema, table, "token_id")) {
                     assertThat(columns.next()).as(table + ".token_id").isTrue();
                 }
+            }
+            // V24: incidents, and a loop may subscribe at the same catch event again.
+            for (String column : java.util.List.of("id", "project_id", "process_instance_id", "token_id",
+                    "activity_id", "incident_type", "message", "created_at", "resolved_at", "resolution")) {
+                try (var columns = metadata.getColumns(null, schema, "incidents", column)) {
+                    assertThat(columns.next()).as("incidents." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "event_subscriptions", true, false)) {
+                assertThat(indexNames(indexes)).doesNotContain("uk_event_subscription");
             }
         }
     }

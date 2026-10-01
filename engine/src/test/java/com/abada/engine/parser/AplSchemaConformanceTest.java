@@ -112,6 +112,15 @@ class AplSchemaConformanceTest {
     }
 
     @Test
+    void theLoopBoundOfTheSchemaMatchesTheParser() {
+        JsonNode bound = AplSchema.instance().document().at("/$defs/loop/properties/max_iterations");
+        assertThat(bound.path("minimum").asInt()).isEqualTo(com.abada.engine.core.model.LoopMeta.MIN_ITERATIONS);
+        assertThat(bound.path("maximum").asInt()).isEqualTo(com.abada.engine.core.model.LoopMeta.MAX_ITERATIONS);
+        assertThat(AplSchema.instance().document().at("/$defs/agentNode/properties/loop/$ref").asText())
+                .isEqualTo("#/$defs/loop");
+    }
+
+    @Test
     void errorsInSeveralNodesAreAllReportedWithLocations() {
         assertThatThrownBy(() -> parser.parseDetailed(document("""
                     - id: route
