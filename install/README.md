@@ -21,7 +21,7 @@ variable to `bash` (the right-hand side of the pipeline):
 
 ```bash
 curl -fsSL https://install.abadaplatform.com/install.sh | \
-  ABADA_VERSION=1.0.0-rc.7 bash
+  ABADA_VERSION=1.0.0-rc.8 bash
 
 curl -fsSL https://install.abadaplatform.com/install.sh | \
   ABADA_INSTALL_DIR=/opt/abada bash
@@ -133,8 +133,8 @@ The emergency helper validates the local checksum and refuses to overwrite a
 version whose R2 checksum differs:
 
 ```bash
-./release/build-bundle.sh 1.0.0-rc.7
-./scripts/release/upload-bundle-to-r2.sh 1.0.0-rc.7
+./release/build-bundle.sh 1.0.0-rc.8
+./scripts/release/upload-bundle-to-r2.sh 1.0.0-rc.8
 ```
 
 It intentionally does not update `/latest`. Prefer the manual workflow retry,
