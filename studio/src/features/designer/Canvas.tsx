@@ -25,7 +25,9 @@ import {
   Loader2,
   Lock,
   Map as MapIcon,
+  Redo2,
   Trash2,
+  Undo2,
   Unlock,
   Wand2,
   Workflow,
@@ -79,6 +81,11 @@ interface CanvasProps {
    */
   nextPathEdges?: string[];
   readOnly?: boolean;
+  /** Document undo/redo (editable canvases only). */
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 const edgeTypes = { abadaEdge: AbadaEdge };
@@ -123,6 +130,10 @@ const CanvasInner: React.FC<CanvasProps> = ({
   activeTokenEdges = [],
   nextPathEdges = [],
   readOnly = false,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }) => {
   const markerPrefix = `abada-canvas-${useId().replace(/:/g, '')}`;
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -299,8 +310,14 @@ const CanvasInner: React.FC<CanvasProps> = ({
                 ariaLabel="Diagram overview"
               />
             )}
-            {rawNodes.length > 0 && (
-              <LayoutToolbar mode={layout.mode} busy={layout.busy} onLayout={layout.runLayout} />
+            {(rawNodes.length > 0 || canUndo || canRedo) && (
+              <LayoutToolbar
+                mode={layout.mode}
+                busy={layout.busy}
+                onLayout={layout.runLayout}
+                showLayout={rawNodes.length > 0}
+                history={!readOnly && onUndo && onRedo ? { onUndo, onRedo, canUndo, canRedo } : undefined}
+              />
             )}
             <CanvasControls
               nodes={rawNodes}
@@ -375,22 +392,46 @@ const LAYOUT_BUTTONS: { mode: LayoutMode; label: string; hint: string; Icon: typ
   { mode: 'tidy', label: 'Tidy', hint: 'Keep your arrangement: align, space evenly and re-route edges (Shift+L repeats)', Icon: Wand2 },
 ];
 
-/** Auto-layout modes. The last mode used is highlighted and remembered per browser. */
+const IS_MAC = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
+const UNDO_HINT = IS_MAC ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)';
+const REDO_HINT = IS_MAC ? 'Redo (⇧⌘Z)' : 'Redo (Ctrl+Y)';
+
+/**
+ * Document undo/redo, then the auto-layout modes. The last layout mode used
+ * is highlighted and remembered per browser.
+ */
 const LayoutToolbar: React.FC<{
   mode: LayoutMode;
   busy: boolean;
   onLayout: (mode: LayoutMode) => void;
-}> = ({ mode, busy, onLayout }) => (
+  showLayout: boolean;
+  history?: { onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean };
+}> = ({ mode, busy, onLayout, showLayout, history }) => (
   <Panel position="top-left">
     <div
       role="group"
-      aria-label="Auto layout"
+      aria-label="Edit history and auto layout"
       className="flex items-center gap-0.5 rounded-xl border border-[#3A322E] bg-[#25201D]/95 p-1 shadow-warm-md"
     >
+      {history && (
+        <>
+          <button type="button" onClick={history.onUndo} disabled={!history.canUndo} title={UNDO_HINT} aria-label="Undo"
+            className="flex items-center rounded-lg px-1.5 py-1 text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#A89F91]">
+            <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={history.onRedo} disabled={!history.canRedo} title={REDO_HINT} aria-label="Redo"
+            className="flex items-center rounded-lg px-1.5 py-1 text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#A89F91]">
+            <Redo2 className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          {showLayout && <span className="mx-1 h-4 w-px bg-[#3A322E]" aria-hidden="true" />}
+        </>
+      )}
+      {showLayout && (
       <span className="flex w-6 items-center justify-center text-[#A89F91]" aria-hidden="true">
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Workflow className="h-3.5 w-3.5" />}
       </span>
-      {LAYOUT_BUTTONS.map(({ mode: value, label, hint, Icon }) => (
+      )}
+      {showLayout && LAYOUT_BUTTONS.map(({ mode: value, label, hint, Icon }) => (
         <button
           key={value}
           type="button"

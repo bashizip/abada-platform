@@ -186,6 +186,7 @@ on a later read or command.
 | Message/signal correlation | Locked subscriptions are consumed with process advancement in one command transaction; duplicate and cancellation races are covered across replicas | Retain this model and add operational contention telemetry if needed |
 | Timers/external work | `SKIP LOCKED` acquisition, durable leases, replica-death recovery and per-item atomic advancement are covered across replicas | Retain this model and tune batch/lease settings from production evidence |
 | Metrics | Some counters are changed before transaction outcome is known | Derive durable facts or update transaction-aware metrics after commit |
+| AI provider credentials | Named providers live in `ai_providers` with AES-GCM encrypted keys (Studio over `ABADA_LLM_*` environment); the agent worker reads resolved keys from a worker-only endpoint and caches them briefly; no model call runs inside a workflow transaction | Retain this model |
 | Lifecycle delivery | History and outbox records commit together; dispatchers use PostgreSQL `SKIP LOCKED` leases, retry delays and stable delivery IDs | Add destination-specific operational dashboards for the 1.0 RC |
 
 The PostgreSQL runtime satisfies the 0.11 stable-contract and security gate for

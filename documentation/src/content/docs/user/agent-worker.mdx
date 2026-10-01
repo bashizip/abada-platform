@@ -19,9 +19,9 @@ sequenceDiagram
     participant W as Agent Worker (abada-agent-worker)
     participant M as LLM provider
 
-    E->>DB: instance reaches agent node; write external task
+    E->>DB: instance reaches agent node, writes external task
     W->>E: fetch-and-lock abada:agent
-    E->>DB: lock task, extend lease; heartbeat loop
+    E->>DB: lock task and extend lease (heartbeat loop)
     W->>M: model call (outside any workflow transaction)
     M-->>W: structured output (+ _confidence)
     W->>E: complete with attempt metadata
@@ -36,27 +36,33 @@ the launcher generates an OIDC client secret, provisions Keycloak and the
 engine, and registers the worker's global `abada:agent` capability. Use
 `--no-agent` only for core-stack diagnostics.
 
-Before real agent tasks can complete, configure an LLM endpoint in the
-untracked local `.env.dev`:
+Before real agent tasks can complete, add a model provider and its key in
+**Studio → Settings → AI Providers**, and pick the **Default model** at the top
+(used by Insight, authoring and new agent nodes). Each provider shows where its
+key comes from: saved in Studio, or from the server's environment. Providers: Google Gemini, OpenAI, Anthropic,
+DeepSeek, OpenRouter or any OpenAI-compatible gateway. Keys are stored
+encrypted in the database and never shown again; the worker receives them
+from the engine, so nothing in the worker's configuration changes. The same
+providers serve Insight and APL authoring.
+
+Each agent node's model goes to the provider whose model prefix matches it
+(`gemini…` to Gemini, `claude…` to Anthropic, `*` for a catch-all gateway).
+If no provider serves a node's model, Studio and the engine refuse to start
+the process and name the model.
+
+On a developer machine you can instead put a key in the untracked `.env.dev`;
+a key saved in Studio always wins:
 
 ```dotenv
-ABADA_AGENT_LLM_BASE_URL=https://generativelanguage.googleapis.com/openai
-ABADA_AGENT_LLM_API_KEY=...
-ABADA_AGENT_LLM_MODEL=gemini-3.6-flash
+ABADA_LLM_GEMINI_API_KEY=...
 ```
-
-Models starting with `gemini` (or a `google/` prefix) route to the Gemini
-OpenAI-compatible endpoint; other models route to an OpenAI-compatible
-`/chat/completions` endpoint. To use a different OpenAI-compatible provider
-(DeepSeek, OpenRouter, a local gateway), set `ABADA_AGENT_OPENAI_BASE_URL`
-and `ABADA_AGENT_OPENAI_API_KEY`; when unset they fall back to the LLM pair.
 
 ## Cost and tool control are local
 
 - `ABADA_AGENT_ALLOWED_MODELS` (comma-separated) is the operator allow-list.
   An `agent` node naming a model outside it **fails at deployment or authoring
   validation** — not at first execution. Default:
-  `gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
+  `gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
 - Requested `tools` on a node must all appear in `ABADA_AGENT_ALLOWED_TOOLS`.
   The worker does not execute arbitrary tool code; identifiers are model
   context for adapters operators add deliberately.
@@ -99,6 +105,13 @@ backed by the worker-health API. On the instance canvas, the live inspector
 renders the agent attempt's model, provider, latency, tools, confidence and
 threshold.
 
+When an attempt fails, the inspector shows the error type and message with a
+**Details** button, and every *Job failed* event is clickable. The dialog
+shows the attempt, model, worker, job status and the full stack trace the
+worker reported, with **Copy details** for a bug report. The worker removes
+provider keys, tokens and credentials from the trace before sending it; only
+the latest attempt's trace is kept.
+
 ## What happens without a worker
 
 With no worker (or no LLM key), the instance pauses in `ACTIVE` at the agent
@@ -113,6 +126,10 @@ For a secured engine, prefer OIDC client credentials
 `ABADA_AGENT_OIDC_CLIENT_SECRET`) over a static `ABADA_ENGINE_TOKEN`. A
 secured worker self-registers once at startup (`PUT /v1/workers/me`) and polls
 project-agnostically; each locked task carries its owning `projectId`.
+If the engine or identity provider is not reachable yet, or answers 5xx,
+registration retries with backoff for up to `ABADA_AGENT_STARTUP_RETRY_MS`
+(default five minutes); a rejected client secret (401/403) stops the worker
+immediately.
 Third-party workers that poll with an explicit `projectId` keep the legacy
 per-project binding semantics and need an Owner-created binding per topic.
 

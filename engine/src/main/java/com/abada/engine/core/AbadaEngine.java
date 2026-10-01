@@ -12,8 +12,7 @@ import com.abada.engine.core.model.TaskInstance;
 import com.abada.engine.core.model.ProcessStatus;
 import com.abada.engine.dto.UserTaskPayload;
 import com.abada.engine.insight.InsightFactWriter;
-import com.abada.engine.insight.InsightProperties;
-import com.abada.engine.llm.LlmKeyResolver;
+import com.abada.engine.llm.AiProviderRegistry;
 import com.abada.engine.observability.EngineMetrics;
 import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.parser.AplParser;
@@ -84,8 +83,7 @@ public class AbadaEngine {
     private final ActivityHistoryService historyService;
     private final InsightFactWriter insightFactWriter;
     private final TaskGroupResolver taskGroupResolver;
-    private final InsightProperties insightProperties;
-    private final LlmKeyResolver llmKeyResolver;
+    private final AiProviderRegistry aiProviders;
     private final Map<String, ParsedProcessDefinition> definitionsByDeploymentId = new ConcurrentHashMap<>();
 
     @Autowired
@@ -96,8 +94,7 @@ public class AbadaEngine {
             InsightFactWriter insightFactWriter,
             TaskGroupResolver taskGroupResolver,
             @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels,
-            @Autowired(required = false) InsightProperties insightProperties,
-            @Autowired(required = false) LlmKeyResolver llmKeyResolver) {
+            @Autowired(required = false) AiProviderRegistry aiProviders) {
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
         this.aplParser = new AplParser(allowedAgentModels);
@@ -113,8 +110,7 @@ public class AbadaEngine {
         this.historyService = historyService;
         this.insightFactWriter = insightFactWriter;
         this.taskGroupResolver = taskGroupResolver;
-        this.insightProperties = insightProperties;
-        this.llmKeyResolver = llmKeyResolver;
+        this.aiProviders = aiProviders;
     }
 
     @PostConstruct
@@ -258,10 +254,12 @@ public class AbadaEngine {
             }
             ParsedProcessDefinition definition = cacheDefinition(deployment);
 
-            if (definitionHasAgentTasks(definition) && !isLlmConfiguredForAgentTasks()) {
+            List<String> unconfiguredModels = unconfiguredAgentModels(definition);
+            if (!unconfiguredModels.isEmpty()) {
                 throw new ProcessEngineException("Cannot start process instance: definition '" + definition.getId()
-                        + "' contains AI agent task(s) but no LLM API key is configured. "
-                        + "Set one via the Studio Settings > AI Providers tab or the ABADA_LLM_API_KEY environment variable.");
+                        + "' contains AI agent task(s) but no AI provider is configured for model(s) "
+                        + String.join(", ", unconfiguredModels)
+                        + ". Add a provider and its API key in Studio Settings > AI Providers.");
             }
 
             ProcessInstance instance = new ProcessInstance(definition);
@@ -1035,16 +1033,24 @@ public class AbadaEngine {
         }
     }
 
-    private static boolean definitionHasAgentTasks(ParsedProcessDefinition definition) {
-        if (definition == null || definition.getServiceTasks() == null) return false;
-        return definition.getServiceTasks().values().stream()
-                .anyMatch(task -> task.agentWork() != null
-                        || AplParser.AGENT_EXTERNAL_TOPIC.equals(task.topicName()));
-    }
-
-    private boolean isLlmConfiguredForAgentTasks() {
-        if (llmKeyResolver != null && llmKeyResolver.isConfigured()) return true;
-        return insightProperties != null && insightProperties.isLlmConfigured();
+    /**
+     * Models of the definition's agent tasks that no configured AI provider
+     * serves (a task without a model needs any provider). Empty when every
+     * agent task can run, or when the definition has none.
+     */
+    private List<String> unconfiguredAgentModels(ParsedProcessDefinition definition) {
+        if (definition == null || definition.getServiceTasks() == null) return List.of();
+        java.util.Set<String> missing = new java.util.LinkedHashSet<>();
+        definition.getServiceTasks().values().stream()
+                .filter(task -> task.agentWork() != null
+                        || AplParser.AGENT_EXTERNAL_TOPIC.equals(task.topicName()))
+                .forEach(task -> {
+                    String model = task.agentWork() == null ? null : task.agentWork().model();
+                    if (aiProviders == null || aiProviders.resolveForModel(model).isEmpty()) {
+                        missing.add(model == null || model.isBlank() ? "(default)" : model);
+                    }
+                });
+        return List.copyOf(missing);
     }
 
 }

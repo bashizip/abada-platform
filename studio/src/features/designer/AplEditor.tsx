@@ -228,10 +228,14 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
               if (event.key === 'Tab') {
                 event.preventDefault();
                 const target = event.currentTarget;
-                const start = target.selectionStart;
-                const next = `${source.slice(0, start)}  ${source.slice(target.selectionEnd)}`;
-                setSource(next);
-                requestAnimationFrame(() => { target.selectionStart = target.selectionEnd = start + 2; });
+                // insertText goes through the browser's edit history, so the
+                // textarea's native undo (Cmd/Ctrl+Z) still covers indentation.
+                if (!document.execCommand?.('insertText', false, '  ')) {
+                  const start = target.selectionStart;
+                  const next = `${source.slice(0, start)}  ${source.slice(target.selectionEnd)}`;
+                  setSource(next);
+                  requestAnimationFrame(() => { target.selectionStart = target.selectionEnd = start + 2; });
+                }
               }
             }}
             spellCheck={false}

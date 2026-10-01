@@ -8,47 +8,63 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/** Shared server-side gateway for OpenAI-compatible chat completions. */
+/**
+ * Shared server-side gateway for OpenAI-compatible chat completions, used by
+ * Insight and APL authoring. Provider, key and model come from
+ * {@link AiProviderRegistry} (Studio settings over environment).
+ */
 @Component
 public class OpenAiCompatibleLlmClient {
     private final InsightProperties properties;
-    private final LlmKeyResolver keyResolver;
+    private final AiProviderRegistry registry;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
-    public OpenAiCompatibleLlmClient(InsightProperties properties, LlmKeyResolver keyResolver,
+    public OpenAiCompatibleLlmClient(InsightProperties properties, AiProviderRegistry registry,
                                      ObjectMapper objectMapper) {
         this.properties = properties;
-        this.keyResolver = keyResolver;
+        this.registry = registry;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(properties.getLlmTimeout()).build();
+        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
 
-    public boolean isConfigured() { return keyResolver.isConfigured(); }
-    public String model() { return keyResolver.resolveModel(); }
+    public boolean isConfigured() { return registry.isConfigured(); }
+    public String model() { return registry.insightModel(); }
 
     public String complete(String systemPrompt, String userPrompt) throws Exception {
-        String apiKey = keyResolver.resolveKey();
-        String baseUrl = keyResolver.resolveBaseUrl();
-        String model = keyResolver.resolveModel();
-        if (apiKey == null || apiKey.isBlank()) throw new IllegalStateException("LLM provider is not configured");
-        if (baseUrl == null || baseUrl.isBlank()) throw new IllegalStateException("LLM base URL is not configured");
+        ResolvedAiProvider provider = registry.insightProvider()
+                .orElseThrow(() -> new IllegalStateException("LLM provider is not configured"));
+        Duration timeout = Duration.ofMillis(Math.max(provider.timeoutMs(), properties.getLlmTimeout().toMillis()));
+        return completeWith(provider, registry.insightModel(), systemPrompt, userPrompt, timeout);
+    }
+
+    /** One chat completion against an explicit provider (also used by connection tests). */
+    public String completeWith(ResolvedAiProvider provider, String model, String systemPrompt, String userPrompt,
+                               Duration timeout) throws Exception {
+        if (provider.apiKey() == null || provider.apiKey().isBlank()) {
+            throw new IllegalStateException("LLM provider is not configured");
+        }
+        if (provider.baseUrl() == null || provider.baseUrl().isBlank()) {
+            throw new IllegalStateException("LLM base URL is not configured");
+        }
+        String upstreamModel = provider.type().upstreamModel(model);
         Map<String, Object> payload = Map.of(
-                "model", model,
+                "model", upstreamModel,
                 "temperature", 0.2,
                 "messages", List.of(
                         Map.of("role", "system", "content", systemPrompt),
                         Map.of("role", "user", "content", userPrompt)));
         HttpRequest.Builder request = HttpRequest.newBuilder(
-                        URI.create(stripTrailingSlash(baseUrl) + "/chat/completions"))
-                .timeout(properties.getLlmTimeout())
+                        URI.create(stripTrailingSlash(provider.baseUrl()) + "/chat/completions"))
+                .timeout(timeout)
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey);
-        if (properties.isOpenRouterEnabled()) {
+                .header("Authorization", "Bearer " + provider.apiKey());
+        if (provider.type() == AiProviderType.OPENROUTER && properties.isOpenRouterEnabled()) {
             request.header("HTTP-Referer", properties.getOpenRouterReferer());
             request.header("X-Title", properties.getOpenRouterTitle());
         }
@@ -61,7 +77,7 @@ public class OpenAiCompatibleLlmClient {
             if (status == 401 || status == 403) {
                 throw new IllegalStateException("LLM API authentication failed: Invalid or expired API key (HTTP " + status + (detail.isBlank() ? "" : ": " + detail) + ")");
             } else if (status == 404) {
-                throw new IllegalStateException("LLM model or endpoint not found: '" + model + "' (HTTP 404" + (detail.isBlank() ? "" : ": " + detail) + ")");
+                throw new IllegalStateException("LLM model or endpoint not found: '" + upstreamModel + "' (HTTP 404" + (detail.isBlank() ? "" : ": " + detail) + ")");
             } else if (status == 429) {
                 throw new IllegalStateException("LLM quota or rate limit exceeded (HTTP 429" + (detail.isBlank() ? "" : ": " + detail) + ")");
             }

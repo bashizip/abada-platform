@@ -12,9 +12,11 @@ mkdir abada-quickstart && cd abada-quickstart
 curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
 
-Automation may supply `ABADA_AGENT_LLM_API_KEY` to the `bash` process. The key
-is stored only in the untracked local `.env.dev` with mode `0600`; it is never
-part of the release archive or Studio runtime configuration.
+Automation may supply `ABADA_LLM_GEMINI_API_KEY` (or the older
+`ABADA_AGENT_LLM_API_KEY`) to the `bash` process. The key is stored only in
+the untracked local `.env.dev` with mode `0600`; it is never part of the
+release archive or Studio runtime configuration. You can also skip it and add
+providers later in Studio → Settings → AI Providers.
 
 One command brings up the whole platform: **PostgreSQL**, the **Engine**, the
 **Studio** operator UI and the **Agent Worker** (`abada-agent-worker`), behind

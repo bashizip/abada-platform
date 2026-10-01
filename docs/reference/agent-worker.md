@@ -102,6 +102,17 @@ is rendered against the declared threshold.
   reports nothing. A descriptor `timeout_ms` above `ABADA_AGENT_MAX_TIMEOUT_MS`
   (default 120000) is clamped to it. On shutdown the worker stops fetching and
   waits up to 30 seconds for in-flight tasks.
+- Startup registration (`PUT /v1/workers/me`, and the OIDC token request it
+  triggers) retries transient failures, so a worker that starts before the
+  engine or identity provider is ready (for example after a host reboot, when
+  Docker starts every container at once) waits instead of exiting. Transient
+  means no connection, a timeout, or HTTP 408, 429 or 5xx from either
+  endpoint. Delays grow exponentially from 1 to 30 seconds with jitter, for at
+  most `ABADA_AGENT_STARTUP_RETRY_MS` (default 300000, five minutes; `0`
+  disables the retry); after that the worker exits with the last error.
+  Rejected credentials (401/403), invalid capabilities (400) and other
+  configuration errors fail on the first attempt. Each retry is logged as
+  `agent_startup_retry` with the source, HTTP status and error code only.
 - Model timeouts and task concurrency are bounded. Technical failures consume
   durable engine retries with a bounded retry delay; zero retries creates the
   normal incident. Agent-task retries are seeded from the APL `max_attempts`
@@ -118,31 +129,50 @@ is rendered against the declared threshold.
   same attempt ordinal (for example after an operator bumps retries).
 - Model and other external effects are at-least-once. Providers and future
   tool adapters must support their own stable deduplication keys.
+- A failed attempt reports its message and full stack trace with the cause
+  chain (capped at 16 KB) as `errorDetails`. The worker first removes the
+  provider keys and engine credentials it holds, bearer tokens, Authorization
+  headers and key-like fields. The engine keeps the latest attempt's trace on
+  the task (`GET /v1/projects/{projectId}/jobs/{jobId}/error`) and Studio shows
+  it in the error details dialog.
 - Logs contain task/activity IDs and counters, not tokens, prompts, variables,
   credentials, or model responses.
 
 ## Sidecar configuration
 
-Required: `ABADA_ENGINE_URL` plus at least one LLM endpoint pair
-(`ABADA_AGENT_LLM_BASE_URL`/`ABADA_AGENT_LLM_API_KEY` and/or
-`ABADA_AGENT_OPENAI_BASE_URL`/`ABADA_AGENT_OPENAI_API_KEY`); each endpoint
-falls back to the other when unset. Select the model with
-`ABADA_AGENT_LLM_MODEL`. The sidecar routes each task to a provider gateway
-from the requested model name (the descriptor `model` field, falling back to
-`ABADA_AGENT_LLM_MODEL`): models starting with `gemini` or the `google/`
-prefix use the Google Gemini OpenAI-compatible `/openai/chat/completions`
-endpoint with the key sent as `Authorization: Bearer` (the `google/` prefix is
-stripped from the model id; Google retired the legacy REST
-`:generateContent` surface for new keys and current models, so this is the
-supported Gemini path); all other models use an OpenAI-compatible
-`/chat/completions` endpoint with `Authorization: Bearer`. Both gateways share
-the same prompt rendering,
-selected-inputs, output-schema and `_confidence` handling. By default the
-OpenAI-compatible gateway reuses the same endpoint and key. To route
-non-Gemini models to a different OpenAI-compatible endpoint (DeepSeek,
-OpenRouter, a local gateway, ...), set `ABADA_AGENT_OPENAI_BASE_URL` and
-`ABADA_AGENT_OPENAI_API_KEY`; when unset they fall back to
-`ABADA_AGENT_LLM_BASE_URL` and `ABADA_AGENT_LLM_API_KEY`.
+Required: `ABADA_ENGINE_URL` and engine credentials (below). Model provider
+keys are **not** worker configuration any more: the worker asks the engine
+which provider serves each model and with which key
+(`GET /v1/workers/me/ai-credentials`, see
+[AI providers](ai-providers.md)). Keys saved in Studio (Settings > AI
+Providers) take precedence over the engine's `ABADA_LLM_*` environment
+variables, and the same providers serve Insight and APL authoring.
+
+- Routing: a task's model (the descriptor `model`, else
+  `ABADA_AGENT_LLM_MODEL`, default `gemini-3.6-flash`) goes to the provider
+  whose model prefix is the longest match (`*` matches any model). A model no
+  provider serves fails the attempt with `AgentConfigurationException`, naming
+  the model and Studio Settings > AI Providers; the engine already refuses to
+  start such a process.
+- Gemini providers use Google's OpenAI-compatible `/v1beta/openai` surface;
+  every other provider (OpenAI, Anthropic, DeepSeek, OpenRouter, any
+  OpenAI-compatible gateway) uses `/chat/completions`. The key is sent as
+  `Authorization: Bearer`, and a provider namespace (`google/`, `openai/`,
+  `anthropic/`) is stripped from the model id. All gateways share the same
+  prompt rendering, selected inputs, output schema and `_confidence` handling.
+- Caching and rotation: credentials are cached for
+  `ABADA_AGENT_CREDENTIALS_TTL_MS` (default 60000). When a provider rejects a
+  key (401/403) the worker refetches at once and retries the call if the
+  credentials changed, so a key rotated in Studio applies without a restart.
+  An unreachable engine keeps the last known credentials.
+- Deprecated fallback: `ABADA_AGENT_LLM_BASE_URL`/`ABADA_AGENT_LLM_API_KEY`
+  (Gemini models) and `ABADA_AGENT_OPENAI_BASE_URL`/`ABADA_AGENT_OPENAI_API_KEY`
+  (other models) are used only for models the engine does not serve, or when
+  the engine predates the credentials endpoint (HTTP 404). They are no longer
+  required at startup. The engine also reads them as environment providers,
+  so rc.7 env files keep working.
+- The worker logs where its credentials come from
+  (`agent_credentials_loaded source=engine providers=...`), never a key.
 
 ## Model allow-list
 
@@ -150,9 +180,9 @@ The engine enforces an operator-defined allow-list of agent model ids. The
 engine rejects an APL document during deployment or authoring validation when
 an agent node declares a `model` outside
 `ABADA_AGENT_ALLOWED_MODELS` (a comma-separated list, default
-`gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`). The sidecar
-routes any model on that list per the gateway rules above; keep the list in
-sync with the endpoint(s) the sidecar can actually reach. This makes the
+`gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`).
+Each listed model also needs a configured provider (see the routing rules
+above) before a process using it can start. This makes the
 "cost control" claim local: an operator can restrict which model ids any
 workflow may invoke without changing workflow definitions. Models that are
 not on the list fail fast at deployment time instead of at first execution.
@@ -189,9 +219,8 @@ worker uses OIDC client credentials instead of a static engine token. Run the
 targeted suite with:
 
 ```bash
-# 1. Configure an OpenAI-compatible endpoint in .env.dev if needed.
-#    The launcher creates this file from safe defaults on first use.
-#    ABADA_AGENT_LLM_BASE_URL / ABADA_AGENT_LLM_API_KEY (or reuse ABADA_LLM_*)
+# 1. Start the stack, then add a provider and key in Studio > Settings >
+#    AI Providers (or set ABADA_LLM_GEMINI_API_KEY etc. in .env.dev).
 
 # 2. Start everything, including provisioning and the agent worker.
 ./release/abada-platform up dev

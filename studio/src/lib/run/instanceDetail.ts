@@ -208,7 +208,10 @@ export function aggregateNodeTelemetry(
     if (typeof details.topic === 'string') agent = { ...(agent ?? {}), topic: details.topic };
     if (typeof rawAgent?.errorMessage === 'string') errorMessage = rawAgent.errorMessage as string;
   }
-  const job = jobs.find((item) => item.activityId === activityId);
+  // The project job list spans instances: only this instance's job applies.
+  const instanceId = history.find((event) => event.processInstanceId)?.processInstanceId;
+  const job = jobs.find((item) => item.activityId === activityId
+    && (!instanceId || !item.processInstanceId || item.processInstanceId === instanceId));
   if (job) {
     retries = job.retries ?? retries;
     errorMessage = job.exceptionMessage ?? errorMessage;

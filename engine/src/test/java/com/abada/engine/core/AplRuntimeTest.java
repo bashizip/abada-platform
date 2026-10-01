@@ -129,7 +129,8 @@ class AplRuntimeTest {
 
             assertThatThrownBy(() -> engine.startProcess("candidate_review", "alice", Map.of("score", 88)))
                     .isInstanceOf(ProcessEngineException.class)
-                    .hasMessageContaining("contains AI agent task(s) but no LLM API key is configured");
+                    .hasMessageContaining("contains AI agent task(s) but no AI provider is configured")
+                    .hasMessageContaining("Studio Settings > AI Providers");
         }
     }
 

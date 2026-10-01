@@ -98,8 +98,8 @@ up to a minute on the first page load.
 1. Open `https://$ABADA_DOMAIN` and sign in as `alice`. The first sign-in
    creates and deploys the **AI Lead Triage** starter and adds `bob` as its
    reviewer.
-2. Add your model provider key in Studio → Settings, or set
-   `ABADA_AGENT_LLM_API_KEY` in `.env.server` and rerun `up server`.
+2. Add your model provider and its key in Studio → Settings → AI Providers.
+   Agent tasks and Insight use it at once; no restart is needed.
 3. Follow [your first agentic workflow](/user/first-workflow/).
 
 ## Google Cloud
@@ -111,12 +111,23 @@ domain and email from instance metadata into `.env.server`. It starts the
 platform only when the metadata attribute `abada-autostart` is `true`.
 
 ```bash
-gcloud compute instances create abada-demo --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --address abada-demo-ip --tags abada-web --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain=demo.example.org,abada-acme-email=ops@example.org,abada-version=1.0.0-rc.7
+gcloud compute instances create abada-demo --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --address abada-demo-ip --tags http-server,https-server --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain=demo.example.org,abada-acme-email=ops@example.org,abada-version=1.0.0-rc.7
 ```
 
+The `http-server` and `https-server` tags match the `default-allow-http` and
+`default-allow-https` rules of a project's default network. Ports 80 and 443
+must be open to everyone: Let's Encrypt validates each hostname over port 80,
+so a rule restricted to admin addresses leaves the platform without
+certificates.
+
 Then connect to the VM and run `sudo /opt/abada/release/abada-platform up server`.
-The full procedure, including the static address, firewall rule, DNS, backups
-and upgrades, is in the
+After a VM reboot the containers restart on their own within about two
+minutes; the Agent Worker waits for the engine and Keycloak, retrying its
+registration with backoff for up to five minutes
+(`ABADA_AGENT_STARTUP_RETRY_MS`).
+
+The full procedure, including the static address, firewall rules, DNS, the
+verification checks, reboot recovery, backups and upgrades, is in the
 [GCP operations guide](https://github.com/bashizip/abada-platform/blob/main/docs/operations/gcp-vm.md).
 
 ## Running a public demo

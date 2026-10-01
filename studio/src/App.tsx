@@ -24,6 +24,8 @@ import { InstanceDetailView } from '@/features/operations/InstanceDetailView';
 import { DryRunPanel } from '@/features/run/DryRunPanel';
 import { DeployDialog } from '@/features/run/DeployDialog';
 import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
+import { AiProvidersAPI } from '@/api/aiProviders';
+import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
 import { EngineAPI } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
 import { ProjectAPI } from '@/api/projects';
@@ -37,6 +39,7 @@ import { useDryRunSimulation } from '@/hooks/useDryRunSimulation';
 import { useAplAuthoringState } from '@/hooks/useAplAuthoringState';
 import { deriveDefaultPayload } from '@/lib/run/liveRun';
 import { getDefaultAgentModel, initAgentModel } from '@/lib/agentModels';
+import { isEditableTarget, undoShortcut } from '@/lib/history/shortcuts';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
@@ -66,7 +69,8 @@ export default function App() {
     workflows, setWorkflows, activeWorkflowId, setActiveWorkflowId,
     currentWorkflow, projects, setProjects, activeProject,
     showProjects, setShowProjects, treeRefreshKey, setTreeRefreshKey,
-    openProject, updateActiveWorkflow, processesRootId, persistedProcessKeys,
+    openProject, updateActiveWorkflow, recordHistory, undo, redo, canUndo, canRedo,
+    processesRootId, persistedProcessKeys,
     workspaceStatus, workspaceError, retryWorkspace
   } = useProjectWorkspace(authenticated);
 
@@ -94,6 +98,20 @@ export default function App() {
   const isLiveReadOnly = !!selectedLiveInstance;
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
 
+  // Undo/redo for the open process. Text fields keep their own native undo,
+  // and nothing happens while a modal dialog is open.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const shortcut = undoShortcut(event);
+      if (!shortcut || isEditableTarget(event.target) || isLiveReadOnly || designerMode !== 'diagram') return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      event.preventDefault();
+      if (shortcut === 'undo') undo(); else redo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo, isLiveReadOnly, designerMode]);
+
   // Load the saved AI model from the Settings panel on startup
   useEffect(() => {
     void initAgentModel();
@@ -120,7 +138,7 @@ export default function App() {
     updateActiveWorkflow((wf) => ({
       ...wf,
       nodes: wf.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)),
-    }));
+    }), `move:${id}`);
   };
 
   const handleSelectNode = useCallback((id: string | null) => {
@@ -147,6 +165,8 @@ export default function App() {
     if (authoringCandidate && !authoringCandidate.replaceWorkflowId) {
       setWorkflows((items) => [appliedWorkflow, ...items]);
     } else if (workflows.some((item) => item.id === targetId)) {
+      const before = workflows.find((item) => item.id === targetId)!;
+      recordHistory(targetId, before, appliedWorkflow);
       setWorkflows((items) => items.map((item) => item.id === targetId ? appliedWorkflow : item));
     } else {
       const draftId = `draft-${Date.now()}`;
@@ -163,14 +183,16 @@ export default function App() {
   };
 
   const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
-    updateActiveWorkflow((wf) => ({ ...wf, nodes: layoutedNodes, layoutPending: false }));
+    // The automatic first layout of a newly opened process is not an undo step.
+    updateActiveWorkflow((wf) => ({ ...wf, nodes: layoutedNodes, layoutPending: false }),
+      currentWorkflow.layoutPending ? null : undefined);
   };
 
   const handleUpdateNode = (updatedNode: WorkflowNode) => {
     updateActiveWorkflow((wf) => ({
       ...wf,
       nodes: wf.nodes.map((n) => (n.id === updatedNode.id) ? updatedNode : n),
-    }));
+    }), `node:${updatedNode.id}`);
   };
 
   const handleDeleteNode = (id: string) => {
@@ -321,10 +343,8 @@ export default function App() {
       const invalidModels = invalidAgentModels(currentWorkflow.nodes);
       if (invalidModels.length > 0) throw new Error(agentModelGuardMessage(invalidModels));
       if (hasAgentNodes(currentWorkflow.nodes)) {
-        const aiSettings = await InsightAPI.getAiSettings();
-        if (!aiSettings.configured) {
-          throw new Error('This workflow contains AI agent nodes but no LLM API key is configured. Go to Settings → AI Providers to configure one.');
-        }
+        const providerStatus = await AiProvidersAPI.status(agentModelsOf(currentWorkflow.nodes));
+        if (!providerStatus.configured) throw new Error(missingProviderMessage(providerStatus.unconfiguredModels));
       }
       let deployWorkflow = currentWorkflow;
       if (activeProject) {
@@ -633,12 +653,16 @@ export default function App() {
                     executionStatuses={executionStatuses}
                     activeLiveNodeIds={activeLiveNodeIds}
                     readOnly={false}
+                    onUndo={undo}
+                    onRedo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
                   />
 
                   <PropertiesInspector
                     selectedNode={selectedNode}
                     onUpdateNode={handleUpdateNode}
-                    onUpdateWorkflow={updateActiveWorkflow}
+                    onUpdateWorkflow={(updater) => updateActiveWorkflow(updater, 'process-properties')}
                     workflow={currentWorkflow}
                     nodeCount={currentWorkflow.nodes.length}
                     projectId={activeProject?.id}
