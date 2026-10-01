@@ -106,6 +106,11 @@ public class AiProviderService {
             row.setApiKeyEnc(encryption.encrypt(request.apiKey().strip()));
             row.setApiKeyHint(ResolvedAiProvider.hint(request.apiKey().strip()));
         }
+        // The first enabled provider becomes the default (Insight, authoring,
+        // new agent nodes) unless the request says otherwise.
+        boolean otherDefault = repository.findAll().stream().anyMatch(other -> !other.getId().equals(id)
+                && other.isEnabled() && other.isInsightDefault());
+        if (request.insightDefault() == null && !otherDefault && row.isEnabled()) row.setInsightDefault(true);
         if (Boolean.TRUE.equals(request.insightDefault())) {
             for (AiProviderEntity other : repository.findAll()) {
                 if (!other.getId().equals(id) && other.isInsightDefault()) {
@@ -138,9 +143,11 @@ public class AiProviderService {
         for (String model : new LinkedHashSet<>(requested)) {
             if (model != null && !model.isBlank() && registry.resolveForModel(model).isEmpty()) missing.add(model);
         }
-        Optional<ResolvedAiProvider> insight = registry.insightProvider();
+        AiProviderRegistry.InsightSelection selection = registry.insightSelection();
+        Optional<ResolvedAiProvider> insight = selection.provider();
         return new AiProvidersStatusDTO(insight.isPresent() && missing.isEmpty(), missing,
-                insight.map(ResolvedAiProvider::id).orElse(null), insight.map(p -> registry.insightModel()).orElse(null));
+                insight.map(ResolvedAiProvider::id).orElse(null), insight.map(p -> registry.insightModel()).orElse(null),
+                selection.requestedId(), selection.fallback());
     }
 
     /**

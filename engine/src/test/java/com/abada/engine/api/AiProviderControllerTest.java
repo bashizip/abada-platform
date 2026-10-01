@@ -87,6 +87,30 @@ class AiProviderControllerTest {
     }
 
     @Test
+    void theFirstProviderBecomesTheDefaultAndLaterOnesDoNot() throws Exception {
+        save("gemini", "{\"providerType\":\"gemini\",\"apiKey\":\"k1\"}");
+        save("anthropic", "{\"providerType\":\"anthropic\",\"apiKey\":\"k2\"}");
+
+        assertThat(providers.findById("gemini").orElseThrow().isInsightDefault()).isTrue();
+        assertThat(providers.findById("anthropic").orElseThrow().isInsightDefault()).isFalse();
+        mvc.perform(get("/v1/ai-providers/status"))
+                .andExpect(jsonPath("$.insightProviderId").value("gemini"))
+                .andExpect(jsonPath("$.insightModel").value("gemini-3.6-flash"))
+                .andExpect(jsonPath("$.insightFallback").value(false));
+    }
+
+    @Test
+    void statusReportsWhenTheChosenDefaultCannotRun() throws Exception {
+        save("anthropic", "{\"providerType\":\"anthropic\",\"apiKey\":\"k\",\"insightDefault\":false}");
+        save("gemini", "{\"providerType\":\"gemini\",\"insightDefault\":true}");
+
+        mvc.perform(get("/v1/ai-providers/status"))
+                .andExpect(jsonPath("$.requestedInsightProviderId").value("gemini"))
+                .andExpect(jsonPath("$.insightProviderId").value("anthropic"))
+                .andExpect(jsonPath("$.insightFallback").value(true));
+    }
+
+    @Test
     void statusListsTheModelsNoProviderServes() throws Exception {
         save("anthropic", "{\"providerType\":\"anthropic\",\"apiKey\":\"k\",\"insightDefault\":false}");
         save("gemini", "{\"providerType\":\"gemini\",\"apiKey\":\"k\",\"enabled\":false}");
