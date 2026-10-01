@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("22");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("23");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -46,6 +46,7 @@ class PostgresSchemaUpgradeTest {
                      "process_definition_deployment_id")) {
             assertThat(columns.next()).isTrue();
         }
+        assertTokenSchema(schema);
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
              var columns = connection.getMetaData().getColumns(null, schema, "process_instances",
@@ -200,6 +201,36 @@ class PostgresSchemaUpgradeTest {
              var result = statement.executeQuery()) {
             assertThat(result.next()).isTrue();
             assertThat(result.getInt(1)).isZero();
+        }
+    }
+
+    /** A fresh install has the V23 token table and every waiting-work table can name its token. */
+    @org.junit.jupiter.api.Test
+    void aFreshDatabaseHasTheTokenSchema() throws Exception {
+        String schema = "fresh_tokens";
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .schemas(schema).createSchemas(true).load().migrate();
+        assertTokenSchema(schema);
+    }
+
+    private void assertTokenSchema(String schema) throws Exception {
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())) {
+            var metadata = connection.getMetaData();
+            for (String column : java.util.List.of("id", "process_instance_id", "activity_id", "state",
+                    "parent_token_id", "scope_token_id", "loop_counter", "created_at", "updated_at")) {
+                try (var columns = metadata.getColumns(null, schema, "process_tokens", column)) {
+                    assertThat(columns.next()).as("process_tokens." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "process_tokens", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_process_tokens_instance_state");
+            }
+            for (String table : java.util.List.of("tasks", "external_tasks", "jobs", "event_subscriptions")) {
+                try (var columns = metadata.getColumns(null, schema, table, "token_id")) {
+                    assertThat(columns.next()).as(table + ".token_id").isTrue();
+                }
+            }
         }
     }
 
