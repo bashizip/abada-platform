@@ -14,6 +14,10 @@ public class JobEntity {
 
     private String processInstanceId;
 
+    /** Token this work resumes; null for rows created before V23. */
+    @Column(name = "token_id", length = 36)
+    private String tokenId;
+
     private String eventId;
 
     private Instant executionTimestamp;
@@ -95,4 +99,7 @@ public class JobEntity {
     public String getLastError() { return lastError; }
     public void setLastError(String lastError) { this.lastError = lastError; }
     public long getEntityVersion() { return entityVersion; }
+
+    public String getTokenId() { return tokenId; }
+    public void setTokenId(String tokenId) { this.tokenId = tokenId; }
 }

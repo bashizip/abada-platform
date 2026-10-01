@@ -23,10 +23,12 @@ import com.abada.engine.persistence.entity.ExternalTaskEntity;
 import com.abada.engine.persistence.entity.JobEntity;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
 import com.abada.engine.persistence.entity.ProcessInstanceEntity;
+import com.abada.engine.persistence.entity.ProcessTokenEntity;
 import com.abada.engine.persistence.entity.TaskEntity;
 import com.abada.engine.persistence.repository.EventSubscriptionRepository;
 import com.abada.engine.persistence.repository.ExternalTaskRepository;
 import com.abada.engine.persistence.repository.JobRepository;
+import com.abada.engine.persistence.repository.ProcessTokenRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,13 +85,15 @@ public class AbadaEngine {
     private final ActivityHistoryService historyService;
     private final InsightFactWriter insightFactWriter;
     private final TaskGroupResolver taskGroupResolver;
+    private final ProcessTokenRepository processTokenRepository;
     private final AiProviderRegistry aiProviders;
     private final Map<String, ParsedProcessDefinition> definitionsByDeploymentId = new ConcurrentHashMap<>();
 
     @Autowired
     public AbadaEngine(PersistenceService persistenceService, TaskManager taskManager, @Lazy EventManager eventManager,
             @Lazy JobScheduler jobScheduler, ExternalTaskRepository externalTaskRepository,
-            EventSubscriptionRepository eventSubscriptionRepository, JobRepository jobRepository, ObjectMapper om,
+            EventSubscriptionRepository eventSubscriptionRepository, JobRepository jobRepository,
+            ProcessTokenRepository processTokenRepository, ObjectMapper om,
             EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
             InsightFactWriter insightFactWriter,
             TaskGroupResolver taskGroupResolver,
@@ -104,6 +108,7 @@ public class AbadaEngine {
         this.externalTaskRepository = externalTaskRepository;
         this.eventSubscriptionRepository = eventSubscriptionRepository;
         this.jobRepository = jobRepository;
+        this.processTokenRepository = processTokenRepository;
         this.om = om;
         this.engineMetrics = engineMetrics;
         this.tracer = tracer;
@@ -370,7 +375,8 @@ public class AbadaEngine {
         recordUserTaskFact(instance, currentTask);
         persistRuntimeState(instance);
 
-        List<UserTaskPayload> nextTasks = instance.advance(currentTask.getTaskDefinitionKey());
+        List<UserTaskPayload> nextTasks = instance.advance(currentTask.getTokenId() != null
+                ? currentTask.getTokenId() : currentTask.getTaskDefinitionKey());
         recordDecisionTableAudits(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
             instance.setEndDate(Instant.now());
@@ -481,6 +487,17 @@ public class AbadaEngine {
 
     @AtomicRuntimeCommand
     public void resumeFromEvent(String processInstanceId, String eventId, Map<String, Object> variables) {
+        resumeFromEvent(processInstanceId, eventId, null, variables);
+    }
+
+    /**
+     * Resumes the token waiting at {@code eventId}. {@code tokenId} identifies it
+     * exactly; null (work created before V23) resumes the oldest token waiting
+     * at that activity.
+     */
+    @AtomicRuntimeCommand
+    public void resumeFromEvent(String processInstanceId, String eventId, String tokenId,
+            Map<String, Object> variables) {
         log.info("Resuming process instance {} from event {}", processInstanceId, eventId);
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null) {
@@ -497,8 +514,9 @@ public class AbadaEngine {
         // before the winner advances: advance() must see the final token set
         // so an event gateway whose children lead straight to an end event
         // marks the instance COMPLETED in the same transaction.
-        cancelEventGatewaySiblings(instance, eventId);
-        List<UserTaskPayload> nextTasks = instance.advance(eventId);
+        String tokenRef = tokenId != null ? tokenId : eventId;
+        cancelEventGatewaySiblings(instance, tokenRef);
+        List<UserTaskPayload> nextTasks = instance.advance(tokenRef);
         recordDecisionTableAudits(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
             instance.setEndDate(Instant.now());
@@ -522,40 +540,36 @@ public class AbadaEngine {
      * consumed and sibling timer jobs are cancelled so they can never fire a
      * duplicate transition. Standalone events (no owning gateway) are a no-op.
      */
-    private void cancelEventGatewaySiblings(ProcessInstance instance, String eventId) {
-        ParsedProcessDefinition definition = instance.getDefinition();
-        String gatewayId = definition.getEventGatewayOf(eventId);
-        if (gatewayId == null) {
-            return;
-        }
-        List<String> siblings = definition.getEventGatewayChildren(gatewayId).stream()
-                .filter(child -> !child.equals(eventId))
-                .toList();
+    private void cancelEventGatewaySiblings(ProcessInstance instance, String tokenRef) {
+        ProcessInstance.EventRace race = instance.eventRace(tokenRef);
+        List<String> siblings = race.loserActivityIds();
         if (siblings.isEmpty()) {
             return;
         }
-
-        List<String> remainingTokens = new ArrayList<>(instance.getActiveTokens());
-        remainingTokens.removeAll(siblings);
-        instance.setActiveTokens(remainingTokens);
+        Set<String> loserTokens = Set.copyOf(race.loserTokenIds());
+        // Work of the losing tokens; rows created before V23 carry no token and
+        // are matched by activity.
+        java.util.function.Predicate<String> losing = token -> token == null || loserTokens.contains(token);
 
         List<EventSubscriptionEntity> subscriptions = eventSubscriptionRepository
-                .findByProcessInstanceIdAndActivityIdInAndConsumedAtIsNull(instance.getId(), siblings);
+                .findByProcessInstanceIdAndActivityIdInAndConsumedAtIsNull(instance.getId(), siblings).stream()
+                .filter(subscription -> losing.test(subscription.getTokenId())).toList();
         Instant now = Instant.now();
         subscriptions.forEach(subscription -> subscription.setConsumedAt(now));
         eventSubscriptionRepository.saveAll(subscriptions);
 
         List<JobEntity> jobs = jobRepository.findByProcessInstanceIdAndEventIdInAndStatusIn(instance.getId(),
-                siblings, List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED));
+                siblings, List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED)).stream()
+                .filter(job -> losing.test(job.getTokenId())).toList();
         jobs.forEach(job -> {
             job.setStatus(JobEntity.Status.CANCELLED);
             job.setLeaseOwner(null);
             job.setLeaseExpiresAt(null);
         });
         jobRepository.saveAll(jobs);
-        log.info("Event gateway {} of instance {} resolved by {}; cancelled {} sibling wait state(s) "
+        log.info("Event race of instance {} resolved by token {}; cancelled {} sibling wait state(s) "
                         + "({} subscription(s), {} timer job(s))",
-                gatewayId, instance.getId(), eventId, siblings.size(), subscriptions.size(), jobs.size());
+                instance.getId(), race.winnerTokenId(), siblings.size(), subscriptions.size(), jobs.size());
     }
 
     private ProcessInstance requireActiveProcessForTask(TaskInstance task) {
@@ -594,9 +608,28 @@ public class AbadaEngine {
         instance.setEntityVersion(entity.getEntityVersion());
         instance.setStartedBy(entity.getStartedBy());
         instance.putAllVariables(readMap(entity.getVariablesJson()));
-        instance.setActiveTokens(readList(entity.getActiveTokensJson(), activeTokens));
-        instance.setJoinExpectedTokens(readIntegerMap(entity.getJoinExpectedTokensJson()));
-        instance.setJoinArrivedTokens(readSetMap(entity.getJoinArrivedTokensJson()));
+        List<ProcessTokenEntity> rows = processTokenRepository
+                .findByProcessInstanceIdOrderByCreatedAtAscIdAsc(entity.getId());
+        List<String> legacyActive = readList(entity.getActiveTokensJson(), activeTokens);
+        Map<String, Integer> legacyExpected = readIntegerMap(entity.getJoinExpectedTokensJson());
+        Map<String, Set<String>> legacyArrived = readSetMap(entity.getJoinArrivedTokensJson());
+        if (!rows.isEmpty()) {
+            instance.restoreTokens(rows.stream().map(AbadaEngine::toToken).toList());
+            if (matchesLegacyState(instance, legacyActive, legacyExpected, legacyArrived)) {
+                return instance;
+            }
+            // The legacy columns are dual-written from the tokens, so a mismatch
+            // means an older engine (after an image rollback) advanced this
+            // instance: its JSON is the truth and the rows are replaced.
+            log.warn("Token rows of process instance {} do not match its stored legacy state; "
+                    + "rebuilding them (the instance was changed by an older engine)", entity.getId());
+            instance.markStoredTokensStale();
+        }
+        // Pre-V23 instance: rebuild tokens from the legacy JSON. The rows are
+        // written by the first command that persists this instance.
+        List<String> warnings = instance.restoreLegacyTokens(legacyActive, legacyExpected, legacyArrived);
+        warnings.forEach(warning -> log.warn("Converting tokens of process instance {}: {}",
+                entity.getId(), warning));
         return instance;
     }
 
@@ -701,6 +734,7 @@ public class AbadaEngine {
                 task.candidateGroups(),
                 task.formKey(),
                 task.assignmentStrategy());
+        createdTask.setTokenId(task.tokenId());
         persistTask(createdTask);
         historyService.record("TASK_CREATED", instance, task.taskDefinitionKey(),
                 Map.of("assignee", task.assignee() == null ? "" : task.assignee(),
@@ -713,15 +747,17 @@ public class AbadaEngine {
 
     private void scheduleWaitingTimerEvents(ProcessInstance instance) {
         ParsedProcessDefinition definition = instance.getDefinition();
-        for (String tokenId : instance.getActiveTokens()) {
-            if (definition.isCatchEvent(tokenId)) {
-                EventMeta eventMeta = definition.getEvents().get(tokenId);
+        for (ProcessToken token : instance.getWaitingTokens()) {
+            String activityId = token.activityId();
+            if (definition.isCatchEvent(activityId)) {
+                EventMeta eventMeta = definition.getEvents().get(activityId);
                 if (eventMeta != null && eventMeta.type() == EventMeta.EventType.TIMER) {
                     try {
                         Duration duration = Duration.parse(eventMeta.definitionRef());
-                        jobScheduler.scheduleJob(instance.getId(), tokenId, Instant.now().plus(duration));
+                        jobScheduler.scheduleJob(instance.getId(), activityId, token.id(),
+                                Instant.now().plus(duration));
                     } catch (Exception e) {
-                        throw new ProcessEngineException("Could not persist timer " + tokenId
+                        throw new ProcessEngineException("Could not persist timer " + activityId
                                 + " with duration " + eventMeta.definitionRef(), e);
                     }
                 }
@@ -731,17 +767,23 @@ public class AbadaEngine {
 
     private void createExternalTaskJobs(ProcessInstance instance) {
         ParsedProcessDefinition definition = instance.getDefinition();
-        for (String tokenId : instance.getActiveTokens()) {
-            if (definition.isServiceTask(tokenId)) {
-                ServiceTaskMeta serviceTaskMeta = definition.getServiceTask(tokenId);
+        List<ExternalTaskEntity.Status> open = List.of(ExternalTaskEntity.Status.OPEN,
+                ExternalTaskEntity.Status.LOCKED);
+        for (ProcessToken token : instance.getWaitingTokens()) {
+            String activityId = token.activityId();
+            if (definition.isServiceTask(activityId)) {
+                ServiceTaskMeta serviceTaskMeta = definition.getServiceTask(activityId);
                 if (serviceTaskMeta != null && serviceTaskMeta.topicName() != null) {
-                    if (externalTaskRepository.existsByProcessInstanceIdAndActivityIdAndStatusIn(instance.getId(),
-                            tokenId, List.of(ExternalTaskEntity.Status.OPEN, ExternalTaskEntity.Status.LOCKED))) {
+                    if (externalTaskRepository.existsByProcessInstanceIdAndTokenIdAndStatusIn(instance.getId(),
+                            token.id(), open)
+                            || externalTaskRepository.existsByProcessInstanceIdAndActivityIdAndTokenIdIsNullAndStatusIn(
+                                    instance.getId(), activityId, open)) {
                         continue;
                     }
                     ExternalTaskEntity externalTask = new ExternalTaskEntity(instance.getId(),
                             serviceTaskMeta.topicName());
-                    externalTask.setActivityId(tokenId);
+                    externalTask.setActivityId(activityId);
+                    externalTask.setTokenId(token.id());
                     externalTask.setCreatedAt(Instant.now());
                     if (serviceTaskMeta.agentWork() != null) {
                         if (serviceTaskMeta.agentWork().maxAttempts() != null) {
@@ -799,6 +841,59 @@ public class AbadaEngine {
     private void persistRuntimeState(ProcessInstance instance, ProcessInstanceEntity entity) {
         ProcessInstanceEntity saved = persistenceService.saveOrUpdateProcessInstance(entity);
         instance.setEntityVersion(saved.getEntityVersion());
+        if (instance.isStoredTokensStale()) {
+            processTokenRepository.deleteByProcessInstanceId(instance.getId());
+            instance.clearStoredTokensStale();
+        }
+        List<ProcessToken> changed = instance.getDirtyTokens();
+        if (!changed.isEmpty()) {
+            processTokenRepository.saveAll(changed.stream().map(token -> toEntity(instance, token)).toList());
+            instance.markTokensClean();
+        }
+    }
+
+    /**
+     * Whether stored token rows still describe the legacy columns written
+     * with them: same waiting activities, same join expectations and arrival
+     * counts. Arrival sets are compared by size because an older engine records
+     * predecessor activity ids where this one records token ids.
+     */
+    private static boolean matchesLegacyState(ProcessInstance instance, List<String> active,
+            Map<String, Integer> expected, Map<String, Set<String>> arrived) {
+        List<String> derived = new ArrayList<>(instance.getActiveTokens());
+        List<String> stored = new ArrayList<>(active);
+        Collections.sort(derived);
+        Collections.sort(stored);
+        if (!derived.equals(stored) || !instance.getJoinExpectedTokens().equals(expected)) return false;
+        Map<String, Set<String>> derivedArrived = instance.getJoinArrivedTokens();
+        Set<String> joins = new HashSet<>(derivedArrived.keySet());
+        joins.addAll(arrived.keySet());
+        for (String join : joins) {
+            if (derivedArrived.getOrDefault(join, Set.of()).size() != arrived.getOrDefault(join, Set.of()).size()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static ProcessTokenEntity toEntity(ProcessInstance instance, ProcessToken token) {
+        ProcessTokenEntity entity = new ProcessTokenEntity();
+        entity.setId(token.id());
+        entity.setProcessInstanceId(instance.getId());
+        entity.setActivityId(token.activityId());
+        entity.setState(token.state().name());
+        entity.setParentTokenId(token.parentTokenId());
+        entity.setScopeTokenId(token.scopeTokenId());
+        entity.setLoopCounter(token.loopCounter());
+        entity.setCreatedAt(token.createdAt());
+        entity.setUpdatedAt(token.updatedAt());
+        return entity;
+    }
+
+    private static ProcessToken toToken(ProcessTokenEntity entity) {
+        return ProcessToken.restore(entity.getId(), entity.getActivityId(),
+                ProcessToken.State.valueOf(entity.getState()), entity.getParentTokenId(), entity.getScopeTokenId(),
+                entity.getLoopCounter(), entity.getCreatedAt(), entity.getUpdatedAt());
     }
 
     private TaskEntity convertToEntity(TaskInstance taskInstance) {
@@ -816,6 +911,7 @@ public class AbadaEngine {
         entity.setCandidateUsers(new ArrayList<>(taskInstance.getCandidateUsers()));
         entity.setCandidateGroups(new ArrayList<>(taskInstance.getCandidateGroups()));
         entity.setFormKey(taskInstance.getFormKey());
+        entity.setTokenId(taskInstance.getTokenId());
         entity.setEntityVersion(taskInstance.getEntityVersion());
 
         return entity;

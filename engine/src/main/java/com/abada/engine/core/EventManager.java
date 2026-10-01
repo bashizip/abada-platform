@@ -45,14 +45,14 @@ public class EventManager {
      * Registers a process instance that is waiting for one or more events.
      */
     void registerWaitStates(ProcessInstance instance) {
-        for (String tokenId : instance.getActiveTokens()) {
-            if (instance.getDefinition().isCatchEvent(tokenId)) {
-                EventMeta eventMeta = instance.getDefinition().getEvents().get(tokenId);
+        for (ProcessToken token : instance.getWaitingTokens()) {
+            if (instance.getDefinition().isCatchEvent(token.activityId())) {
+                EventMeta eventMeta = instance.getDefinition().getEvents().get(token.activityId());
                 if (eventMeta == null) continue;
 
                 switch (eventMeta.type()) {
-                    case MESSAGE -> registerMessageSubscription(instance, eventMeta);
-                    case SIGNAL -> registerSignalSubscription(instance, eventMeta);
+                    case MESSAGE -> registerMessageSubscription(instance, eventMeta, token.id());
+                    case SIGNAL -> registerSignalSubscription(instance, eventMeta, token.id());
                     case CONDITIONAL -> log.debug("Conditional events not yet implemented for instance {}", instance.getId());
                     case TIMER -> log.debug("Timer events are handled by the JobScheduler, not here for instance {}", instance.getId());
                 }
@@ -60,21 +60,21 @@ public class EventManager {
         }
     }
 
-    private void registerMessageSubscription(ProcessInstance instance, EventMeta eventMeta) {
+    private void registerMessageSubscription(ProcessInstance instance, EventMeta eventMeta, String tokenId) {
         String correlationKey = (String) instance.getVariable("correlationKey");
         if (correlationKey == null) {
             log.warn("Instance {} is waiting for message '{}' but has no correlationKey variable.", instance.getId(), eventMeta.definitionRef());
             return;
         }
-        persistSubscription(instance, eventMeta, EventSubscriptionEntity.Type.MESSAGE, correlationKey);
+        persistSubscription(instance, eventMeta, EventSubscriptionEntity.Type.MESSAGE, correlationKey, tokenId);
     }
 
-    private void registerSignalSubscription(ProcessInstance instance, EventMeta eventMeta) {
-        persistSubscription(instance, eventMeta, EventSubscriptionEntity.Type.SIGNAL, null);
+    private void registerSignalSubscription(ProcessInstance instance, EventMeta eventMeta, String tokenId) {
+        persistSubscription(instance, eventMeta, EventSubscriptionEntity.Type.SIGNAL, null, tokenId);
     }
 
     private void persistSubscription(ProcessInstance instance, EventMeta eventMeta,
-            EventSubscriptionEntity.Type type, String correlationKey) {
+            EventSubscriptionEntity.Type type, String correlationKey, String tokenId) {
         if (subscriptionRepository.existsByProcessInstanceIdAndActivityId(instance.getId(), eventMeta.id())) return;
         EventSubscriptionEntity subscription = new EventSubscriptionEntity();
         subscription.setProcessInstanceId(instance.getId());
@@ -82,6 +82,7 @@ public class EventManager {
         subscription.setEventType(type);
         subscription.setEventName(eventMeta.definitionRef());
         subscription.setCorrelationKey(correlationKey);
+        subscription.setTokenId(tokenId);
         subscriptionRepository.save(subscription);
         log.info("Registered instance {} waiting for {} '{}'", instance.getId(), type, eventMeta.definitionRef());
     }
@@ -112,7 +113,8 @@ public class EventManager {
                     span.setAttribute("event.id", waiting.getActivityId());
                     
                     log.info("Correlated message '{}' with key '{}' to instance {}. Resuming...", messageName, correlationKey, waiting.getProcessInstanceId());
-                    abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(), variables);
+                    abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(),
+                            waiting.getTokenId(), variables);
                     
                     engineMetrics.recordEventCorrelated("MESSAGE", messageName);
             } else {
@@ -136,7 +138,8 @@ public class EventManager {
         EventSubscriptionEntity waiting = subscription.get();
         waiting.setConsumedAt(Instant.now());
         subscriptionRepository.save(waiting);
-        abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(), variables);
+        abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(),
+                            waiting.getTokenId(), variables);
         engineMetrics.recordEventConsumed("MESSAGE", messageName);
         engineMetrics.recordEventCorrelated("MESSAGE", messageName);
     }
@@ -162,7 +165,8 @@ public class EventManager {
                 for (EventSubscriptionEntity waiting : subs) {
                     waiting.setConsumedAt(Instant.now());
                     subscriptionRepository.save(waiting);
-                    abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(), variables);
+                    abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(),
+                            waiting.getTokenId(), variables);
                     engineMetrics.recordEventCorrelated("SIGNAL", signalName);
                 }
             } else {
@@ -186,7 +190,8 @@ public class EventManager {
         for (EventSubscriptionEntity waiting : subscriptions) {
             waiting.setConsumedAt(Instant.now());
             subscriptionRepository.save(waiting);
-            abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(), variables);
+            abadaEngine.resumeFromEvent(waiting.getProcessInstanceId(), waiting.getActivityId(),
+                            waiting.getTokenId(), variables);
             engineMetrics.recordEventCorrelated("SIGNAL", signalName);
         }
     }

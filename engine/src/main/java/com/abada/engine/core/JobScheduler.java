@@ -50,16 +50,23 @@ public class JobScheduler {
      */
     @WithSpan("abada.job.schedule")
     void scheduleJob(@SpanTag("process.instance.id") String processInstanceId,
-                           @SpanTag("event.id") String eventId, 
+                           @SpanTag("event.id") String eventId,
+                           String tokenId,
                            @SpanTag("execution.timestamp") Instant executionTimestamp) {
         Span span = tracer.spanBuilder("abada.job.schedule").startSpan();
         
         try (var scope = TraceLogContext.open(span)) {
-            if (jobRepository.existsByProcessInstanceIdAndEventIdAndStatusIn(processInstanceId, eventId,
-                    List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED))) {
+            List<JobEntity.Status> pending = List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED);
+            boolean scheduled = tokenId != null
+                    ? jobRepository.existsByProcessInstanceIdAndTokenIdAndStatusIn(processInstanceId, tokenId, pending)
+                            || jobRepository.existsByProcessInstanceIdAndEventIdAndTokenIdIsNullAndStatusIn(
+                                    processInstanceId, eventId, pending)
+                    : jobRepository.existsByProcessInstanceIdAndEventIdAndStatusIn(processInstanceId, eventId, pending);
+            if (scheduled) {
                 return;
             }
             JobEntity job = new JobEntity(processInstanceId, eventId, executionTimestamp);
+            job.setTokenId(tokenId);
             jobRepository.save(job);
             
             span.setAttribute("job.id", job.getId());

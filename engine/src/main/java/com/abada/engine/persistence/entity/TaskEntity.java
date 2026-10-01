@@ -18,6 +18,10 @@ public class TaskEntity {
     @Column(nullable = false)
     private String processInstanceId;
 
+    /** Token this work resumes; null for rows created before V23. */
+    @Column(name = "token_id", length = 36)
+    private String tokenId;
+
     @Column
     private String assignee;
 
@@ -148,4 +152,7 @@ public class TaskEntity {
 
     public String getFormKey() { return formKey; }
     public void setFormKey(String formKey) { this.formKey = formKey; }
+
+    public String getTokenId() { return tokenId; }
+    public void setTokenId(String tokenId) { this.tokenId = tokenId; }
 }
