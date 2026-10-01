@@ -87,6 +87,9 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_operations:read", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
                 .requestMatchers("/v1/jobs/**", "/v1/process-instances/**")
                         .hasAnyAuthority("SCOPE_operations:write", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
+                // Plaintext provider keys: worker principals only, never human administrators.
+                .requestMatchers(HttpMethod.GET, "/v1/workers/me/ai-credentials")
+                        .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER)
                 .requestMatchers("/v1/external-tasks/**", "/v1/workers/**")
                         .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.GET, "/v1/insight/config/**", "/v1/insight/proposals/**",
@@ -97,6 +100,12 @@ public class SecurityConfig {
                         "/v1/insight/config/ai/test")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.PUT, "/v1/insight/config/ai")
+                        .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.GET, "/v1/ai-providers/status").authenticated()
+                .requestMatchers(HttpMethod.GET, "/v1/ai-providers")
+                        .hasAnyAuthority("SCOPE_insight:read", AbadaRoles.INSIGHT_REVIEWER,
+                                AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
+                .requestMatchers("/v1/ai-providers/**")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/insight/proposals/*/reviews")
                         .hasAnyAuthority("SCOPE_insight:review", AbadaRoles.INSIGHT_REVIEWER, AbadaRoles.ADMIN)

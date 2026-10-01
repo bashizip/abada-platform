@@ -24,6 +24,8 @@ import { InstanceDetailView } from '@/features/operations/InstanceDetailView';
 import { DryRunPanel } from '@/features/run/DryRunPanel';
 import { DeployDialog } from '@/features/run/DeployDialog';
 import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
+import { AiProvidersAPI } from '@/api/aiProviders';
+import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
 import { EngineAPI } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
 import { ProjectAPI } from '@/api/projects';
@@ -341,10 +343,8 @@ export default function App() {
       const invalidModels = invalidAgentModels(currentWorkflow.nodes);
       if (invalidModels.length > 0) throw new Error(agentModelGuardMessage(invalidModels));
       if (hasAgentNodes(currentWorkflow.nodes)) {
-        const aiSettings = await InsightAPI.getAiSettings();
-        if (!aiSettings.configured) {
-          throw new Error('This workflow contains AI agent nodes but no LLM API key is configured. Go to Settings → AI Providers to configure one.');
-        }
+        const providerStatus = await AiProvidersAPI.status(agentModelsOf(currentWorkflow.nodes));
+        if (!providerStatus.configured) throw new Error(missingProviderMessage(providerStatus.unconfiguredModels));
       }
       let deployWorkflow = currentWorkflow;
       if (activeProject) {

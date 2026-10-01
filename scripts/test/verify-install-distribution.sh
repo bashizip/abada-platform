@@ -19,7 +19,7 @@ REAL_CURL="$(command -v curl)"
 
 mkdir -p "$PUBLIC_DIR" "$STAGING_DIR/release" "$FAKE_BIN"
 printf '%s\n' "$VERSION" >"$PUBLIC_DIR/latest"
-printf '%s\n' 'ABADA_AGENT_LLM_API_KEY=' 'ABADA_AGENT_OPENAI_API_KEY=' \
+printf '%s\n' 'ABADA_LLM_GEMINI_API_KEY=' \
   'ABADA_LLM_API_KEY=' 'ABADA_LLM_BASE_URL=' 'ABADA_LLM_MODEL=gemini-3.6-flash' \
   'ABADA_INSIGHT_ENABLED=false' 'ABADA_INSIGHT_LLM_TIMEOUT_MS=90000' \
   'ABADA_STARTER_WORKFLOW_ENABLED=true' \
@@ -75,7 +75,7 @@ INSTALL_DIR="$TMP_DIR/default-install"
 PATH="$FAKE_BIN:$PATH" \
 ABADA_TEST_MARKER="$MARKER" \
 ABADA_TEST_REAL_CURL="$REAL_CURL" \
-ABADA_AGENT_LLM_API_KEY="test_gemini_key_1234567890" \
+ABADA_LLM_GEMINI_API_KEY="test_gemini_key_1234567890" \
 ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR/" \
 ABADA_INSTALL_DIR="$INSTALL_DIR" \
   bash "$ROOT_DIR/install/install.sh" >"$INSTALL_OUTPUT" 2>&1
@@ -87,9 +87,8 @@ ABADA_INSTALL_DIR="$INSTALL_DIR" \
 [[ "$(awk -F= '$1 == "ABADA_INSIGHT_LLM_TIMEOUT_MS" { print $2 }' "$INSTALL_DIR/.env.dev")" == "90000" ]] || { echo "ABADA_INSIGHT_LLM_TIMEOUT_MS mismatch" >&2; exit 1; }
 grep -Fq 'Initialize: alice / alice' "$INSTALL_OUTPUT" || { echo "missing Initialize line in install output" >&2; cat "$INSTALL_OUTPUT" >&2; exit 1; }
 grep -Fq 'HIGH review: bob / bob' "$INSTALL_OUTPUT" || { echo "missing HIGH review line in install output" >&2; cat "$INSTALL_OUTPUT" >&2; exit 1; }
-[[ "$(awk -F= '$1 == "ABADA_AGENT_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_AGENT_LLM_API_KEY mismatch" >&2; exit 1; }
-[[ "$(awk -F= '$1 == "ABADA_AGENT_OPENAI_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_AGENT_OPENAI_API_KEY mismatch" >&2; exit 1; }
-[[ "$(awk -F= '$1 == "ABADA_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_LLM_API_KEY mismatch" >&2; exit 1; }
+[[ "$(awk -F= '$1 == "ABADA_LLM_GEMINI_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "test_gemini_key_1234567890" ]] || { echo "ABADA_LLM_GEMINI_API_KEY mismatch" >&2; exit 1; }
+[[ "$(awk -F= '$1 == "ABADA_LLM_API_KEY" { print $2 }' "$INSTALL_DIR/.env.dev")" == "" ]] || { echo "the key must only be written to ABADA_LLM_GEMINI_API_KEY" >&2; exit 1; }
 if stat -c '%a' "$INSTALL_DIR/.env.dev" >/dev/null 2>&1; then
   ACTUAL_PERMS="$(stat -c '%a' "$INSTALL_DIR/.env.dev")"
 else
@@ -132,8 +131,8 @@ ABADA_INSTALL_DIR="$NOKEY_DIR" \
   exit 1
 }
 [[ "$(cat "$MARKER")" == "up dev" ]] || { echo "no-key marker mismatch" >&2; exit 1; }
-[[ "$(awk -F= '$1 == "ABADA_AGENT_LLM_API_KEY" { print $2 }' "$NOKEY_DIR/.env.dev")" == "" ]] || {
-  echo "no-key install must leave ABADA_AGENT_LLM_API_KEY empty" >&2
+[[ "$(awk -F= '$1 == "ABADA_LLM_GEMINI_API_KEY" { print $2 }' "$NOKEY_DIR/.env.dev")" == "" ]] || {
+  echo "no-key install must leave ABADA_LLM_GEMINI_API_KEY empty" >&2
   exit 1
 }
 grep -Fq 'add it in Studio' "$TMP_DIR/nokey-output" || {
@@ -148,7 +147,7 @@ EXPLICIT_INSTALL_DIR="$TMP_DIR/explicit-install"
 PATH="$FAKE_BIN:$PATH" \
 ABADA_TEST_MARKER="$MARKER" \
 ABADA_TEST_REAL_CURL="$REAL_CURL" \
-ABADA_AGENT_LLM_API_KEY="test_gemini_key_1234567890" \
+ABADA_LLM_GEMINI_API_KEY="test_gemini_key_1234567890" \
 ABADA_VERSION="$VERSION" \
 ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
 ABADA_INSTALL_DIR="$EXPLICIT_INSTALL_DIR" \
@@ -173,7 +172,7 @@ rm -f "$MARKER"
 if PATH="$FAKE_BIN:$PATH" \
   ABADA_TEST_MARKER="$MARKER" \
   ABADA_TEST_REAL_CURL="$REAL_CURL" \
-  ABADA_AGENT_LLM_API_KEY="test_gemini_key_1234567890" \
+  ABADA_LLM_GEMINI_API_KEY="test_gemini_key_1234567890" \
   ABADA_VERSION="$VERSION" \
   ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
   ABADA_INSTALL_DIR="$TMP_DIR/corrupt-install" \

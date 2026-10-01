@@ -132,6 +132,7 @@ cat > "$TMP_DIR/prod.env" <<'ENV'
 ABADA_REGISTRY=ghcr.io/bashizip
 ABADA_VERSION=1.0.0-rc.3-test
 POSTGRES_PASSWORD=test-only-production-password
+ABADA_ENCRYPTION_KEY=dGVzdC1vbmx5LWVuY3J5cHRpb24ta2V5LTMyLWJ5dGU=
 ABADA_API_HOST=api.abada.test
 ABADA_STUDIO_HOST=studio.abada.test
 ABADA_DOCS_HOST=docs.abada.test
@@ -196,6 +197,10 @@ cp "$TMP_DIR/prod.env" "$TMP_DIR/invalid-cors.env"
 sed -i.bak 's|ABADA_ALLOWED_ORIGINS=https://studio.abada.test|ABADA_ALLOWED_ORIGINS=*|' "$TMP_DIR/invalid-cors.env"
 expect_preflight_failure "$TMP_DIR/invalid-cors.env" 'production CORS origin must be an exact HTTPS origin'
 
+cp "$TMP_DIR/prod.env" "$TMP_DIR/missing-encryption-key.env"
+sed -i.bak 's|^ABADA_ENCRYPTION_KEY=.*|ABADA_ENCRYPTION_KEY=not-a-key|' "$TMP_DIR/missing-encryption-key.env"
+expect_preflight_failure "$TMP_DIR/missing-encryption-key.env" 'ABADA_ENCRYPTION_KEY must be a base64-encoded 32-byte key'
+
 cp "$TMP_DIR/prod.env" "$TMP_DIR/missing-grafana-secret.env"
 sed -i.bak 's|GRAFANA_ADMIN_PASSWORD=test-only-grafana-password|GRAFANA_ADMIN_PASSWORD=|' "$TMP_DIR/missing-grafana-secret.env"
 if "$ROOT_DIR/release/abada-platform" doctor prod --telemetry --env-file "$TMP_DIR/missing-grafana-secret.env" --no-pull >"$TMP_DIR/preflight.out" 2>&1; then
@@ -242,6 +247,7 @@ fi
   exit 1
 }
 grep -q 'Generated POSTGRES_PASSWORD' "$TMP_DIR/server-doctor.out"
+grep -Eq '^ABADA_ENCRYPTION_KEY=[A-Za-z0-9+/]{43}=$' "$TMP_DIR/server.env"
 [[ "$(ls -l "$TMP_DIR/server.env" | cut -c1-10)" == "-rw-------" ]]
 SERVER=(docker compose --env-file "$TMP_DIR/server.env" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.server.yaml")
 assert_config_clean "${SERVER[@]}"
@@ -252,6 +258,7 @@ jq -e '
   and .services.keycloak.environment.KC_HOSTNAME_URL == "https://auth.demo.abada.test"
   and .services["abada-engine"].environment.OIDC_ISSUER_URI == "https://auth.demo.abada.test/realms/abada"
   and .services["abada-engine"].environment.ABADA_ALLOWED_ORIGINS == "https://demo.abada.test"
+  and (.services["abada-engine"].environment.ABADA_ENCRYPTION_KEY | test("^[A-Za-z0-9+/]{43}=$"))
   and .services["abada-studio"].environment.ABADA_API_URL == "https://demo.abada.test/api"
   and ([.services.traefik.ports[] | .published] | sort) == ["443", "80"]
   and ([.services.traefik.ports[] | .host_ip // ""] | all(. == "" or . == "0.0.0.0"))

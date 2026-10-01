@@ -36,27 +36,31 @@ the launcher generates an OIDC client secret, provisions Keycloak and the
 engine, and registers the worker's global `abada:agent` capability. Use
 `--no-agent` only for core-stack diagnostics.
 
-Before real agent tasks can complete, configure an LLM endpoint in the
-untracked local `.env.dev`:
+Before real agent tasks can complete, add a model provider and its key in
+**Studio → Settings → AI Providers**: Google Gemini, OpenAI, Anthropic,
+DeepSeek, OpenRouter or any OpenAI-compatible gateway. Keys are stored
+encrypted in the database and never shown again; the worker receives them
+from the engine, so nothing in the worker's configuration changes. The same
+providers serve Insight and APL authoring.
+
+Each agent node's model goes to the provider whose model prefix matches it
+(`gemini…` to Gemini, `claude…` to Anthropic, `*` for a catch-all gateway).
+If no provider serves a node's model, Studio and the engine refuse to start
+the process and name the model.
+
+On a developer machine you can instead put a key in the untracked `.env.dev`;
+a key saved in Studio always wins:
 
 ```dotenv
-ABADA_AGENT_LLM_BASE_URL=https://generativelanguage.googleapis.com/openai
-ABADA_AGENT_LLM_API_KEY=...
-ABADA_AGENT_LLM_MODEL=gemini-3.6-flash
+ABADA_LLM_GEMINI_API_KEY=...
 ```
-
-Models starting with `gemini` (or a `google/` prefix) route to the Gemini
-OpenAI-compatible endpoint; other models route to an OpenAI-compatible
-`/chat/completions` endpoint. To use a different OpenAI-compatible provider
-(DeepSeek, OpenRouter, a local gateway), set `ABADA_AGENT_OPENAI_BASE_URL`
-and `ABADA_AGENT_OPENAI_API_KEY`; when unset they fall back to the LLM pair.
 
 ## Cost and tool control are local
 
 - `ABADA_AGENT_ALLOWED_MODELS` (comma-separated) is the operator allow-list.
   An `agent` node naming a model outside it **fails at deployment or authoring
   validation** — not at first execution. Default:
-  `gemini-3.6-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
+  `gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
 - Requested `tools` on a node must all appear in `ABADA_AGENT_ALLOWED_TOOLS`.
   The worker does not execute arbitrary tool code; identifiers are model
   context for adapters operators add deliberately.

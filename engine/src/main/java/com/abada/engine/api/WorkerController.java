@@ -1,12 +1,17 @@
 package com.abada.engine.api;
 
+import com.abada.engine.dto.WorkerAiCredentialsDTO;
 import com.abada.engine.dto.WorkerHealthDTO;
 import com.abada.engine.dto.WorkerRegistrationRequest;
 import com.abada.engine.dto.WorkerRegistrationResponse;
+import com.abada.engine.llm.AiProviderService;
 import com.abada.engine.persistence.entity.WorkerCapabilityEntity;
 import com.abada.engine.project.WorkerCapabilityService;
 import com.abada.engine.project.WorkerHealthService;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -24,13 +29,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/v1/workers")
 public class WorkerController {
+    private static final Logger log = LoggerFactory.getLogger(WorkerController.class);
+    static final String AGENT_TOPIC = "abada:agent";
 
     private final WorkerCapabilityService workerCapabilities;
     private final WorkerHealthService workerHealth;
+    private final AiProviderService aiProviders;
 
-    public WorkerController(WorkerCapabilityService workerCapabilities, WorkerHealthService workerHealth) {
+    public WorkerController(WorkerCapabilityService workerCapabilities, WorkerHealthService workerHealth,
+            AiProviderService aiProviders) {
         this.workerCapabilities = workerCapabilities;
         this.workerHealth = workerHealth;
+        this.aiProviders = aiProviders;
     }
 
     /**
@@ -48,6 +58,24 @@ public class WorkerController {
     @GetMapping("/me")
     public WorkerRegistrationResponse me() {
         return toResponse(workerCapabilities.capabilitiesForCurrentWorker());
+    }
+
+    /**
+     * AI provider credentials for the first-party agent worker, resolved with
+     * Studio settings over environment. Only a worker principal registered for
+     * {@code abada:agent} may read them (the security chain also excludes human
+     * administrators); the response is never cached and only provider ids and
+     * the revision are logged.
+     */
+    @GetMapping("/me/ai-credentials")
+    public ResponseEntity<WorkerAiCredentialsDTO> aiCredentials() {
+        workerCapabilities.requireGlobalWorker(List.of(AGENT_TOPIC));
+        WorkerAiCredentialsDTO credentials = aiProviders.workerCredentials();
+        log.info("ai_credentials_issued providers={} revision={}",
+                String.join(",", credentials.providers().stream().map(WorkerAiCredentialsDTO.Provider::id).toList()),
+                credentials.revision());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header("Pragma", "no-cache")
+                .body(credentials);
     }
 
     /**

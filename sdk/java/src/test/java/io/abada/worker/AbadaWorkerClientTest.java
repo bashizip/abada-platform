@@ -121,4 +121,42 @@ class AbadaWorkerClientTest {
         assertEquals("abada.agent/v1", task.agentWork().profileVersion());
         assertEquals("result", task.agentWork().resultVariable());
     }
+
+    @Test
+    void fetchesAiCredentialsAndNeverPrintsTheKey() {
+        AtomicReference<String> authorization = new AtomicReference<>();
+        server.createContext("/api/v1/workers/me/ai-credentials", request -> {
+            authorization.set(request.getRequestHeaders().getFirst("Authorization"));
+            byte[] response = ("{\"revision\":\"r1\",\"futureField\":true,\"providers\":[{\"id\":\"gemini\","
+                    + "\"type\":\"gemini\",\"baseUrl\":\"https://g.example/v1beta/openai\","
+                    + "\"apiKey\":\"secret-key\",\"modelPatterns\":[\"gemini\",\"google/\"],"
+                    + "\"defaultModel\":\"gemini-3.6-flash\",\"timeoutMs\":30000,\"fallback\":true}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            request.getResponseHeaders().add("Content-Type", "application/json");
+            request.sendResponseHeaders(200, response.length);
+            request.getResponseBody().write(response);
+            request.close();
+        });
+
+        AiCredentials credentials = client.aiCredentials();
+
+        assertEquals("Bearer token", authorization.get());
+        assertEquals("r1", credentials.revision());
+        assertEquals("secret-key", credentials.providers().get(0).apiKey());
+        assertEquals(List.of("gemini", "google/"), credentials.providers().get(0).modelPatterns());
+        assertTrue(credentials.providers().get(0).fallback());
+        assertTrue(!credentials.toString().contains("secret-key"));
+    }
+
+    @Test
+    void anOlderEngineWithoutTheCredentialsEndpointAnswers404() {
+        server.createContext("/api/v1/workers/me/ai-credentials", request -> {
+            request.sendResponseHeaders(404, -1);
+            request.close();
+        });
+
+        WorkerProtocolException missing = assertThrows(WorkerProtocolException.class, client::aiCredentials);
+
+        assertEquals(404, missing.status());
+    }
 }

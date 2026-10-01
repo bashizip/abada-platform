@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("21");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("22");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -129,6 +129,11 @@ class PostgresSchemaUpgradeTest {
         }
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var columns = connection.getMetaData().getColumns(null, schema, "ai_providers", "model_patterns")) {
+            assertThat(columns.next()).isTrue();
+        }
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
              var columns = connection.getMetaData().getColumns(null, schema,
                      "project_folders", "system_folder")) {
             assertThat(columns.next()).isTrue();
@@ -144,6 +149,57 @@ class PostgresSchemaUpgradeTest {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getInt(1)).isEqualTo(6);
             }
+        }
+    }
+
+    /** The single rc.7 Studio key becomes the Insight-default provider; the ciphertext is carried over. */
+    @org.junit.jupiter.api.Test
+    void carriesTheRc7StudioKeyIntoTheProviderTable() throws Exception {
+        String schema = "carry_ai_key";
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .schemas(schema).createSchemas(true).target(MigrationVersion.fromVersion("21")).load().migrate();
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var statement = connection.prepareStatement("update " + schema + ".ai_provider_settings set "
+                     + "provider_type = 'gemini', base_url = 'https://generativelanguage.googleapis.com/v1beta', "
+                     + "api_key_enc = 'ciphertext', api_key_hint = '****abcd', model = 'gemini-3.7-flash', "
+                     + "enabled = true where id = 'default'")) {
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
+
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .schemas(schema).load().migrate();
+
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var statement = connection.prepareStatement("select id, provider_type, base_url, api_key_enc, "
+                     + "model_patterns, default_model, insight_default, enabled from " + schema + ".ai_providers");
+             var result = statement.executeQuery()) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getString("id")).isEqualTo("gemini");
+            assertThat(result.getString("provider_type")).isEqualTo("gemini");
+            assertThat(result.getString("base_url")).as("the corrected preset applies").isNull();
+            assertThat(result.getString("api_key_enc")).isEqualTo("ciphertext");
+            assertThat(result.getString("model_patterns")).isEqualTo("gemini,google/");
+            assertThat(result.getString("default_model")).isEqualTo("gemini-3.7-flash");
+            assertThat(result.getBoolean("insight_default")).isTrue();
+            assertThat(result.getBoolean("enabled")).isTrue();
+            assertThat(result.next()).isFalse();
+        }
+    }
+
+    /** A fresh install (or an rc.7 install that never saved a key) starts with no Studio provider. */
+    @org.junit.jupiter.api.Test
+    void aFreshDatabaseHasNoStudioProvider() throws Exception {
+        String schema = "fresh_ai_providers";
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .schemas(schema).createSchemas(true).load().migrate();
+        try (var connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             var statement = connection.prepareStatement("select count(*) from " + schema + ".ai_providers");
+             var result = statement.executeQuery()) {
+            assertThat(result.next()).isTrue();
+            assertThat(result.getInt(1)).isZero();
         }
     }
 

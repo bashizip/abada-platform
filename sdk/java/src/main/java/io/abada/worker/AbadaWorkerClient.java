@@ -127,6 +127,25 @@ public final class AbadaWorkerClient {
         sendEngine("/v1/workers/me", "PUT", body);
     }
 
+    /**
+     * Fetches the AI provider credentials the engine resolved for this worker
+     * (Studio settings over engine environment). Requires a worker principal
+     * registered for {@code abada:agent}; an engine older than 1.0.0-rc.8
+     * answers 404. Callers must never log the returned keys.
+     */
+    public AiCredentials aiCredentials() {
+        HttpResponse<String> response = sendEngine("/v1/workers/me/ai-credentials", "GET", null);
+        try {
+            // Tolerate fields added by newer engines.
+            return objectMapper.readerFor(AiCredentials.class)
+                    .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(response.body());
+        } catch (IOException exception) {
+            throw new WorkerProtocolException(response.statusCode(), "INVALID_RESPONSE",
+                    "Could not decode AI credentials response");
+        }
+    }
+
     /** Returns the worker's registered global capabilities. */
     public String capabilities() {
         return sendEngine("/v1/workers/me", "GET", null).body();

@@ -28,7 +28,8 @@ public record WorkerConfig(
         Set<String> localAckTopics,
         Duration maxTimeout,
         StructuredOutput structuredOutput,
-        Duration startupRetryBudget) {
+        Duration startupRetryBudget,
+        Duration credentialsTtl) {
 
     /**
      * How the worker asks OpenAI-compatible providers for structured output when a
@@ -70,6 +71,22 @@ public record WorkerConfig(
     /** How long startup registration retries transient failures ({@code ABADA_AGENT_STARTUP_RETRY_MS}). */
     public static final Duration DEFAULT_STARTUP_RETRY_BUDGET = Duration.ofMinutes(5);
 
+    /** How long engine-provided AI credentials are cached ({@code ABADA_AGENT_CREDENTIALS_TTL_MS}). */
+    public static final Duration DEFAULT_CREDENTIALS_TTL = Duration.ofSeconds(60);
+
+    public WorkerConfig(
+            URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
+            String oidcClientSecret, URI llmBaseUrl, String llmApiKey,
+            URI openAiBaseUrl, String openAiApiKey,
+            String defaultModel, String workerId, Set<String> allowedModels, Duration pollInterval,
+            Duration lockDuration, int maxTasks, Set<String> allowedTools, Set<String> localAckTopics,
+            Duration maxTimeout, StructuredOutput structuredOutput, Duration startupRetryBudget) {
+        this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
+                llmBaseUrl, llmApiKey, openAiBaseUrl, openAiApiKey,
+                defaultModel, workerId, allowedModels, pollInterval, lockDuration, maxTasks, allowedTools,
+                localAckTopics, maxTimeout, structuredOutput, startupRetryBudget, DEFAULT_CREDENTIALS_TTL);
+    }
+
     public WorkerConfig(
             URI engineUrl, String engineToken, URI tokenUrl, String oidcClientId,
             String oidcClientSecret, URI llmBaseUrl, String llmApiKey,
@@ -80,7 +97,8 @@ public record WorkerConfig(
         this(engineUrl, engineToken, tokenUrl, oidcClientId, oidcClientSecret,
                 llmBaseUrl, llmApiKey, openAiBaseUrl, openAiApiKey,
                 defaultModel, workerId, allowedModels, pollInterval, lockDuration, maxTasks, allowedTools,
-                localAckTopics, maxTimeout, structuredOutput, DEFAULT_STARTUP_RETRY_BUDGET);
+                localAckTopics, maxTimeout, structuredOutput, DEFAULT_STARTUP_RETRY_BUDGET,
+                DEFAULT_CREDENTIALS_TTL);
     }
 
     public WorkerConfig(
@@ -117,9 +135,9 @@ public record WorkerConfig(
                 tokenUrl.isBlank() ? null : URI.create(tokenUrl),
                 clientId,
                 clientSecret,
-                URI.create(endpoints.llmUrl()),
+                endpoints.llmUrl().isBlank() ? null : URI.create(endpoints.llmUrl()),
                 endpoints.apiKey(),
-                URI.create(endpoints.openAiUrl()),
+                endpoints.openAiUrl().isBlank() ? null : URI.create(endpoints.openAiUrl()),
                 endpoints.openAiKey(),
                 env.getOrDefault("ABADA_AGENT_LLM_MODEL", "gemini-3.6-flash"),
                 workerId(env),
@@ -132,7 +150,9 @@ public record WorkerConfig(
                 Duration.ofMillis(longValue(env, "ABADA_AGENT_MAX_TIMEOUT_MS", DEFAULT_MAX_TIMEOUT.toMillis(),
                         1_000, 3_600_000)),
                 StructuredOutput.parse(env.get("ABADA_AGENT_STRUCTURED_OUTPUT")),
-                startupRetryBudget(env)
+                startupRetryBudget(env),
+                Duration.ofMillis(longValue(env, "ABADA_AGENT_CREDENTIALS_TTL_MS", DEFAULT_CREDENTIALS_TTL.toMillis(),
+                        1_000, 3_600_000))
         );
     }
 
@@ -170,10 +190,6 @@ public record WorkerConfig(
         String apiKey = env.getOrDefault("ABADA_AGENT_LLM_API_KEY", "").strip();
         String openAiUrl = env.getOrDefault("ABADA_AGENT_OPENAI_BASE_URL", "").replaceAll("/+$", "");
         String openAiKey = env.getOrDefault("ABADA_AGENT_OPENAI_API_KEY", "").strip();
-        if (llmUrl.isBlank() && openAiUrl.isBlank()) {
-            throw new IllegalArgumentException(
-                    "ABADA_AGENT_LLM_BASE_URL or ABADA_AGENT_OPENAI_BASE_URL is required");
-        }
         if (llmUrl.isBlank()) { llmUrl = openAiUrl; apiKey = openAiKey; }
         if (openAiUrl.isBlank()) { openAiUrl = llmUrl; openAiKey = apiKey; }
         return new Endpoints(llmUrl, apiKey, openAiUrl, openAiKey);

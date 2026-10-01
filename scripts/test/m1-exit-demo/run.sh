@@ -84,9 +84,10 @@ if $SETUP; then
   "${COMPOSE[@]}" up -d --wait abada-engine mock-llm abada-agent-worker >"$TMP_DIR/compose.log" 2>&1 \
     || { cat "$TMP_DIR/compose.log" >&2; fail "could not start the demo overlay"; }
   auth
+  # A catch-all provider in Studio's store: the engine hands it to the workers.
   curl -fsS -X PUT -H @"$AUTH" -H 'Content-Type: application/json' \
-    --data '{"enabled":true,"baseUrl":"http://mock-llm:8000/v1","model":"gpt-5-mini","apiKey":"demo-not-a-secret"}' \
-    "$API_URL/v1/insight/config/ai" | jq -e '.configured == true' >/dev/null || fail "could not set the placeholder AI key"
+    --data '{"providerType":"openai-compatible","displayName":"Scripted model","baseUrl":"http://mock-llm:8000/v1","apiKey":"demo-not-a-secret","modelPatterns":["*"],"defaultModel":"gpt-5-mini","enabled":true,"insightDefault":true}' \
+    "$API_URL/v1/ai-providers/mock-llm" | jq -e '.configured == true' >/dev/null || fail "could not set the placeholder AI provider"
 fi
 
 auth
