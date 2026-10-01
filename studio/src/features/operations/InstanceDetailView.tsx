@@ -516,6 +516,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                     jobs={failedJobs}
                     variables={variables}
                     onRetry={retryJob}
+                    projectId={projectId}
                   />
                 ) : (
                   <div className="space-y-3">

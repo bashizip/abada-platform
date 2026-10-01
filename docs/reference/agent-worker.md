@@ -129,6 +129,12 @@ is rendered against the declared threshold.
   same attempt ordinal (for example after an operator bumps retries).
 - Model and other external effects are at-least-once. Providers and future
   tool adapters must support their own stable deduplication keys.
+- A failed attempt reports its message and full stack trace with the cause
+  chain (capped at 16 KB) as `errorDetails`. The worker first removes the
+  provider keys and engine credentials it holds, bearer tokens, Authorization
+  headers and key-like fields. The engine keeps the latest attempt's trace on
+  the task (`GET /v1/projects/{projectId}/jobs/{jobId}/error`) and Studio shows
+  it in the error details dialog.
 - Logs contain task/activity IDs and counters, not tokens, prompts, variables,
   credentials, or model responses.
 

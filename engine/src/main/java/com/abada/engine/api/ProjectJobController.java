@@ -3,6 +3,7 @@ package com.abada.engine.api;
 import com.abada.engine.core.ExternalTaskCommandService;
 import com.abada.engine.core.IdempotencyService;
 import com.abada.engine.dto.FailedJobDTO;
+import com.abada.engine.dto.JobErrorDTO;
 import com.abada.engine.dto.RetriesRequest;
 import com.abada.engine.persistence.entity.ExternalTaskEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
@@ -75,6 +76,16 @@ public class ProjectJobController {
         String stacktrace = requireJob(projectId, jobId).getExceptionStacktrace();
         return ResponseEntity.ok(stacktrace == null || stacktrace.isEmpty()
                 ? "No stack trace available for this job." : stacktrace);
+    }
+
+    /** Message and stack trace of the last reported failure, also while the job is still retrying. */
+    @GetMapping("/{jobId}/error")
+    public JobErrorDTO error(@PathVariable String projectId, @PathVariable String jobId) {
+        access.require(projectId, Role.VIEWER, Role.OPERATOR, Role.OWNER);
+        ExternalTaskEntity task = requireJob(projectId, jobId);
+        return new JobErrorDTO(task.getId(), task.getProcessInstanceId(), task.getActivityId(),
+                task.getStatus() == null ? null : task.getStatus().name(), task.getRetries(),
+                task.getExceptionMessage(), task.getExceptionStacktrace());
     }
 
     private ExternalTaskEntity requireJob(String projectId, String jobId) {

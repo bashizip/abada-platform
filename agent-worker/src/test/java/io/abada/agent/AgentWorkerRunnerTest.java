@@ -127,6 +127,36 @@ class AgentWorkerRunnerTest {
         assertEquals(60_000L, AgentWorkerMain.withBoundedTimeout(unset, Duration.ofMinutes(2)).timeoutMs());
     }
 
+    @Test
+    void aFailedAttemptReportsTheRedactedStackTraceWithItsCause() throws Exception {
+        FakeEngine engine = new FakeEngine(1, false);
+        String key = "sk-live-provider-key-0042";
+        AgentGateway failing = new AgentGateway() {
+            @Override
+            public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) {
+                throw new AgentGateway.AgentUnreachableException("anthropic API is unreachable with key " + key,
+                        new java.net.ConnectException("Connection refused; Authorization: Bearer " + key));
+            }
+
+            @Override
+            public String provider() {
+                return "anthropic";
+            }
+        };
+        var runner = new AgentWorkerMain.Runner(engine, work -> failing, config(1),
+                new SecretRedactor(() -> List.of(key)));
+
+        assertEquals(1, runner.pollOnce());
+        assertTrue(runner.awaitIdle(Duration.ofSeconds(10)));
+        runner.close();
+
+        String details = engine.failureDetails.get(0);
+        assertTrue(details.startsWith("io.abada.agent.AgentGateway$AgentUnreachableException"), details);
+        assertTrue(details.contains("Caused by: java.net.ConnectException"), details);
+        assertTrue(details.contains("\tat "), "stack frames are included");
+        assertTrue(!details.contains(key) && !engine.failureMessages.get(0).contains(key), "the key is redacted");
+    }
+
     private static AgentGateway slowGateway(AtomicInteger calls) {
         return new AgentGateway() {
             @Override
@@ -162,6 +192,8 @@ class AgentWorkerRunnerTest {
         private final boolean heartbeatFails;
         final List<String> completed = Collections.synchronizedList(new ArrayList<>());
         final List<String> failed = Collections.synchronizedList(new ArrayList<>());
+        final List<String> failureMessages = Collections.synchronizedList(new ArrayList<>());
+        final List<String> failureDetails = Collections.synchronizedList(new ArrayList<>());
         final List<String> lockViolations = Collections.synchronizedList(new ArrayList<>());
         final List<Integer> requestedBatchSizes = Collections.synchronizedList(new ArrayList<>());
         final AtomicInteger extendCalls = new AtomicInteger();
@@ -209,6 +241,8 @@ class AgentWorkerRunnerTest {
                 Duration retryTimeout, AgentAttemptMetadata agent, RequestOptions options) {
             reporting.add(task.id());
             requireLock(task);
+            failureMessages.add(message);
+            failureDetails.add(details);
             failed.add(task.id());
         }
 
