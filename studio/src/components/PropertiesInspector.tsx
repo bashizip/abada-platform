@@ -1,6 +1,7 @@
 import React from 'react';
 import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig } from '@/types';
-import { AGENT_MODEL_OPTIONS, getDefaultAgentModel } from '@/lib/agentModels';
+import { agentModelOptions, getDefaultAgentModel } from '@/lib/agentModels';
+import { useAplContract } from '@/lib/aplContract';
 import { 
   Bot, 
   UserCheck, 
@@ -45,6 +46,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onUpdateWorkflow,
   projectId,
 }) => {
+  const aplContractValue = useAplContract();
+  /** Engine bound for an agent field (served APL contract), or the fallback until it loads. */
+  const agentBound = (field: string, side: 'min' | 'max', fallback: number): number =>
+    aplContractValue?.agentBounds[field]?.[side] ?? fallback;
 
   if (!selectedNode) {
     return (
@@ -153,15 +158,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     });
   };
 
-  // Model selector options stay in sync with the node's APL: the curated list
-  // is always joined by the current model when it is not among the options, so
-  // the dropdown can never render an empty/ghost selection.
+  // Model selector options are the engine's allowed models (served APL
+  // contract), joined by the current model when it is not among them, so the
+  // dropdown can never render an empty/ghost selection.
   const agentConfig = selectedNode.agentConfig;
   const humanConfig = selectedNode.humanConfig;
   const currentModel = agentConfig?.model || getDefaultAgentModel();
-  const modelOptions = AGENT_MODEL_OPTIONS.includes(currentModel)
-    ? AGENT_MODEL_OPTIONS
-    : [currentModel, ...AGENT_MODEL_OPTIONS];
+  const allowedModels = agentModelOptions(aplContractValue?.allowedAgentModels ?? []);
+  const modelOptions = allowedModels.includes(currentModel) ? allowedModels : [currentModel, ...allowedModels];
 
   /* ---- Event-gateway authoring: the gateway's competing catch events are
      materialized canvas nodes (gateway → catch → next edges), so the editor
@@ -365,8 +369,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
               <input
                 type="range"
-                min="0"
-                max="99"
+                min={agentBound('confidence_threshold', 'min', 0)}
+                max={agentBound('confidence_threshold', 'max', 100)}
                 value={selectedNode.agentConfig.confidenceThreshold ?? 0}
                 onChange={(e) => handleAgentChange('confidenceThreshold', Number(e.target.value))}
                 className="w-full accent-[#9D4EDD] bg-[#25201D] h-1.5 rounded-lg cursor-pointer"
@@ -420,8 +424,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
               <input
                 type="range"
-                min="0"
-                max="1"
+                min={agentBound('temperature', 'min', 0)}
+                max={agentBound('temperature', 'max', 2)}
                 step="0.05"
                 value={selectedNode.agentConfig.temperature}
                 onChange={(e) => handleAgentChange('temperature', Number(e.target.value))}
@@ -435,7 +439,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <label className="text-xs text-[#A89F91] block">Max Tokens</label>
                 <input
                   type="number"
-                  min="1"
+                  min={agentBound('max_tokens', 'min', 1)}
+                  max={agentBound('max_tokens', 'max', 1000000)}
                   step="1"
                   placeholder="engine default"
                   value={selectedNode.agentConfig.maxTokens ?? ''}
@@ -450,8 +455,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <label className="text-xs text-[#A89F91] block">Max Attempts</label>
                 <input
                   type="number"
-                  min="1"
-                  max="10"
+                  min={agentBound('max_attempts', 'min', 1)}
+                  max={agentBound('max_attempts', 'max', 20)}
                   step="1"
                   placeholder="engine default"
                   value={selectedNode.agentConfig.maxAttempts ?? ''}
@@ -565,7 +570,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <label className="text-xs text-[#A89F91] block">Timeout (ms)</label>
                 <input
                   type="number"
-                  min="1000"
+                  min={agentBound('timeout_ms', 'min', 1)}
+                  max={agentBound('timeout_ms', 'max', 3600000)}
                   step="1000"
                   placeholder="60000"
                   value={agentConfig?.timeoutMs ?? ''}
@@ -578,7 +584,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <label className="text-xs text-[#A89F91] block">Retry Backoff (ms)</label>
                 <input
                   type="number"
-                  min="100"
+                  min={agentBound('retry_backoff_ms', 'min', 0)}
+                  max={agentBound('retry_backoff_ms', 'max', 3600000)}
                   step="100"
                   placeholder="2000"
                   value={agentConfig?.retryBackoffMs ?? ''}

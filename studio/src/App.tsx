@@ -23,8 +23,10 @@ import { LiveInstanceInspector } from '@/features/operations/LiveInstanceInspect
 import { InstanceDetailView } from '@/features/operations/InstanceDetailView';
 import { DryRunPanel } from '@/features/run/DryRunPanel';
 import { DeployDialog } from '@/features/run/DeployDialog';
-import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
+import { hasAgentNodes } from '@/lib/agentModels';
+import { issuesToLogs } from '@/lib/apl/issues';
 import { AiProvidersAPI } from '@/api/aiProviders';
+import { AplAPI } from '@/api/apl';
 import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
 import { EngineAPI } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
@@ -39,6 +41,7 @@ import { useDryRunSimulation } from '@/hooks/useDryRunSimulation';
 import { useAplAuthoringState } from '@/hooks/useAplAuthoringState';
 import { deriveDefaultPayload } from '@/lib/run/liveRun';
 import { getDefaultAgentModel, initAgentModel } from '@/lib/agentModels';
+import { loadAplContract } from '@/lib/aplContract';
 import { isEditableTarget, undoShortcut } from '@/lib/history/shortcuts';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
@@ -112,9 +115,10 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo, isLiveReadOnly, designerMode]);
 
-  // Load the saved AI model from the Settings panel on startup
+  // Load the saved AI model and the engine's APL contract on startup
   useEffect(() => {
     void initAgentModel();
+    void loadAplContract();
   }, []);
 
   useEffect(() => {
@@ -340,8 +344,15 @@ export default function App() {
     setShowLogPanel(true);
     setSimulationLogs(prev => [...prev, { id: `deploy-${Date.now()}-1`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'Deployment Compiler', nodeType: 'event', status: 'info', message: 'Validating and deploying native abada.io/v1 APL...' }]);
     try {
-      const invalidModels = invalidAgentModels(currentWorkflow.nodes);
-      if (invalidModels.length > 0) throw new Error(agentModelGuardMessage(invalidModels));
+      // The engine validates exactly as it deploys; errors block here with node-level detail.
+      const validation = await AplAPI.validate(stringifyAPLYaml(workflowToAPL(currentWorkflow)));
+      const issueLogs = issuesToLogs(validation.issues, currentWorkflow.nodes);
+      if (issueLogs.length > 0) setSimulationLogs(prev => [...prev, ...issueLogs]);
+      if (!validation.valid) {
+        const errors = validation.issues.filter((issue) => issue.severity === 'ERROR').length;
+        throw new Error(`${errors} APL error${errors === 1 ? '' : 's'} block deployment; see the log panel.`);
+      }
+      const warningCount = validation.issues.length;
       if (hasAgentNodes(currentWorkflow.nodes)) {
         const providerStatus = await AiProvidersAPI.status(agentModelsOf(currentWorkflow.nodes));
         if (!providerStatus.configured) throw new Error(missingProviderMessage(providerStatus.unconfiguredModels));
@@ -374,7 +385,9 @@ export default function App() {
       setSimulationLogs(prev => [...prev, { id: `deploy-${Date.now()}-2`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'Abada Engine', nodeType: 'event', status: 'success', message: `Deployed [${response.processKey}] v${response.version} and started live instance ${processInstanceId}.` }]);
       setShowDeployDialog(false);
       setInstancesRefreshKey((value) => value + 1);
-      showToast('success', 'Successfully deployed workflow and started process instance.');
+      showToast(warningCount > 0 ? 'warning' : 'success', warningCount > 0
+        ? `Deployed and started with ${warningCount} APL warning${warningCount === 1 ? '' : 's'}; see the log panel.`
+        : 'Successfully deployed workflow and started process instance.');
       await openLiveInstance(instance);
     } catch (err: any) {
       setSimulationLogs(prev => [...prev, { id: `deploy-${Date.now()}-err`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'Deploy & Start Error', nodeType: 'event', status: 'error', message: `Deploy & Start failed: ${err.message}` }]);

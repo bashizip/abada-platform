@@ -3,11 +3,13 @@
  * default model of the provider Insight uses (Settings → AI Providers).
  * Falls back to gemini-3.6-flash if no provider is configured yet.
  *
- * `AGENT_MODEL_OPTIONS` feeds the node settings panel's model selector.
- * `ALLOWED_AGENT_MODELS` is the deployment gate: the engine rejects APL
- * whose agent nodes declare a model outside this list.
+ * The allowed models come from the engine's served APL contract
+ * (`GET /v1/apl/schema`, configured by `abada.agent.allowed-models`); Studio
+ * keeps no copy of that list. Until the contract loads the guard below is
+ * skipped, and the engine still rejects a disallowed model at deployment.
  */
 import { AiProvidersAPI } from '@/api/aiProviders';
+import { aplContract } from '@/lib/aplContract';
 
 const FALLBACK_DEFAULT_MODEL = 'gemini-3.6-flash';
 
@@ -42,15 +44,12 @@ export function setCachedModel(model: string): void {
   }
 }
 
-export const AGENT_MODEL_OPTIONS: string[] = [
-  'gemini-3.6-flash',
-  'gemini-3.7-flash',
-  'gemini-3.8-flash',
-  'deepseek/deepseek-v4-flash-free',
-  'gpt-5-mini',
-];
+/** Models this engine allows; empty until the APL contract has loaded. */
+export const allowedAgentModels = (): readonly string[] => aplContract()?.allowedAgentModels ?? [];
 
-export const ALLOWED_AGENT_MODELS: readonly string[] = AGENT_MODEL_OPTIONS;
+/** Selector options: the allowed models, or the default model while the contract is unknown. */
+export const agentModelOptions = (allowed: readonly string[] = allowedAgentModels()): string[] =>
+  allowed.length > 0 ? [...allowed] : [getDefaultAgentModel()];
 
 export interface InvalidAgentModel {
   nodeId: string;
@@ -58,16 +57,18 @@ export interface InvalidAgentModel {
   model: string;
 }
 
-export const invalidAgentModels = (nodes: { id: string; title: string; type: string; agentConfig?: { model?: string } }[]): InvalidAgentModel[] =>
-  nodes
+export const invalidAgentModels = (nodes: { id: string; title: string; type: string; agentConfig?: { model?: string } }[],
+  allowed: readonly string[] = allowedAgentModels()): InvalidAgentModel[] =>
+  allowed.length === 0 ? [] : nodes
     .filter((node) => node.type === 'agent' && node.agentConfig?.model)
     .map((node) => ({ nodeId: node.id, nodeTitle: node.title, model: node.agentConfig!.model!.trim() }))
-    .filter((item) => !ALLOWED_AGENT_MODELS.includes(item.model));
+    .filter((item) => !allowed.includes(item.model));
 
-export const agentModelGuardMessage = (issues: InvalidAgentModel[]): string =>
+export const agentModelGuardMessage = (issues: InvalidAgentModel[],
+  allowed: readonly string[] = allowedAgentModels()): string =>
   issues
     .map((issue) =>
-      `Agent node "${issue.nodeTitle}" declares model "${issue.model}" which is not on the allowed model list (${ALLOWED_AGENT_MODELS.join(', ')}).`
+      `Agent node "${issue.nodeTitle}" declares model "${issue.model}" which is not on the allowed model list (${allowed.join(', ')}).`
     )
     .join(' ');
 
