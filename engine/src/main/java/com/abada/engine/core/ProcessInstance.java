@@ -30,6 +30,13 @@ public class ProcessInstance {
     private boolean storedTokensStale;
 
     private final List<DecisionTableAudit> decisionAudits = new ArrayList<>();
+    private final List<LoopExhaustion> loopExhaustions = new ArrayList<>();
+
+    /**
+     * A loop step whose limit was reached: the token went to {@code routedTo},
+     * or stopped in {@link ProcessToken.State#INCIDENT} when it is null.
+     */
+    public record LoopExhaustion(String tokenId, String headerId, int maxIterations, String routedTo) {}
 
     public ProcessInstance(ParsedProcessDefinition definition) {
         this.id = UUID.randomUUID().toString();
@@ -340,7 +347,11 @@ public class ProcessInstance {
 
     private record Step(ProcessToken token, String pointer, String previous) {}
 
-    private static final int MAX_HOPS = 2048;
+    /**
+     * Safety net per token and command. Every loop is bounded by its
+     * max_iterations, so a well-formed definition stays far below it.
+     */
+    private static final int MAX_HOPS = 10_000;
 
     private List<UserTaskPayload> run(Deque<Step> queue, List<UserTaskPayload> newUserTasks) {
         while (!queue.isEmpty()) {
@@ -356,6 +367,7 @@ public class ProcessInstance {
     private void move(Step step, Deque<Step> queue, List<UserTaskPayload> newUserTasks) {
         ProcessToken token = step.token();
         String current = step.pointer();
+        String previous = step.previous();
         int hops = 0;
         while (current != null) {
             if (++hops > MAX_HOPS) {
@@ -363,8 +375,16 @@ public class ProcessInstance {
                         "advance() exceeded max hops; possible cycle without wait state. pi=" + id);
             }
             String pointer = current;
-            token.moveTo(pointer, ProcessToken.State.ACTIVE);
             current = null;
+            LoopMeta loop = definition.getLoop(pointer);
+            if (loop != null && !enterLoopStep(token, loop, previous)) {
+                if (loop.onExhausted() == null) return;
+                previous = pointer;
+                current = loop.onExhausted();
+                continue;
+            }
+            previous = pointer;
+            token.moveTo(pointer, ProcessToken.State.ACTIVE);
 
             ServiceTaskMeta serviceTaskMeta = definition.getServiceTask(pointer);
             boolean isExternalServiceTask = serviceTaskMeta != null && serviceTaskMeta.topicName() != null;
@@ -458,6 +478,38 @@ public class ProcessInstance {
                 return;
             }
         }
+    }
+
+    /**
+     * Counts an entry into a loop step. A forward entry starts a new pass at 1;
+     * an entry through a back-edge adds one. Past {@code max_iterations} the
+     * loop is exhausted: the token goes to {@code on_exhausted}, or stops in the
+     * INCIDENT state at the step when no route is declared.
+     *
+     * @return true when the token may enter the step
+     */
+    private boolean enterLoopStep(ProcessToken token, LoopMeta loop, String previous) {
+        String variable = com.abada.engine.parser.AplParser.iterationVariable(loop.headerId());
+        boolean backEdge = previous != null && definition.isBackEdge(previous, loop.headerId());
+        int iteration = backEdge && variables.get(variable) instanceof Number count ? count.intValue() + 1 : 1;
+        if (iteration > loop.maxIterations()) {
+            loopExhaustions.add(new LoopExhaustion(token.id(), loop.headerId(), loop.maxIterations(),
+                    loop.onExhausted()));
+            if (loop.onExhausted() == null) {
+                token.moveTo(loop.headerId(), ProcessToken.State.INCIDENT);
+            }
+            return false;
+        }
+        variables.put(variable, iteration);
+        token.setLoopCounter(iteration);
+        return true;
+    }
+
+    /** Returns and clears the loop exhaustions produced by advance(). */
+    public List<LoopExhaustion> takeLoopExhaustions() {
+        List<LoopExhaustion> snapshot = List.copyOf(loopExhaustions);
+        loopExhaustions.clear();
+        return snapshot;
     }
 
     /** The forking token waits; one child token per chosen branch runs in this command. */

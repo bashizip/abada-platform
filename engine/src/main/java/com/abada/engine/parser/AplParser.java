@@ -909,6 +909,11 @@ public final class AplParser {
         return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_error_code";
     }
 
+    /** Process variable holding how many times a loop step has been entered in the current pass (1-based). */
+    public static String iterationVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_iteration";
+    }
+
     /** Process variable holding (truncated) raw output rejected by the agent output contract. */
     public static String rawOutputVariable(String nodeId) {
         return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_raw_output";

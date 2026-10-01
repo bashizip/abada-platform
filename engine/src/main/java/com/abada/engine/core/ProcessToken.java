@@ -24,12 +24,15 @@ public final class ProcessToken {
         FORKED,
         /** Parked at an event gateway while its catch-event children wait. */
         EVENT_WAIT,
+        /** Stopped at a loop step whose limit was reached with no on_exhausted route; an incident is open. */
+        INCIDENT,
         COMPLETED,
         CONSUMED,
         CANCELLED;
 
         public boolean isLive() {
-            return this == ACTIVE || this == WAITING || this == ARRIVED || this == FORKED || this == EVENT_WAIT;
+            return this == ACTIVE || this == WAITING || this == ARRIVED || this == FORKED || this == EVENT_WAIT
+                    || this == INCIDENT;
         }
     }
 
@@ -73,6 +76,13 @@ public final class ProcessToken {
         if (state == this.state && activityId.equals(this.activityId)) return;
         this.activityId = activityId;
         this.state = state;
+        this.updatedAt = Instant.now();
+        this.dirty = true;
+    }
+
+    void setLoopCounter(int loopCounter) {
+        if (this.loopCounter == loopCounter) return;
+        this.loopCounter = loopCounter;
         this.updatedAt = Instant.now();
         this.dirty = true;
     }

@@ -75,7 +75,10 @@ public class EventManager {
 
     private void persistSubscription(ProcessInstance instance, EventMeta eventMeta,
             EventSubscriptionEntity.Type type, String correlationKey, String tokenId) {
-        if (subscriptionRepository.existsByProcessInstanceIdAndActivityId(instance.getId(), eventMeta.id())) return;
+        boolean waiting = subscriptionRepository.existsByProcessInstanceIdAndActivityIdAndTokenIdIsNullAndConsumedAtIsNull(
+                instance.getId(), eventMeta.id())
+                || tokenId != null && subscriptionRepository.existsByTokenIdAndConsumedAtIsNull(tokenId);
+        if (waiting) return;
         EventSubscriptionEntity subscription = new EventSubscriptionEntity();
         subscription.setProcessInstanceId(instance.getId());
         subscription.setActivityId(eventMeta.id());

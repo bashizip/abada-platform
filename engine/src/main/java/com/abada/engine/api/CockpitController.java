@@ -1,5 +1,8 @@
 package com.abada.engine.api;
 
+import com.abada.engine.dto.IncidentDTO;
+import com.abada.engine.persistence.repository.IncidentRepository;
+
 import com.abada.engine.core.AbadaEngine;
 import com.abada.engine.core.ProcessInstance;
 import com.abada.engine.core.IdempotencyService;
@@ -38,13 +41,15 @@ public class CockpitController {
     private final ActivityHistoryRepository historyRepository;
     private final IdempotencyService idempotency;
     private final ObjectMapper objectMapper;
+    private final IncidentRepository incidents;
 
     public CockpitController(AbadaEngine engine, ActivityHistoryRepository historyRepository,
-            IdempotencyService idempotency, ObjectMapper objectMapper) {
+            IdempotencyService idempotency, ObjectMapper objectMapper, IncidentRepository incidents) {
         this.engine = engine;
         this.historyRepository = historyRepository;
         this.idempotency = idempotency;
         this.objectMapper = objectMapper;
+        this.incidents = incidents;
     }
 
     /**
@@ -158,6 +163,13 @@ public class CockpitController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(new ActivityInstanceTree(id, children));
+    }
+
+    /** Incidents of a process instance, open and resolved, oldest first. */
+    @GetMapping("/{id}/incidents")
+    public List<IncidentDTO> getIncidents(@PathVariable String id) {
+        requireInstance(id);
+        return incidents.findByProcessInstanceIdOrderByCreatedAtAsc(id).stream().map(IncidentDTO::from).toList();
     }
 
     @GetMapping("/{id}/history")

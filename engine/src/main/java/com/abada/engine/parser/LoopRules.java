@@ -43,6 +43,16 @@ public final class LoopRules {
                             + "abada:maxIterations), optionally with on_exhausted naming where to go when the "
                             + "limit is reached."));
         }
+        for (String header : headers) {
+            com.abada.engine.core.model.GatewayMeta gateway = definition.getGateways().get(header);
+            if (gateway != null && (gateway.type() == com.abada.engine.core.model.GatewayMeta.Type.PARALLEL
+                    || gateway.type() == com.abada.engine.core.model.GatewayMeta.Type.INCLUSIVE)) {
+                issues.add(issue(code, ValidationSeverity.ERROR, namespace, definition, header,
+                        "cycle returns to " + gateway.type().name().toLowerCase(java.util.Locale.ROOT)
+                                + " gateway '" + header + "'; it would wait for a branch that never comes",
+                        "Return the cycle to a task or an exclusive gateway (APL: condition) instead."));
+            }
+        }
         for (LoopMeta loop : definition.getLoops().values()) {
             if (!headers.contains(loop.headerId())) {
                 issues.add(issue(code, ValidationSeverity.WARNING, namespace, definition, loop.headerId(),

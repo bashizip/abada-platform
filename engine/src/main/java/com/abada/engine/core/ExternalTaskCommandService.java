@@ -268,6 +268,12 @@ public class ExternalTaskCommandService {
             Map<String, Object> merged = new LinkedHashMap<>();
             if (!AplParser.OUTCOME_INVALID_OUTPUT.equals(verdict.outcome())) {
                 merged.put(resultVariable, verdict.value());
+                // A step inside a loop runs again: output rejected or errors
+                // reported by an earlier iteration must not leak into this one.
+                for (String stale : List.of(AplParser.rawOutputVariable(activityId),
+                        AplParser.errorCodeVariable(activityId))) {
+                    if (instance.getVariables().containsKey(stale)) merged.put(stale, null);
+                }
             } else {
                 merged.put(AplParser.rawOutputVariable(activityId), truncatedJson(variables == null
                         ? null : variables.get(resultVariable)));
