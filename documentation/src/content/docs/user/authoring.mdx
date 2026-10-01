@@ -36,16 +36,27 @@ A document has exactly three top-level keys:
 ```yaml
 version: abada.io/v1
 metadata:
-  name: Lead Triage          # sanitized to the process key: lead_triage
+  key: lead_triage           # optional — derived from name when omitted
+  name: Lead Triage
   owner: alice               # optional
+  variables:                 # optional — what expressions may read
+    - name: lead
+      type: object
+      required: true
 flow:
   entry: onStart             # id of the single webhook start node
   nodes: [ ... ]
 ```
 
-`metadata.name` becomes the immutable process key (non-alphanumeric characters
-become `_`, lowercased). A project can hold multiple process keys; each key
-versions immutably on every deploy.
+`metadata.key` is the immutable process key; without it, `metadata.name` is
+sanitized into one (non-alphanumeric characters become `_`, lowercased). A
+project can hold multiple process keys; each key versions immutably on every
+deploy.
+
+`metadata.variables` declares the start payload and any variable written by an
+`engine-task`, `script` or `human-input` node. Once declared, the engine warns
+about an expression that reads a name nobody declares or writes upstream — a
+typo that would otherwise fail only when an instance reaches that node.
 
 ## Node vocabulary
 
@@ -56,7 +67,7 @@ versions immutably on every deploy.
 | `engine-task` | Any durable worker topic (system service, integration) | External service task |
 | `script` | In-transaction server-side script | Script task |
 | `decision-table` | Deterministic rules evaluated **in the workflow transaction** | Business rule task |
-| `approval-gate` | Human validation step (optionally with a `formKey` form) | User task |
+| `human-input` | Human task for the listed groups (optionally with a `formKey` form); `approval-gate` is a deprecated alias | User task |
 | `condition` | Exclusive branch on `rules` | Exclusive gateway |
 | `inclusive` | Fork/join on all matching `rules` | Inclusive gateway |
 | `parallel` | Fork into ≥2 branches and join | Parallel gateway |
@@ -67,7 +78,7 @@ versions immutably on every deploy.
 | `end` | Terminal node | End event |
 
 Every node shares `id`, optional `description` (the human-visible name — for
-an `approval-gate` it is the task name), optional `next`, and an optional `ui`
+a `human-input` it is the task name), optional `next`, and an optional `ui`
 layout hint. `condition` and `parallel` route through their branching keys
 (`rules` / `branches`), never `next`; `event-gateway` routes exclusively
 through its inline `events`. A `condition` branch matches with an
@@ -156,6 +167,33 @@ index-friendly, stable error codes — atomically, persisting nothing.
   `processes/`, `forms/` and `resources/` folders. Documents autosave with
   optimistic revisions; a stale save is rejected instead of overwriting
   another editor.
+
+## Validating APL
+
+The engine is the only APL validator, and Studio asks it directly:
+
+- **While you type** in the APL editor, the draft is sent to
+  `POST /api/v1/apl/validate` — the same checks a deployment runs, with
+  nothing stored. Every problem is listed with its node; selecting one moves
+  the cursor to the offending lines.
+- **Errors** (`ABADA-APL-VALIDATION-001`) block **Apply to diagram** and
+  **Deploy & Start**: a broken `next`, a model outside the engine's allow-list,
+  an expression that is not valid CEL.
+- **Warnings** never block. `ABADA-APL-SCHEMA-001` flags a field the engine
+  does not know — usually a typo such as `confidence_treshold` — or a value of
+  the wrong type. `ABADA-APL-VARIABLE-001` flags an expression that reads an
+  undeclared variable.
+
+<Aside type="caution" title="Warnings become errors at 1.1.0">
+  In the 1.1.0 release candidates, schema violations are warnings so existing
+  processes keep deploying. From 1.1.0 they reject the deployment; fix them
+  now.
+</Aside>
+
+The model list and the field limits in the node settings come from the same
+engine (`GET /api/v1/apl/schema`), so Studio never offers a model this
+deployment would reject. Automation can call both endpoints too; see the
+[API reference](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/api-v1.md#apl-contract).
 
 ## Dry Run vs Deploy & Start
 
