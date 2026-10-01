@@ -204,6 +204,33 @@ class ProcessInstanceTokenTest {
         assertThat(instance.isCompleted()).isTrue();
     }
 
+    /**
+     * A join with no fork in scope is a merge: after an exclusive choice only one
+     * path is taken, so the merge fires once no other token can still reach it
+     * (strict BPMN would leave a parallel merge waiting forever).
+     */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"parallel", "inclusive"})
+    void aMergeAfterAnExclusiveChoiceFiresWithTheOnePathTaken(String mergeType) {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: condition
+                      rules:
+                        - if: "${fast == true}"
+                          then: a
+                        - else: b
+                """ + flag("a", "a", "merge") + flag("b", "b", "merge") + """
+                    - { id: merge, type: %s, next: after }
+                """.formatted(mergeType) + flag("after", "merged", "done")));
+        instance.putAllVariables(Map.of("fast", true));
+
+        instance.advance();
+
+        assertThat(instance.getVariables()).containsEntry("a", true).doesNotContainKey("b")
+                .containsEntry("merged", true);
+        assertThat(instance.isCompleted()).isTrue();
+    }
+
     @Test
     void cancellingAnInstanceCancelsEveryLiveToken() {
         ProcessInstance instance = new ProcessInstance(define("""
