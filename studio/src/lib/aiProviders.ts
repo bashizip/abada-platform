@@ -46,3 +46,28 @@ export const missingProviderMessage = (models: string[]): string =>
   models.length === 0
     ? 'This workflow contains AI agent nodes but no AI provider is configured. Go to Settings → AI Providers to add one.'
     : `No AI provider is configured for model${models.length > 1 ? 's' : ''} ${models.join(', ')}. Go to Settings → AI Providers to add the provider and its API key.`;
+
+/** "every model no other provider serves" for a catch-all, else the prefixes in words. */
+export const describeRouting = (patterns: string[]): string => {
+  const prefixes = patterns.filter((pattern) => pattern !== '*');
+  const catchAll = patterns.includes('*');
+  if (prefixes.length === 0) return catchAll ? 'every model no other provider serves' : 'no models';
+  const listed = `models starting with ${prefixes.join(', ')}`;
+  return catchAll ? `${listed}, and every model no other provider serves` : listed;
+};
+
+/** Known model ids this provider would serve, its own default model first. */
+export const modelsFor = (patterns: string[], defaultModel: string | null, known: readonly string[]): string[] => {
+  const matches = known.filter((model) => patterns.includes('*')
+    || patterns.some((pattern) => model.toLowerCase().startsWith(pattern)));
+  return Array.from(new Set([defaultModel, ...matches].filter((model): model is string => !!model)));
+};
+
+export type KeyStatus = 'studio' | 'environment' | 'missing' | 'disabled';
+
+/** Where a provider's key comes from, as the engine resolved it. */
+export const keyStatusOf = (provider: { enabled: boolean; activeSource: 'STUDIO' | 'ENVIRONMENT' | null }): KeyStatus =>
+  !provider.enabled ? 'disabled'
+    : provider.activeSource === 'STUDIO' ? 'studio'
+      : provider.activeSource === 'ENVIRONMENT' ? 'environment'
+        : 'missing';

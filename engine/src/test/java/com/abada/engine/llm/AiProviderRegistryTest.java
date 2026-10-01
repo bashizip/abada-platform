@@ -52,18 +52,53 @@ class AiProviderRegistryTest {
     }
 
     @Test
-    void environmentKeyAppliesWhenTheStudioProviderIsDisabledOrKeyless() {
+    void aStudioProviderWithoutItsOwnKeyUsesTheEnvironmentKeyAndKeepsItsSettings() {
         environment.setProperty("ABADA_LLM_GEMINI_API_KEY", "env-gemini-key");
-        AiProviderEntity disabled = row("gemini", "gemini", "studio-gemini-key", null, true);
+        AiProviderEntity gemini = row("gemini", "gemini", null, null, true);
+        gemini.setDefaultModel("gemini-3.8-flash");
+        rows.add(gemini);
+        AiProviderEntity placeholder = row("openai-compatible", "openai-compatible", "placeholder-key", "*", false);
+        placeholder.setBaseUrl("http://mock-llm:8000/v1");
+        placeholder.setDefaultModel("gpt-5-mini");
+        rows.add(placeholder);
+
+        ResolvedAiProvider insight = registry.insightProvider().orElseThrow();
+
+        assertThat(insight.id()).as("the provider chosen in Studio, not the first one with a key").isEqualTo("gemini");
+        assertThat(insight.apiKey()).isEqualTo("env-gemini-key");
+        assertThat(insight.source()).isEqualTo(ResolvedAiProvider.Source.ENVIRONMENT);
+        assertThat(registry.insightModel()).isEqualTo("gemini-3.8-flash");
+        assertThat(registry.insightSelection().fallback()).isFalse();
+    }
+
+    @Test
+    void aProviderDisabledInStudioIsNotUsedEvenWithAnEnvironmentKey() {
+        environment.setProperty("ABADA_LLM_GEMINI_API_KEY", "env-gemini-key");
+        AiProviderEntity disabled = row("gemini", "gemini", "studio-gemini-key", null, false);
         disabled.setEnabled(false);
         rows.add(disabled);
 
-        assertThat(registry.resolveForModel("gemini-3.6-flash").orElseThrow().apiKey()).isEqualTo("env-gemini-key");
+        assertThat(registry.resolveForModel("gemini-3.6-flash")).isEmpty();
+    }
 
-        rows.clear();
+    @Test
+    void aChosenDefaultWithoutAnyKeyIsReportedAsAFallback() {
         rows.add(row("gemini", "gemini", null, null, true));
-        assertThat(registry.resolveForModel("gemini-3.6-flash").orElseThrow().source())
-                .isEqualTo(ResolvedAiProvider.Source.ENVIRONMENT);
+        rows.add(row("anthropic", "anthropic", "anthropic-key", null, false));
+
+        AiProviderRegistry.InsightSelection selection = registry.insightSelection();
+
+        assertThat(selection.requestedId()).isEqualTo("gemini");
+        assertThat(selection.provider().orElseThrow().id()).isEqualTo("anthropic");
+        assertThat(selection.fallback()).isTrue();
+    }
+
+    @Test
+    void aKeylessStudioProviderWithoutAnEnvironmentKeyIsNotUsable() {
+        rows.add(row("gemini", "gemini", null, null, true));
+
+        assertThat(registry.activeProviders()).isEmpty();
+        assertThat(registry.insightSelection().fallback()).isFalse();
     }
 
     @Test

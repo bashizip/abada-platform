@@ -40,8 +40,12 @@ export interface AiProviderRequest {
 export interface AiProvidersStatus {
   configured: boolean;
   unconfiguredModels: string[];
+  /** The provider and model Insight, authoring and new agent nodes use now. */
   insightProviderId: string | null;
   insightModel: string | null;
+  /** The default chosen in Studio; differs from `insightProviderId` when it cannot run. */
+  requestedInsightProviderId: string | null;
+  insightFallback: boolean;
 }
 
 export interface AiConnectionTestResult {
