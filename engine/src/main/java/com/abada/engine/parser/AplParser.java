@@ -623,7 +623,10 @@ public final class AplParser {
                     default -> throw validation("type", "unsupported node type '" + type + "' for node '" + nodeId
                             + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
                 }
-
+            } catch (BpmnValidationException exception) {
+                errors.addAll(locate(exception, nodeId, pointerById.get(nodeId)));
+            }
+            try {
                 if (node.hasNonNull("next")) {
                     String next = node.path("next").asText();
                     if (next == null || next.isBlank()) {

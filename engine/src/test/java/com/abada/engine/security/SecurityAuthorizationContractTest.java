@@ -129,6 +129,31 @@ class SecurityAuthorizationContractTest {
     }
 
     @Test
+    void aplContractRequiresAuthenticationButNoRole() throws Exception {
+        String body = "{\"source\":\"version: abada.io/v1\"}";
+        mvc.perform(get("/v1/apl/schema")).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mvc.perform(get("/v1/apl/schema").header("X-Auth-Request-User", "forged-admin"))
+                .andExpect(status().isUnauthorized());
+        for (String token : List.of("invalid", "expired")) {
+            mvc.perform(post("/v1/apl/validate").header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        }
+        mvc.perform(post("/v1/apl/validate").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+
+        // A signed-in user without any Abada role or scope may read the contract and validate drafts.
+        mvc.perform(get("/v1/apl/schema").header("Authorization", "Bearer viewer"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/v1/apl/validate").header("Authorization", "Bearer viewer")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(false));
+    }
+
+    @Test
     void readinessIsPublicButDoesNotExposeProtectedApis() throws Exception {
         mvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk());
         mvc.perform(get("/v1/tasks")).andExpect(status().isUnauthorized());

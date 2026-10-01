@@ -94,7 +94,7 @@ public class ProjectDocumentController {
     @PostMapping("/{documentId}/deploy")
     public ResponseEntity<ProcessDefinitionDto> deploy(@PathVariable String projectId,
             @PathVariable String documentId, @RequestHeader(HttpHeaders.IF_MATCH) String ifMatch) {
-        return ResponseEntity.ok(ProcessDefinitionDto.from(
+        return ResponseEntity.ok(ProcessDefinitionDto.deployed(
                 documents.deploy(projectId, documentId, revision(ifMatch))));
     }
 
