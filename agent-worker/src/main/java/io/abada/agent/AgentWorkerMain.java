@@ -59,13 +59,19 @@ public final class AgentWorkerMain {
                 ProviderCredentials.fromEnvironment(config), config.credentialsTtl(), System::currentTimeMillis);
         credentials.logSource();
         AgentGatewayFactory gateways = new AgentGatewayFactory(config, credentials);
+        SecretRedactor redactor = new SecretRedactor(() -> {
+            java.util.List<String> secrets = new java.util.ArrayList<>(credentials.knownKeys());
+            secrets.add(config.engineToken());
+            secrets.add(config.oidcClientSecret());
+            return secrets;
+        });
         LOG.log(System.Logger.Level.INFO,
                 "agent_worker_started worker_id={0} topics={1} models={2} max_tasks={3} lock_ms={4}",
                 config.workerId(), String.join(",", topics),
                 config.allowedModels().isEmpty() ? "(all)" : String.join(",", config.allowedModels()),
                 config.maxTasks(), config.lockDuration().toMillis());
 
-        Runner runner = new Runner(Engine.over(client, config, topics), gateways::gatewayFor, config);
+        Runner runner = new Runner(Engine.over(client, config, topics), gateways::gatewayFor, config, redactor);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> runner.close(), "agent-worker-shutdown"));
         runner.runUntilInterrupted();
     }
@@ -124,6 +130,7 @@ public final class AgentWorkerMain {
         private final Engine engine;
         private final Function<AgentWorkDescriptor, AgentGateway> gateways;
         private final WorkerConfig config;
+        private final SecretRedactor redactor;
         private final Semaphore slots;
         private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
         private final ScheduledExecutorService heartbeats =
@@ -134,6 +141,12 @@ public final class AgentWorkerMain {
         final AtomicLong abandoned = new AtomicLong();
 
         Runner(Engine engine, Function<AgentWorkDescriptor, AgentGateway> gateways, WorkerConfig config) {
+            this(engine, gateways, config, SecretRedactor.patternsOnly());
+        }
+
+        Runner(Engine engine, Function<AgentWorkDescriptor, AgentGateway> gateways, WorkerConfig config,
+                SecretRedactor redactor) {
+            this.redactor = redactor;
             this.engine = engine;
             this.gateways = gateways;
             this.config = config;
@@ -316,7 +329,10 @@ public final class AgentWorkerMain {
                 Double achieved = exception instanceof AgentGateway.ConfidenceBelowThresholdException below
                         ? below.confidence() : null;
                 try {
-                    engine.fail(task, safeMessage(exception), exception.getClass().getSimpleName(), remaining,
+                    // The full, redacted stack trace is stored on the task and shown
+                    // to operators in Studio's error details.
+                    engine.fail(task, redactor.redact(safeMessage(exception)), redactor.stackTrace(exception),
+                            remaining,
                             Duration.ofMillis(backoff),
                             new AgentAttemptMetadata(model, provider, attempt, null, List.of(), null, null,
                                     exception.getClass().getSimpleName(), achieved),

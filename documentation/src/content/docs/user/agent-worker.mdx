@@ -37,7 +37,9 @@ engine, and registers the worker's global `abada:agent` capability. Use
 `--no-agent` only for core-stack diagnostics.
 
 Before real agent tasks can complete, add a model provider and its key in
-**Studio → Settings → AI Providers**: Google Gemini, OpenAI, Anthropic,
+**Studio → Settings → AI Providers**, and pick the **Default model** at the top
+(used by Insight, authoring and new agent nodes). Each provider shows where its
+key comes from: saved in Studio, or from the server's environment. Providers: Google Gemini, OpenAI, Anthropic,
 DeepSeek, OpenRouter or any OpenAI-compatible gateway. Keys are stored
 encrypted in the database and never shown again; the worker receives them
 from the engine, so nothing in the worker's configuration changes. The same
@@ -102,6 +104,13 @@ The same view shows last heartbeat, last rejection and consecutive failures,
 backed by the worker-health API. On the instance canvas, the live inspector
 renders the agent attempt's model, provider, latency, tools, confidence and
 threshold.
+
+When an attempt fails, the inspector shows the error type and message with a
+**Details** button, and every *Job failed* event is clickable. The dialog
+shows the attempt, model, worker, job status and the full stack trace the
+worker reported, with **Copy details** for a bug report. The worker removes
+provider keys, tokens and credentials from the trace before sending it; only
+the latest attempt's trace is kept.
 
 ## What happens without a worker
 

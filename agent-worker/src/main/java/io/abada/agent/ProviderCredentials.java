@@ -74,6 +74,16 @@ final class ProviderCredentials {
         return fromEngine.isPresent() ? fromEngine : match(environment, model);
     }
 
+    /** Every key the worker currently holds, so reports to the engine can be redacted. */
+    java.util.Set<String> knownKeys() {
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        Snapshot current = snapshot;
+        if (current != null) current.providers().forEach(provider -> keys.add(provider.apiKey()));
+        environment.forEach(provider -> keys.add(provider.apiKey()));
+        keys.remove(null);
+        return keys;
+    }
+
     /** Refetches from the engine now; true when the credentials changed. */
     synchronized boolean refresh() {
         if (engine == null) return false;

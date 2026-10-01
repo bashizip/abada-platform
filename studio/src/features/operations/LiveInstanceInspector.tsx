@@ -253,6 +253,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
                 jobs={jobs}
                 variables={variables}
                 onRetry={retryJob}
+                projectId={projectId}
               />
             ) : (
               <div className="space-y-3">
