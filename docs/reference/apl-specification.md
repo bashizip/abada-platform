@@ -71,18 +71,33 @@ agents are the advice*:
 
 ### 2.1 Top-level schema
 
-An APL document is a single YAML mapping with exactly three top-level keys:
+An APL document is a single YAML mapping with exactly three top-level keys.
+The machine-readable contract is the JSON Schema
+[`engine/src/main/resources/apl/apl-v1.schema.json`](../../engine/src/main/resources/apl/apl-v1.schema.json),
+served by every engine at `GET /api/v1/apl/schema` (see §6.1).
 
 ```yaml
 version: abada.io/v1      # required — document language version
 metadata:                 # required — authoring metadata
-  name: <string>          # required — becomes the process key/id (sanitized)
+  key: <string>           # optional — stable process key, [a-z][a-z0-9_-]{0,127}
+  name: <string>          # required — human-readable name (key derived from it when omitted)
+  description: <string>   # optional
   owner: <string>         # optional
   category: <string>      # optional — workflow category
+  variables:              # optional — declared instance variables (§5.3)
+    - name: <identifier>  #   required — [A-Za-z_][A-Za-z0-9_]*
+      type: <type>        #   optional — string|number|integer|boolean|object|list|any (default any)
+      required: <bool>    #   optional — default false
+      description: <string>
 flow:                     # required — the executable graph
   entry: <nodeId>         # required — id of the start node
   nodes: [ <APLNode>, ... ]  # required — at least one node
 ```
+
+`metadata.variables` declares the variables expressions may read: the start
+payload and anything written by an `engine-task`, `script` or `human-input`
+node. Declarations are checked statically (§6.1); the engine does **not** yet
+enforce them on the start payload.
 
 - `version` is currently `abada.io/v1`. It is the APL language version, not a
   process semantic version.
@@ -735,6 +750,11 @@ which is non-Turing-complete, side-effect free and cannot reach the JVM
   so downstream conditions reference them directly (`${riskLevel == 'LOW'}`).
 - Nested access uses dot paths (`applicant.creditScore`); array indexing is
   not part of the current subset.
+- Declaring `metadata.variables` (§2.1) turns on a static check: every
+  top-level identifier an expression reads must be declared or written by an
+  upstream node, otherwise deployment returns an `ABADA-APL-VARIABLE-001`
+  warning naming the identifier and node (§6.1). Without declarations the
+  check is skipped, because the start payload is unknown.
 
 ### 5.4 Studio-side convention
 
@@ -747,31 +767,43 @@ consistent.
 
 ## 6. Validation, Compilation & Error Codes
 
-APL validation is enforced in two layers: the **Studio edit step** provides
-immediate syntax and graph feedback, while the Engine's native `AplParser` is
-the authoritative semantic gate. Both AI-authored candidates and deployment
-sources are parsed directly as APL; neither path requires an XML round-trip.
+The engine is the only APL validator. Studio checks YAML syntax locally and
+sends everything else to the engine, which validates a draft exactly as it
+deploys it. Both AI-authored candidates and deployment sources are parsed
+directly as APL; neither path requires an XML round-trip.
 
-### 6.1 Studio compile-time checks
+### 6.1 The APL contract endpoints
 
-| Check | Behavior |
+| Endpoint | Purpose |
 | --- | --- |
-| YAML syntax | `parseAPLYaml` fails on malformed YAML |
-| `metadata.key` and `metadata.name` present | authoring requires a stable process key and a human-readable name |
-| `id` uniqueness / flow wiring | `next`/`rules.then` targets must exist for a valid graph; the compiler emits sequence flows only for declared links |
-| Gateway condition discipline | only explicit `${...}` labels become conditions; free text stays a description (never a condition) |
-| Parallel branch discipline | `branches` lists ≥2 distinct declared targets and never coexists with `next` |
-| Decision-table normalization | `normalizeTableInputs` / `resolveRuleOutcome` collapse map/array and flattened/wrapper forms before emission |
+| `GET /api/v1/apl/schema` | The APL v1 JSON Schema this engine accepts, with `$defs.agentModel.enum` set to the configured `abada.agent.allowed-models` and an `x-abada-runtime` block (`scriptsEnabled`, `schemaViolations`, `maxSourceBytes`, `allowedAgentModels`). Supports `ETag` / `If-None-Match`. Studio's types are generated from the same file (`npm run generate:apl-types`). |
+| `POST /api/v1/apl/validate` | Body `{ "source": "<yaml>" }`. Runs the deployment pipeline (schema → `AplParser` → CEL and execution policy → variable check) without persisting anything and returns `{ valid, processKey, issues[] }`. Each issue has `code`, `severity`, `message`, `path` (JSON Pointer such as `/flow/nodes/3/temperature`), `elementId` and `suggestedResolution`. |
 
-Studio performs fast client-side checks, then the Engine rejects unknown node
-types, invalid fields, broken targets and ambiguous graph shapes through
-`AplParser`. The authoring endpoint runs that same parser before returning a
-candidate and may ask the configured LLM to repair invalid output twice.
+Every error in every node is reported, not only the first one. A document is
+`valid` when it has no `ERROR` issue; warnings never block validation or
+deployment.
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `ABADA-APL-VALIDATION-001` | ERROR | Semantic rejection by `AplParser` (see §6.2) |
+| `ABADA-APL-SCHEMA-001` | WARNING | The document violates the JSON Schema: an unknown field (often a typo such as `confidence_treshold`), a wrong value type (`temperature: hot`, previously defaulted silently) or an out-of-range value |
+| `ABADA-APL-VARIABLE-001` | WARNING | An expression reads an identifier that is neither declared in `metadata.variables` nor written by an upstream node (checked only when `metadata.variables` is declared); or a decision-table `when` rule reads something that is not one of the table's inputs (always checked) |
+
+An identifier is *written upstream* when an ancestor node in the graph writes
+it: an agent's `result_variable` (default `<id>_result`), `<id>_outcome`,
+`<id>_error_code` and `<id>_raw_output`; an engine-task's `<id>_outcome` and
+`<id>_error_code`; or a decision-table output. `correlationKey` is always
+available.
+
+**Strictness policy.** In the 1.1.0-rc line, schema violations are warnings so
+existing documents keep deploying. They become deployment errors at 1.1.0.
 
 ### 6.2 Engine deployment-time validation
 
 Deploying native YAML (`POST /v1/processes/deploy`) runs source detection then
-strict `AplParser` validation before the executable graph is persisted.
+strict `AplParser` validation before the executable graph is persisted. The
+deployment response carries the §6.1 warnings (`compatibilityReport.issues`
+for `/v1/processes/deploy`, `validationIssues` for a project document deploy).
 Backward-compatible BPMN input follows the XML compatibility and structural
 validation path. Failures abort the deployment transaction.
 
@@ -782,7 +814,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
-| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, cycles, non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, cycles, non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, an agent model outside `abada.agent.allowed-models`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while

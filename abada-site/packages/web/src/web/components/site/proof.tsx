@@ -1,6 +1,6 @@
 import { ArrowUpRight, Check } from "lucide-react";
 import { EXIT_DEMO_URL, GATE_REPORT_URL } from "../../lib/links";
-import { RELEASE_GATE_TESTS, RELEASE_VERSION } from "../../lib/release";
+import { RELEASE_GATE_TESTS, RELEASE_SCHEMA_VERSION, RELEASE_VERSION } from "../../lib/release";
 import { Reveal, Section, SectionHead } from "./primitives";
 
 const NUMBERS = [
@@ -10,7 +10,7 @@ const NUMBERS = [
       ? "engine tests against real PostgreSQL in the recorded release gate"
       : "restart, upgrade and concurrency suites",
   },
-  { k: "V1 → V21", v: "schema upgrades tested from every prior version" },
+  { k: `V1 → ${RELEASE_SCHEMA_VERSION}`, v: "schema upgrades tested from every prior version" },
   { k: "2 × 4", v: "slow agent tasks on two workers, one model call each" },
   { k: "amd64 · arm64", v: "native images for every component of this release" },
 ];

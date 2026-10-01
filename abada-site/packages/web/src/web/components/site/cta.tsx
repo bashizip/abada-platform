@@ -1,5 +1,5 @@
 import { ArrowRight, ArrowUpRight, Terminal } from "lucide-react";
-import { DEMO_URL, DOCS_URL, EMAIL, GITHUB_URL, LICENSE_URL, PILOT_URL } from "../../lib/links";
+import { DEMO_URL, DOCS_URL, GITHUB_URL, LICENSE_URL, PILOT_URL } from "../../lib/links";
 
 export function Cta() {
   return (
@@ -50,7 +50,7 @@ export function Cta() {
                 <a href={LICENSE_URL} target="_blank" rel="noreferrer" className="hover:text-t2">
                   AGPL-3.0
                 </a>{" "}
-                · Built in the Democratic Republic of the Congo
+                · Self-hosted
               </p>
             </div>
           </div>
@@ -73,11 +73,8 @@ export function Cta() {
             <a href="/vs-camunda" className="text-[13px] text-t2 transition-colors hover:text-t1">
               Abada vs Camunda
             </a>
-            <a
-              href={`mailto:${EMAIL}`}
-              className="text-[13px] text-t2 transition-colors hover:text-t1"
-            >
-              {EMAIL}
+            <a href={PILOT_URL} className="text-[13px] text-t2 transition-colors hover:text-t1">
+              Contact
             </a>
           </nav>
         </div>

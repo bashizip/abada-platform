@@ -59,6 +59,30 @@ Messages are for people and may become more precise without a version change.
 The generated document is served at `/api/v3/api-docs`, and Swagger UI at
 `/api/swagger-ui.html`.
 
+## APL contract
+
+`GET /api/v1/apl/schema` returns the APL v1 JSON Schema
+(`application/schema+json`) this engine accepts: the engine-owned
+`apl-v1.schema.json` with `$defs.agentModel.enum` set to the configured
+`abada.agent.allowed-models` and an `x-abada-runtime` block
+(`languageVersion`, `scriptsEnabled`, `schemaViolations`, `maxSourceBytes`,
+`allowedAgentModels`). The response carries an `ETag`; `If-None-Match` returns
+`304`.
+
+`POST /api/v1/apl/validate` accepts `{ "source": "<yaml>" }` and validates it
+exactly as a deployment would, without persisting anything or writing history.
+It returns `200` with `valid`, `processKey` (when the document compiles) and
+`issues[]` (`code`, `severity`, `message`, `path`, `elementId`,
+`suggestedResolution`) for any well-formed request, including invalid APL;
+a missing `source` is `400 INVALID_REQUEST`. Sources over 10 MiB are reported
+as an `ERROR` issue.
+
+Both endpoints require an authenticated user and no Abada role. Deployment
+responses carry the same warnings: `compatibilityReport.issues` from
+`POST /api/v1/processes/deploy` and `validationIssues` from a project document
+deploy (omitted when empty). Codes and the warning policy are in
+[the APL specification §6.1](apl-specification.md#61-the-apl-contract-endpoints).
+
 ## Project-scoped APL authoring
 
 `POST /api/v1/projects/{projectId}/authoring/generate` accepts `prompt`, a

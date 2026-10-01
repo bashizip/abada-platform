@@ -276,6 +276,6 @@ release notes with before/after examples and the dry-run command.
 - Comparison: rename "Legacy engines" to "Process engines"; mark Camunda "yes" on agent as participant and human approval; keep Abada's real differentiators (PostgreSQL-only footprint, MIT licence, engine-enforced output contract after T4, evidence per model call, review-gated evolution).
 - One version source: read the version and test count from a generated `release.json` (produced by the release gate script).
 - `DEMO_URL`: point to a real video or remove every demo link and the "84-second" text.
-- Contact: `patrick@abadaplatform.com` and a real booking link; fix the `gnail.com` typo in the PDF.
+- Contact: a working contact path (the site now uses the design-partner form and publishes no personal address); fix the misspelled address in the PDF.
 
 **Acceptance tests.** `bun run lint`, `bun run typecheck`, `bun run build`; a grep in CI fails the build if any phrase from the removed list reappears.

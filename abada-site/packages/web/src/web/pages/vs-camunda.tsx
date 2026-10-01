@@ -3,7 +3,7 @@ import { Nav, StickyCta } from "../components/site/nav";
 import { Comparison } from "../components/site/comparison";
 import { Cta } from "../components/site/cta";
 import { Reveal, Section, SectionHead } from "../components/site/primitives";
-import { CALENDAR_URL, DOCS_URL, GITHUB_URL } from "../lib/links";
+import { DOCS_URL, GITHUB_URL, PILOT_URL } from "../lib/links";
 
 const CAMUNDA_STRENGTHS = [
   "Broad BPMN 2.0 and DMN execution coverage, refined over more than a decade.",
@@ -188,7 +188,7 @@ export default function VsCamundaPage() {
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a
-                href={CALENDAR_URL}
+                href={PILOT_URL}
                 className="inline-flex items-center gap-2 rounded-lg bg-signal px-5 py-3 text-[14.5px] font-medium text-[#04150f] transition-opacity hover:opacity-90"
               >
                 <Mail className="size-4" /> Talk to the founder

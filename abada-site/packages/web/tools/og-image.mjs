@@ -57,7 +57,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
 
   <line x1="72" y1="516" x2="1128" y2="516" stroke="#ffffff" stroke-opacity="0.08"/>
   <circle cx="76" cy="553" r="4" fill="${SIGNAL}"/>
-  <text x="96" y="558" font-family="${MONO}" font-size="14" letter-spacing="2.5" fill="${T3}">ABADAPLATFORM.COM · SELF-HOSTED · BUILT IN THE DR CONGO</text>
+  <text x="96" y="558" font-family="${MONO}" font-size="14" letter-spacing="2.5" fill="${T3}">ABADAPLATFORM.COM · SELF-HOSTED · OPEN SOURCE</text>
 </svg>`;
 
 await sharp(Buffer.from(svg)).png().toFile(new URL("../public/og-image.png", import.meta.url).pathname);
