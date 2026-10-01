@@ -29,7 +29,8 @@ unsupported flow nodes instead of silently treating them as pass-through nodes.
 
 Not supported in the 1.0 contract: subprocesses, call activities, boundary
 events, event subprocesses, compensation, transactions, multi-instance
-activities, complex gateways, conditional events, time-date/time-cycle timers,
+and standard-loop activities (rejected at deployment; model a bounded cycle
+instead), complex gateways, conditional events, time-date/time-cycle timers,
 message/signal start events, throwing events, receive/send/manual tasks,
 DMN 1.3 decision files and CMMN.
 
@@ -82,8 +83,9 @@ The supported APL construct set maps 1:1 onto the BPMN elements above:
 
 APL semantics that close or tighten holes:
 
-- Documents are **strictly acyclic**; any loop over `next` or condition targets
-  is rejected at deployment.
+- Every cycle is **bounded**: the node a cycle returns to declares
+  `loop: { max_iterations, on_exhausted }` (BPMN: `abada:maxIterations`,
+  `abada:onExhausted`); an unbounded cycle is rejected at deployment.
 - A `condition` must route via `rules`, never `next`; a `parallel` node must
   not combine `branches` with `next` or declare fewer than two distinct branch
   targets; a second `else` rule, a missing `metadata.name`, an undeclared
@@ -125,7 +127,8 @@ both run on the same runtime.
 | An event-based gateway inside a parallel branch, its catch events leading to the join | Each incoming sequence flow of the join is a separate expected token | The race counts as one branch: the winner continues, the losing waits are cancelled in the same transaction | `ProcessInstanceTokenTest` `anEventRaceInsideABranchCountsAsOneStreamAtTheJoin`, [`EventGatewayTest`](../../engine/src/test/java/com/abada/engine/core/EventGatewayTest.java) |
 | Conditions and decision rules | Expression language left to the engine; commonly scripts or EL that can reach the host platform | CEL only: sandboxed, no JVM access, compiled at deployment; an expression that cannot be evaluated fails the command instead of being treated as `false` | [`ExpressionSecurityTest`](../../engine/src/test/java/com/abada/engine/expression/ExpressionSecurityTest.java) |
 | Elements the engine does not execute | Implementations often ignore or pass through what they do not understand | Rejected at deployment with a stable validation code | [`SupportedBpmnValidatorTest`](../../engine/src/test/java/com/abada/engine/parser/SupportedBpmnValidatorTest.java) |
-| Cycles in the flow | Allowed with no bound | Rejected at deployment today; bounded loops with a mandatory iteration limit are planned (roadmap M2/E3) | [`AplParserTest`](../../engine/src/test/java/com/abada/engine/parser/AplParserTest.java) `rejectsCycleBehindConvergingBranches` |
+| Cycles in the flow | Allowed with no bound; a mistaken back-edge loops forever | Every cycle declares a bound on the node it returns to (APL `loop.max_iterations`, BPMN `abada:maxIterations`); past it the token takes `on_exhausted` or an operator incident is opened. Unbounded cycles are rejected at deployment | [`AplLoopRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/AplLoopRuntimeTest.java), [`BpmnLoopDeploymentTest`](../../engine/src/test/java/com/abada/engine/core/BpmnLoopDeploymentTest.java) |
+| Loop and multi-instance markers on an activity | Repeat the activity | Rejected at deployment with a pointer to bounded cycles; never silently run once | `BpmnLoopDeploymentTest` `multiInstanceMarkersAreRejectedInsteadOfRunningOnce` |
 | A step performed by an AI model | No equivalent; a generic service task | The `agent` node: durable external work whose output the engine validates against a declared schema and confidence threshold before it enters process state | [`AgentOutputContractTest`](../../engine/src/test/java/com/abada/engine/core/AgentOutputContractTest.java) |
 | Business rules | A separate DMN document and engine | Decision tables inline in the process, evaluated deterministically in the workflow transaction and audited | [`DecisionTableRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/DecisionTableRuntimeTest.java) |
 

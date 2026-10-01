@@ -124,8 +124,10 @@ behaviors. Each one is covered by an engine test listed in the repository's
 - **Governed AI steps.** The `agent` node runs model calls outside the
   transaction and admits their output only after the engine checks it against
   a declared schema and confidence threshold.
-- **Bounded loops (planned, M2/E3).** Cycles are rejected today; loops will
-  require an iteration limit instead of being unbounded as in BPMN.
+- **Bounded loops.** A cycle must declare how many times the step it returns to
+  may run (`abada:maxIterations`); past the limit the process takes its
+  `abada:onExhausted` route or opens an incident. Unbounded cycles and
+  loop or multi-instance markers are rejected at deployment.
 
 Abada does not claim full BPMN 2.0 conformance: the supported subset is
 explicit, and everything outside it is rejected.

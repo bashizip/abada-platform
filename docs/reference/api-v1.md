@@ -83,6 +83,17 @@ responses carry the same warnings: `compatibilityReport.issues` from
 deploy (omitted when empty). Codes and the warning policy are in
 [the APL specification §6.1](apl-specification.md#61-the-apl-contract-endpoints).
 
+## Incidents
+
+`GET /api/v1/projects/{projectId}/incidents` lists a project's incidents,
+newest first (`open=true` by default; `page`, `size` ≤ 100), for project
+viewers, operators and owners. `GET /api/v1/process-instances/{id}/incidents`
+lists one instance's incidents, open and resolved (operations read scope).
+Each `IncidentDTO` has `id`, `projectId`, `processInstanceId`, `tokenId`,
+`activityId`, `type` (`LOOP_EXHAUSTED`), `message`, `createdAt`, `resolvedAt`
+and `resolution` (`INSTANCE_CANCELLED`, `INSTANCE_FAILED`). An incident is
+opened in the same transaction as the state change that caused it.
+
 ## Project-scoped APL authoring
 
 `POST /api/v1/projects/{projectId}/authoring/generate` accepts `prompt`, a

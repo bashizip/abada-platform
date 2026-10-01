@@ -131,7 +131,39 @@ Every node in `flow.nodes` is a mapping with the following common keys:
 - `ui` is a Studio layout hint with no runtime meaning. Studio keeps saved
   positions as authored and auto-lays-out a document that has none.
 
-### 2.3 Formatting conventions
+### 2.3 Loops
+
+A cycle in the flow is allowed only when the node it returns to — the *loop
+step* — declares its bound:
+
+```yaml
+- id: draft
+  type: agent
+  loop:
+    max_iterations: 3        # required, 1–1000
+    on_exhausted: escalate   # optional: where to go when the limit is reached
+  next: review
+```
+
+- Every cycle must return to a node that declares `loop.max_iterations`;
+  otherwise deployment fails with `ABADA-APL-VALIDATION-001` ("cycle back to
+  node … needs a bound"). A cycle cannot return to the `webhook` start, nor to
+  a `parallel` or `inclusive` gateway (it would become a join waiting for a
+  branch that never comes); return to a task or a `condition` instead.
+- Entering the loop step forward starts a pass at 1; each return through the
+  cycle adds 1. The engine writes the count to the variable `<id>_iteration`
+  (e.g. `draft_iteration`), readable in conditions and prompts.
+- When a return would exceed `max_iterations`, the token goes to
+  `on_exhausted`. Without it the token stops at the loop step and the engine
+  opens a `LOOP_EXHAUSTED` incident; the instance stays running until an
+  operator cancels it. `on_exhausted` must leave the loop: a target that can
+  reach the loop step again is rejected, because re-entering it forward would
+  restart the count.
+- A `loop` on a node that no cycle returns to is a warning (it has no effect).
+- Waits inside a loop (user tasks, external tasks, message, signal and timer
+  catches) are created afresh on every pass.
+
+### 2.4 Formatting conventions
 
 - Two-space indentation; one node per list item under `flow.nodes`.
 - Node type is always the second key after `id` for readability.
@@ -143,7 +175,7 @@ Every node in `flow.nodes` is a mapping with the following common keys:
   (§5). Free-text labels are descriptions and must never be confused with
   conditions.
 
-### 2.4 Canonical vs. vision-compatible forms
+### 2.5 Canonical vs. vision-compatible forms
 
 APL accepts two shapes for some constructs and always **stringifies to the
 canonical vision form**:
@@ -814,7 +846,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
-| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, cycles, non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, an agent model outside `abada.agent.allowed-models`, invalid or duplicate `metadata.variables` |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, an agent model outside `abada.agent.allowed-models`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while
