@@ -144,6 +144,14 @@ index-friendly, stable error codes — atomically, persisting nothing.
   stays in sync with the canonical YAML.
 - **Natural-language generation.** Describe the process; Studio scaffolds APL
   through the configured provider, with a deterministic local fallback.
+- **Undo and redo.** Every edit of the open process — adding, deleting,
+  connecting or moving nodes, node and process properties, auto-layout, an
+  applied APL edit or an adopted AI proposal — can be undone with
+  <kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> and redone with <kbd>⇧⌘Z</kbd> /
+  <kbd>Ctrl+Y</kbd>, or with the arrows in the canvas toolbar. A drag or a
+  burst of typing in one field is a single step. History is kept per process
+  (100 steps) for the session; undone changes are autosaved like any edit.
+  Text fields and the APL editor keep their own native undo.
 - **Project file tree.** Projects are IDE-like workspaces seeded with
   `processes/`, `forms/` and `resources/` folders. Documents autosave with
   optimistic revisions; a stale save is rejected instead of overwriting

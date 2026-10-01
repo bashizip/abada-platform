@@ -4,6 +4,9 @@ import { WorkflowFile, LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
 import { config } from '@/config/runtime';
 import { ensureLeadTriageStarter } from '@/lib/starter/leadTriage';
+import {
+  WorkflowHistory, emptyHistory, record as recordEdit, redo as redoEdit, undo as undoEdit, withContent,
+} from '@/lib/history/workflowHistory';
 
 export const createEmptyWorkflow = (
   id: string,
@@ -40,6 +43,10 @@ export function useProjectWorkspace(authenticated: boolean) {
   const creatingWorkflowIds = useRef(new Set<string>());
   const processesRootId = useRef<string | undefined>(undefined);
   const materializedDraftId = useRef<string | undefined>(undefined);
+  // Undo/redo per process document, keyed by workflow id (re-keyed when a
+  // draft is first saved and receives its document id).
+  const histories = useRef(new Map<string, WorkflowHistory>());
+  const [historyVersion, setHistoryVersion] = useState(0);
 
   const currentWorkflow = workflows.find((w) => w.id === activeWorkflowId)
     || workflows[0] || bootstrapWorkflow.current;
@@ -139,6 +146,10 @@ export function useProjectWorkspace(authenticated: boolean) {
         failedAutosaveFingerprint.current.delete(currentWorkflow.id);
         persistedProcessKeys.current.set(persistedId, saved.processKey);
 
+        if (persistedId !== currentWorkflow.id && histories.current.has(currentWorkflow.id)) {
+          histories.current.set(persistedId, histories.current.get(currentWorkflow.id)!);
+          histories.current.delete(currentWorkflow.id);
+        }
         setWorkflows((items) =>
           items.map((item) =>
             item.id === currentWorkflow.id
@@ -166,7 +177,28 @@ export function useProjectWorkspace(authenticated: boolean) {
     return () => window.clearTimeout(timer);
   }, [activeProject, currentWorkflow]);
 
-  const updateActiveWorkflow = useCallback((updater: (wf: WorkflowFile) => WorkflowFile) => {
+  /**
+   * Records `before` → `after` as an undo step of document `id`. Edits of the
+   * same `kind` in quick succession merge into one step; without a kind every
+   * edit is its own step.
+   */
+  const recordHistory = useCallback((id: string, before: WorkflowFile, after: WorkflowFile, kind?: string) => {
+    const now = Date.now();
+    const current = histories.current.get(id) ?? emptyHistory();
+    const next = recordEdit(current, before, after, kind ?? `edit-${now}-${Math.random()}`, now);
+    if (next !== current) {
+      histories.current.set(id, next);
+      setHistoryVersion((value) => value + 1);
+    }
+  }, []);
+
+  /**
+   * Applies an edit to the active process document. `kind` groups rapid edits
+   * of the same thing (a drag, typing in one field) into one undo step; `null`
+   * applies the edit without recording it (for example the automatic first
+   * layout of a newly opened process).
+   */
+  const updateActiveWorkflow = useCallback((updater: (wf: WorkflowFile) => WorkflowFile, kind?: string | null) => {
     let targetId: string | undefined = activeWorkflowId;
     if (!targetId || !workflows.some((wf) => wf.id === targetId)) {
       const refId = materializedDraftId.current;
@@ -183,8 +215,29 @@ export function useProjectWorkspace(authenticated: boolean) {
       setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
       return;
     }
+    const before = workflows.find((wf) => wf.id === targetId);
+    if (before && kind !== null) recordHistory(targetId, before, updater(before), kind);
     setWorkflows((prev) => prev.map((wf) => (wf.id === targetId ? updater(wf) : wf)));
-  }, [activeWorkflowId, workflows]);
+  }, [activeWorkflowId, workflows, recordHistory]);
+
+  const stepHistory = useCallback((direction: 'undo' | 'redo') => {
+    const target = workflows.find((wf) => wf.id === currentWorkflow.id);
+    if (!target) return;
+    const history = histories.current.get(target.id);
+    if (!history) return;
+    const step = direction === 'undo' ? undoEdit(history, target) : redoEdit(history, target);
+    if (!step) return;
+    histories.current.set(target.id, step.history);
+    setHistoryVersion((value) => value + 1);
+    setWorkflows((prev) => prev.map((wf) => (wf.id === target.id ? withContent(wf, step.content) : wf)));
+  }, [workflows, currentWorkflow.id]);
+
+  const undo = useCallback(() => stepHistory('undo'), [stepHistory]);
+  const redo = useCallback(() => stepHistory('redo'), [stepHistory]);
+  void historyVersion; // re-render when the history changes
+  const activeHistory = histories.current.get(currentWorkflow.id);
+  const canUndo = (activeHistory?.past.length ?? 0) > 0;
+  const canRedo = (activeHistory?.future.length ?? 0) > 0;
 
   return {
     workflows,
@@ -201,6 +254,11 @@ export function useProjectWorkspace(authenticated: boolean) {
     setTreeRefreshKey,
     openProject,
     updateActiveWorkflow,
+    recordHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     processesRootId,
     persistedProcessKeys,
     workspaceStatus,
