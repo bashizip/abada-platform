@@ -60,7 +60,11 @@ install_bundle() {
     return 0
   fi
   tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' RETURN
+  # Expand the path now and clear the trap after it runs: a RETURN trap stays
+  # set after this function and would otherwise fire again in main(), where
+  # tmp_dir is unset (set -u), failing the script after a successful install.
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp_dir'; trap - RETURN" RETURN
   log "Downloading Abada $version..."
   curl --fail --location --silent --show-error "$BASE_URL/$archive" -o "$tmp_dir/$archive"
   curl --fail --location --silent --show-error "$BASE_URL/$archive.sha256" -o "$tmp_dir/$archive.sha256"
