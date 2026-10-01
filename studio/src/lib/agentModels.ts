@@ -1,13 +1,13 @@
 /**
- * Agent node LLM models. The default model is dynamically loaded from
- * the AI provider settings saved in the Settings panel (database-backed).
- * Falls back to gemini-3.6-flash if no settings are saved yet.
+ * Agent node LLM models. The default model for new agent nodes is the
+ * default model of the provider Insight uses (Settings → AI Providers).
+ * Falls back to gemini-3.6-flash if no provider is configured yet.
  *
  * `AGENT_MODEL_OPTIONS` feeds the node settings panel's model selector.
  * `ALLOWED_AGENT_MODELS` is the deployment gate: the engine rejects APL
  * whose agent nodes declare a model outside this list.
  */
-import { InsightAPI } from '@/api/insight';
+import { AiProvidersAPI } from '@/api/aiProviders';
 
 const FALLBACK_DEFAULT_MODEL = 'gemini-3.6-flash';
 
@@ -22,9 +22,9 @@ export function getDefaultAgentModel(): string {
 /** Load the saved model from the API. Call once at app startup. */
 export async function initAgentModel(): Promise<string> {
   try {
-    const settings = await InsightAPI.getAiSettings();
-    if (settings.model && settings.model.trim()) {
-      cachedModel = settings.model.trim();
+    const status = await AiProvidersAPI.status();
+    if (status.insightModel && status.insightModel.trim()) {
+      cachedModel = status.insightModel.trim();
     }
   } catch {
     // API unavailable — keep fallback

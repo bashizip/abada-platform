@@ -65,8 +65,11 @@ groups in any order; sequential policies enforce their declared order.
 
 ## Configuration
 
-The principal settings are `ABADA_INSIGHT_ENABLED`, `ABADA_LLM_BASE_URL`,
-`ABADA_LLM_API_KEY`, and `ABADA_LLM_MODEL`. The LLM connection is shared with
+The principal setting is `ABADA_INSIGHT_ENABLED`. Insight calls the model
+through the AI provider marked *Used by Insight* in Studio > Settings > AI
+Providers, with the same keys that serve agent tasks; without one it falls
+back to the engine's `ABADA_LLM_*` environment provider (see
+[AI providers](ai-providers.md)). The LLM connection is shared with
 project-scoped APL authoring, but `ABADA_INSIGHT_ENABLED` controls only the
 scheduled Insight worker: Studio authoring remains available while that worker
 is disabled. Thresholds and scheduling are available under `abada.insight.*`.

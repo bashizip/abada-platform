@@ -79,9 +79,9 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p>{error}</p>
-                {error.includes('LLM API key') && (
+                {error.includes('AI provider') && (
                   <p className="mt-1 text-[10px] text-[#A89F91]">
-                    Configure an AI provider in <strong>Settings → AI Providers</strong> or set the <code>ABADA_LLM_API_KEY</code> environment variable.
+                    Add the provider and its API key in <strong>Settings → AI Providers</strong>.
                   </p>
                 )}
               </div>

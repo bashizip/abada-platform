@@ -3,7 +3,8 @@ import { AlertTriangle, Braces, CheckCircle2, ChevronRight, FlaskConical, Play, 
 import { WorkflowEdge, WorkflowFile, WorkflowNode } from '@/types';
 import { deriveDefaultPayload, NodeRunStatus, sleep } from '@/lib/run/liveRun';
 import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
-import { InsightAPI } from '@/api/insight';
+import { AiProvidersAPI } from '@/api/aiProviders';
+import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
 
 type PauseState =
   | { kind: 'agent'; node: WorkflowNode; edges: WorkflowEdge[] }
@@ -105,9 +106,9 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
 
     if (hasAgentNodes(workflow.nodes)) {
       try {
-        const aiSettings = await InsightAPI.getAiSettings();
-        if (!aiSettings.configured) {
-          const message = 'This workflow contains AI agent nodes but no LLM API key is configured. Go to Settings → AI Providers to configure one before deploying.';
+        const providerStatus = await AiProvidersAPI.status(agentModelsOf(workflow.nodes));
+        if (!providerStatus.configured) {
+          const message = missingProviderMessage(providerStatus.unconfiguredModels);
           setPayloadError(message);
           onBlocked?.(message);
           return;

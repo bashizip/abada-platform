@@ -123,14 +123,10 @@ class AgentWorkerMainTest {
     void factoryRoutesGeminiModelsToGeminiGateway() {
         var factory = new AgentGatewayFactory(config(URI.create("http://llm.invalid/v1")));
 
-        assertInstanceOf(GoogleGeminiGateway.class,
-                factory.gatewayFor(descriptor(0.0, "gemini-3.6-flash")));
-        assertInstanceOf(GoogleGeminiGateway.class,
-                factory.gatewayFor(descriptor(0.0, "google/gemini-3.6-flash")));
-        assertInstanceOf(OpenAiCompatibleGateway.class,
-                factory.gatewayFor(descriptor(0.0, "gpt-5-mini")));
-        assertInstanceOf(OpenAiCompatibleGateway.class,
-                factory.gatewayFor(descriptor(0.0, null)));
+        assertInstanceOf(GoogleGeminiGateway.class, delegateOf(factory, "gemini-3.6-flash"));
+        assertInstanceOf(GoogleGeminiGateway.class, delegateOf(factory, "google/gemini-3.6-flash"));
+        assertInstanceOf(OpenAiCompatibleGateway.class, delegateOf(factory, "gpt-5-mini"));
+        assertInstanceOf(OpenAiCompatibleGateway.class, delegateOf(factory, null));
     }
 
     @Test
@@ -170,9 +166,10 @@ class AgentWorkerMainTest {
     }
 
     @Test
-    void resolveEndpointsRequiresAtLeastOneEndpoint() {
-        assertThrows(IllegalArgumentException.class,
-                () -> WorkerConfig.resolveEndpoints(Map.of()));
+    void workerStartsWithoutEnvironmentEndpointsBecauseTheEngineSuppliesThem() {
+        WorkerConfig.Endpoints none = WorkerConfig.resolveEndpoints(Map.of());
+        assertEquals("", none.llmUrl());
+        assertEquals("", none.openAiUrl());
     }
 
     @Test
@@ -331,6 +328,10 @@ class AgentWorkerMainTest {
         });
         server.start();
         return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+    }
+
+    private AgentGateway delegateOf(AgentGatewayFactory factory, String model) {
+        return ((AgentGatewayFactory.RefreshingGateway) factory.gatewayFor(descriptor(0.0, model))).delegate();
     }
 
     private WorkerConfig config(URI llmBaseUrl) {

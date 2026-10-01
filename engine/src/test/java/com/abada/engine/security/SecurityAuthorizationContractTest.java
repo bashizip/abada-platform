@@ -11,13 +11,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import com.abada.engine.persistence.entity.AiProviderEntity;
 import com.abada.engine.persistence.entity.PrincipalEntity;
 import com.abada.engine.persistence.entity.ProjectWorkerBindingEntity;
+import com.abada.engine.persistence.repository.AiProviderRepository;
 import com.abada.engine.persistence.repository.PrincipalRepository;
+import com.abada.engine.persistence.repository.WorkerCapabilityRepository;
 import com.abada.engine.persistence.repository.ProjectWorkerBindingRepository;
 import com.abada.engine.project.ProjectConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -43,11 +49,16 @@ import static org.mockito.Mockito.when;
 })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@ExtendWith(OutputCaptureExtension.class)
 class SecurityAuthorizationContractTest {
+    private static final String PROVIDER_KEY = "sk-test-provider-key-91c2";
     @Autowired MockMvc mvc;
     @Autowired CommonsRequestLoggingFilter requestLoggingFilter;
     @Autowired PrincipalRepository principals;
     @Autowired ProjectWorkerBindingRepository workerBindings;
+    @Autowired WorkerCapabilityRepository workerCapabilities;
+    @Autowired AiProviderRepository aiProviders;
+    @Autowired com.abada.engine.security.AesEncryption encryption;
     @MockitoBean JwtDecoder jwtDecoder;
 
     @BeforeEach
@@ -92,7 +103,8 @@ class SecurityAuthorizationContractTest {
                 .subject("worker".equals(token) ? "worker-1" : "user-1")
                 .claim("preferred_username", "worker".equals(token)
                         ? "service-account-test-worker" : "alice")
-                .claim("groups", List.of("customers")).claim("scope", scope)
+                .claim("groups", "admin".equals(token) ? List.of("abada-admin") : List.of("customers"))
+                .claim("scope", scope)
                 .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300));
         if ("worker".equals(token)) builder.claim("client_id", "test-worker");
         return builder.build();
@@ -214,6 +226,83 @@ class SecurityAuthorizationContractTest {
                 "worker");
         assertForbidden(put("/v1/workers/me").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"topics\":[\"t\"],\"models\":[]}"), "operator");
+    }
+
+    @Test
+    void aiCredentialsAreServedOnlyToAnAgentWorkerAndNeverLogged(CapturedOutput output) throws Exception {
+        seedProvider();
+        mvc.perform(put("/v1/workers/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topics\":[\"abada:agent\"],\"models\":[]}")
+                        .header("Authorization", "Bearer worker"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/v1/workers/me/ai-credentials").header("Authorization", "Bearer worker"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.revision").isString())
+                .andExpect(jsonPath("$.providers[0].id").value("gemini"))
+                .andExpect(jsonPath("$.providers[0].apiKey").value(PROVIDER_KEY))
+                .andExpect(jsonPath("$.providers[0].baseUrl")
+                        .value("https://generativelanguage.googleapis.com/v1beta/openai"));
+
+        assertThat(output.getAll()).contains("ai_credentials_issued providers=gemini")
+                .doesNotContain(PROVIDER_KEY);
+    }
+
+    @Test
+    void aiCredentialsAreDeniedToEveryoneElse() throws Exception {
+        seedProvider();
+        mvc.perform(get("/v1/workers/me/ai-credentials"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/v1/workers/me/ai-credentials").header("X-Auth-Request-User", "forged-worker")
+                        .header("X-Auth-Request-Groups", "abada-worker"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/v1/workers/me/ai-credentials").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/v1/workers/me/ai-credentials").header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(get("/v1/workers/me/ai-credentials"), "admin");
+        assertForbidden(get("/v1/workers/me/ai-credentials"), "insight-admin");
+        assertForbidden(get("/v1/workers/me/ai-credentials"), "operator");
+
+        String workerId = principals.findByIssuerAndSubjectId("oidc", "worker-1").orElseThrow().getId();
+        workerCapabilities.findByPrincipalIdAndTopic(workerId, "abada:agent").ifPresent(workerCapabilities::delete);
+        assertForbidden(get("/v1/workers/me/ai-credentials"), "worker");
+    }
+
+    @Test
+    void aiProviderManagementRequiresInsightConfigure() throws Exception {
+        assertForbidden(put("/v1/ai-providers/gemini").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"apiKey\":\"k\"}"), "insight-reviewer");
+        assertForbidden(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .delete("/v1/ai-providers/gemini"), "insight-reader");
+        assertForbidden(post("/v1/ai-providers/gemini/test"), "insight-reader");
+        assertForbidden(get("/v1/ai-providers"), "tasks");
+        mvc.perform(get("/v1/ai-providers").header("Authorization", "Bearer insight-reader"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/v1/ai-providers/status").param("model", "gemini-3.6-flash")
+                        .header("Authorization", "Bearer tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unconfiguredModels").isArray());
+        mvc.perform(put("/v1/ai-providers/anthropic").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"providerType\":\"anthropic\",\"apiKey\":\"k\"}")
+                        .header("Authorization", "Bearer admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.apiKeyHint").value("****"));
+        aiProviders.deleteById("anthropic");
+    }
+
+    private void seedProvider() {
+        AiProviderEntity provider = aiProviders.findById("gemini").orElseGet(AiProviderEntity::new);
+        provider.setId("gemini");
+        provider.setDisplayName("Google Gemini");
+        provider.setProviderType("gemini");
+        provider.setApiKeyEnc(encryption.encrypt(PROVIDER_KEY));
+        provider.setApiKeyHint("****91c2");
+        provider.setInsightDefault(true);
+        if (provider.getCreatedAt() == null) provider.setCreatedAt(Instant.now());
+        provider.setUpdatedAt(Instant.now());
+        aiProviders.save(provider);
     }
 
     @Test
