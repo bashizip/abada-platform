@@ -5,8 +5,11 @@ description: How BPMN 2.0 fits into an APL-native platform — dialects, the sup
 
 import { Aside } from '@astrojs/starlight/components';
 
-Native APL is Abada's authoring language, but BPMN remains a first-class
-**import and backward-compatibility surface**. Studio transpiles BPMN into APL
+APL is Abada's process language, and BPMN 2.0 is the foundation it builds on.
+Abada keeps BPMN's proven parts — events, gateways, human and service tasks,
+durable waits — and changes the semantics where strict BPMN deadlocks, guesses
+or runs unbounded (see [Where APL improves on BPMN](#where-apl-improves-on-bpmn)).
+BPMN remains a first-class **import and backward-compatibility surface**. Studio transpiles BPMN into APL
 at the import boundary, and the engine accepts BPMN 2.0 XML directly: a
 deployment source starting with `<` is validated and compiled through the
 canonical BPMN path, while `version: abada.io/v1` goes through the native APL
@@ -99,3 +102,31 @@ cannot change an active instance's semantics.
   index](/reference/contracts/). APL-native authoring: [Author processes in
   native APL](/user/authoring/).
 </Aside>
+
+## Where APL improves on BPMN
+
+Native APL and imported BPMN run on the same runtime, so both get these
+behaviors. Each one is covered by an engine test listed in the repository's
+`docs/reference/bpmn-support.md`.
+
+- **No join deadlocks.** A parallel-fork branch that ends before the join no
+  longer blocks it, and paths of an exclusive choice that converge on a
+  parallel gateway merge instead of waiting forever. Joins count execution
+  tokens by id, and the token that forked continues after the join.
+- **Event races count once.** An event-based gateway inside a parallel branch
+  is one branch at the join; the losing waits are cancelled in the same
+  transaction as the winner.
+- **Safe expressions.** Conditions and decision rules are sandboxed CEL,
+  compiled at deployment; an expression that cannot be evaluated fails the
+  step instead of being read as `false`.
+- **Nothing ignored.** Elements the engine does not execute are rejected at
+  deployment.
+- **Governed AI steps.** The `agent` node runs model calls outside the
+  transaction and admits their output only after the engine checks it against
+  a declared schema and confidence threshold.
+- **Bounded loops (planned, M2/E3).** Cycles are rejected today; loops will
+  require an iteration limit instead of being unbounded as in BPMN.
+
+Abada does not claim full BPMN 2.0 conformance: the supported subset is
+explicit, and everything outside it is rejected.
+
