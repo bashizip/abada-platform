@@ -138,6 +138,26 @@
         }
       ]
     },
+    "loop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_iterations"
+      ],
+      "description": "Bound of the loop whose back-edges return to this node. Every cycle must return to a node that declares one.",
+      "properties": {
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Times this node may be entered per pass of the loop; the engine exposes the current count as <id>_iteration."
+        },
+        "on_exhausted": {
+          "$ref": "#/$defs/nodeRef",
+          "description": "Where to go when the limit is reached; without it an incident is opened. Must leave the loop."
+        }
+      }
+    },
     "variableDeclaration": {
       "type": "object",
       "additionalProperties": false,
@@ -319,6 +339,9 @@
         "on_error": {
           "$ref": "#/$defs/onError"
         },
+        "loop": {
+          "$ref": "#/$defs/loop"
+        },
         "ui": {
           "$ref": "#/$defs/uiPosition"
         }
@@ -353,6 +376,9 @@
         },
         "on_error": {
           "$ref": "#/$defs/onError"
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"
@@ -472,6 +498,9 @@
             }
           }
         },
+        "loop": {
+          "$ref": "#/$defs/loop"
+        },
         "ui": {
           "$ref": "#/$defs/uiPosition"
         }
@@ -507,6 +536,9 @@
           "type": "string",
           "minLength": 1,
           "default": "javascript"
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"
@@ -557,6 +589,9 @@
           "type": "number",
           "minimum": 0,
           "description": "Service-level target for monitoring; not enforced by the engine yet."
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"
@@ -629,6 +664,9 @@
           "type": "boolean",
           "description": "Reserved; currently has no runtime effect."
         },
+        "loop": {
+          "$ref": "#/$defs/loop"
+        },
         "ui": {
           "$ref": "#/$defs/uiPosition"
         }
@@ -678,6 +716,9 @@
               }
             }
           }
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"
@@ -732,6 +773,9 @@
             }
           }
         },
+        "loop": {
+          "$ref": "#/$defs/loop"
+        },
         "ui": {
           "$ref": "#/$defs/uiPosition"
         }
@@ -768,6 +812,9 @@
             "$ref": "#/$defs/nodeRef"
           }
         },
+        "loop": {
+          "$ref": "#/$defs/loop"
+        },
         "ui": {
           "$ref": "#/$defs/uiPosition"
         }
@@ -800,6 +847,9 @@
           "items": {
             "$ref": "#/$defs/eventGatewayChild"
           }
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"
@@ -868,6 +918,9 @@
           "type": "string",
           "minLength": 1
         },
+        "loop": {
+          "$ref": "#/$defs/loop"
+        },
         "ui": {
           "$ref": "#/$defs/uiPosition"
         }
@@ -898,6 +951,9 @@
         },
         "duration": {
           "$ref": "#/$defs/isoDuration"
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"
@@ -930,6 +986,9 @@
         "signal": {
           "type": "string",
           "minLength": 1
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"

@@ -170,6 +170,17 @@ public class AbadaEngine {
                 com.abada.engine.expression.DefinitionPolicyValidator.validate(parseResult.definition(),
                         com.abada.engine.bpmn.compatibility.BpmnErrorCodes.UNSUPPORTED_EXTENSION,
                         "http://www.omg.org/spec/BPMN/20100524/MODEL");
+                // Every cycle must be bounded (deployment only: stored definitions reload unchanged).
+                List<com.abada.engine.bpmn.compatibility.BpmnValidationIssue> loopErrors =
+                        com.abada.engine.parser.LoopRules.check(parseResult.definition(),
+                                        com.abada.engine.bpmn.compatibility.BpmnErrorCodes.UNBOUNDED_LOOP,
+                                        com.abada.engine.bpmn.compatibility.BpmnCompatibilityDetector.ABADA_NAMESPACE)
+                                .stream().filter(issue -> issue.severity()
+                                        == com.abada.engine.bpmn.compatibility.ValidationSeverity.ERROR)
+                                .toList();
+                if (!loopErrors.isEmpty()) {
+                    throw new com.abada.engine.bpmn.compatibility.BpmnValidationException(loopErrors);
+                }
             }
             ParsedProcessDefinition definition = parseResult.definition();
             ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId);

@@ -547,7 +547,7 @@ class AplParserTest {
                 + "    - id: end\n      type: end\n";
         assertThatThrownBy(() -> parser.parseDetailed(source.getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(BpmnValidationException.class)
-                .hasMessageContaining("cyclic flow");
+                .hasMessageContaining("cycle back to the start node");
     }
 
     @Test
@@ -596,7 +596,7 @@ class AplParserTest {
                 + "    - id: end\n      type: end\n";
         assertThatThrownBy(() -> parser.parseDetailed(source.getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(BpmnValidationException.class)
-                .hasMessageContaining("cyclic flow");
+                .hasMessageContaining("needs a bound");
     }
 
     private static byte[] agentFlow(String agentExtras) {
