@@ -100,7 +100,7 @@ public final class AplParser {
      * {@code human-input} is the canonical type for human tasks; {@code approval-gate}
      * is retained as a deprecated alias for backward compatibility.
      */
-    private static final Set<String> SUPPORTED_TYPES = Set.of(
+    public static final Set<String> SUPPORTED_TYPES = Set.of(
              "webhook", "end", "agent", "engine-task", "decision-table", "script",
              "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
              "message-catch", "timer", "signal", "human-input");
@@ -112,6 +112,11 @@ public final class AplParser {
     private final Set<String> allowedAgentModels;
     private final boolean enforceDeploymentPolicy;
 
+    /** Agent models this parser accepts; empty when the check is disabled. */
+    public Set<String> allowedAgentModels() {
+        return allowedAgentModels;
+    }
+
     public AplParser() {
         this(DEFAULT_ALLOWED_AGENT_MODELS);
     }
@@ -120,7 +125,9 @@ public final class AplParser {
      * @param allowedAgentModelsCsv comma-separated model ids an agent node may
      *        declare; a blank value disables the check.
      */
-    public AplParser(String allowedAgentModelsCsv) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public AplParser(@org.springframework.beans.factory.annotation.Value(
+            "${abada.agent.allowed-models:" + DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModelsCsv) {
         this(allowedAgentModelsCsv, true);
     }
 
@@ -140,9 +147,32 @@ public final class AplParser {
     }
 
     private static BpmnValidationException validation(String message) {
+        return validation(null, message);
+    }
+
+    /**
+     * @param field JSON Pointer of the offending value: absolute ({@code /flow/entry})
+     *        or relative to the current node ({@code temperature}); null for the node itself.
+     */
+    private static BpmnValidationException validation(String field, String message) {
         return BpmnValidationException.single(new BpmnValidationIssue(
                 APL_VALIDATION_CODE, ValidationSeverity.ERROR, message,
-                null, null, "abada.io/v1", null, null));
+                null, null, LANGUAGE_VERSION, null, null, field));
+    }
+
+    /** Attaches the node id and anchors relative paths under the node's pointer. */
+    private static List<BpmnValidationIssue> locate(BpmnValidationException exception, String nodeId,
+            String nodePointer) {
+        List<BpmnValidationIssue> located = new ArrayList<>();
+        for (BpmnValidationIssue issue : exception.getIssues()) {
+            String path = issue.path();
+            if (path == null) path = nodePointer;
+            else if (!path.startsWith("/")) path = nodePointer + "/" + path;
+            located.add(new BpmnValidationIssue(issue.code(), issue.severity(), issue.message(),
+                    issue.processDefinitionId(), issue.elementId() == null ? nodeId : issue.elementId(),
+                    issue.namespace(), issue.sourceLocation(), issue.suggestedResolution(), path));
+        }
+        return located;
     }
 
     /**
@@ -166,75 +196,98 @@ public final class AplParser {
     }
 
     public BpmnParseResult parseDetailed(byte[] source) {
+        List<BpmnValidationIssue> warnings = new ArrayList<>();
+        try {
+            return compile(source, warnings);
+        } catch (BpmnValidationException exception) {
+            // Errors first, then every warning gathered before the failure.
+            List<BpmnValidationIssue> issues = new ArrayList<>(exception.getIssues());
+            issues.addAll(warnings);
+            throw new BpmnValidationException(issues);
+        }
+    }
+
+    private BpmnParseResult compile(byte[] source, List<BpmnValidationIssue> warnings) {
         if (source == null || source.length == 0) {
-            throw validation("APL source is empty");
+            throw validation("/", "APL source is empty");
         }
         if (source.length > MAX_DEPLOYMENT_BYTES) {
-            throw validation("APL deployment exceeds the 10 MiB input limit");
+            throw validation("/", "APL deployment exceeds the 10 MiB input limit");
         }
         String rawSource = new String(source, StandardCharsets.UTF_8);
         JsonNode root;
         try {
             root = yamlMapper.readTree(rawSource);
         } catch (IOException exception) {
-            throw validation("APL source is not valid YAML: " + exception.getMessage());
+            throw validation("/", "APL source is not valid YAML: " + exception.getMessage());
+        }
+        if (root == null || !root.isObject()) {
+            throw validation("/", "APL source must be a YAML mapping");
         }
         if (!LANGUAGE_VERSION.equals(root.path("version").asText())) {
-            throw validation("Unsupported APL language version '" + root.path("version").asText()
+            throw validation("/version", "Unsupported APL language version '" + root.path("version").asText()
                     + "' — only '" + LANGUAGE_VERSION + "' is supported");
         }
+        warnings.addAll(AplSchema.instance().validate(root));
 
         String name = root.path("metadata").path("name").asText(null);
         if (name == null || name.isBlank()) {
-            throw validation("metadata.name is required");
+            throw validation("/metadata/name", "metadata.name is required");
         }
         String declaredKey = root.path("metadata").path("key").asText(null);
         String processId = declaredKey == null || declaredKey.isBlank()
                 ? name.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase(Locale.ROOT)
                 : declaredKey;
         if (processId.isBlank()) {
-            throw validation("metadata.name must contain at least one alphanumeric character");
+            throw validation("/metadata/name", "metadata.name must contain at least one alphanumeric character");
         }
         if (declaredKey != null && !declaredKey.isBlank()
                 && !processId.matches("[a-z][a-z0-9_-]{0,127}")) {
-            throw validation("metadata.key must match [a-z][a-z0-9_-]{0,127}");
+            throw validation("/metadata/key", "metadata.key must match [a-z][a-z0-9_-]{0,127}");
         }
 
         JsonNode flow = root.path("flow");
         if (!flow.isObject()) {
-            throw validation("flow (with entry and nodes) is required");
+            throw validation("/flow", "flow (with entry and nodes) is required");
         }
         String entry = flow.path("entry").asText(null);
         if (entry == null || entry.isBlank()) {
-            throw validation("flow.entry is required");
+            throw validation("/flow/entry", "flow.entry is required");
         }
         JsonNode rawNodes = flow.path("nodes");
         if (!rawNodes.isArray() || rawNodes.isEmpty()) {
-            throw validation("flow.nodes must declare at least one node");
+            throw validation("/flow/nodes", "flow.nodes must declare at least one node");
         }
 
+        List<BpmnValidationIssue> errors = new ArrayList<>();
+        errors.addAll(AplVariables.declarationErrors(root));
         Map<String, JsonNode> nodesById = new LinkedHashMap<>();
-        for (JsonNode node : rawNodes) {
+        Map<String, String> pointerById = new LinkedHashMap<>();
+        for (int index = 0; index < rawNodes.size(); index++) {
+            JsonNode node = rawNodes.get(index);
+            String pointer = "/flow/nodes/" + index;
             String nodeId = node.path("id").asText();
             if (nodeId == null || nodeId.isBlank()) {
-                throw validation("every flow node must declare a non-empty id");
-            }
-            if (nodesById.put(nodeId, node) != null) {
-                throw validation("duplicate node id '" + nodeId + "'");
-            }
-            if (nodeId.endsWith(OUTCOME_GATEWAY_SUFFIX)) {
-                throw validation("node id '" + nodeId + "' uses the reserved suffix '" + OUTCOME_GATEWAY_SUFFIX + "'");
+                errors.add(issueAt(pointer + "/id", null, "every flow node must declare a non-empty id"));
+            } else if (nodesById.containsKey(nodeId)) {
+                errors.add(issueAt(pointer + "/id", nodeId, "duplicate node id '" + nodeId + "'"));
+            } else if (nodeId.endsWith(OUTCOME_GATEWAY_SUFFIX)) {
+                errors.add(issueAt(pointer + "/id", nodeId,
+                        "node id '" + nodeId + "' uses the reserved suffix '" + OUTCOME_GATEWAY_SUFFIX + "'"));
+            } else {
+                nodesById.put(nodeId, node);
+                pointerById.put(nodeId, pointer);
             }
         }
         if (!nodesById.containsKey(entry)) {
-            throw validation("flow.entry '" + entry + "' does not match any node id");
-        }
-        if (!"webhook".equals(nodesById.get(entry).path("type").asText())) {
-            throw validation("flow.entry '" + entry + "' must reference a webhook node");
+            errors.add(issueAt("/flow/entry", null, "flow.entry '" + entry + "' does not match any node id"));
+        } else if (!"webhook".equals(nodesById.get(entry).path("type").asText())) {
+            errors.add(issueAt("/flow/entry", entry, "flow.entry '" + entry + "' must reference a webhook node"));
         }
         for (Map.Entry<String, JsonNode> candidate : nodesById.entrySet()) {
             if (!candidate.getKey().equals(entry) && "webhook".equals(candidate.getValue().path("type").asText())) {
-                throw validation("exactly one webhook node is allowed; '" + candidate.getKey() + "' is a second start");
+                errors.add(issueAt(pointerById.get(candidate.getKey()) + "/type", candidate.getKey(),
+                        "exactly one webhook node is allowed; '" + candidate.getKey() + "' is a second start"));
             }
         }
 
@@ -249,341 +302,353 @@ public final class AplParser {
         Map<String, GatewayMeta> gateways = new LinkedHashMap<>();
         Map<String, Object> endEvents = new LinkedHashMap<>();
 
-        for (JsonNode node : rawNodes) {
-            String nodeId = node.path("id").asText();
+        // Each node is compiled independently so one invalid node never hides another's errors.
+        for (Map.Entry<String, JsonNode> compiled : nodesById.entrySet()) {
+            String nodeId = compiled.getKey();
+            JsonNode node = compiled.getValue();
             String type = node.path("type").asText();
             String nodeName = node.hasNonNull("description") ? node.path("description").asText() : null;
-
-            switch (type) {
-                case "webhook" -> { /* start; routed via `next` */ }
-                case "end" -> {
-                    if (node.hasNonNull("next")) {
-                        throw validation("end node '" + nodeId + "' must not declare a 'next' node");
-                    }
-                    endEvents.put(nodeId, nodeId);
-                }
-                case "agent" -> serviceTasks.put(nodeId,
-                        new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
-                                parseAgentWork(node, nodeId)));
-                case "engine-task" -> {
-                    String topic = node.path("service").asText(null);
-                    if (topic == null || topic.isBlank()) {
-                        throw validation("engine-task node '" + nodeId + "' requires the 'service' topic");
-                    }
-                    serviceTasks.put(nodeId, new ServiceTaskMeta(nodeId, nodeName, null, topic));
-                }
-                case "decision-table" -> {
-                    String decisionKey = node.path("decisionKey").asText("DMN_" + nodeId.toUpperCase(Locale.ROOT));
-                    String hitPolicy = node.path("hitPolicy").asText("FIRST").toUpperCase(Locale.ROOT);
-                    if (!Set.of("FIRST", "UNIQUE", "COLLECT").contains(hitPolicy)) {
-                        throw validation("decision-table node '" + nodeId + "' declares unsupported hitPolicy '"
-                                + node.path("hitPolicy").asText() + "'; expected FIRST, UNIQUE or COLLECT");
-                    }
-                    decisionTables.put(nodeId, new DecisionTableMeta(nodeId, nodeName, decisionKey,
-                            hitPolicy, parseInputs(node, nodeId), parseRules(node, nodeId)));
-                }
-                case "script" -> {
-                    String script = node.path("script").asText(null);
-                    if (script == null || script.isBlank()) {
-                        throw validation("script node '" + nodeId + "' requires a non-empty 'script' body");
-                    }
-                    String format = node.path("format").asText("javascript");
-                    if (format.isBlank()) {
-                        throw validation("script node '" + nodeId + "' must not declare an empty 'format'");
-                    }
-                    scriptTasks.put(nodeId, new ScriptTaskMeta(nodeId, nodeName, format, script));
-                }
-                case "approval-gate" -> {
-                    JsonNode assignees = node.path("assignees");
-                    if (!assignees.isArray() || assignees.isEmpty()) {
-                        throw validation("approval-gate node '" + nodeId + "' requires a non-empty 'assignees' list");
-                    }
-                    List<String> groups = new ArrayList<>();
-                    for (JsonNode assignee : assignees) {
-                        String group = assignee.asText(null);
-                        if (group == null || group.isBlank()) {
-                            throw validation("approval-gate node '" + nodeId + "' has an empty assignee");
-                        }
-                        groups.add(group);
-                    }
-                    userTasks.put(nodeId,
-                            new TaskMeta(nodeId, nodeName, null, List.of(), groups, null, null, null, null, null));
-                }
-                case "condition" -> {
-                    if (node.hasNonNull("next")) {
-                        throw validation("condition node '" + nodeId + "' routes via 'rules', not 'next'");
-                    }
-                    JsonNode rules = node.path("rules");
-                    if (!rules.isArray() || rules.isEmpty()) {
-                        throw validation("condition node '" + nodeId + "' requires a non-empty rules list");
-                    }
-                    List<SequenceFlow> conditionFlows = new ArrayList<>();
-                    String defaultFlowId = null;
-                    for (JsonNode rule : rules) {
-                        boolean isElseRule = rule.path("else").asBoolean(false)
-                                || rule.path("else").isTextual();
-                        String target = rule.path("then").asText(rule.path("else").asText(null));
-                        if (target == null || target.isBlank() || "true".equals(target)) {
-                            throw validation("condition node '" + nodeId + "' rule must declare a 'then' target");
-                        }
-                        if (!nodesById.containsKey(target)) {
-                            throw validation("condition node '" + nodeId + "' routes to undeclared node '" + target + "'");
-                        }
-                        String condition = rule.path("if").asText(null);
-                        if (!isElseRule && (condition == null || condition.isBlank())) {
-                            throw validation("condition node '" + nodeId
-                                    + "' rule must declare an 'if' condition unless it is the else rule");
-                        }
-                        String flowId = flowIdFor(nodeId, target, flowIds);
-                        if (isElseRule) {
-                            if (defaultFlowId != null) {
-                                throw validation("condition node '" + nodeId
-                                        + "' declares more than one else/default rule");
-                            }
-                            defaultFlowId = flowId;
-                        }
-                        SequenceFlow conditionFlow = new SequenceFlow(flowId, nodeId, target, null, condition,
-                                isElseRule);
-                        conditionFlows.add(conditionFlow);
-                        flows.add(conditionFlow);
-                    }
-                    if (defaultFlowId == null && !conditionFlows.isEmpty()) {
-                        SequenceFlow lastFlow = conditionFlows.get(conditionFlows.size() - 1);
-                        defaultFlowId = lastFlow.getId();
-                        flows.remove(lastFlow);
-                        flows.add(new SequenceFlow(lastFlow.getId(), lastFlow.getSourceRef(),
-                                lastFlow.getTargetRef(), null, lastFlow.getConditionExpression(), true));
-                    }
-                    gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.EXCLUSIVE, defaultFlowId));
-                }
-                case "inclusive" -> {
-                    JsonNode rules = node.path("rules");
-                    if (!rules.isMissingNode()) {
+            try {
+                switch (type) {
+                    case "webhook" -> { /* start; routed via `next` */ }
+                    case "end" -> {
                         if (node.hasNonNull("next")) {
-                            throw validation("inclusive fork node '" + nodeId
-                                    + "' must not combine 'rules' and 'next'");
+                            throw validation("next", "end node '" + nodeId + "' must not declare a 'next' node");
                         }
+                        endEvents.put(nodeId, nodeId);
+                    }
+                    case "agent" -> serviceTasks.put(nodeId,
+                            new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
+                                    parseAgentWork(node, nodeId)));
+                    case "engine-task" -> {
+                        String topic = node.path("service").asText(null);
+                        if (topic == null || topic.isBlank()) {
+                            throw validation("service", "engine-task node '" + nodeId + "' requires the 'service' topic");
+                        }
+                        serviceTasks.put(nodeId, new ServiceTaskMeta(nodeId, nodeName, null, topic));
+                    }
+                    case "decision-table" -> {
+                        String decisionKey = node.path("decisionKey").asText("DMN_" + nodeId.toUpperCase(Locale.ROOT));
+                        String hitPolicy = node.path("hitPolicy").asText("FIRST").toUpperCase(Locale.ROOT);
+                        if (!Set.of("FIRST", "UNIQUE", "COLLECT").contains(hitPolicy)) {
+                            throw validation("hitPolicy", "decision-table node '" + nodeId + "' declares unsupported hitPolicy '"
+                                    + node.path("hitPolicy").asText() + "'; expected FIRST, UNIQUE or COLLECT");
+                        }
+                        decisionTables.put(nodeId, new DecisionTableMeta(nodeId, nodeName, decisionKey,
+                                hitPolicy, parseInputs(node, nodeId), parseRules(node, nodeId)));
+                    }
+                    case "script" -> {
+                        String script = node.path("script").asText(null);
+                        if (script == null || script.isBlank()) {
+                            throw validation("script", "script node '" + nodeId + "' requires a non-empty 'script' body");
+                        }
+                        String format = node.path("format").asText("javascript");
+                        if (format.isBlank()) {
+                            throw validation("format", "script node '" + nodeId + "' must not declare an empty 'format'");
+                        }
+                        scriptTasks.put(nodeId, new ScriptTaskMeta(nodeId, nodeName, format, script));
+                    }
+                    case "approval-gate" -> {
+                        JsonNode assignees = node.path("assignees");
+                        if (!assignees.isArray() || assignees.isEmpty()) {
+                            throw validation("assignees", "approval-gate node '" + nodeId + "' requires a non-empty 'assignees' list");
+                        }
+                        List<String> groups = new ArrayList<>();
+                        for (JsonNode assignee : assignees) {
+                            String group = assignee.asText(null);
+                            if (group == null || group.isBlank()) {
+                                throw validation("assignees", "approval-gate node '" + nodeId + "' has an empty assignee");
+                            }
+                            groups.add(group);
+                        }
+                        userTasks.put(nodeId,
+                                new TaskMeta(nodeId, nodeName, null, List.of(), groups, null, null, null, null, null));
+                    }
+                    case "condition" -> {
+                        if (node.hasNonNull("next")) {
+                            throw validation("next", "condition node '" + nodeId + "' routes via 'rules', not 'next'");
+                        }
+                        JsonNode rules = node.path("rules");
                         if (!rules.isArray() || rules.isEmpty()) {
-                            throw validation("inclusive fork node '" + nodeId
-                                    + "' requires a non-empty rules list");
+                            throw validation("rules", "condition node '" + nodeId + "' requires a non-empty rules list");
                         }
+                        List<SequenceFlow> conditionFlows = new ArrayList<>();
                         String defaultFlowId = null;
                         for (JsonNode rule : rules) {
                             boolean isElseRule = rule.path("else").asBoolean(false)
                                     || rule.path("else").isTextual();
                             String target = rule.path("then").asText(rule.path("else").asText(null));
                             if (target == null || target.isBlank() || "true".equals(target)) {
-                                throw validation("inclusive fork node '" + nodeId
-                                        + "' rule must declare a 'then' target");
+                                throw validation("rules", "condition node '" + nodeId + "' rule must declare a 'then' target");
                             }
                             if (!nodesById.containsKey(target)) {
-                                throw validation("inclusive fork node '" + nodeId
-                                        + "' routes to undeclared node '" + target + "'");
+                                throw validation("rules", "condition node '" + nodeId + "' routes to undeclared node '" + target + "'");
                             }
                             String condition = rule.path("if").asText(null);
                             if (!isElseRule && (condition == null || condition.isBlank())) {
-                                throw validation("inclusive fork node '" + nodeId
+                                throw validation("rules", "condition node '" + nodeId
                                         + "' rule must declare an 'if' condition unless it is the else rule");
                             }
                             String flowId = flowIdFor(nodeId, target, flowIds);
                             if (isElseRule) {
                                 if (defaultFlowId != null) {
-                                    throw validation("inclusive fork node '" + nodeId
+                                    throw validation("rules", "condition node '" + nodeId
                                             + "' declares more than one else/default rule");
                                 }
                                 defaultFlowId = flowId;
                             }
-                            flows.add(new SequenceFlow(flowId, nodeId, target, null, condition, isElseRule));
+                            SequenceFlow conditionFlow = new SequenceFlow(flowId, nodeId, target, null, condition,
+                                    isElseRule);
+                            conditionFlows.add(conditionFlow);
+                            flows.add(conditionFlow);
                         }
-                        gateways.put(nodeId,
-                                new GatewayMeta(nodeId, GatewayMeta.Type.INCLUSIVE, defaultFlowId));
-                    } else {
-                        if (!node.hasNonNull("next")) {
-                            throw validation("inclusive node '" + nodeId
-                                    + "' must declare either 'rules' (fork) or 'next' (join)");
+                        if (defaultFlowId == null && !conditionFlows.isEmpty()) {
+                            SequenceFlow lastFlow = conditionFlows.get(conditionFlows.size() - 1);
+                            defaultFlowId = lastFlow.getId();
+                            flows.remove(lastFlow);
+                            flows.add(new SequenceFlow(lastFlow.getId(), lastFlow.getSourceRef(),
+                                    lastFlow.getTargetRef(), null, lastFlow.getConditionExpression(), true));
                         }
-                        gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.INCLUSIVE, null));
+                        gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.EXCLUSIVE, defaultFlowId));
                     }
-                }
-                case "parallel" -> {
-                    JsonNode branches = node.path("branches");
-                    if (!branches.isMissingNode() && !branches.isNull()) {
+                    case "inclusive" -> {
+                        JsonNode rules = node.path("rules");
+                        if (!rules.isMissingNode()) {
+                            if (node.hasNonNull("next")) {
+                                throw validation("next", "inclusive fork node '" + nodeId
+                                        + "' must not combine 'rules' and 'next'");
+                            }
+                            if (!rules.isArray() || rules.isEmpty()) {
+                                throw validation("rules", "inclusive fork node '" + nodeId
+                                        + "' requires a non-empty rules list");
+                            }
+                            String defaultFlowId = null;
+                            for (JsonNode rule : rules) {
+                                boolean isElseRule = rule.path("else").asBoolean(false)
+                                        || rule.path("else").isTextual();
+                                String target = rule.path("then").asText(rule.path("else").asText(null));
+                                if (target == null || target.isBlank() || "true".equals(target)) {
+                                    throw validation("rules", "inclusive fork node '" + nodeId
+                                            + "' rule must declare a 'then' target");
+                                }
+                                if (!nodesById.containsKey(target)) {
+                                    throw validation("rules", "inclusive fork node '" + nodeId
+                                            + "' routes to undeclared node '" + target + "'");
+                                }
+                                String condition = rule.path("if").asText(null);
+                                if (!isElseRule && (condition == null || condition.isBlank())) {
+                                    throw validation("rules", "inclusive fork node '" + nodeId
+                                            + "' rule must declare an 'if' condition unless it is the else rule");
+                                }
+                                String flowId = flowIdFor(nodeId, target, flowIds);
+                                if (isElseRule) {
+                                    if (defaultFlowId != null) {
+                                        throw validation("rules", "inclusive fork node '" + nodeId
+                                                + "' declares more than one else/default rule");
+                                    }
+                                    defaultFlowId = flowId;
+                                }
+                                flows.add(new SequenceFlow(flowId, nodeId, target, null, condition, isElseRule));
+                            }
+                            gateways.put(nodeId,
+                                    new GatewayMeta(nodeId, GatewayMeta.Type.INCLUSIVE, defaultFlowId));
+                        } else {
+                            if (!node.hasNonNull("next")) {
+                                throw validation("next", "inclusive node '" + nodeId
+                                        + "' must declare either 'rules' (fork) or 'next' (join)");
+                            }
+                            gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.INCLUSIVE, null));
+                        }
+                    }
+                    case "parallel" -> {
+                        JsonNode branches = node.path("branches");
+                        if (!branches.isMissingNode() && !branches.isNull()) {
+                            if (node.hasNonNull("next")) {
+                                throw validation("next", "parallel node '" + nodeId
+                                        + "' must not combine 'branches' and 'next'");
+                            }
+                            if (!branches.isArray() || branches.size() < 2) {
+                                throw validation("branches", "parallel node '" + nodeId
+                                        + "' 'branches' must declare at least two distinct target nodes");
+                            }
+                            Set<String> branchTargets = new HashSet<>();
+                            for (JsonNode branch : branches) {
+                                String target = branch.asText(null);
+                                if (target == null || target.isBlank()) {
+                                    throw validation("branches", "parallel node '" + nodeId + "' has an empty branch target");
+                                }
+                                if (!nodesById.containsKey(target)) {
+                                    throw validation("branches", "parallel node '" + nodeId
+                                            + "' 'branches' target '" + target + "' is not a declared node");
+                                }
+                                if (!branchTargets.add(target)) {
+                                    throw validation("branches", "parallel node '" + nodeId
+                                            + "' lists duplicate branch target '" + target + "'");
+                                }
+                                flows.add(new SequenceFlow(flowIdFor(nodeId, target, flowIds),
+                                        nodeId, target, null, null, false));
+                            }
+                        }
+                        gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.PARALLEL, null));
+                    }
+                    case "event-gateway" -> {
                         if (node.hasNonNull("next")) {
-                            throw validation("parallel node '" + nodeId
-                                    + "' must not combine 'branches' and 'next'");
+                            throw validation("events", "event-gateway node '" + nodeId
+                                    + "' routes via its 'events', not 'next'");
                         }
-                        if (!branches.isArray() || branches.size() < 2) {
-                            throw validation("parallel node '" + nodeId
-                                    + "' 'branches' must declare at least two distinct target nodes");
+                        JsonNode eventNodes = node.path("events");
+                        if (!eventNodes.isArray() || eventNodes.size() < 2) {
+                            throw validation("events", "event-gateway node '" + nodeId
+                                    + "' requires at least two 'events' catch children");
                         }
-                        Set<String> branchTargets = new HashSet<>();
-                        for (JsonNode branch : branches) {
-                            String target = branch.asText(null);
-                            if (target == null || target.isBlank()) {
-                                throw validation("parallel node '" + nodeId + "' has an empty branch target");
+                        Set<String> competingNames = new HashSet<>();
+                        for (int index = 0; index < eventNodes.size(); index++) {
+                            JsonNode child = eventNodes.get(index);
+                            String childType = child.path("type").asText(null);
+                            String childId = nodeId + "_e" + index;
+                            String childNext = child.path("next").asText(null);
+                            if (childNext == null || childNext.isBlank()) {
+                                throw validation("events", "event '" + (childType == null ? "?" : childType)
+                                        + "' in event-gateway '" + nodeId + "' requires a 'next' target");
                             }
-                            if (!nodesById.containsKey(target)) {
-                                throw validation("parallel node '" + nodeId
-                                        + "' 'branches' target '" + target + "' is not a declared node");
+                            if (!nodesById.containsKey(childNext)) {
+                                throw validation("events", "event in event-gateway '" + nodeId
+                                        + "' routes to undeclared node '" + childNext + "'");
                             }
-                            if (!branchTargets.add(target)) {
-                                throw validation("parallel node '" + nodeId
-                                        + "' lists duplicate branch target '" + target + "'");
-                            }
-                            flows.add(new SequenceFlow(flowIdFor(nodeId, target, flowIds),
-                                    nodeId, target, null, null, false));
+                            EventMeta childEvent = switch (childType) {
+                                case "message-catch" -> {
+                                    String message = child.path("message").asText(null);
+                                    if (message == null || message.isBlank()) {
+                                        throw validation("events", "event-gateway '" + nodeId
+                                                + "' message-catch event requires a non-empty 'message' name");
+                                    }
+                                    if (!competingNames.add("MESSAGE:" + message)) {
+                                        throw validation("events", "event-gateway '" + nodeId
+                                                + "' declares duplicate competing message '" + message + "'");
+                                    }
+                                    yield new EventMeta(childId, child.path("description").asText(null),
+                                            EventMeta.EventType.MESSAGE, message);
+                                }
+                                case "timer" -> {
+                                    String duration = child.path("duration").asText(null);
+                                    if (duration == null || duration.isBlank()) {
+                                        throw validation("events", "event-gateway '" + nodeId
+                                                + "' timer event requires a non-empty 'duration'");
+                                    }
+                                    try {
+                                        Duration.parse(duration);
+                                    } catch (Exception exception) {
+                                        throw validation("events", "event-gateway '" + nodeId
+                                                + "' timer event declares invalid ISO-8601 duration '" + duration + "'");
+                                    }
+                                    yield new EventMeta(childId, child.path("description").asText(null),
+                                            EventMeta.EventType.TIMER, duration);
+                                }
+                                case "signal" -> {
+                                    String signal = child.path("signal").asText(null);
+                                    if (signal == null || signal.isBlank()) {
+                                        throw validation("events", "event-gateway '" + nodeId
+                                                + "' signal event requires a non-empty 'signal' name");
+                                    }
+                                    if (!competingNames.add("SIGNAL:" + signal)) {
+                                        throw validation("events", "event-gateway '" + nodeId
+                                                + "' declares duplicate competing signal '" + signal + "'");
+                                    }
+                                    yield new EventMeta(childId, child.path("description").asText(null),
+                                            EventMeta.EventType.SIGNAL, signal);
+                                }
+                                default -> throw validation("events", "event-gateway '" + nodeId
+                                        + "' declares unsupported event type '" + childType
+                                        + "'; expected message-catch, timer or signal");
+                            };
+                            events.put(childId, childEvent);
+                            flows.add(new SequenceFlow(flowIdFor(nodeId, childId, flowIds),
+                                    nodeId, childId, null, null, false));
+                            flows.add(new SequenceFlow(flowIdFor(childId, childNext, flowIds),
+                                    childId, childNext, null, null, false));
                         }
+                        gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.EVENT, null));
                     }
-                    gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.PARALLEL, null));
-                }
-                case "event-gateway" -> {
-                    if (node.hasNonNull("next")) {
-                        throw validation("event-gateway node '" + nodeId
-                                + "' routes via its 'events', not 'next'");
-                    }
-                    JsonNode eventNodes = node.path("events");
-                    if (!eventNodes.isArray() || eventNodes.size() < 2) {
-                        throw validation("event-gateway node '" + nodeId
-                                + "' requires at least two 'events' catch children");
-                    }
-                    Set<String> competingNames = new HashSet<>();
-                    for (int index = 0; index < eventNodes.size(); index++) {
-                        JsonNode child = eventNodes.get(index);
-                        String childType = child.path("type").asText(null);
-                        String childId = nodeId + "_e" + index;
-                        String childNext = child.path("next").asText(null);
-                        if (childNext == null || childNext.isBlank()) {
-                            throw validation("event '" + (childType == null ? "?" : childType)
-                                    + "' in event-gateway '" + nodeId + "' requires a 'next' target");
+                    case "message-catch" -> {
+                        String message = node.path("message").asText(null);
+                        if (message == null || message.isBlank()) {
+                            throw validation("message", "message-catch node '" + nodeId + "' requires a non-empty 'message' name");
                         }
-                        if (!nodesById.containsKey(childNext)) {
-                            throw validation("event in event-gateway '" + nodeId
-                                    + "' routes to undeclared node '" + childNext + "'");
+                        events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.MESSAGE, message));
+                    }
+                    case "timer" -> {
+                        String duration = node.path("duration").asText(null);
+                        if (duration == null || duration.isBlank()) {
+                            throw validation("duration", "timer node '" + nodeId + "' requires a non-empty 'duration'");
                         }
-                        EventMeta childEvent = switch (childType) {
-                            case "message-catch" -> {
-                                String message = child.path("message").asText(null);
-                                if (message == null || message.isBlank()) {
-                                    throw validation("event-gateway '" + nodeId
-                                            + "' message-catch event requires a non-empty 'message' name");
-                                }
-                                if (!competingNames.add("MESSAGE:" + message)) {
-                                    throw validation("event-gateway '" + nodeId
-                                            + "' declares duplicate competing message '" + message + "'");
-                                }
-                                yield new EventMeta(childId, child.path("description").asText(null),
-                                        EventMeta.EventType.MESSAGE, message);
-                            }
-                            case "timer" -> {
-                                String duration = child.path("duration").asText(null);
-                                if (duration == null || duration.isBlank()) {
-                                    throw validation("event-gateway '" + nodeId
-                                            + "' timer event requires a non-empty 'duration'");
-                                }
-                                try {
-                                    Duration.parse(duration);
-                                } catch (Exception exception) {
-                                    throw validation("event-gateway '" + nodeId
-                                            + "' timer event declares invalid ISO-8601 duration '" + duration + "'");
-                                }
-                                yield new EventMeta(childId, child.path("description").asText(null),
-                                        EventMeta.EventType.TIMER, duration);
-                            }
-                            case "signal" -> {
-                                String signal = child.path("signal").asText(null);
-                                if (signal == null || signal.isBlank()) {
-                                    throw validation("event-gateway '" + nodeId
-                                            + "' signal event requires a non-empty 'signal' name");
-                                }
-                                if (!competingNames.add("SIGNAL:" + signal)) {
-                                    throw validation("event-gateway '" + nodeId
-                                            + "' declares duplicate competing signal '" + signal + "'");
-                                }
-                                yield new EventMeta(childId, child.path("description").asText(null),
-                                        EventMeta.EventType.SIGNAL, signal);
-                            }
-                            default -> throw validation("event-gateway '" + nodeId
-                                    + "' declares unsupported event type '" + childType
-                                    + "'; expected message-catch, timer or signal");
-                        };
-                        events.put(childId, childEvent);
-                        flows.add(new SequenceFlow(flowIdFor(nodeId, childId, flowIds),
-                                nodeId, childId, null, null, false));
-                        flows.add(new SequenceFlow(flowIdFor(childId, childNext, flowIds),
-                                childId, childNext, null, null, false));
-                    }
-                    gateways.put(nodeId, new GatewayMeta(nodeId, GatewayMeta.Type.EVENT, null));
-                }
-                case "message-catch" -> {
-                    String message = node.path("message").asText(null);
-                    if (message == null || message.isBlank()) {
-                        throw validation("message-catch node '" + nodeId + "' requires a non-empty 'message' name");
-                    }
-                    events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.MESSAGE, message));
-                }
-                case "timer" -> {
-                    String duration = node.path("duration").asText(null);
-                    if (duration == null || duration.isBlank()) {
-                        throw validation("timer node '" + nodeId + "' requires a non-empty 'duration'");
-                    }
-                    try {
-                        Duration.parse(duration);
-                    } catch (Exception exception) {
-                        throw validation("timer node '" + nodeId
-                                + "' declares invalid ISO-8601 duration '" + duration + "'");
-                    }
-                    events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.TIMER, duration));
-                }
-                case "signal" -> {
-                    String signal = node.path("signal").asText(null);
-                    if (signal == null || signal.isBlank()) {
-                        throw validation("signal node '" + nodeId + "' requires a non-empty 'signal' name");
-                    }
-                    events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.SIGNAL, signal));
-                }
-                case "human-input" -> {
-                    // Canonical APL field is `formKey`; `formId` remains a
-                    // deprecated alias so existing documents keep deploying.
-                    String formKey = textField(node, "formKey", "formId");
-                    JsonNode assignees = node.path("assignees");
-                    if (!assignees.isArray() || assignees.isEmpty()) {
-                        throw validation("human-input node '" + nodeId + "' requires a non-empty 'assignees' list");
-                    }
-                    List<String> groups = new ArrayList<>();
-                    for (JsonNode assignee : assignees) {
-                        String group = assignee.asText(null);
-                        if (group == null || group.isBlank()) {
-                            throw validation("human-input node '" + nodeId + "' has an empty assignee");
+                        try {
+                            Duration.parse(duration);
+                        } catch (Exception exception) {
+                            throw validation("duration", "timer node '" + nodeId
+                                    + "' declares invalid ISO-8601 duration '" + duration + "'");
                         }
-                        groups.add(group);
+                        events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.TIMER, duration));
                     }
-                    // Parse optional fields
-                    JsonNode slaHoursNode = node.path("slaHours");
-                    Long slaHours = slaHoursNode.isNumber() ? slaHoursNode.asLong() : null;
-                    JsonNode requireDoubleSignOffNode = node.path("requireDoubleSignOff");
-                    Boolean requireDoubleSignOff = requireDoubleSignOffNode.isBoolean() ? requireDoubleSignOffNode.asBoolean() : null;
-                    userTasks.put(nodeId,
-                            new TaskMeta(nodeId, nodeName, null, List.of(), groups, formKey, null, null, null, null));
+                    case "signal" -> {
+                        String signal = node.path("signal").asText(null);
+                        if (signal == null || signal.isBlank()) {
+                            throw validation("signal", "signal node '" + nodeId + "' requires a non-empty 'signal' name");
+                        }
+                        events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.SIGNAL, signal));
+                    }
+                    case "human-input" -> {
+                        // Canonical APL field is `formKey`; `formId` remains a
+                        // deprecated alias so existing documents keep deploying.
+                        String formKey = textField(node, "formKey", "formId");
+                        JsonNode assignees = node.path("assignees");
+                        if (!assignees.isArray() || assignees.isEmpty()) {
+                            throw validation("assignees", "human-input node '" + nodeId + "' requires a non-empty 'assignees' list");
+                        }
+                        List<String> groups = new ArrayList<>();
+                        for (JsonNode assignee : assignees) {
+                            String group = assignee.asText(null);
+                            if (group == null || group.isBlank()) {
+                                throw validation("assignees", "human-input node '" + nodeId + "' has an empty assignee");
+                            }
+                            groups.add(group);
+                        }
+                        // Parse optional fields
+                        JsonNode slaHoursNode = node.path("slaHours");
+                        Long slaHours = slaHoursNode.isNumber() ? slaHoursNode.asLong() : null;
+                        JsonNode requireDoubleSignOffNode = node.path("requireDoubleSignOff");
+                        Boolean requireDoubleSignOff = requireDoubleSignOffNode.isBoolean() ? requireDoubleSignOffNode.asBoolean() : null;
+                        userTasks.put(nodeId,
+                                new TaskMeta(nodeId, nodeName, null, List.of(), groups, formKey, null, null, null, null));
+                    }
+                    default -> throw validation("type", "unsupported node type '" + type + "' for node '" + nodeId
+                            + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
                 }
-                default -> throw validation("unsupported node type '" + type + "' for node '" + nodeId
-                        + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
-            }
 
-            if (node.hasNonNull("next")) {
-                String next = node.path("next").asText();
-                if (next == null || next.isBlank()) {
-                    throw validation("node '" + nodeId + "' declares an empty 'next' target");
+                if (node.hasNonNull("next")) {
+                    String next = node.path("next").asText();
+                    if (next == null || next.isBlank()) {
+                        throw validation("next", "node '" + nodeId + "' declares an empty 'next' target");
+                    }
+                    if (!nodesById.containsKey(next)) {
+                        throw validation("next", "flow target '" + next + "' of node '" + nodeId + "' is not a declared node");
+                    }
+                    nextByNode.put(nodeId, next);
+                    flows.add(new SequenceFlow(flowIdFor(nodeId, next, flowIds), nodeId, next, null, null, false));
                 }
-                if (!nodesById.containsKey(next)) {
-                    throw validation("flow target '" + next + "' of node '" + nodeId + "' is not a declared node");
-                }
-                nextByNode.put(nodeId, next);
-                flows.add(new SequenceFlow(flowIdFor(nodeId, next, flowIds), nodeId, next, null, null, false));
+            } catch (BpmnValidationException exception) {
+                errors.addAll(locate(exception, nodeId, pointerById.get(nodeId)));
             }
         }
 
-        addOutcomeRoutes(nodesById, flows, flowIds, gateways);
-        rejectCycles(entry, flows);
+        if (errors.isEmpty()) {
+            addOutcomeRoutes(nodesById, pointerById, flows, flowIds, gateways, errors);
+        }
+        if (!errors.isEmpty()) throw new BpmnValidationException(errors);
+        try {
+            rejectCycles(entry, flows);
+        } catch (BpmnValidationException exception) {
+            throw new BpmnValidationException(relocate(exception.getIssues(), pointerById));
+        }
 
         String definitionId = processId;
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
@@ -591,9 +656,14 @@ public final class AplParser {
                 flows, gateways, events, endEvents,
                 rawSource, null, null);
         if (enforceDeploymentPolicy) {
-            com.abada.engine.expression.DefinitionPolicyValidator.validate(definition, APL_VALIDATION_CODE,
-                    "abada.io/v1");
+            try {
+                com.abada.engine.expression.DefinitionPolicyValidator.validate(definition, APL_VALIDATION_CODE,
+                        LANGUAGE_VERSION);
+            } catch (BpmnValidationException exception) {
+                throw new BpmnValidationException(relocate(exception.getIssues(), pointerById));
+            }
         }
+        warnings.addAll(AplVariables.analyze(root, definition, pointerById));
         return new BpmnParseResult(
                 definition,
                 new CompatibilityReport(Set.of(CompatibilityProfiles.ABADA_NATIVE),
@@ -601,23 +671,44 @@ public final class AplParser {
                                 "Abada canonical process model", definitionId,
                                 "Native APL definitions compile directly into the executable graph "
                                         + "without an XML round-trip.")),
-                        List.of()),
+                        List.copyOf(warnings)),
                 List.of(CompatibilityProfiles.ABADA_NATIVE),
-                Set.of("abada.io/v1"));
+                Set.of(LANGUAGE_VERSION));
+    }
+
+    private static BpmnValidationIssue issueAt(String path, String elementId, String message) {
+        return new BpmnValidationIssue(APL_VALIDATION_CODE, ValidationSeverity.ERROR, message,
+                null, elementId, LANGUAGE_VERSION, null, null, path);
+    }
+
+    /** Anchors issues raised against the compiled graph (by element id) to their APL node. */
+    private static List<BpmnValidationIssue> relocate(List<BpmnValidationIssue> issues,
+            Map<String, String> pointerById) {
+        List<BpmnValidationIssue> located = new ArrayList<>();
+        for (BpmnValidationIssue issue : issues) {
+            String elementId = issue.elementId();
+            String owner = elementId == null ? null : elementId.endsWith(OUTCOME_GATEWAY_SUFFIX)
+                    ? elementId.substring(0, elementId.length() - OUTCOME_GATEWAY_SUFFIX.length())
+                    : elementId.replaceAll("_e\\d+$", "");
+            String pointer = pointerById.containsKey(elementId) ? pointerById.get(elementId)
+                    : owner == null ? null : pointerById.get(owner);
+            located.add(issue.path() != null || pointer == null ? issue : issue.withLocation(elementId, pointer));
+        }
+        return located;
     }
 
     private AgentWorkDescriptor parseAgentWork(JsonNode node, String nodeId) {
         String profile = node.path("profile").asText("abada.agent/v1");
         if (!"abada.agent/v1".equals(profile)) {
-            throw validation("agent node '" + nodeId + "' declares unsupported profile '" + profile + "'");
+            throw validation("profile", "agent node '" + nodeId + "' declares unsupported profile '" + profile + "'");
         }
         double confidence = node.path("confidence_threshold").asDouble(0.0);
         if (confidence < 0 || confidence > 100) {
-            throw validation("agent node '" + nodeId + "' confidence_threshold must be between 0 and 100");
+            throw validation("confidence_threshold", "agent node '" + nodeId + "' confidence_threshold must be between 0 and 100");
         }
         double temperature = node.path("temperature").asDouble(0.2);
         if (temperature < 0 || temperature > 2) {
-            throw validation("agent node '" + nodeId + "' temperature must be between 0 and 2");
+            throw validation("temperature", "agent node '" + nodeId + "' temperature must be between 0 and 2");
         }
         int maxTokens = node.path("max_tokens").asInt(2048);
         long timeoutMs = node.path("timeout_ms").asLong(60_000L);
@@ -632,7 +723,7 @@ public final class AplParser {
         if (rawInputs.isObject()) {
             rawInputs.fields().forEachRemaining(entry -> inputs.put(entry.getKey(), entry.getValue().asText()));
         } else if (!rawInputs.isMissingNode() && !rawInputs.isNull()) {
-            throw validation("agent node '" + nodeId + "' inputs must be a mapping");
+            throw validation("inputs", "agent node '" + nodeId + "' inputs must be a mapping");
         }
         String prompt = node.path("prompt").asText("");
         Set<String> references = promptReferences(prompt, nodeId);
@@ -644,7 +735,7 @@ public final class AplParser {
                 boolean covered = inputs.keySet().stream()
                         .anyMatch(name -> path.equals(name) || path.startsWith(name + "."));
                 if (!covered) {
-                    throw validation("agent node '" + nodeId + "' prompt references '${" + path
+                    throw validation("prompt", "agent node '" + nodeId + "' prompt references '${" + path
                             + "}' which is not a declared input; add it to 'inputs' or remove 'inputs' to derive them");
                 }
             }
@@ -656,19 +747,19 @@ public final class AplParser {
         if (!outputSchema.isEmpty()) {
             String problem = com.abada.engine.core.agent.AgentOutputValidator.schemaProblem(outputSchema);
             if (problem != null) {
-                throw validation("agent node '" + nodeId + "' output_schema is not a valid JSON Schema: " + problem);
+                throw validation("output_schema", "agent node '" + nodeId + "' output_schema is not a valid JSON Schema: " + problem);
             }
         }
         List<String> tools = new ArrayList<>();
         JsonNode rawTools = node.path("tools");
         if (rawTools.isArray()) rawTools.forEach(tool -> tools.add(tool.asText()));
         else if (!rawTools.isMissingNode() && !rawTools.isNull()) {
-            throw validation("agent node '" + nodeId + "' tools must be a list");
+            throw validation("tools", "agent node '" + nodeId + "' tools must be a list");
         }
         String model = node.path("model").asText(null);
         if (model != null && !model.isBlank() && !allowedAgentModels.isEmpty()
                 && !allowedAgentModels.contains(model.strip())) {
-            throw validation("agent node '" + nodeId + "' declares model '" + model.strip()
+            throw validation("model", "agent node '" + nodeId + "' declares model '" + model.strip()
                     + "' which is not on the allowed model list ("
                     + String.join(", ", allowedAgentModels) + ")");
         }
@@ -686,7 +777,7 @@ public final class AplParser {
             for (JsonNode input : inputs) {
                 String name = input.path("name").asText(null);
                 if (name == null || name.isBlank() || !names.add(name)) {
-                    throw validation("decision-table node '" + nodeId
+                    throw validation("inputs", "decision-table node '" + nodeId
                             + "' has a missing or duplicate input name");
                 }
                 String expr = input.path("expr").asText(null);
@@ -697,7 +788,7 @@ public final class AplParser {
             inputs.fields().forEachRemaining(entry ->
                     result.add(new DecisionTableMeta.DecisionTableInput(entry.getKey(), entry.getValue().asText())));
         } else if (!inputs.isMissingNode() && !inputs.isNull()) {
-            throw validation("decision-table node '" + nodeId + "' declares invalid inputs");
+            throw validation("inputs", "decision-table node '" + nodeId + "' declares invalid inputs");
         }
         return result;
     }
@@ -723,7 +814,7 @@ public final class AplParser {
             }
             String when = rule.path("when").asText(null);
             if (when == null && !otherwise) {
-                throw validation("decision-table node '" + nodeId
+                throw validation("rules", "decision-table node '" + nodeId
                         + "' rule must declare 'when' or 'otherwise: true'");
             }
             result.add(new DecisionTableMeta.DecisionTableRule(
@@ -735,7 +826,7 @@ public final class AplParser {
     private static Map<String, Object> readOutputs(JsonNode outputsNode, String nodeId) {
         Map<String, Object> outputs = new LinkedHashMap<>();
         if (!outputsNode.isObject()) {
-            throw validation("decision-table node '" + nodeId + "' rule 'then' must be an output map");
+            throw validation("rules", "decision-table node '" + nodeId + "' rule 'then' must be an output map");
         }
         outputsNode.fields().forEachRemaining(entry -> outputs.put(entry.getKey(), scalar(entry.getValue())));
         return outputs;
@@ -786,7 +877,8 @@ public final class AplParser {
                 nextChild.push(childIndex + 1);
                 String child = children.get(childIndex);
                 if (onPath.contains(child)) {
-                    throw validation("cyclic flow detected at node '" + child + "'");
+                    throw BpmnValidationException.single(issueAt(null, child,
+                            "cyclic flow detected at node '" + child + "'"));
                 }
                 if (!finished.contains(child)) {
                     nodes.push(child);
@@ -839,7 +931,7 @@ public final class AplParser {
         while (matcher.find()) {
             String path = matcher.group(1).strip();
             if (!VARIABLE_PATH.matcher(path).matches()) {
-                throw validation("agent node '" + nodeId + "' prompt placeholder '${" + matcher.group(1)
+                throw validation("prompt", "agent node '" + nodeId + "' prompt placeholder '${" + matcher.group(1)
                         + "}' must be a variable path such as ${lead.companySize}");
             }
             references.add(path);
@@ -853,11 +945,21 @@ public final class AplParser {
      * after the node. Its conditional flows test the engine-written outcome
      * variables; its default flow is the node's {@code next}.
      */
-    private static void addOutcomeRoutes(Map<String, JsonNode> nodesById, List<SequenceFlow> flows,
-            Set<String> flowIds, Map<String, GatewayMeta> gateways) {
+    private static void addOutcomeRoutes(Map<String, JsonNode> nodesById, Map<String, String> pointerById,
+            List<SequenceFlow> flows, Set<String> flowIds, Map<String, GatewayMeta> gateways,
+            List<BpmnValidationIssue> errors) {
         for (Map.Entry<String, JsonNode> entry : nodesById.entrySet()) {
-            String nodeId = entry.getKey();
-            JsonNode node = entry.getValue();
+            try {
+                addOutcomeRoute(entry.getKey(), entry.getValue(), nodesById, flows, flowIds, gateways);
+            } catch (BpmnValidationException exception) {
+                errors.addAll(locate(exception, entry.getKey(), pointerById.get(entry.getKey())));
+            }
+        }
+    }
+
+    private static void addOutcomeRoute(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
+            List<SequenceFlow> flows, Set<String> flowIds, Map<String, GatewayMeta> gateways) {
+        {
             String type = node.path("type").asText();
             boolean agent = "agent".equals(type);
             boolean routable = agent || "engine-task".equals(type);
@@ -871,14 +973,14 @@ public final class AplParser {
             } else {
                 for (String field : List.of("on_invalid_output", "on_low_confidence")) {
                     if (node.has(field)) {
-                        throw validation("node '" + nodeId + "' declares '" + field + "', which only agent nodes support");
+                        throw validation(field, "node '" + nodeId + "' declares '" + field + "', which only agent nodes support");
                     }
                 }
             }
             JsonNode onError = node.path("on_error");
             if (!onError.isMissingNode() && !onError.isNull()) {
                 if (!routable) {
-                    throw validation("node '" + nodeId + "' declares 'on_error', which only agent and engine-task nodes support");
+                    throw validation("on_error", "node '" + nodeId + "' declares 'on_error', which only agent and engine-task nodes support");
                 }
                 String errorCode = errorCodeVariable(nodeId);
                 if (onError.isTextual()) {
@@ -888,7 +990,7 @@ public final class AplParser {
                     for (JsonNode rule : onError) {
                         String code = rule.path("code").asText(null);
                         if (code != null && !code.matches("[A-Za-z0-9_.:-]{1,128}")) {
-                            throw validation("node '" + nodeId + "' on_error code '" + code + "' is not a valid error code");
+                            throw validation("on_error", "node '" + nodeId + "' on_error code '" + code + "' is not a valid error code");
                         }
                         String condition = code == null
                                 ? "${" + outcome + " == '" + OUTCOME_ERROR + "'}"
@@ -897,14 +999,14 @@ public final class AplParser {
                                 condition);
                     }
                     if (catchAll.size() > 1) {
-                        throw validation("node '" + nodeId + "' declares more than one on_error rule without a code");
+                        throw validation("on_error", "node '" + nodeId + "' declares more than one on_error rule without a code");
                     }
                     routes.addAll(catchAll);
                 } else {
-                    throw validation("node '" + nodeId + "' on_error must be a node id or a list of {code, then}");
+                    throw validation("on_error", "node '" + nodeId + "' on_error must be a node id or a list of {code, then}");
                 }
             }
-            if (routes.isEmpty()) continue;
+            if (routes.isEmpty()) return;
 
             SequenceFlow normal = flows.stream().filter(flow -> flow.getSourceRef().equals(nodeId)).findFirst()
                     .orElseThrow(() -> validation("node '" + nodeId + "' declares outcome routes but no 'next'"));
@@ -926,10 +1028,11 @@ public final class AplParser {
         if (target == null || target.isMissingNode() || target.isNull()) return;
         String targetId = target.asText(null);
         if (targetId == null || targetId.isBlank()) {
-            throw validation("node '" + nodeId + "' declares an empty '" + field + "' target");
+            throw validation(field.split("\\.")[0], "node '" + nodeId + "' declares an empty '" + field + "' target");
         }
         if (!nodesById.containsKey(targetId)) {
-            throw validation("node '" + nodeId + "' " + field + " target '" + targetId + "' is not a declared node");
+            throw validation(field.split("\\.")[0], "node '" + nodeId + "' " + field + " target '" + targetId
+                    + "' is not a declared node");
         }
         routes.add(new String[]{targetId, condition});
     }
