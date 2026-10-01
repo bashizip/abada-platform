@@ -284,3 +284,76 @@ describe('APL → workflow: condition else shorthand', () => {
     expect(workflow.edges.some((edge) => edge.target === undefined || edge.id.endsWith('_undefined'))).toBe(false);
   });
 });
+
+describe('APL round trip: loops and keys Studio does not edit', () => {
+  const rework: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: {
+      key: 'rework',
+      name: 'Rework',
+      description: 'Draft, review, redo',
+      variables: [{ name: 'brief', type: 'object', required: true }],
+    },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'draft' },
+        {
+          id: 'draft',
+          type: 'engine-task',
+          service: 'draft',
+          loop: { max_iterations: 3, on_exhausted: 'escalate' },
+          next: 'decide',
+        },
+        { id: 'decide', type: 'condition', rules: [{ if: '${approved == true}', then: 'done' }, { else: 'draft' }] },
+        { id: 'escalate', type: 'end' },
+        { id: 'done', type: 'end' },
+      ],
+    },
+  };
+
+  it('keeps a loop bound and draws on_exhausted as a route edge', () => {
+    const workflow = aplToWorkflow(rework);
+
+    expect(workflow.nodes.find((node) => node.id === 'draft')?.loop)
+      .toEqual({ maxIterations: 3, onExhausted: 'escalate' });
+    expect(workflow.edges.filter((edge) => edge.source === 'draft').map((edge) => [edge.target, edge.label]))
+      .toEqual([['decide', undefined], ['escalate', 'on_exhausted']]);
+
+    const draft = workflowToAPL(workflow).flow.nodes.find((node) => node.id === 'draft');
+    expect(draft).toMatchObject({ next: 'decide', loop: { max_iterations: 3, on_exhausted: 'escalate' } });
+  });
+
+  it('keeps metadata variables and description through a save', () => {
+    expect(workflowToAPL(aplToWorkflow(rework)).metadata).toMatchObject({
+      key: 'rework',
+      description: 'Draft, review, redo',
+      variables: [{ name: 'brief', type: 'object', required: true }],
+    });
+  });
+
+  it('keeps node keys Studio does not edit instead of dropping them', () => {
+    const withUnknown = structuredClone(rework);
+    (withUnknown.flow.nodes[1] as unknown as Record<string, unknown>).future_field = { keep: true };
+
+    const draft = workflowToAPL(aplToWorkflow(withUnknown)).flow.nodes.find((node) => node.id === 'draft');
+
+    expect(draft).toMatchObject({ future_field: { keep: true }, service: 'draft' });
+  });
+
+  it('does not resurrect a field Studio edits when it is removed on the canvas', () => {
+    const withRoute = structuredClone(rework);
+    (withRoute.flow.nodes[1] as unknown as Record<string, unknown>).on_error = 'escalate';
+    const workflow = aplToWorkflow(withRoute);
+    const draft = workflow.nodes.find((node) => node.id === 'draft')!;
+    expect(draft.engineTaskConfig?.onError).toBe('escalate');
+    draft.engineTaskConfig = { ...draft.engineTaskConfig!, onError: undefined };
+    delete draft.loop;
+
+    const saved = workflowToAPL(workflow).flow.nodes.find((node) => node.id === 'draft') as unknown as
+      Record<string, unknown>;
+
+    expect(saved.loop).toBeUndefined();
+    expect(saved.on_error).toBeUndefined();
+  });
+});

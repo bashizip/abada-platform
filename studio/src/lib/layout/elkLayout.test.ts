@@ -30,6 +30,7 @@ import eventGateway from '../../../../engine/src/test/resources/apl/event-gatewa
 import inclusiveRouter from '../../../../engine/src/test/resources/apl/inclusive-router.apl.yaml?raw';
 import conditionRouter from '../../../../engine/src/test/resources/apl/condition-router.apl.yaml?raw';
 import agentContract from '../../../../engine/src/test/resources/apl/agent-contract.apl.yaml?raw';
+import reworkLoop from '../../../../engine/src/test/resources/apl/rework-loop.apl.yaml?raw';
 import kycOnboarding from '../../../../examples/apl/kyc-onboarding.apl.yaml?raw';
 import leadTriageDemo from '../../../../examples/apl/lead-triage-demo.apl.yaml?raw';
 
@@ -78,6 +79,7 @@ const FIXTURES: Record<string, () => WorkflowFile> = {
   'inclusive-router': () => apl(inclusiveRouter),
   'condition-router': () => apl(conditionRouter),
   'agent-contract': () => apl(agentContract),
+  'rework-loop': () => apl(reworkLoop),
   'kyc-onboarding': () => apl(kycOnboarding),
   'lead-triage-demo': () => apl(leadTriageDemo),
   loop: () => apl(LOOP_APL),

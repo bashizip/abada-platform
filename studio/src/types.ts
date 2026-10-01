@@ -100,6 +100,19 @@ export interface WorkflowNode {
   engineTaskConfig?: EngineTaskConfig;
   scriptConfig?: ScriptConfig;
   catchEventConfig?: CatchEventConfig;
+  /** Bound of the loop whose back-edges return to this step (APL `loop`). */
+  loop?: LoopConfig;
+  /**
+   * APL keys of this node that Studio does not edit, kept verbatim so saving
+   * never drops them.
+   */
+  aplExtras?: Record<string, unknown>;
+}
+
+export interface LoopConfig {
+  maxIterations: number;
+  /** Where the token goes when the limit is reached; without it the engine opens an incident. */
+  onExhausted?: string;
 }
 
 export interface WorkflowEdge {
@@ -112,6 +125,8 @@ export interface WorkflowEdge {
 }
 
 export interface WorkflowFile {
+  /** APL `metadata` keys Studio does not edit (description, owner, variables), kept verbatim. */
+  metadataExtras?: Record<string, unknown>;
   id: string;
   name: string;
   category: 'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom';
