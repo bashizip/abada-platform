@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && npm run verify:apl-parity && npm run verify:kitchen-sink",
+    "build": "tsc -b && vite build && npm run verify:apl-types && npm run verify:kitchen-sink",
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "verify:apl-parity": "tsx --tsconfig tsconfig.app.json scripts/check-apl-parity.mts",
+    "generate:apl-types": "tsx --tsconfig tsconfig.app.json scripts/generate-apl-types.mts",
+    "verify:apl-types": "tsx --tsconfig tsconfig.app.json scripts/generate-apl-types.mts --check",
     "verify:kitchen-sink": "tsx --tsconfig tsconfig.app.json scripts/kitchen-sink-roundtrip.mts"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "@vitejs/plugin-react": "^6.0.4",
     "@vitest/coverage-v8": "^5.0.1",
     "jsdom": "^26.0.0",
+    "json-schema-to-typescript": "^16.0.0",
     "oxlint": "^1.75.0",
     "tsx": "^4.19.2",
     "typescript": "~6.0.2",

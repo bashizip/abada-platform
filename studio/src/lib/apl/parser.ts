@@ -60,6 +60,13 @@ export const normalizeTableInputs = (
     ? inputs
     : Object.entries(inputs || {}).map(([name, expr]) => ({ name, expr: String(expr) }));
 
+/**
+ * Target of a condition/inclusive rule: `then`, or the `else: <node id>`
+ * shorthand the engine also accepts.
+ */
+export const ruleTarget = (rule: { then?: string; else?: boolean | string }): string | undefined =>
+  rule.then ?? (typeof rule.else === 'string' ? rule.else : undefined);
+
 /** Resolves the flattened and vision-wrapper forms of an `otherwise` rule. */
 export const resolveRuleOutcome = (rule: APLDecisionTableRule): {
   otherwise: boolean;
@@ -72,9 +79,13 @@ export const resolveRuleOutcome = (rule: APLDecisionTableRule): {
   return {
     otherwise: wrapped ? true : !!rule.otherwise,
     when: wrapped ? undefined : rule.when,
-    then: wrapped ? wrapped.then : (rule.then || {}),
+    then: definedOutputs(wrapped ? wrapped.then : rule.then),
   };
 };
+
+/** The DMN editor has no null literal; a `null` output (valid APL) is not shown. */
+const definedOutputs = (outputs?: Record<string, APLValue | null>): Record<string, APLValue> =>
+  Object.fromEntries(Object.entries(outputs ?? {}).filter((entry): entry is [string, APLValue] => entry[1] !== null));
 
 /** Coerces a string raw value to its declared output type in canonical APL. */
 export const coerceAPLValue = (
@@ -220,7 +231,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.humanConfig = {
           assignees: aplNode.assignees || ['Reviewer'],
           slaHours: aplNode.sla_hours || 24,
-          formKey: aplNode.formKey,
+          formKey: 'formKey' in aplNode ? aplNode.formKey : undefined,
           formFields: [],
         };
         break;
@@ -236,7 +247,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
             id: `r${i}`,
             when: r.if,
             otherwise: !!r.else,
-            then: { Next: r.then },
+            then: { Next: ruleTarget(r) ?? '' },
           })),
         };
         break;
@@ -271,7 +282,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
             id: `r${i}`,
             when: r.if,
             otherwise: !!r.else,
-            then: { Next: r.then },
+            then: { Next: ruleTarget(r) ?? '' },
           })),
         };
         break;
@@ -303,10 +314,12 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
       // Condition and inclusive forks route through their rules; each rule is
       // one labelled branch (an inclusive join declares `next` instead).
       (aplNode.rules ?? []).forEach((r) => {
+        const target = ruleTarget(r);
+        if (!target) return;
         edges.push({
-          id: `e_${aplNode.id}_${r.then}`,
+          id: `e_${aplNode.id}_${target}`,
           source: aplNode.id,
-          target: r.then,
+          target,
           label: r.if ? `if ${r.if}` : 'else',
         });
       });

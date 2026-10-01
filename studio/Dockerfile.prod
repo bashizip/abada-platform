@@ -1,12 +1,11 @@
 # Production Dockerfile for Abada Studio.
 #
 # The build context for this Dockerfile is the project root (`./`), not
-# `studio/`, because `npm run build` invokes the apl-parity check which
-# reads `../../engine/src/main/java/com/abada/engine/parser/AplParser.java`
-# relative to its own location. Inside the container the script lives at
-# `/app/scripts/check-apl-parity.mts`, so that path resolves to
-# `/engine/src/main/java/com/abada/engine/parser/AplParser.java`; we COPY
-# the engine parser source below so the parity guard can read it.
+# `studio/`, because `npm run build` verifies the generated APL types against
+# the engine-owned schema `../../engine/src/main/resources/apl/apl-v1.schema.json`,
+# resolved relative to `/app/scripts/generate-apl-types.mts`. That path is
+# `/engine/src/main/resources/apl/apl-v1.schema.json` inside the container;
+# we COPY the schema below so the check can read it.
 #
 # See `scripts/dev/rebuild.sh` for the matching build invocation.
 FROM node:24.18.0-alpine AS builder
@@ -25,9 +24,9 @@ RUN npm ci --production=false
 # studio/.dockerignore).
 COPY studio/ ./
 
-# Make the engine AplParser visible to the apl-parity check (see comment
-# at the top of this file).
-COPY engine/src/main/java/com/abada/engine/parser/AplParser.java /engine/src/main/java/com/abada/engine/parser/AplParser.java
+# Make the engine APL schema visible to the generated-types check (see the
+# comment at the top of this file).
+COPY engine/src/main/resources/apl/apl-v1.schema.json /engine/src/main/resources/apl/apl-v1.schema.json
 
 # Build the production bundle
 RUN npm run build

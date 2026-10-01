@@ -260,3 +260,27 @@ describe('canvas positions', () => {
     expect(workflowToAPL(wf)).not.toHaveProperty('layoutPending');
   });
 });
+
+describe('APL → workflow: condition else shorthand', () => {
+  it('routes `else: <node id>` (no then) to that node, as the engine does', () => {
+    const doc: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { name: 'Else shorthand', key: 'else_shorthand' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'gate' },
+          { id: 'gate', type: 'condition', rules: [{ if: '${score > 80}', then: 'fast' }, { else: 'slow' }] },
+          { id: 'fast', type: 'end' },
+          { id: 'slow', type: 'end' },
+        ],
+      },
+    };
+
+    const workflow = aplToWorkflow(doc);
+
+    expect(workflow.edges.filter((edge) => edge.source === 'gate').map((edge) => edge.target))
+      .toEqual(['fast', 'slow']);
+    expect(workflow.edges.some((edge) => edge.target === undefined || edge.id.endsWith('_undefined'))).toBe(false);
+  });
+});
