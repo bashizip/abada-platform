@@ -75,7 +75,7 @@ the stack's memory limits (about 6 GB with the agent worker); use
 `e2-standard-4` if you add `--telemetry`.
 
 ```bash
-gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags "$TAGS" --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.0.0-rc.7
+gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags "$TAGS" --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.0.0-rc.8
 ```
 
 On every boot, [`deployment/gcp/startup.sh`](../../deployment/gcp/startup.sh)

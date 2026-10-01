@@ -9,7 +9,7 @@
 #   sudo /opt/abada/release/abada-platform up server
 #
 # Instance metadata attributes (all optional):
-#   abada-version     exact release, e.g. 1.0.0-rc.7 (default: published latest)
+#   abada-version     exact release, e.g. 1.0.0-rc.8 (default: published latest)
 #   abada-domain      ABADA_DOMAIN, e.g. demo.abadaplatform.com
 #   abada-acme-email  ABADA_ACME_EMAIL for Let's Encrypt
 #   abada-autostart   "true" to run `up server` after installation
@@ -60,7 +60,11 @@ install_bundle() {
     return 0
   fi
   tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' RETURN
+  # Expand the path now and clear the trap after it runs: a RETURN trap stays
+  # set after this function and would otherwise fire again in main(), where
+  # tmp_dir is unset (set -u), failing the script after a successful install.
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp_dir'; trap - RETURN" RETURN
   log "Downloading Abada $version..."
   curl --fail --location --silent --show-error "$BASE_URL/$archive" -o "$tmp_dir/$archive"
   curl --fail --location --silent --show-error "$BASE_URL/$archive.sha256" -o "$tmp_dir/$archive.sha256"

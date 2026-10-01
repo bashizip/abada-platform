@@ -49,7 +49,7 @@ Full specifications: [`m1-task-specs.md`](m1-task-specs.md).
 - [x] T11 Truth in the repository (AGENTS.md, README, roadmap consolidation)
 - [x] T12 Truth on the web (site claims corrected; the outdated PDF brief was removed and will be replaced later)
 - [x] rc.6 gate report and exit demo — [report](1.0-rc.6-gate-report-2026-09-23.md): exit demo passed (heartbeat race found and fixed); GO signed off and published 2026-09-23
-- [ ] 1.0.0-rc.8 — fix release on top of rc.7: agent worker startup retry after host reboots; AI provider keys saved in Studio serve agent tasks, Insight and authoring (several providers, Flyway `V22` `ai_providers`, worker credentials endpoint, `ABADA_ENCRYPTION_KEY` generated and enforced); agent error details with stack traces in Studio; Studio undo/redo — [notes](../release-notes/1.0.0-rc.8-release-notes.md)
+- [x] 1.0.0-rc.8 — fix release on top of rc.7: agent worker startup retry after host reboots; AI provider keys saved in Studio serve agent tasks, Insight and authoring (several providers, Flyway `V22` `ai_providers`, worker credentials endpoint, `ABADA_ENCRYPTION_KEY` generated and enforced); agent error details with stack traces in Studio; Studio undo/redo — [report](1.0-rc.8-gate-report-2026-10-01.md); published 2026-10-01
 - [x] 1.0.0-rc.7 — Studio and packaging follow-up to M1, no engine or schema change: BPMN-notation canvas with ELK layout and four canvas fixes, bundled fonts (no Google Fonts), dev login theme, `LICENSE` in the archive and images, single-VM server profile — [report](1.0-rc.7-gate-report-2026-09-28.md); published 2026-09-28
 
 ## M2 — Real process shapes
