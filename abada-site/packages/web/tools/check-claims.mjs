@@ -23,7 +23,7 @@ const RETRACTED = [
   "no lost transactions",
   "auto-pr",
   "the only engine that",
-  "bashizip@gnail.com",
+  "@gnail.com",
   "improves itself",
   "improves from its own",
   "autonomous agents",
