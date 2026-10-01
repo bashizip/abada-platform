@@ -151,15 +151,10 @@ public class CockpitController {
     public ResponseEntity<ActivityInstanceTree> getActivityInstances(@PathVariable String id) {
         ProcessInstance instance = requireInstance(id);
 
-        List<ChildActivityInstance> children = instance.getActiveTokens().stream()
-                .map(activityId -> {
-                    String name = instance.getDefinition().getActivityName(activityId);
-                    return new ChildActivityInstance(
-                            activityId,
-                            name,
-                            "exec-" + id // Simplified execution ID
-                    );
-                })
+        // One child per waiting token; the execution id is the token id.
+        List<ChildActivityInstance> children = instance.getWaitingTokens().stream()
+                .map(token -> new ChildActivityInstance(token.activityId(),
+                        instance.getDefinition().getActivityName(token.activityId()), token.id()))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(new ActivityInstanceTree(id, children));

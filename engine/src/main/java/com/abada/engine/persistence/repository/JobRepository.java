@@ -29,6 +29,13 @@ public interface JobRepository extends JpaRepository<JobEntity, String> {
     boolean existsByProcessInstanceIdAndEventIdAndStatusIn(
             String processInstanceId, String eventId, List<JobEntity.Status> statuses);
 
+    boolean existsByProcessInstanceIdAndTokenIdAndStatusIn(
+            String processInstanceId, String tokenId, List<JobEntity.Status> statuses);
+
+    /** Pending timers created before V23 (no token) for this event. */
+    boolean existsByProcessInstanceIdAndEventIdAndTokenIdIsNullAndStatusIn(
+            String processInstanceId, String eventId, List<JobEntity.Status> statuses);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select job from JobEntity job where job.id = :id")
     Optional<JobEntity> findByIdForUpdate(@Param("id") String id);

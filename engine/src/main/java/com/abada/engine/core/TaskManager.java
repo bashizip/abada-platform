@@ -327,6 +327,7 @@ public class TaskManager {
         task.setEndDate(entity.getEndDate());
         task.setEntityVersion(entity.getEntityVersion());
         task.setFormKey(entity.getFormKey());
+        task.setTokenId(entity.getTokenId());
         return task;
     }
 

@@ -107,9 +107,10 @@ public class ProjectOperationsController {
     public ResponseEntity<ActivityInstanceTree> activities(@PathVariable String projectId,
             @PathVariable String instanceId) {
         ProcessInstance instance = requireInstance(projectId, instanceId, false);
-        List<ChildActivityInstance> children = instance.getActiveTokens().stream()
-                .map(activityId -> new ChildActivityInstance(activityId,
-                        instance.getDefinition().getActivityName(activityId), "exec-" + instanceId))
+        // One child per waiting token; the execution id is the token id.
+        List<ChildActivityInstance> children = instance.getWaitingTokens().stream()
+                .map(token -> new ChildActivityInstance(token.activityId(),
+                        instance.getDefinition().getActivityName(token.activityId()), token.id()))
                 .toList();
         return ResponseEntity.ok(new ActivityInstanceTree(instanceId, children));
     }

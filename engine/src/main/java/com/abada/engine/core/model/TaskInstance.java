@@ -24,6 +24,8 @@ public class TaskInstance {
     private List<String> candidateGroups = new ArrayList<>();
     private AssignmentStrategy assignmentStrategy = AssignmentStrategy.CLAIM;
     private String formKey;
+    /** The waiting token this task resumes; null for tasks created before V23. */
+    private String tokenId;
     private long entityVersion;
     
     @JsonIgnore
@@ -116,6 +118,8 @@ public class TaskInstance {
 
     public String getFormKey() { return formKey; }
     public void setFormKey(String formKey) { this.formKey = formKey; }
+    public String getTokenId() { return tokenId; }
+    public void setTokenId(String tokenId) { this.tokenId = tokenId; }
 
     public List<String> getCandidateGroups() {
         return candidateGroups;

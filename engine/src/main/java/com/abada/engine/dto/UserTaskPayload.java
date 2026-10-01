@@ -10,5 +10,7 @@ public record UserTaskPayload(
         List<String> candidateUsers,
         List<String> candidateGroups,
         String formKey,
-        AssignmentStrategy assignmentStrategy
+        AssignmentStrategy assignmentStrategy,
+        /** The waiting token the task resumes. */
+        String tokenId
 ) {}

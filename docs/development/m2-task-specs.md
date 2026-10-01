@@ -75,3 +75,52 @@ Studio's model guard steps aside when the contract cannot be loaded.
 
 **Out of scope.** Enforcing `metadata.variables` on start payloads; YAML line
 and column numbers in issues; turning schema warnings into errors (1.1.0).
+
+## E2 — Token entity ✅ done
+
+**Goal.** A token is a durable row with a stable identity, so joins count
+tokens, waiting work resumes the exact token, and loops (E3), boundaries (E4),
+child processes (E20) and for-each (E21) have a model to build on.
+
+**Files.** `engine/src/main/resources/db/migration/V23__process_tokens.sql`,
+`ENGINE/core/{ProcessToken,ProcessInstance,AbadaEngine,EventManager,JobScheduler,TimerJobCommandService,ExternalTaskCommandService}.java`,
+`ENGINE/persistence/entity/{ProcessTokenEntity,TaskEntity,ExternalTaskEntity,JobEntity,EventSubscriptionEntity}.java`,
+`ENGINE/persistence/repository/ProcessTokenRepository.java`,
+`ENGINE/api/{CockpitController,ProjectOperationsController}.java`.
+
+**Changes.**
+- `process_tokens` (id, instance, activity, state, parent, scope, loop counter,
+  timestamps; cascade-deleted with the instance) and a nullable `token_id` on
+  tasks, external tasks, jobs and event subscriptions. Portable SQL.
+- States `ACTIVE`, `WAITING`, `ARRIVED`, `FORKED`, `EVENT_WAIT`, `COMPLETED`,
+  `CONSUMED`, `CANCELLED`. A fork suspends its token and creates one child per
+  branch; the closing join fires when every live child arrived, consumes them
+  and resumes the forking token. An event gateway parks its token with one
+  waiting child per catch event; the winner resumes the parent.
+- Hops are bounded per token instead of a run-wide visited set: this fixes the
+  dropped same-command join arrival and lets E3 revisit nodes.
+- Waiting work records its token; completions resume by token id, falling back
+  to the oldest token at the activity for pre-V23 rows.
+- Pre-V23 instances are converted from the JSON columns on their first command.
+  The JSON columns stay dual-written through the 1.1.0-rc line for rc.8 rollback.
+- `activity-instances` returns token ids as execution ids.
+
+**Acceptance tests.**
+- `ProcessInstanceTokenTest`: same-command convergence runs the step after the
+  join (fails on the rc.8 code); the forking token id survives its join; nested
+  forks; an event race counts as one stream; two tokens at one activity resume
+  by id; a branch ending before the join; cancel; legacy conversion and its
+  mismatch warning.
+- `PostgresTokenUpgradeTest`: rc.8-shaped instances (mid-join, event race, user
+  task) on a real V22 database run to completion after Flyway applies V23; new
+  work names its token and the legacy columns keep the rc.8 shape.
+- `PostgresSchemaUpgradeTest`: upgrade from V1–V22 and a fresh database carry
+  the token schema.
+- Existing gateway, kitchen-sink, restart-recovery and two-replica suites green.
+
+**Invariants.** Tokens are read and written only inside their instance's
+locked command. No remote call runs while they are held.
+
+**Out of scope.** Back-edges and the `uk_event_subscription (instance,
+activity)` constraint that loops must relax (E3); incrementing `loop_counter`
+(E3); dropping the legacy JSON columns (after 1.1.0); boundary events (E4).

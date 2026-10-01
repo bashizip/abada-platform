@@ -15,6 +15,10 @@ public class EventSubscriptionEntity {
     @Column(name = "process_instance_id", nullable = false)
     private String processInstanceId;
 
+    /** Token this work resumes; null for rows created before V23. */
+    @Column(name = "token_id", length = 36)
+    private String tokenId;
+
     @Column(name = "activity_id", nullable = false)
     private String activityId;
 
@@ -54,4 +58,7 @@ public class EventSubscriptionEntity {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getConsumedAt() { return consumedAt; }
     public void setConsumedAt(Instant value) { consumedAt = value; }
+
+    public String getTokenId() { return tokenId; }
+    public void setTokenId(String tokenId) { this.tokenId = tokenId; }
 }

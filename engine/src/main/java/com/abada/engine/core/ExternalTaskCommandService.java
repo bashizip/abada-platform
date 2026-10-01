@@ -139,7 +139,7 @@ public class ExternalTaskCommandService {
         task.setLockExpirationTime(null);
         persistAgentMetadata(task, agent);
         repository.save(task);
-        engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), variables);
+        engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(), variables);
         history.record("EXTERNAL_TASK_COMPLETED", requireInstance(task), task.getActivityId(),
                 completedDetails(task, agent));
         recordExternalTaskFact(task, true);
@@ -217,7 +217,7 @@ public class ExternalTaskCommandService {
             Map<String, Object> routed = new LinkedHashMap<>(request.effectiveVariables());
             routed.put(AplParser.outcomeVariable(task.getActivityId()), AplParser.OUTCOME_ERROR);
             routed.put(AplParser.errorCodeVariable(task.getActivityId()), request.errorCode());
-            engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), routed);
+            engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(), routed);
             history.record("EXTERNAL_TASK_BPMN_ERROR", requireInstance(task), task.getActivityId(),
                     Map.of("externalTaskId", id, "errorCode", request.errorCode(),
                             "errorMessage", request.errorMessage() == null ? "" : request.errorMessage(),
@@ -276,7 +276,7 @@ public class ExternalTaskCommandService {
             task.setStatus(ExternalTaskEntity.Status.COMPLETED);
             task.setLockExpirationTime(null);
             repository.save(task);
-            engine.resumeFromEvent(task.getProcessInstanceId(), activityId, merged);
+            engine.resumeFromEvent(task.getProcessInstanceId(), activityId, task.getTokenId(), merged);
             Map<String, Object> details = new LinkedHashMap<>(completedDetails(task, agent));
             details.put("agentOutcome", verdict.outcome());
             if (verdict.reason() != null) details.put("outcomeReason", verdict.reason());

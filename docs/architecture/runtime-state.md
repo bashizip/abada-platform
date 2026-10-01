@@ -174,6 +174,50 @@ the process lock preserves both replicas' changes instead of losing the first
 committed update. Mutating a detached process query result also has no effect
 on a later read or command.
 
+## Execution tokens
+
+Since V23 every thread of execution is a row in `process_tokens` (id, process
+instance, activity, state, parent token, scope token, loop counter). Tokens are
+read and written only inside the locked command of their process instance.
+
+| State | Meaning |
+|---|---|
+| `WAITING` | Parked at a user task, external task or catch event |
+| `ARRIVED` | Parked at a parallel or inclusive join |
+| `FORKED` | Suspended at a fork until its join resumes it |
+| `EVENT_WAIT` | Parked at an event gateway while its catch-event children wait |
+| `ACTIVE` | Moving inside the current command; never left behind by a command |
+| `COMPLETED`, `CONSUMED`, `CANCELLED` | Terminal; rows stay for lineage and are deleted with the instance |
+
+- A fork suspends the forking token and creates one child per taken branch
+  (parent and scope = the forking token). The join that closes the fork fires
+  when every live child has arrived there; the children are consumed and the
+  forking token continues, so its id survives the fork. A child that reaches
+  an end event inside the scope stops counting toward the join.
+- Any other join (a merge with no fork in scope) fires after
+  `logicalIncomingCount` arrivals, or with the arrivals it has once no other
+  live token of the scope can still reach it.
+- An event gateway parks its token (`EVENT_WAIT`) and creates one waiting child
+  per catch event. The winning child is consumed, its siblings are cancelled
+  with their subscriptions and timer jobs, and the parked token continues, so
+  a race counts as one stream at a later join.
+- Hops are bounded per token (`MAX_HOPS`), not per command, so two branches
+  reaching the same join in one command are both counted.
+- Tasks, external tasks, timer jobs and subscriptions record the `token_id`
+  they resume. Rows created before V23 have none and resume the oldest token
+  waiting at their activity.
+- Instances started before V23 are converted from the legacy JSON columns on
+  their first command (`ProcessInstance.restoreLegacyTokens`): each join with
+  bookkeeping becomes a forked token with one arrived child per recorded
+  arrival, and the waiting activities that can still reach it become its other
+  children. A mismatch with the recorded expectation is logged and converted.
+- Through the 1.1.0-rc line the engine also writes `current_activity_id`,
+  `active_tokens_json` and the two join columns derived from the tokens, so an
+  image rollback to 1.0.0-rc.8 finds consistent state. On load, token rows
+  that no longer match those columns (an older engine advanced the instance
+  after a rollback) are discarded and rebuilt from the columns. The columns
+  are dropped in a later migration.
+
 ## Current migration status
 
 | Area | Current behavior | 1.0 target |
@@ -187,6 +231,7 @@ on a later read or command.
 | Timers/external work | `SKIP LOCKED` acquisition, durable leases, replica-death recovery and per-item atomic advancement are covered across replicas | Retain this model and tune batch/lease settings from production evidence |
 | Metrics | Some counters are changed before transaction outcome is known | Derive durable facts or update transaction-aware metrics after commit |
 | AI provider credentials | Named providers live in `ai_providers` with AES-GCM encrypted keys (Studio over `ABADA_LLM_*` environment); the agent worker reads resolved keys from a worker-only endpoint and caches them briefly; no model call runs inside a workflow transaction | Retain this model |
+| Execution tokens | One `process_tokens` row per thread of execution (V23); joins count token ids; waiting work records its token; legacy JSON columns dual-written for rc.8 rollback | Drop the legacy JSON columns after 1.1.0 |
 | Lifecycle delivery | History and outbox records commit together; dispatchers use PostgreSQL `SKIP LOCKED` leases, retry delays and stable delivery IDs | Add destination-specific operational dashboards for the 1.0 RC |
 
 The PostgreSQL runtime satisfies the 0.11 stable-contract and security gate for
@@ -219,9 +264,9 @@ version, while an existing process loads the deployment ID stored on its
 instance row. Cache entries may be discarded and reconstructed from stored XML
 without changing execution semantics.
 
-Mutable process instances, tasks, subscriptions, jobs and variables are not
-runtime-wide cache entries. Command-local maps inside a materialized process
-instance hold variables and join state only for the lifetime of that command.
+Mutable process instances, tokens, tasks, subscriptions, jobs and variables are
+not runtime-wide cache entries. A materialized process instance holds its
+variables and tokens only for the lifetime of the command that loaded them.
 
 ## Completion criteria
 
