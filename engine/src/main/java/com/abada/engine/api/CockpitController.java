@@ -172,6 +172,22 @@ public class CockpitController {
         return incidents.findByProcessInstanceIdOrderByCreatedAtAsc(id).stream().map(IncidentDTO::from).toList();
     }
 
+    /** Restarts the token an open incident stopped (operator action, recorded in history). */
+    @PostMapping("/{id}/incidents/{incidentId}/retry")
+    public ResponseEntity<Void> retryIncident(@PathVariable String id, @PathVariable String incidentId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        requireInstance(id);
+        if (incidents.findById(incidentId).filter(found -> found.getProcessInstanceId().equals(id)).isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
+                    "Incident not found: " + incidentId);
+        }
+        idempotency.execute(idempotencyKey, "incident.retry", Map.of("id", id, "incidentId", incidentId), () -> {
+            engine.retryIncident(id, incidentId);
+            return Map.of("status", "Retried", "incidentId", incidentId);
+        });
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{id}/history")
     public ResponseEntity<List<ActivityHistoryDto>> getHistory(@PathVariable String id,
             @RequestParam(defaultValue = "0") int page,

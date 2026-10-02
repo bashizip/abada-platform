@@ -633,7 +633,7 @@ public class AbadaEngine {
         Map<String, Integer> legacyExpected = readIntegerMap(entity.getJoinExpectedTokensJson());
         Map<String, Set<String>> legacyArrived = readSetMap(entity.getJoinArrivedTokensJson());
         if (!rows.isEmpty()) {
-            instance.restoreTokens(rows.stream().map(AbadaEngine::toToken).toList());
+            instance.restoreTokens(rows.stream().map(this::toToken).toList());
             if (matchesLegacyState(instance, legacyActive, legacyExpected, legacyArrived)) {
                 return instance;
             }
@@ -695,6 +695,37 @@ public class AbadaEngine {
 
     /** Records decision-table applications (identifiers and names only) in history and the outbox. */
     /**
+     * Operator action on an open incident: the stopped token starts again at
+     * its activity (a loop step with a fresh pass, a message wait re-reading
+     * correlationKey). Recorded as INCIDENT_RETRIED history with the actor.
+     */
+    @AtomicRuntimeCommand
+    public void retryIncident(String processInstanceId, String incidentId) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null) {
+            throw new ProcessEngineException("No process instance found for id=" + processInstanceId);
+        }
+        requireActive(instance);
+        IncidentEntity incident = incidentService.requireOpen(processInstanceId, incidentId);
+        List<UserTaskPayload> nextTasks = instance.retryIncident(incident.getTokenId());
+        incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
+        recordDecisionTableAudits(instance);
+        recordLoopExhaustions(instance);
+        if (instance.isCompleted() && instance.getEndDate() == null) {
+            instance.setEndDate(Instant.now());
+        }
+        persistRuntimeState(instance);
+        historyService.record("INCIDENT_RETRIED", instance, incident.getActivityId(),
+                Map.of("incidentId", incidentId, "type", incident.getType()));
+        for (UserTaskPayload task : nextTasks) {
+            createAndPersistTask(task, instance);
+        }
+        eventManager.registerWaitStates(instance);
+        scheduleWaitingTimerEvents(instance);
+        createExternalTaskJobs(instance);
+    }
+
+    /**
      * Records each loop that reached its limit in this command, and opens an
      * incident when the loop declares no on_exhausted route (its token stopped
      * in the INCIDENT state).
@@ -704,14 +735,12 @@ public class AbadaEngine {
             historyService.record("LOOP_EXHAUSTED", instance, exhausted.headerId(), Map.of(
                     "maxIterations", exhausted.maxIterations(),
                     "routedTo", exhausted.routedTo() == null ? "" : exhausted.routedTo()));
-            if (exhausted.routedTo() == null) {
-                incidentService.open(instance, exhausted.tokenId(), exhausted.headerId(),
-                        IncidentEntity.Type.LOOP_EXHAUSTED, "loop at '" + exhausted.headerId()
-                                + "' reached max_iterations " + exhausted.maxIterations()
-                                + " and declares no on_exhausted route");
-                log.warn("Process instance {}: loop at '{}' exhausted after {} iteration(s); incident opened",
-                        instance.getId(), exhausted.headerId(), exhausted.maxIterations());
-            }
+        }
+        for (ProcessInstance.RuntimeIncident incident : instance.takeIncidents()) {
+            incidentService.open(instance, incident.tokenId(), incident.activityId(), incident.type(),
+                    incident.message());
+            log.warn("Process instance {}: {} at '{}'; incident opened", instance.getId(), incident.type(),
+                    incident.activityId());
         }
     }
 
@@ -916,7 +945,7 @@ public class AbadaEngine {
         return true;
     }
 
-    private static ProcessTokenEntity toEntity(ProcessInstance instance, ProcessToken token) {
+    private ProcessTokenEntity toEntity(ProcessInstance instance, ProcessToken token) {
         ProcessTokenEntity entity = new ProcessTokenEntity();
         entity.setId(token.id());
         entity.setProcessInstanceId(instance.getId());
@@ -925,15 +954,17 @@ public class AbadaEngine {
         entity.setParentTokenId(token.parentTokenId());
         entity.setScopeTokenId(token.scopeTokenId());
         entity.setLoopCounter(token.loopCounter());
+        entity.setLoopCounts(token.loopCounts().isEmpty() ? null : writeValue(token.loopCounts()));
         entity.setCreatedAt(token.createdAt());
         entity.setUpdatedAt(token.updatedAt());
         return entity;
     }
 
-    private static ProcessToken toToken(ProcessTokenEntity entity) {
+    private ProcessToken toToken(ProcessTokenEntity entity) {
         return ProcessToken.restore(entity.getId(), entity.getActivityId(),
                 ProcessToken.State.valueOf(entity.getState()), entity.getParentTokenId(), entity.getScopeTokenId(),
-                entity.getLoopCounter(), entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.getLoopCounter(), readIntegerMap(entity.getLoopCounts()), entity.getCreatedAt(),
+                entity.getUpdatedAt());
     }
 
     private TaskEntity convertToEntity(TaskInstance taskInstance) {
