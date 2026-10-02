@@ -124,3 +124,49 @@ locked command. No remote call runs while they are held.
 **Out of scope.** Back-edges and the `uk_event_subscription (instance,
 activity)` constraint that loops must relax (E3); incrementing `loop_counter`
 (E3); dropping the legacy JSON columns (after 1.1.0); boundary events (E4).
+
+## E3 — Bounded loops ✅ done
+
+**Goal.** A process may return to an earlier step (agent drafts, human
+rejects, agent revises) but never without a limit, so a modeling slip or a
+disagreeing agent cannot loop forever.
+
+**Files.** `engine/src/main/resources/db/migration/V24__bounded_loops.sql`,
+`ENGINE/core/model/{LoopMeta,ParsedProcessDefinition}.java`,
+`ENGINE/parser/{AplParser,BpmnParser,LoopRules,SupportedBpmnValidator}.java`,
+`ENGINE/core/{ProcessInstance,ProcessToken,AbadaEngine,IncidentService,EventManager,TimerJobCommandService,ExternalTaskCommandService}.java`,
+`ENGINE/api/{ProjectIncidentController,CockpitController}.java`,
+`studio/src/lib/apl/parser.ts`, `studio/src/features/run/DryRunPanel.tsx`.
+
+**Changes.**
+- Language: the node a cycle returns to declares `loop: { max_iterations,
+  on_exhausted }` (BPMN `abada:maxIterations`, `abada:onExhausted`). Back-edges
+  are classified once on the parsed definition (O(V+E)); unbounded cycles,
+  cycles to the start or to a parallel/inclusive gateway, and an
+  `on_exhausted` that re-enters the loop are rejected at deployment only.
+  BPMN loop and multi-instance markers are rejected.
+- Runtime: `<step>_iteration` counts passes (forward entry = 1, back-edge +1),
+  mirrored on the token's loop counter. Past the bound the token takes
+  `on_exhausted`, or stops in the `INCIDENT` state and an incident opens.
+  `LOOP_EXHAUSTED` history in both cases; cancel/fail resolve incidents.
+- V24: `incidents` table and endpoints; `INCIDENT` token state; the
+  `(instance, activity)` subscription uniqueness is dropped and waits are
+  re-armed per token every pass; timers complete before advancing; a
+  successful agent pass clears stale raw output and error code.
+- Studio keeps `loop` and every APL key it does not edit; the dry run honours
+  loop bounds and stops following every outcome route.
+
+**Acceptance tests.**
+- `AplLoopRuntimeTest` (PostgreSQL): rework loop approved after a restart
+  mid-loop; third rejection routes to `on_exhausted`; incident without a
+  route, resolved by cancel; message wait and self-looping timer re-armed.
+- `AplParserTest`, `BpmnLoopDeploymentTest`, `ProcessInstanceTokenTest`
+  (bound without wait states, incident state, forward re-entry resets),
+  `AplSchemaConformanceTest` (bound parity), `PostgresSchemaUpgradeTest`
+  (V1–V23 → V24), `PostgresTokenUpgradeTest` (rc.8 simulation undoes V24).
+- Studio `parser.test.ts` (loop round trip, verbatim keys, no resurrection of
+  removed fields), `elkLayout.test.ts` with the rework fixture.
+
+**Out of scope.** Studio loop editing (E6); incident retry or raising the
+bound; per-branch iteration counts for parallel branches sharing a loop step.
+

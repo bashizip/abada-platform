@@ -116,6 +116,24 @@ should use external tasks and an idempotent worker operation.
   external tasks and subscriptions name the token they resume. See
   `docs/architecture/runtime-state.md` §Execution tokens.
 
+## Loops
+
+- A cycle returns to a loop step that declares `max_iterations` (APL
+  `loop.max_iterations`, BPMN `abada:maxIterations`); unbounded cycles are
+  rejected at deployment.
+- Entering the step forward sets `<step>_iteration` to 1; each return through
+  the cycle adds 1, inside the same transaction as the advancement.
+- A return that would exceed the limit records a `LOOP_EXHAUSTED` history
+  event. With `on_exhausted` the token continues there; without it the token
+  stops in the `INCIDENT` state and an incident is opened
+  (`GET /api/v1/process-instances/{id}/incidents`). The instance stays
+  `RUNNING`; cancelling or failing it resolves its open incidents.
+- Waits inside a loop are created again on every pass; a timer can loop to
+  itself. An agent step that succeeds clears `<step>_raw_output` and
+  `<step>_error_code` left by an earlier pass.
+- The iteration variable is instance-wide: two parallel branches converging on
+  the same loop step share one count.
+
 ## Decision tables
 
 - A `bpmn:businessRuleTask` is supported only when it carries an inline

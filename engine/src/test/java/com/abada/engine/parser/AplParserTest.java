@@ -532,6 +532,130 @@ class AplParserTest {
                 .hasMessageContaining("not a declared node");
     }
 
+    private static final String REWORK = """
+            version: abada.io/v1
+            metadata: { key: rework, name: Rework }
+            flow:
+              entry: start
+              nodes:
+                - { id: start, type: webhook, next: draft }
+                - id: draft
+                  type: engine-task
+                  service: draft
+            %s
+                  next: decide
+                - id: decide
+                  type: condition
+                  rules:
+                    - if: "${approved == true}"
+                      then: done
+                    - else: draft
+                - { id: escalate, type: end }
+                - { id: done, type: end }
+            """;
+
+    private byte[] rework(String loop) {
+        return REWORK.formatted(loop).getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void acceptsACycleWhoseTargetDeclaresItsBound() {
+        var definition = parser.parseDetailed(rework("      loop: { max_iterations: 3, on_exhausted: escalate }"))
+                .definition();
+        assertThat(definition.isBackEdge("decide", "draft")).isTrue();
+        assertThat(definition.getLoop("draft").maxIterations()).isEqualTo(3);
+        assertThat(definition.getLoop("draft").onExhausted()).isEqualTo("escalate");
+    }
+
+    @Test
+    void rejectsAnUnboundedCycleAtItsTarget() {
+        assertThatThrownBy(() -> parser.parseDetailed(rework("")))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("cycle back to node 'draft' (from 'decide') needs a bound")
+                .satisfies(error -> assertThat(((BpmnValidationException) error).getIssues())
+                        .anySatisfy(issue -> assertThat(issue.path()).isEqualTo("/flow/nodes/1")));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "1001", "two"})
+    void rejectsLoopBoundsOutsideOneToAThousand(String value) {
+        assertThatThrownBy(() -> parser.parseDetailed(rework("      loop: { max_iterations: " + value + " }")))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("loop.max_iterations must be an integer between 1 and 1000");
+    }
+
+    @Test
+    void rejectsAnUndeclaredOnExhaustedTarget() {
+        assertThatThrownBy(() -> parser.parseDetailed(
+                rework("      loop: { max_iterations: 3, on_exhausted: nowhere }")))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("loop.on_exhausted target 'nowhere' is not a declared node");
+    }
+
+    @Test
+    void rejectsAnOnExhaustedRouteThatReentersTheLoop() {
+        assertThatThrownBy(() -> parser.parseDetailed(
+                rework("      loop: { max_iterations: 3, on_exhausted: decide }")))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("leads back into the loop");
+    }
+
+    @Test
+    void aLoopOnANodeNoCycleReturnsToIsAWarning() {
+        var result = parser.parseDetailed(("""
+                version: abada.io/v1
+                metadata: { key: straight, name: Straight }
+                flow:
+                  entry: start
+                  nodes:
+                    - { id: start, type: webhook, next: work }
+                    - { id: work, type: engine-task, service: w, loop: { max_iterations: 2 }, next: done }
+                    - { id: done, type: end }
+                """).getBytes(StandardCharsets.UTF_8));
+        assertThat(result.report().issues()).anySatisfy(issue -> {
+            assertThat(issue.severity()).isEqualTo(com.abada.engine.bpmn.compatibility.ValidationSeverity.WARNING);
+            assertThat(issue.message()).contains("no flow returns to it");
+        });
+    }
+
+    @Test
+    void rejectsACycleReturningToAParallelGateway() {
+        assertThatThrownBy(() -> parser.parseDetailed(("""
+                version: abada.io/v1
+                metadata: { key: bad_loop, name: Bad loop }
+                flow:
+                  entry: start
+                  nodes:
+                    - { id: start, type: webhook, next: merge }
+                    - { id: merge, type: parallel, loop: { max_iterations: 2 }, next: work }
+                    - { id: work, type: engine-task, service: w, next: again }
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${retry == true}"
+                          then: merge
+                        - else: done
+                    - { id: done, type: end }
+                """).getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("cycle returns to parallel gateway 'merge'");
+    }
+
+    @Test
+    void rejectsALoopOnTheStartOrEndNode() {
+        assertThatThrownBy(() -> parser.parseDetailed(("""
+                version: abada.io/v1
+                metadata: { key: bad_start, name: Bad start }
+                flow:
+                  entry: start
+                  nodes:
+                    - { id: start, type: webhook, loop: { max_iterations: 2 }, next: done }
+                    - { id: done, type: end }
+                """).getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("webhook node 'start' cannot be a loop step");
+    }
+
     @Test
     void rejectsCycleThroughConditionRuleTarget() {
         String source = "version: abada.io/v1\n"
@@ -547,7 +671,7 @@ class AplParserTest {
                 + "    - id: end\n      type: end\n";
         assertThatThrownBy(() -> parser.parseDetailed(source.getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(BpmnValidationException.class)
-                .hasMessageContaining("cyclic flow");
+                .hasMessageContaining("cycle back to the start node");
     }
 
     @Test
@@ -596,7 +720,7 @@ class AplParserTest {
                 + "    - id: end\n      type: end\n";
         assertThatThrownBy(() -> parser.parseDetailed(source.getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(BpmnValidationException.class)
-                .hasMessageContaining("cyclic flow");
+                .hasMessageContaining("needs a bound");
     }
 
     private static byte[] agentFlow(String agentExtras) {

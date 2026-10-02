@@ -218,7 +218,24 @@ export interface APLAgentNode {
   on_low_confidence?: NodeRef;
   on_invalid_output?: NodeRef;
   on_error?: OnError;
+  loop?: Loop;
   ui?: UiPosition;
+}
+/**
+ * Bound of the loop whose back-edges return to this node. Every cycle must return to a node that declares one.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "loop".
+ */
+export interface Loop {
+  /**
+   * Times this node may be entered per pass of the loop; the engine exposes the current count as <id>_iteration.
+   */
+  max_iterations: number;
+  /**
+   * Id of a node declared in flow.nodes.
+   */
+  on_exhausted?: string;
 }
 /**
  * This interface was referenced by `APLDocument`'s JSON-Schema
@@ -237,6 +254,7 @@ export interface APLEngineTaskNode {
    */
   service: string;
   on_error?: OnError;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -280,6 +298,7 @@ export interface APLDecisionTableNode {
       [k: string]: string | number | boolean | null;
     };
   }[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -298,6 +317,7 @@ export interface APLScriptNode {
   next?: NodeRef;
   script: string;
   format?: string;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -329,6 +349,7 @@ export interface APLApprovalGateNode {
    * Service-level target for monitoring; not enforced by the engine yet.
    */
   sla_hours?: number;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -372,6 +393,7 @@ export interface APLHumanInputNode {
    * Reserved; currently has no runtime effect.
    */
   requireDoubleSignOff?: boolean;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -402,6 +424,7 @@ export interface APLConditionNode {
     else?: boolean | string;
     then?: NodeRef;
   }[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -432,6 +455,7 @@ export interface APLInclusiveNode {
     else?: boolean | string;
     then?: NodeRef;
   }[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -452,6 +476,7 @@ export interface APLParallelNode {
    * @minItems 2
    */
   branches?: NodeRef[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -470,6 +495,7 @@ export interface APLEventGatewayNode {
    * @minItems 2
    */
   events: APLEventGatewayChild[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -497,6 +523,7 @@ export interface APLMessageCatchNode {
   description?: string;
   next?: NodeRef;
   message: string;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -512,6 +539,7 @@ export interface APLTimerNode {
   description?: string;
   next?: NodeRef;
   duration: IsoDuration;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -527,5 +555,6 @@ export interface APLSignalNode {
   description?: string;
   next?: NodeRef;
   signal: string;
+  loop?: Loop;
   ui?: UiPosition;
 }

@@ -230,13 +230,57 @@ public class BpmnParser {
             ParsedProcessDefinition definition = new ParsedProcessDefinition(id, name, documentation, startEventId,
                     userTasks, serviceTasks, scriptTasks, decisionTables, flows, gateways, events, endEvents, rawXml,
                     candidateStarterGroups, candidateStarterUsers);
-            return definition;
+            return definition.withLoops(loops(model));
 
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse BPMN", e);
         }
+    }
+
+    /**
+     * Loop bounds declared with {@code abada:maxIterations} (and optionally
+     * {@code abada:onExhausted}) on the flow node a cycle returns to.
+     */
+    private static Map<String, LoopMeta> loops(BpmnModelInstance model) {
+        Map<String, LoopMeta> loops = new LinkedHashMap<>();
+        Set<String> nodeIds = new HashSet<>();
+        model.getModelElementsByType(FlowNode.class).forEach(node -> nodeIds.add(node.getId()));
+        for (FlowNode node : model.getModelElementsByType(FlowNode.class)) {
+            String max = node.getAttributeValueNs(BpmnCompatibilityDetector.ABADA_NAMESPACE, "maxIterations");
+            String onExhausted = blankToNull(
+                    node.getAttributeValueNs(BpmnCompatibilityDetector.ABADA_NAMESPACE, "onExhausted"));
+            if (max == null) {
+                if (onExhausted != null) throw loopError(node.getId(), "abada:onExhausted requires abada:maxIterations");
+                continue;
+            }
+            int iterations;
+            try {
+                iterations = Integer.parseInt(max.strip());
+            } catch (NumberFormatException exception) {
+                iterations = -1;
+            }
+            if (iterations < LoopMeta.MIN_ITERATIONS
+                    || iterations > LoopMeta.MAX_ITERATIONS) {
+                throw loopError(node.getId(), "abada:maxIterations must be an integer between "
+                        + LoopMeta.MIN_ITERATIONS + " and "
+                        + LoopMeta.MAX_ITERATIONS);
+            }
+            if (onExhausted != null && !nodeIds.contains(onExhausted)) {
+                throw loopError(node.getId(), "abada:onExhausted target '" + onExhausted + "' is not a flow node");
+            }
+            loops.put(node.getId(), new LoopMeta(node.getId(), iterations, onExhausted));
+        }
+        return loops;
+    }
+
+    private static BpmnValidationException loopError(String elementId, String message) {
+        return BpmnValidationException.single(new BpmnValidationIssue(
+                BpmnErrorCodes.UNBOUNDED_LOOP,
+                ValidationSeverity.ERROR, "node '" + elementId + "': " + message,
+                null, elementId, BpmnCompatibilityDetector.ABADA_NAMESPACE, null,
+                "Set abada:maxIterations to the number of times the step may run."));
     }
 
     private static String blankToNull(String value) {

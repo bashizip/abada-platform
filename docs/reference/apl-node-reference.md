@@ -85,6 +85,7 @@ All 14 node types share these base fields:
 | `description` | string | no | A human-readable name for the node. Becomes the BPMN element `name`. **For an approval gate this is the task name people see.** |
 | `next` | nodeId | depends | The id of the node that runs next. Required on linear nodes; forbidden on branching nodes (`condition`, `event-gateway`, and `parallel`/`inclusive` forks). |
 | `ui` | `{ x, y }` | no | Canvas layout hint (where Studio draws the node). Ignored by the engine. |
+| `loop` | `{ max_iterations, on_exhausted? }` | when a cycle returns here | Bound of the loop that returns to this node: it may run at most `max_iterations` (1–1000) times per pass; past that the token goes to `on_exhausted`, or an incident is opened. The current count is the variable `<id>_iteration`. Not allowed on `webhook` and `end`; see the APL specification §2.3. |
 
 ---
 

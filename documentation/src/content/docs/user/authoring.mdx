@@ -140,9 +140,26 @@ flow:
       type: end
 ```
 
-Strict deployment validation rejects cycles, duplicate ids, undeclared
-targets, a second `webhook`, invalid bounds and unrecognized node types with
-index-friendly, stable error codes — atomically, persisting nothing.
+Strict deployment validation rejects unbounded cycles, duplicate ids,
+undeclared targets, a second `webhook`, invalid bounds and unrecognized node
+types with index-friendly, stable error codes — atomically, persisting nothing.
+
+## Loops: repeat a step, never forever
+
+A process may go back to an earlier step — a reviewer rejects a draft and the
+agent writes it again — as long as that step says how many times it may run:
+
+```yaml
+- id: draft
+  type: agent
+  loop: { max_iterations: 3, on_exhausted: escalate }
+  next: review
+```
+
+The engine counts each pass in `draft_iteration` (handy in a prompt:
+`this is attempt ${draft_iteration}`). After the third rejection the process continues
+at `escalate`; without `on_exhausted` it stops at `draft` and opens an incident
+that operators see. A cycle without a bound is rejected at deployment.
 
 ## Authoring surfaces in Studio
 

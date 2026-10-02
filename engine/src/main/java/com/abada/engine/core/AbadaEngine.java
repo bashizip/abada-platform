@@ -19,6 +19,7 @@ import com.abada.engine.parser.AplParser;
 import com.abada.engine.parser.BpmnParser;
 import com.abada.engine.persistence.PersistenceService;
 import com.abada.engine.persistence.entity.EventSubscriptionEntity;
+import com.abada.engine.persistence.entity.IncidentEntity;
 import com.abada.engine.persistence.entity.ExternalTaskEntity;
 import com.abada.engine.persistence.entity.JobEntity;
 import com.abada.engine.persistence.entity.ProcessDefinitionEntity;
@@ -86,6 +87,7 @@ public class AbadaEngine {
     private final InsightFactWriter insightFactWriter;
     private final TaskGroupResolver taskGroupResolver;
     private final ProcessTokenRepository processTokenRepository;
+    private final IncidentService incidentService;
     private final AiProviderRegistry aiProviders;
     private final Map<String, ParsedProcessDefinition> definitionsByDeploymentId = new ConcurrentHashMap<>();
 
@@ -93,7 +95,7 @@ public class AbadaEngine {
     public AbadaEngine(PersistenceService persistenceService, TaskManager taskManager, @Lazy EventManager eventManager,
             @Lazy JobScheduler jobScheduler, ExternalTaskRepository externalTaskRepository,
             EventSubscriptionRepository eventSubscriptionRepository, JobRepository jobRepository,
-            ProcessTokenRepository processTokenRepository, ObjectMapper om,
+            ProcessTokenRepository processTokenRepository, IncidentService incidentService, ObjectMapper om,
             EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
             InsightFactWriter insightFactWriter,
             TaskGroupResolver taskGroupResolver,
@@ -109,6 +111,7 @@ public class AbadaEngine {
         this.eventSubscriptionRepository = eventSubscriptionRepository;
         this.jobRepository = jobRepository;
         this.processTokenRepository = processTokenRepository;
+        this.incidentService = incidentService;
         this.om = om;
         this.engineMetrics = engineMetrics;
         this.tracer = tracer;
@@ -170,6 +173,17 @@ public class AbadaEngine {
                 com.abada.engine.expression.DefinitionPolicyValidator.validate(parseResult.definition(),
                         com.abada.engine.bpmn.compatibility.BpmnErrorCodes.UNSUPPORTED_EXTENSION,
                         "http://www.omg.org/spec/BPMN/20100524/MODEL");
+                // Every cycle must be bounded (deployment only: stored definitions reload unchanged).
+                List<com.abada.engine.bpmn.compatibility.BpmnValidationIssue> loopErrors =
+                        com.abada.engine.parser.LoopRules.check(parseResult.definition(),
+                                        com.abada.engine.bpmn.compatibility.BpmnErrorCodes.UNBOUNDED_LOOP,
+                                        com.abada.engine.bpmn.compatibility.BpmnCompatibilityDetector.ABADA_NAMESPACE)
+                                .stream().filter(issue -> issue.severity()
+                                        == com.abada.engine.bpmn.compatibility.ValidationSeverity.ERROR)
+                                .toList();
+                if (!loopErrors.isEmpty()) {
+                    throw new com.abada.engine.bpmn.compatibility.BpmnValidationException(loopErrors);
+                }
             }
             ParsedProcessDefinition definition = parseResult.definition();
             ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId);
@@ -297,6 +311,7 @@ public class AbadaEngine {
 
             historyService.record("PROCESS_STARTED", instance, definition.getStartEventId(), Map.of());
             recordDecisionTableAudits(instance);
+            recordLoopExhaustions(instance);
 
             for (UserTaskPayload task : userTasks) {
                 createAndPersistTask(task, instance);
@@ -378,6 +393,7 @@ public class AbadaEngine {
         List<UserTaskPayload> nextTasks = instance.advance(currentTask.getTokenId() != null
                 ? currentTask.getTokenId() : currentTask.getTaskDefinitionKey());
         recordDecisionTableAudits(instance);
+        recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
             instance.setEndDate(Instant.now());
         }
@@ -416,6 +432,7 @@ public class AbadaEngine {
         instance.setStatus(ProcessStatus.FAILED);
         instance.setEndDate(Instant.now());
         instance.setActiveTokens(Collections.emptyList()); // Clear active tokens to stop execution
+        incidentService.resolveAll(instance.getId(), IncidentService.RESOLVED_BY_FAIL);
 
         // Record metrics for process failure
         engineMetrics.recordProcessFailed(instance.getDefinition().getId());
@@ -442,6 +459,7 @@ public class AbadaEngine {
         instance.setStatus(ProcessStatus.CANCELLED);
         instance.setEndDate(Instant.now());
         instance.setActiveTokens(Collections.emptyList());
+        incidentService.resolveAll(instance.getId(), IncidentService.RESOLVED_BY_CANCEL);
 
         persistRuntimeState(instance);
         historyService.record("PROCESS_CANCELLED", instance, null, Map.of("reason", reason == null ? "" : reason));
@@ -518,6 +536,7 @@ public class AbadaEngine {
         cancelEventGatewaySiblings(instance, tokenRef);
         List<UserTaskPayload> nextTasks = instance.advance(tokenRef);
         recordDecisionTableAudits(instance);
+        recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
             instance.setEndDate(Instant.now());
         }
@@ -675,6 +694,27 @@ public class AbadaEngine {
     }
 
     /** Records decision-table applications (identifiers and names only) in history and the outbox. */
+    /**
+     * Records each loop that reached its limit in this command, and opens an
+     * incident when the loop declares no on_exhausted route (its token stopped
+     * in the INCIDENT state).
+     */
+    private void recordLoopExhaustions(ProcessInstance instance) {
+        for (ProcessInstance.LoopExhaustion exhausted : instance.takeLoopExhaustions()) {
+            historyService.record("LOOP_EXHAUSTED", instance, exhausted.headerId(), Map.of(
+                    "maxIterations", exhausted.maxIterations(),
+                    "routedTo", exhausted.routedTo() == null ? "" : exhausted.routedTo()));
+            if (exhausted.routedTo() == null) {
+                incidentService.open(instance, exhausted.tokenId(), exhausted.headerId(),
+                        IncidentEntity.Type.LOOP_EXHAUSTED, "loop at '" + exhausted.headerId()
+                                + "' reached max_iterations " + exhausted.maxIterations()
+                                + " and declares no on_exhausted route");
+                log.warn("Process instance {}: loop at '{}' exhausted after {} iteration(s); incident opened",
+                        instance.getId(), exhausted.headerId(), exhausted.maxIterations());
+            }
+        }
+    }
+
     private void recordDecisionTableAudits(ProcessInstance instance) {
         for (DecisionTableAudit audit : instance.takeDecisionAudits()) {
             historyService.record("DECISION_TABLE_APPLIED", instance, audit.activityId(), Map.of(

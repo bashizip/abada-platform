@@ -61,3 +61,24 @@ Unknown Abada elements, invalid hit policies, duplicate `otherwise` rules and
 unsupported `camunda:*` directives on the business rule task remain deployment
 errors.
 
+## Bounded loops (`abada:maxIterations`, `abada:onExhausted`)
+
+Every cycle in a BPMN process must return to a flow node that declares how many
+times it may run per pass:
+
+```xml
+<bpmn:userTask id="review" name="Review" abada:maxIterations="3"
+    abada:onExhausted="escalate" camunda:candidateGroups="reviewers"/>
+```
+
+- `abada:maxIterations` (required on the node a cycle returns to): an integer
+  from 1 to 1000. Without it, a process containing the cycle is rejected with
+  `ABADA-BPMN-LOOP-001`.
+- `abada:onExhausted` (optional): the id of the flow node to continue at when
+  the limit is reached. It must leave the loop. Without it the engine stops the
+  token and opens a `LOOP_EXHAUSTED` incident.
+- The current pass is exposed as the process variable `<nodeId>_iteration`.
+
+`standardLoopCharacteristics` and `multiInstanceLoopCharacteristics` are
+rejected; model the repetition as a bounded cycle.
+

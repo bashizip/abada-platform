@@ -29,6 +29,15 @@ public final class SupportedBpmnValidator {
                 unsupported.add("scriptTask(" + task.getId() + "): only JavaScript is supported");
             }
         }
+        // Loop and multi-instance markers would otherwise be ignored and the
+        // activity run once; bounded loops are modeled as a cycle whose target
+        // declares abada:maxIterations instead.
+        for (LoopCharacteristics marker : model.getModelElementsByType(LoopCharacteristics.class)) {
+            String owner = marker.getParentElement() instanceof BaseElement element ? element.getId() : "?";
+            unsupported.add(marker.getElementType().getTypeName() + "(" + owner
+                    + "): loop and multi-instance markers are not supported; model the loop as a cycle back to a "
+                    + "step that declares abada:maxIterations");
+        }
         for (EventBasedGateway gateway : model.getModelElementsByType(EventBasedGateway.class)) {
             if (gateway.getOutgoing().size() < 2) {
                 unsupported.add("eventBasedGateway(" + gateway.getId()

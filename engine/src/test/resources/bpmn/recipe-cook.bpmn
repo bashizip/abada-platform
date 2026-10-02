@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_0im7viy" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.35.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.23.0">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:abada="https://abada.io/schema/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_0im7viy" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.35.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.23.0">
   <bpmn:process id="recipe-cook" name="recipe-cook" isExecutable="true" camunda:candidateStarterGroups="customers" camunda:versionTag="1.0.0">
     <bpmn:documentation>A simple process for cooking a recipe.</bpmn:documentation>
     <bpmn:startEvent id="StartEvent_1">
@@ -20,7 +20,7 @@
       <bpmn:incoming>Flow_5</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_5" sourceRef="cook-recipe" targetRef="Event_1" />
-    <bpmn:userTask id="choose-recipe" name="Choose Recipe" camunda:formKey="fk_choose_recipe" camunda:candidateUsers="alice, black, jeannot" camunda:candidateGroups="customers">
+    <bpmn:userTask id="choose-recipe" name="Choose Recipe" abada:maxIterations="5" camunda:formKey="fk_choose_recipe" camunda:candidateUsers="alice, black, jeannot" camunda:candidateGroups="customers">
       <bpmn:incoming>Flow_1</bpmn:incoming>
       <bpmn:incoming>back-choose-flow</bpmn:incoming>
       <bpmn:outgoing>Flow_2</bpmn:outgoing>

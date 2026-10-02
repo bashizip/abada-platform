@@ -14,6 +14,7 @@ import com.abada.engine.persistence.repository.JobRepository;
 import com.abada.engine.persistence.repository.ProcessDefinitionRepository;
 import com.abada.engine.persistence.repository.ProcessInstanceRepository;
 import com.abada.engine.persistence.repository.ProcessTokenRepository;
+import com.abada.engine.persistence.repository.IncidentRepository;
 import com.abada.engine.persistence.repository.TaskRepository;
 import com.abada.engine.persistence.repository.OutboxEventRepository;
 import com.abada.engine.persistence.repository.PrincipalRepository;
@@ -45,6 +46,7 @@ public class DatabaseTestHelper {
     private final JobRepository jobRepository;
     private final ProcessInstanceRepository processInstanceRepository;
     private final ProcessTokenRepository processTokenRepository;
+    private final IncidentRepository incidentRepository;
     private final TaskRepository taskRepository;
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final OutboxEventRepository outboxEventRepository;
@@ -69,7 +71,7 @@ public class DatabaseTestHelper {
             InsightProposalReviewRepository insightProposalReviewRepository,
             InsightApprovalPolicyRepository insightApprovalPolicyRepository,
             JobRepository jobRepository, ProcessInstanceRepository processInstanceRepository,
-            ProcessTokenRepository processTokenRepository,
+            ProcessTokenRepository processTokenRepository, IncidentRepository incidentRepository,
             TaskRepository taskRepository, ProcessDefinitionRepository processDefinitionRepository,
             OutboxEventRepository outboxEventRepository,
             ProjectProcessDocumentRepository projectProcessDocumentRepository,
@@ -93,6 +95,7 @@ public class DatabaseTestHelper {
         this.jobRepository = jobRepository;
         this.processInstanceRepository = processInstanceRepository;
         this.processTokenRepository = processTokenRepository;
+        this.incidentRepository = incidentRepository;
         this.taskRepository = taskRepository;
         this.processDefinitionRepository = processDefinitionRepository;
         this.outboxEventRepository = outboxEventRepository;
@@ -123,6 +126,7 @@ public class DatabaseTestHelper {
         externalTaskRepository.deleteAll();
         jobRepository.deleteAll();
         taskRepository.deleteAll();
+        incidentRepository.deleteAll();
         processTokenRepository.deleteAll();
         processInstanceRepository.deleteAll();
         processDefinitionRepository.deleteAll();

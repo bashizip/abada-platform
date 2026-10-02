@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Braces, CheckCircle2, ChevronRight, FlaskConical, Play, RotateCcw, X } from 'lucide-react';
 import { WorkflowEdge, WorkflowFile, WorkflowNode } from '@/types';
 import { deriveDefaultPayload, NodeRunStatus, sleep } from '@/lib/run/liveRun';
+import { isOutcomeRouteEdge } from '@/lib/apl/parser';
 import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
 import { AiProvidersAPI } from '@/api/aiProviders';
 import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
@@ -135,7 +136,23 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
       steps += 1;
       const visitCount = (visits.get(nodeId) || 0) + 1;
       visits.set(nodeId, visitCount);
-      if (steps > 100 || visitCount > 10) {
+      // A loop step honours its declared bound, as the engine does.
+      if (node.loop && visitCount > node.loop.maxIterations) {
+        const exhausted = node.loop.onExhausted;
+        setMessages((items) => [...items, exhausted
+          ? `Loop at ${node.title} reached ${node.loop!.maxIterations} pass(es); continuing at on_exhausted.`
+          : `Loop at ${node.title} reached ${node.loop!.maxIterations} pass(es) with no on_exhausted route: `
+            + 'the engine would open an incident.']);
+        if (exhausted) {
+          queue.push(exhausted);
+          continue;
+        }
+        statuses.current[nodeId] = 'failed';
+        emit(nodeId, false);
+        setRunning(false);
+        return;
+      }
+      if (steps > 100 || (!node.loop && visitCount > 10)) {
         statuses.current[nodeId] = 'failed';
         setMessages((items) => [...items, `Stopped at ${node.title}: loop protection reached.`]);
         emit(nodeId, false);
@@ -149,8 +166,10 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
       await sleep(450);
       if (currentRun !== runId.current) return;
 
-      const edges = outgoing(nodeId);
-      let chosen = edges;
+      // on_exhausted is only taken when the loop limit is reached (above).
+      const edges = outgoing(nodeId).filter((edge) => edge.label !== 'on_exhausted');
+      // Steps that ask nothing follow their normal successor, never an outcome route.
+      let chosen = edges.filter((edge) => !isOutcomeRouteEdge(edge));
       if (node.type === 'agent') {
         chosen = await waitForInput({ kind: 'agent', node, edges });
       } else if (node.type === 'human') {

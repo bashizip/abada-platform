@@ -42,11 +42,13 @@ public class TimerJobCommandService {
                 || !leaseOwner.equals(job.getLeaseOwner()) || job.getLeaseExpiresAt() == null
                 || !job.getLeaseExpiresAt().isAfter(now)) return false;
 
-        engine.resumeFromEvent(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(), Map.of());
+        // Completed before the instance advances: a loop that returns to this
+        // timer must be able to schedule the next one for the same token.
         job.setStatus(JobEntity.Status.COMPLETED);
         job.setLeaseOwner(null);
         job.setLeaseExpiresAt(null);
-        repository.save(job);
+        repository.saveAndFlush(job);
+        engine.resumeFromEvent(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(), Map.of());
 
         ProcessInstance instance = engine.getProcessInstanceById(job.getProcessInstanceId());
         history.record("TIMER_JOB_COMPLETED", instance, job.getEventId(), Map.of("jobId", jobId));

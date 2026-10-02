@@ -8,6 +8,7 @@ import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.bpmn.compatibility.CompatibilityReport;
 import com.abada.engine.bpmn.compatibility.ValidationSeverity;
 import com.abada.engine.core.model.DecisionTableMeta;
+import com.abada.engine.core.model.LoopMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
 import com.abada.engine.core.model.GatewayMeta;
 import com.abada.engine.core.model.EventMeta;
@@ -21,11 +22,9 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import org.springframework.stereotype.Component;
-import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -301,6 +300,7 @@ public final class AplParser {
         Map<String, EventMeta> events = new LinkedHashMap<>();
         Map<String, GatewayMeta> gateways = new LinkedHashMap<>();
         Map<String, Object> endEvents = new LinkedHashMap<>();
+        Map<String, LoopMeta> loops = new LinkedHashMap<>();
 
         // Each node is compiled independently so one invalid node never hides another's errors.
         for (Map.Entry<String, JsonNode> compiled : nodesById.entrySet()) {
@@ -623,6 +623,9 @@ public final class AplParser {
                     default -> throw validation("type", "unsupported node type '" + type + "' for node '" + nodeId
                             + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
                 }
+                if (node.has("loop")) {
+                    loops.put(nodeId, parseLoop(node, nodeId, type, nodesById));
+                }
             } catch (BpmnValidationException exception) {
                 errors.addAll(locate(exception, nodeId, pointerById.get(nodeId)));
             }
@@ -647,18 +650,21 @@ public final class AplParser {
             addOutcomeRoutes(nodesById, pointerById, flows, flowIds, gateways, errors);
         }
         if (!errors.isEmpty()) throw new BpmnValidationException(errors);
-        try {
-            rejectCycles(entry, flows);
-        } catch (BpmnValidationException exception) {
-            throw new BpmnValidationException(relocate(exception.getIssues(), pointerById));
-        }
 
         String definitionId = processId;
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
-                rawSource, null, null);
+                rawSource, null, null).withLoops(loops);
         if (enforceDeploymentPolicy) {
+            // Every cycle must be bounded. Checked on deployment only, like the
+            // execution policy, so reloading stored definitions never changes.
+            List<BpmnValidationIssue> loopIssues = relocate(
+                    LoopRules.check(definition, APL_VALIDATION_CODE, LANGUAGE_VERSION), pointerById);
+            List<BpmnValidationIssue> loopErrors = loopIssues.stream()
+                    .filter(issue -> issue.severity() == ValidationSeverity.ERROR).toList();
+            if (!loopErrors.isEmpty()) throw new BpmnValidationException(loopErrors);
+            loopIssues.stream().filter(issue -> issue.severity() != ValidationSeverity.ERROR).forEach(warnings::add);
             try {
                 com.abada.engine.expression.DefinitionPolicyValidator.validate(definition, APL_VALIDATION_CODE,
                         LANGUAGE_VERSION);
@@ -698,6 +704,29 @@ public final class AplParser {
             located.add(issue.path() != null || pointer == null ? issue : issue.withLocation(elementId, pointer));
         }
         return located;
+    }
+
+    /** {@code loop: { max_iterations, on_exhausted }} on the node a cycle returns to. */
+    private static LoopMeta parseLoop(JsonNode node, String nodeId, String type, Map<String, JsonNode> nodesById) {
+        if ("webhook".equals(type) || "end".equals(type)) {
+            throw validation("loop", type + " node '" + nodeId + "' cannot be a loop step");
+        }
+        JsonNode loop = node.path("loop");
+        if (!loop.isObject()) {
+            throw validation("loop", "node '" + nodeId + "' loop must be a mapping with max_iterations");
+        }
+        JsonNode max = loop.path("max_iterations");
+        if (!max.canConvertToInt() || !max.isIntegralNumber() || max.asInt() < LoopMeta.MIN_ITERATIONS
+                || max.asInt() > LoopMeta.MAX_ITERATIONS) {
+            throw validation("loop", "node '" + nodeId + "' loop.max_iterations must be an integer between "
+                    + LoopMeta.MIN_ITERATIONS + " and " + LoopMeta.MAX_ITERATIONS);
+        }
+        String onExhausted = loop.hasNonNull("on_exhausted") ? loop.path("on_exhausted").asText() : null;
+        if (onExhausted != null && !nodesById.containsKey(onExhausted)) {
+            throw validation("loop", "node '" + nodeId + "' loop.on_exhausted target '" + onExhausted
+                    + "' is not a declared node");
+        }
+        return new LoopMeta(nodeId, max.asInt(), onExhausted);
     }
 
     private AgentWorkDescriptor parseAgentWork(JsonNode node, String nodeId) {
@@ -853,49 +882,6 @@ public final class AplParser {
         return candidate;
     }
 
-    /**
-     * Native APL definitions are strictly acyclic: the engine never loops.
-     *
-     * <p>Iterative three-colour depth-first search (unvisited, on the current
-     * path, finished). A finished node is never re-entered, so validation is
-     * O(V+E) even for graphs with many converging branches.
-     */
-    private static void rejectCycles(String entry, List<SequenceFlow> flows) {
-        Map<String, List<String>> adjacency = new LinkedHashMap<>();
-        for (SequenceFlow flow : flows) {
-            adjacency.computeIfAbsent(flow.getSourceRef(), key -> new ArrayList<>()).add(flow.getTargetRef());
-        }
-        Set<String> onPath = new HashSet<>();
-        Set<String> finished = new HashSet<>();
-        Deque<String> nodes = new ArrayDeque<>();
-        Deque<Integer> nextChild = new ArrayDeque<>();
-        nodes.push(entry);
-        nextChild.push(0);
-        onPath.add(entry);
-        while (!nodes.isEmpty()) {
-            String nodeId = nodes.peek();
-            int childIndex = nextChild.pop();
-            List<String> children = adjacency.getOrDefault(nodeId, List.of());
-            if (childIndex < children.size()) {
-                nextChild.push(childIndex + 1);
-                String child = children.get(childIndex);
-                if (onPath.contains(child)) {
-                    throw BpmnValidationException.single(issueAt(null, child,
-                            "cyclic flow detected at node '" + child + "'"));
-                }
-                if (!finished.contains(child)) {
-                    nodes.push(child);
-                    nextChild.push(0);
-                    onPath.add(child);
-                }
-            } else {
-                nodes.pop();
-                onPath.remove(nodeId);
-                finished.add(nodeId);
-            }
-        }
-    }
-
     /** Reserved suffix of the synthetic gateway that routes agent/engine-task outcomes. */
     public static final String OUTCOME_GATEWAY_SUFFIX = "__outcome";
     public static final String OUTCOME_OK = "OK";
@@ -921,6 +907,11 @@ public final class AplParser {
     /** Process variable holding the BPMN error code reported for a routed node. */
     public static String errorCodeVariable(String nodeId) {
         return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_error_code";
+    }
+
+    /** Process variable holding how many times a loop step has been entered in the current pass (1-based). */
+    public static String iterationVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_iteration";
     }
 
     /** Process variable holding (truncated) raw output rejected by the agent output contract. */
