@@ -91,8 +91,15 @@ viewers, operators and owners. `GET /api/v1/process-instances/{id}/incidents`
 lists one instance's incidents, open and resolved (operations read scope).
 Each `IncidentDTO` has `id`, `projectId`, `processInstanceId`, `tokenId`,
 `activityId`, `type` (`LOOP_EXHAUSTED`), `message`, `createdAt`, `resolvedAt`
-and `resolution` (`INSTANCE_CANCELLED`, `INSTANCE_FAILED`). An incident is
-opened in the same transaction as the state change that caused it.
+and `resolution` (`RETRIED`, `INSTANCE_CANCELLED`, `INSTANCE_FAILED`). Types are
+`LOOP_EXHAUSTED` and `MISSING_CORRELATION_KEY`. An incident is opened in the
+same transaction as the state change that caused it.
+
+`POST /api/v1/process-instances/{id}/incidents/{incidentId}/retry` (operations
+write scope) and `POST /api/v1/projects/{projectId}/incidents/{incidentId}/retry`
+(project operators and owners) restart the stopped token and resolve the
+incident; `204` on success, `404` for an unknown incident or a non-member,
+`400 ENGINE_COMMAND_REJECTED` for an incident already resolved.
 
 ## Project-scoped APL authoring
 

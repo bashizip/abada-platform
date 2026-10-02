@@ -127,12 +127,28 @@ should use external tasks and an idempotent worker operation.
   event. With `on_exhausted` the token continues there; without it the token
   stops in the `INCIDENT` state and an incident is opened
   (`GET /api/v1/process-instances/{id}/incidents`). The instance stays
-  `RUNNING`; cancelling or failing it resolves its open incidents.
+  `RUNNING`. An operator either retries the incident — the token starts a
+  fresh pass at the loop step, recorded as `INCIDENT_RETRIED` with the actor —
+  or cancels the instance; cancelling or failing resolves its open incidents.
 - Waits inside a loop are created again on every pass; a timer can loop to
   itself. An agent step that succeeds clears `<step>_raw_output` and
   `<step>_error_code` left by an earlier pass.
-- The iteration variable is instance-wide: two parallel branches converging on
-  the same loop step share one count.
+- Passes are counted per token and loop step (V25), so parallel branches
+  looping on the same step each get their own bound; the tokens a fork creates
+  inherit their parent's counts, so a cycle that leaves its fork keeps counting.
+  `<step>_iteration` holds the pass of the token that entered the step last.
+
+## Incidents
+
+- An incident stops one token in the `INCIDENT` state and leaves the instance
+  `RUNNING`. Types: `LOOP_EXHAUSTED` (a loop limit with no `on_exhausted`) and
+  `MISSING_CORRELATION_KEY` (a message wait, standalone or in an event race,
+  reached without a `correlationKey` variable — it could never be correlated,
+  so the engine stops loudly instead of waiting forever).
+- `POST .../incidents/{incidentId}/retry` restarts the stopped token at its
+  activity in one transaction: a loop step begins a fresh pass, a message wait
+  re-reads `correlationKey` (set it first with the variables endpoint). The
+  incident is resolved as `RETRIED`.
 
 ## Decision tables
 

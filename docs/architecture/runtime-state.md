@@ -186,7 +186,7 @@ read and written only inside the locked command of their process instance.
 | `ARRIVED` | Parked at a parallel or inclusive join |
 | `FORKED` | Suspended at a fork until its join resumes it |
 | `EVENT_WAIT` | Parked at an event gateway while its catch-event children wait |
-| `INCIDENT` | Stopped at a loop step whose limit was reached with no `on_exhausted` route (V24); an incident is open |
+| `INCIDENT` | Stopped by an open incident (V24): a loop limit with no `on_exhausted` route, or a message wait without `correlationKey`; an operator retry restarts it |
 | `ACTIVE` | Moving inside the current command; never left behind by a command |
 | `COMPLETED`, `CONSUMED`, `CANCELLED` | Terminal; rows stay for lineage and are deleted with the instance |
 
@@ -232,7 +232,7 @@ read and written only inside the locked command of their process instance.
 | Timers/external work | `SKIP LOCKED` acquisition, durable leases, replica-death recovery and per-item atomic advancement are covered across replicas | Retain this model and tune batch/lease settings from production evidence |
 | Metrics | Some counters are changed before transaction outcome is known | Derive durable facts or update transaction-aware metrics after commit |
 | AI provider credentials | Named providers live in `ai_providers` with AES-GCM encrypted keys (Studio over `ABADA_LLM_*` environment); the agent worker reads resolved keys from a worker-only endpoint and caches them briefly; no model call runs inside a workflow transaction | Retain this model |
-| Incidents | `incidents` rows (V24) opened inside the command that stops a token, e.g. an exhausted loop; resolved when the instance is cancelled or failed | Add incident actions beyond cancel (retry, raise the bound) and other incident types |
+| Incidents | `incidents` rows (V24) opened inside the command that stops a token (exhausted loop, message wait without `correlationKey`); resolved by an operator retry or when the instance is cancelled or failed | Add more incident types as runtime conditions need them |
 | Execution tokens | One `process_tokens` row per thread of execution (V23); joins count token ids; waiting work records its token; legacy JSON columns dual-written for rc.8 rollback | Drop the legacy JSON columns after 1.1.0 |
 | Lifecycle delivery | History and outbox records commit together; dispatchers use PostgreSQL `SKIP LOCKED` leases, retry delays and stable delivery IDs | Add destination-specific operational dashboards for the 1.0 RC |
 
