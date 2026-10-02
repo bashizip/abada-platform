@@ -36,6 +36,10 @@ public class ProcessTokenEntity {
     @Column(name = "loop_counter", nullable = false)
     private int loopCounter;
 
+    /** JSON map of loop step id to the token's current pass (V25); null before V25. */
+    @Column(name = "loop_counts", columnDefinition = "TEXT")
+    private String loopCounts;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -56,6 +60,8 @@ public class ProcessTokenEntity {
     public void setScopeTokenId(String scopeTokenId) { this.scopeTokenId = scopeTokenId; }
     public int getLoopCounter() { return loopCounter; }
     public void setLoopCounter(int loopCounter) { this.loopCounter = loopCounter; }
+    public String getLoopCounts() { return loopCounts; }
+    public void setLoopCounts(String loopCounts) { this.loopCounts = loopCounts; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

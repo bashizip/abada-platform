@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("24");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("25");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -218,7 +218,7 @@ class PostgresSchemaUpgradeTest {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())) {
             var metadata = connection.getMetaData();
             for (String column : java.util.List.of("id", "process_instance_id", "activity_id", "state",
-                    "parent_token_id", "scope_token_id", "loop_counter", "created_at", "updated_at")) {
+                    "parent_token_id", "scope_token_id", "loop_counter", "loop_counts", "created_at", "updated_at")) {
                 try (var columns = metadata.getColumns(null, schema, "process_tokens", column)) {
                     assertThat(columns.next()).as("process_tokens." + column).isTrue();
                 }

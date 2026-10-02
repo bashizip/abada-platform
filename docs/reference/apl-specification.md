@@ -152,11 +152,13 @@ step* — declares its bound:
   branch that never comes); return to a task or a `condition` instead.
 - Entering the loop step forward starts a pass at 1; each return through the
   cycle adds 1. The engine writes the count to the variable `<id>_iteration`
-  (e.g. `draft_iteration`), readable in conditions and prompts.
+  (e.g. `draft_iteration`), readable in conditions and prompts. Passes are
+  counted per token, so parallel branches looping on one step are bounded
+  independently.
 - When a return would exceed `max_iterations`, the token goes to
   `on_exhausted`. Without it the token stops at the loop step and the engine
   opens a `LOOP_EXHAUSTED` incident; the instance stays running until an
-  operator cancels it. `on_exhausted` must leave the loop: a target that can
+  operator retries the incident (a fresh pass) or cancels the instance. `on_exhausted` must leave the loop: a target that can
   reach the loop step again is rejected, because re-entering it forward would
   restart the count.
 - A `loop` on a node that no cycle returns to is a warning (it has no effect).

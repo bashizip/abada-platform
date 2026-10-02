@@ -35,6 +35,7 @@ class ProjectIncidentApiTest {
     @Autowired private ExternalTaskCommandService workers;
     @Autowired private TaskManager tasks;
     @Autowired private DatabaseTestHelper database;
+    @Autowired private com.abada.engine.core.EventManager events;
 
     private String projectId;
     private String instanceId;
@@ -84,6 +85,58 @@ class ProjectIncidentApiTest {
         assertThat(incidents("alice", true).getBody()).isEmpty();
         assertThat(incidents("alice", false).getBody()).singleElement()
                 .satisfies(incident -> assertThat(incident.resolution()).isEqualTo("INSTANCE_CANCELLED"));
+    }
+
+    @Test
+    void anOperatorRetryStartsAFreshPassAndResolvesTheIncident() {
+        IncidentDTO open = incidents("alice", true).getBody().getFirst();
+
+        ResponseEntity<Void> retried = rest.exchange("/v1/projects/{projectId}/incidents/{incidentId}/retry",
+                HttpMethod.POST, new HttpEntity<>(headers("alice")), Void.class, projectId, open.id());
+
+        assertThat(retried.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(incidents("alice", true).getBody()).isEmpty();
+        assertThat(incidents("alice", false).getBody()).singleElement()
+                .satisfies(incident -> assertThat(incident.resolution()).isEqualTo("RETRIED"));
+        // The draft step runs again: a fresh pass with new work for the drafter.
+        assertThat(engine.getProcessInstanceById(instanceId).getVariables()).containsEntry("draft_iteration", 1);
+        assertThat(workers.fetchAndLock(new FetchAndLockRequest("w", List.of("once-draft"), 60_000L))).hasSize(1);
+    }
+
+    @Test
+    void viewersCannotRetry() {
+        IncidentDTO open = incidents("alice", true).getBody().getFirst();
+
+        ResponseEntity<String> denied = rest.exchange("/v1/projects/{projectId}/incidents/{incidentId}/retry",
+                HttpMethod.POST, new HttpEntity<>(headers("mallory")), String.class, projectId, open.id());
+
+        assertThat(denied.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(incidents("alice", true).getBody()).hasSize(1);
+    }
+
+    @Test
+    void aMessageWaitWithoutKeyOpensAnIncidentThatRetryFixesOnceTheKeyIsSet() {
+        engine.deploy(projectId, new ByteArrayInputStream("""
+                version: abada.io/v1
+                metadata: { key: paid_wait, name: Paid wait }
+                flow:
+                  entry: start
+                  nodes:
+                    - { id: start, type: webhook, next: paid }
+                    - { id: paid, type: message-catch, message: Paid, next: done }
+                    - { id: done, type: end }
+                """.getBytes(StandardCharsets.UTF_8)));
+        String waiting = engine.startProcess(projectId, "paid_wait", "alice", Map.of()).getId();
+        IncidentDTO missing = incidents("alice", true).getBody().stream()
+                .filter(incident -> incident.processInstanceId().equals(waiting)).findFirst().orElseThrow();
+        assertThat(missing.type()).isEqualTo("MISSING_CORRELATION_KEY");
+
+        engine.updateProcessVariables(waiting, Map.of("correlationKey", "order-9"));
+        rest.exchange("/v1/projects/{projectId}/incidents/{incidentId}/retry", HttpMethod.POST,
+                new HttpEntity<>(headers("alice")), Void.class, projectId, missing.id());
+        events.correlateMessage("Paid", "order-9", Map.of());
+
+        assertThat(engine.getProcessInstanceById(waiting).isCompleted()).isTrue();
     }
 
     @Test

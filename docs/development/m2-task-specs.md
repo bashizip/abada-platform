@@ -167,6 +167,12 @@ disagreeing agent cannot loop forever.
 - Studio `parser.test.ts` (loop round trip, verbatim keys, no resurrection of
   removed fields), `elkLayout.test.ts` with the rework fixture.
 
-**Out of scope.** Studio loop editing (E6); incident retry or raising the
-bound; per-branch iteration counts for parallel branches sharing a loop step.
+**Hardening (same milestone).** Passes are counted per token and loop step
+(V25 `process_tokens.loop_counts`; fork children inherit their parent's
+counts); open incidents can be retried by operators (`POST
+.../incidents/{id}/retry`, recorded as `INCIDENT_RETRIED`); a message wait
+without `correlationKey` opens a `MISSING_CORRELATION_KEY` incident instead of
+hanging silently.
+
+**Out of scope.** Studio loop editing (E6); raising a loop bound at runtime.
 

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 public class IncidentService {
     public static final String RESOLVED_BY_CANCEL = "INSTANCE_CANCELLED";
     public static final String RESOLVED_BY_FAIL = "INSTANCE_FAILED";
+    public static final String RESOLVED_BY_RETRY = "RETRIED";
 
     private final IncidentRepository incidents;
 
@@ -34,6 +35,25 @@ public class IncidentService {
         incident.setMessage(message.length() > 1024 ? message.substring(0, 1024) : message);
         incident.setCreatedAt(Instant.now());
         return incidents.save(incident);
+    }
+
+    /** The open incident of a process instance, or a rejection naming why it cannot be acted on. */
+    IncidentEntity requireOpen(String processInstanceId, String incidentId) {
+        IncidentEntity incident = incidents.findById(incidentId)
+                .filter(found -> found.getProcessInstanceId().equals(processInstanceId))
+                .orElseThrow(() -> new com.abada.engine.core.exception.ProcessEngineException(
+                        "Incident " + incidentId + " not found for process instance " + processInstanceId));
+        if (incident.getResolvedAt() != null) {
+            throw new com.abada.engine.core.exception.ProcessEngineException(
+                    "Incident " + incidentId + " is already resolved (" + incident.getResolution() + ")");
+        }
+        return incident;
+    }
+
+    void resolve(IncidentEntity incident, String resolution) {
+        incident.setResolvedAt(Instant.now());
+        incident.setResolution(resolution);
+        incidents.save(incident);
     }
 
     /** Marks the open incidents of an instance resolved, e.g. when an operator cancels it. */

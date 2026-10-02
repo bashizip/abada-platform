@@ -1,6 +1,8 @@
 package com.abada.engine.core;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -43,12 +45,15 @@ public final class ProcessToken {
     private String activityId;
     private State state;
     private int loopCounter;
+    /** Passes of each loop step this token is in; children of a fork start from their parent's counts. */
+    private final Map<String, Integer> loopCounts = new LinkedHashMap<>();
     private Instant updatedAt;
     private boolean dirty;
 
     private ProcessToken(String id, String activityId, State state, String parentTokenId, String scopeTokenId,
-            int loopCounter, Instant createdAt, Instant updatedAt, boolean dirty) {
+            int loopCounter, Map<String, Integer> loopCounts, Instant createdAt, Instant updatedAt, boolean dirty) {
         this.id = id;
+        if (loopCounts != null) this.loopCounts.putAll(loopCounts);
         this.activityId = activityId;
         this.state = state;
         this.parentTokenId = parentTokenId;
@@ -60,16 +65,17 @@ public final class ProcessToken {
     }
 
     static ProcessToken create(String activityId, State state, String parentTokenId, String scopeTokenId,
-            Instant createdAt) {
+            Map<String, Integer> inheritedLoopCounts, Instant createdAt) {
         return new ProcessToken(UUID.randomUUID().toString(), activityId, state, parentTokenId, scopeTokenId, 0,
-                createdAt, createdAt, true);
+                inheritedLoopCounts, createdAt, createdAt, true);
     }
 
     /** A token loaded from storage; it is not dirty until it changes. */
     public static ProcessToken restore(String id, String activityId, State state, String parentTokenId,
-            String scopeTokenId, int loopCounter, Instant createdAt, Instant updatedAt) {
-        return new ProcessToken(id, activityId, state, parentTokenId, scopeTokenId, loopCounter, createdAt,
-                updatedAt, false);
+            String scopeTokenId, int loopCounter, Map<String, Integer> loopCounts, Instant createdAt,
+            Instant updatedAt) {
+        return new ProcessToken(id, activityId, state, parentTokenId, scopeTokenId, loopCounter, loopCounts,
+                createdAt, updatedAt, false);
     }
 
     void moveTo(String activityId, State state) {
@@ -80,11 +86,22 @@ public final class ProcessToken {
         this.dirty = true;
     }
 
-    void setLoopCounter(int loopCounter) {
-        if (this.loopCounter == loopCounter) return;
-        this.loopCounter = loopCounter;
+    /** Records the current pass of a loop step; the loop counter mirrors the latest one. */
+    void setLoopCount(String loopStepId, int count) {
+        if (Integer.valueOf(count).equals(loopCounts.get(loopStepId)) && loopCounter == count) return;
+        loopCounts.put(loopStepId, count);
+        this.loopCounter = count;
         this.updatedAt = Instant.now();
         this.dirty = true;
+    }
+
+    /** Passes this token has made through a loop step in its current pass, or null if it never entered it. */
+    public Integer loopCount(String loopStepId) {
+        return loopCounts.get(loopStepId);
+    }
+
+    public Map<String, Integer> loopCounts() {
+        return Map.copyOf(loopCounts);
     }
 
     public String id() { return id; }

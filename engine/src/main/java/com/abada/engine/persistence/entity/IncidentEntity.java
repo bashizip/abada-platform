@@ -10,7 +10,12 @@ import java.time.Instant;
 @Entity
 @Table(name = "incidents")
 public class IncidentEntity {
-    public enum Type { LOOP_EXHAUSTED }
+    public enum Type {
+        /** A loop step reached max_iterations and declares no on_exhausted route. */
+        LOOP_EXHAUSTED,
+        /** A message wait was reached without a correlationKey variable to correlate on. */
+        MISSING_CORRELATION_KEY
+    }
 
     @Id
     @Column(length = 36)
