@@ -145,6 +145,7 @@ class ProcessInstanceTokenTest {
                 """ + work("b", "join") + """
                     - { id: join, type: parallel, next: after }
                 """ + flag("after", "joined", "done")));
+        instance.putAllVariables(Map.of("correlationKey", "race-1"));
         instance.advance();
         assertThat(instance.getActiveTokens()).containsExactlyInAnyOrder("race_e0", "race_e1", "b");
         ProcessToken message = waitingAt(instance, "race_e0");
@@ -202,6 +203,262 @@ class ProcessInstanceTokenTest {
 
         assertThat(instance.getVariables()).containsEntry("joined", true);
         assertThat(instance.isCompleted()).isTrue();
+    }
+
+    /**
+     * A join with no fork in scope is a merge: after an exclusive choice only one
+     * path is taken, so the merge fires once no other token can still reach it
+     * (strict BPMN would leave a parallel merge waiting forever).
+     */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"parallel", "inclusive"})
+    void aMergeAfterAnExclusiveChoiceFiresWithTheOnePathTaken(String mergeType) {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: condition
+                      rules:
+                        - if: "${fast == true}"
+                          then: a
+                        - else: b
+                """ + flag("a", "a", "merge") + flag("b", "b", "merge") + """
+                    - { id: merge, type: %s, next: after }
+                """.formatted(mergeType) + flag("after", "merged", "done")));
+        instance.putAllVariables(Map.of("fast", true));
+
+        instance.advance();
+
+        assertThat(instance.getVariables()).containsEntry("a", true).doesNotContainKey("b")
+                .containsEntry("merged", true);
+        assertThat(instance.isCompleted()).isTrue();
+    }
+
+    @Test
+    void aLoopWithoutWaitStatesIsBoundedByItsMaxIterations() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { spin: true } }
+                      loop: { max_iterations: 3, on_exhausted: after }
+                      next: again
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${spin == true}"
+                          then: fork
+                        - else: done
+                """ + flag("after", "stopped", "done")));
+
+        instance.advance();
+
+        assertThat(instance.isCompleted()).isTrue();
+        assertThat(instance.getVariables()).containsEntry("fork_iteration", 3).containsEntry("stopped", true);
+        assertThat(instance.takeLoopExhaustions()).singleElement()
+                .satisfies(exhausted -> assertThat(exhausted.routedTo()).isEqualTo("after"));
+    }
+
+    @Test
+    void anExhaustedLoopWithoutRouteStopsItsTokenInTheIncidentState() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { spin: true } }
+                      loop: { max_iterations: 2 }
+                      next: again
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${spin == true}"
+                          then: fork
+                        - else: done
+                """));
+
+        instance.advance();
+
+        assertThat(instance.isCompleted()).isFalse();
+        assertThat(instance.getTokens().get(0).state()).isEqualTo(State.INCIDENT);
+        assertThat(instance.getTokens().get(0).activityId()).isEqualTo("fork");
+        assertThat(instance.takeLoopExhaustions()).singleElement()
+                .satisfies(exhausted -> assertThat(exhausted.routedTo()).isNull());
+    }
+
+    @Test
+    void enteringAnInnerLoopForwardStartsANewPass() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { outerPass: true } }
+                      loop: { max_iterations: 3, on_exhausted: done }
+                      next: inner
+                    - id: inner
+                      type: engine-task
+                      service: work
+                      loop: { max_iterations: 2, on_exhausted: done }
+                      next: innerGate
+                    - id: innerGate
+                      type: condition
+                      rules:
+                        - if: "${innerAgain == true}"
+                          then: inner
+                        - else: outerGate
+                    - id: outerGate
+                      type: condition
+                      rules:
+                        - if: "${outerAgain == true}"
+                          then: fork
+                        - else: done
+                """));
+        instance.putAllVariables(Map.of("innerAgain", true, "outerAgain", false));
+        instance.advance();
+        instance.advance(waitingAt(instance, "inner").id());
+        assertThat(instance.getVariables()).containsEntry("inner_iteration", 2);
+
+        // Leave the inner loop and take the outer one: the inner step is
+        // entered forward again, so its count restarts.
+        instance.putAllVariables(Map.of("innerAgain", false, "outerAgain", true));
+        instance.advance(waitingAt(instance, "inner").id());
+
+        assertThat(instance.getVariables()).containsEntry("fork_iteration", 2).containsEntry("inner_iteration", 1);
+        assertThat(waitingAt(instance, "inner").loopCounter()).isEqualTo(1);
+    }
+
+    /** Shared loop step: both branches of a fork wait at `work` and loop on it independently. */
+    private ProcessInstance sharedLoopStep(int maxIterations) {
+        return new ProcessInstance(define("""
+                    - { id: fork, type: parallel, branches: [a, b] }
+                """ + flag("a", "a", "work") + flag("b", "b", "work") + """
+                    - id: work
+                      type: engine-task
+                      service: work
+                      loop: { max_iterations: %d, on_exhausted: stop }
+                      next: again
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${retry == true}"
+                          then: work
+                        - else: done
+                    - { id: stop, type: end }
+                """.formatted(maxIterations)));
+    }
+
+    @Test
+    void parallelBranchesLoopingOnTheSameStepEachGetTheirOwnBound() {
+        ProcessInstance instance = sharedLoopStep(2);
+        instance.putAllVariables(Map.of("retry", true));
+        instance.advance();
+        List<ProcessToken> waiting = instance.getWaitingTokens();
+        assertThat(waiting).hasSize(2);
+
+        // Each branch makes its second pass; with an instance-wide count the
+        // second branch would see pass 3 and be cut off.
+        instance.advance(waiting.get(0).id());
+        instance.advance(waiting.get(1).id());
+
+        assertThat(instance.takeLoopExhaustions()).isEmpty();
+        assertThat(instance.getWaitingTokens()).extracting(token -> token.loopCount("work")).containsExactly(2, 2);
+    }
+
+    @Test
+    void aCycleThatLeavesItsForkKeepsCountingThroughTheNextFork() {
+        // `again` sits inside a fork branch and returns to a step before the
+        // fork: every pass forks anew, so the count must travel with the token.
+        ProcessInstance instance = new ProcessInstance(define(flag("fork", "started", "step") + """
+                    - id: step
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { stepped: true } }
+                      loop: { max_iterations: 3, on_exhausted: out }
+                      next: split
+                    - { id: split, type: parallel, branches: [again, side] }
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${retry == true}"
+                          then: step
+                        - else: done
+                    - { id: side, type: end }
+                """ + flag("out", "exhausted", "done")));
+        instance.putAllVariables(Map.of("retry", true));
+
+        instance.advance();
+
+        assertThat(instance.getVariables()).containsEntry("exhausted", true).containsEntry("step_iteration", 3);
+        assertThat(instance.isCompleted()).isTrue();
+    }
+
+    @Test
+    void retryingAnExhaustedLoopStartsAFreshPass() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: decision-table
+                      rules:
+                        - otherwise: { then: { stepped: true } }
+                      loop: { max_iterations: 2 }
+                      next: again
+                    - id: again
+                      type: condition
+                      rules:
+                        - if: "${spin == true}"
+                          then: fork
+                        - else: done
+                """));
+        instance.putAllVariables(Map.of("spin", true));
+        instance.advance();
+        ProcessToken stopped = instance.getTokens().get(0);
+        assertThat(instance.takeIncidents()).singleElement().satisfies(incident ->
+                assertThat(incident.type()).isEqualTo(com.abada.engine.persistence.entity.IncidentEntity.Type.LOOP_EXHAUSTED));
+
+        // The operator lets it run again; this time the rule says stop.
+        instance.putAllVariables(Map.of("spin", false));
+        instance.retryIncident(stopped.id());
+
+        assertThat(instance.isCompleted()).isTrue();
+        assertThat(instance.getVariables()).containsEntry("fork_iteration", 1);
+    }
+
+    @Test
+    void aMessageWaitWithoutCorrelationKeyStopsWithAnIncidentUntilRetried() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - { id: fork, type: message-catch, message: Paid, next: done }
+                """));
+
+        instance.advance();
+
+        ProcessToken stopped = instance.getTokens().get(0);
+        assertThat(stopped.state()).isEqualTo(State.INCIDENT);
+        assertThat(instance.getActiveTokens()).isEmpty();
+        assertThat(instance.isCompleted()).isFalse();
+        assertThat(instance.takeIncidents()).singleElement().satisfies(incident -> {
+            assertThat(incident.type()).isEqualTo(
+                    com.abada.engine.persistence.entity.IncidentEntity.Type.MISSING_CORRELATION_KEY);
+            assertThat(incident.activityId()).isEqualTo("fork");
+        });
+
+        instance.putAllVariables(Map.of("correlationKey", "order-7"));
+        instance.retryIncident(stopped.id());
+
+        assertThat(stopped.state()).isEqualTo(State.WAITING);
+        assertThat(instance.getActiveTokens()).containsExactly("fork");
+    }
+
+    @Test
+    void anEventRaceMessageWithoutCorrelationKeyStopsLoudlyToo() {
+        ProcessInstance instance = new ProcessInstance(define("""
+                    - id: fork
+                      type: event-gateway
+                      events:
+                        - { type: message-catch, message: Paid, next: done }
+                        - { type: timer, duration: PT1H, next: done }
+                """));
+
+        instance.advance();
+
+        assertThat(instance.takeIncidents()).singleElement().satisfies(incident ->
+                assertThat(incident.activityId()).isEqualTo("fork_e0"));
+        assertThat(instance.getActiveTokens()).containsExactly("fork_e1");
     }
 
     @Test

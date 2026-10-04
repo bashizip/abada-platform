@@ -4,6 +4,7 @@
     xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
     xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
     xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+    xmlns:abada="https://abada.io/schema/bpmn"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
     xmlns:modeler="http://camunda.org/schema/modeler/1.0"
@@ -68,6 +69,7 @@
         <bpmn:userTask
             id="choose-recipe"
             name="Choose Recipe"
+            abada:maxIterations="5"
             camunda:formKey="fk_choose_recipe"
             camunda:candidateUsers="alice, black, jeannot"
             camunda:candidateGroups="customers"

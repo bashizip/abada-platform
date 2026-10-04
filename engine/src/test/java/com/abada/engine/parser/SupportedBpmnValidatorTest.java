@@ -118,6 +118,99 @@ class SupportedBpmnValidatorTest {
         assertEquals("gw", definition.getEventGatewayOf("c2"));
     }
 
+    @Test
+    void mapsInterruptingTimerAndErrorBoundariesToTheRuntimeBoundaries() {
+        String xml = boundaryModel("""
+                <bpmn:userTask id="review" abada:slaHours="4" abada:escalateTo="managers, directors"/>
+                <bpmn:boundaryEvent id="reviewTimeout" attachedToRef="review">
+                  <bpmn:timerEventDefinition><bpmn:timeDuration>P3D</bpmn:timeDuration></bpmn:timerEventDefinition>
+                </bpmn:boundaryEvent>
+                <bpmn:serviceTask id="notify" camunda:topic="notify"/>
+                <bpmn:boundaryEvent id="notifyRejected" attachedToRef="notify">
+                  <bpmn:errorEventDefinition errorRef="rejected"/>
+                </bpmn:boundaryEvent>
+                <bpmn:boundaryEvent id="notifyFailed" attachedToRef="notify">
+                  <bpmn:errorEventDefinition/>
+                </bpmn:boundaryEvent>
+                <bpmn:endEvent id="expired"/>
+                <bpmn:endEvent id="manual"/>
+                """, """
+                <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+                <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="notify"/>
+                <bpmn:sequenceFlow id="f3" sourceRef="notify" targetRef="end"/>
+                <bpmn:sequenceFlow id="f4" sourceRef="reviewTimeout" targetRef="expired"/>
+                <bpmn:sequenceFlow id="f5" sourceRef="notifyRejected" targetRef="manual"/>
+                <bpmn:sequenceFlow id="f6" sourceRef="notifyFailed" targetRef="end"/>
+                """);
+
+        var definition = parse(xml);
+        var timeout = definition.boundaryFor("review", com.abada.engine.core.model.BoundaryMeta.Kind.TIMEOUT, null);
+        assertEquals(java.time.Duration.ofDays(3), timeout.after());
+        assertEquals("expired", timeout.target());
+        assertEquals("manual", definition.boundaryFor("notify",
+                com.abada.engine.core.model.BoundaryMeta.Kind.ERROR, "REJECTED").target(), "code-specific first");
+        assertEquals("end", definition.boundaryFor("notify",
+                com.abada.engine.core.model.BoundaryMeta.Kind.ERROR, "WORK_FAILED").target(), "catch-all last");
+        assertEquals(4.0, definition.getUserTask("review").getSlaHours());
+        assertEquals(java.util.List.of("managers", "directors"), definition.getUserTask("review").getEscalateTo());
+
+        // The boundary flow leaves from the task itself and is never its normal exit.
+        ProcessInstance instance = new ProcessInstance(definition);
+        instance.advance();
+        assertEquals(java.util.List.of("review"), instance.getActiveTokens());
+        instance.leaveViaBoundary("review", timeout);
+        assertTrue(instance.isCompleted());
+    }
+
+    @Test
+    void rejectsBoundariesTheRuntimeCannotHonour() {
+        String messageBoundary = boundaryModel("""
+                <bpmn:userTask id="review"/>
+                <bpmn:boundaryEvent id="b" attachedToRef="review"><bpmn:messageEventDefinition/></bpmn:boundaryEvent>
+                """, """
+                <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+                <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="end"/>
+                <bpmn:sequenceFlow id="f3" sourceRef="b" targetRef="end"/>
+                """);
+        assertTrue(assertThrows(ProcessEngineException.class, () -> parse(messageBoundary)).getMessage()
+                .contains("only timer and error boundary events"));
+
+        String nonInterrupting = messageBoundary.replace("<bpmn:boundaryEvent id=\"b\" attachedToRef=\"review\">"
+                        + "<bpmn:messageEventDefinition/>",
+                "<bpmn:boundaryEvent id=\"b\" attachedToRef=\"review\" cancelActivity=\"false\">"
+                        + "<bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition>");
+        assertTrue(assertThrows(ProcessEngineException.class, () -> parse(nonInterrupting)).getMessage()
+                .contains("non-interrupting"));
+
+        String onScript = boundaryModel("""
+                <bpmn:scriptTask id="calc" scriptFormat="javascript"><bpmn:script>1</bpmn:script></bpmn:scriptTask>
+                <bpmn:boundaryEvent id="b" attachedToRef="calc"><bpmn:errorEventDefinition/></bpmn:boundaryEvent>
+                """, """
+                <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="calc"/>
+                <bpmn:sequenceFlow id="f2" sourceRef="calc" targetRef="end"/>
+                <bpmn:sequenceFlow id="f3" sourceRef="b" targetRef="end"/>
+                """);
+        assertTrue(assertThrows(ProcessEngineException.class, () -> parse(onScript)).getMessage()
+                .contains("user tasks and external"));
+    }
+
+    private static String boundaryModel(String nodes, String flows) {
+        return """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:abada="https://abada.io/schema/bpmn"
+                    targetNamespace="test">
+                  <bpmn:error id="rejected" errorCode="REJECTED"/>
+                  <bpmn:process id="boundary-test" isExecutable="true">
+                    <bpmn:startEvent id="start"/>
+                    %s
+                    <bpmn:endEvent id="end"/>
+                    %s
+                  </bpmn:process>
+                </bpmn:definitions>
+                """.formatted(nodes.stripIndent(), flows.stripIndent());
+    }
+
     private static String eventGatewayModel(String nodes, String flows) {
         return """
                 <?xml version="1.0" encoding="UTF-8"?>

@@ -13,6 +13,20 @@ import org.springframework.data.repository.query.Param;
 public interface EventSubscriptionRepository extends JpaRepository<EventSubscriptionEntity, String> {
     boolean existsByProcessInstanceIdAndActivityId(String processInstanceId, String activityId);
 
+    /** An open wait of this token; consumed subscriptions of earlier loop iterations do not count. */
+    boolean existsByTokenIdAndConsumedAtIsNull(String tokenId);
+
+    /** Open subscriptions of an instance, locked so ending the instance consumes them atomically. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM EventSubscriptionEntity s WHERE s.processInstanceId = :processInstanceId "
+            + "AND s.consumedAt IS NULL")
+    List<EventSubscriptionEntity> findOpenByProcessInstanceIdForUpdate(
+            @Param("processInstanceId") String processInstanceId);
+
+    /** An open wait created before V23 (no token) for this activity. */
+    boolean existsByProcessInstanceIdAndActivityIdAndTokenIdIsNullAndConsumedAtIsNull(
+            String processInstanceId, String activityId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<EventSubscriptionEntity> findFirstByEventTypeAndEventNameAndCorrelationKeyAndConsumedAtIsNull(
             EventSubscriptionEntity.Type type, String eventName, String correlationKey);

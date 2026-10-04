@@ -45,6 +45,13 @@ depends on schema, locking, persistence or recovery.
   </TabItem>
 </Tabs>
 
+`npm audit` fails on advisories published after a lockfile was committed, so a
+branch can turn red without a code change. The **Dependency audit** workflow
+audits Studio and the documentation on `dev` and `main` every day (and on
+demand); fix a failure on `dev` with `npm audit fix`, pinning the patched
+version in `overrides` when the package is transitive, before promoting to
+`main`.
+
 ## Evidence matrix
 
 | Change | Required evidence |

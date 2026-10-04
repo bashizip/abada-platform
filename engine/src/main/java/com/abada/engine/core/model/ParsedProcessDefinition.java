@@ -25,6 +25,10 @@ public class ParsedProcessDefinition implements Serializable {
     private final Map<String, List<SequenceFlow>> incomingByTarget = new HashMap<>();
 
     private final Map<String, List<String>> flowGraph = new HashMap<>();
+    private Map<String, LoopMeta> loops = Map.of();
+    private Map<String, List<BoundaryMeta>> boundaries = Map.of();
+    /** Back-edges of the depth-first walk from the start event, keyed by {@link #edgeKey}. */
+    private final Set<String> backEdges = new LinkedHashSet<>();
 
     public List<SequenceFlow> getOutgoing(String sourceId) {
         return outgoingBySource.getOrDefault(sourceId, List.of());
@@ -94,6 +98,106 @@ public class ParsedProcessDefinition implements Serializable {
         this.candidateStarterUsers = candidateStarterUsers != null ? Collections.unmodifiableList(candidateStarterUsers)
                 : List.of();
         buildFlowGraph();
+        classifyBackEdges();
+    }
+
+    /** Declares the loop bounds of this definition (set once by the parser). */
+    public ParsedProcessDefinition withLoops(Map<String, LoopMeta> declared) {
+        this.loops = Map.copyOf(declared);
+        return this;
+    }
+
+    /** Declares the boundaries of this definition (set once by the parser); their flows are already in the graph. */
+    public ParsedProcessDefinition withBoundaries(Collection<BoundaryMeta> declared) {
+        Map<String, List<BoundaryMeta>> byActivity = new LinkedHashMap<>();
+        for (BoundaryMeta boundary : declared) {
+            byActivity.computeIfAbsent(boundary.attachedTo(), key -> new ArrayList<>()).add(boundary);
+        }
+        byActivity.replaceAll((key, list) -> List.copyOf(list));
+        this.boundaries = Map.copyOf(byActivity);
+        return this;
+    }
+
+    /** Boundaries attached to an activity, in declaration order (code-specific errors before catch-alls). */
+    public List<BoundaryMeta> boundariesOf(String activityId) {
+        return boundaries.getOrDefault(activityId, List.of());
+    }
+
+    public Collection<BoundaryMeta> getBoundaries() {
+        return boundaries.values().stream().flatMap(List::stream).toList();
+    }
+
+    /** The first boundary of {@code kind} on the activity that catches {@code code} (ERROR) or any (others). */
+    public BoundaryMeta boundaryFor(String activityId, BoundaryMeta.Kind kind, String code) {
+        for (BoundaryMeta boundary : boundariesOf(activityId)) {
+            if (boundary.kind() != kind) continue;
+            if (kind != BoundaryMeta.Kind.ERROR || boundary.catches(code)) return boundary;
+        }
+        return null;
+    }
+
+    public BoundaryMeta getBoundary(String activityId, String boundaryId) {
+        return boundariesOf(activityId).stream().filter(boundary -> boundary.id().equals(boundaryId))
+                .findFirst().orElse(null);
+    }
+
+    public Map<String, LoopMeta> getLoops() {
+        return loops;
+    }
+
+    public LoopMeta getLoop(String headerId) {
+        return loops.get(headerId);
+    }
+
+    /** True when {@code source -> target} closes a cycle (its target is a loop header). */
+    public boolean isBackEdge(String source, String target) {
+        return backEdges.contains(edgeKey(source, target));
+    }
+
+    /** Every back-edge as {@code [source, target]}, in discovery order. */
+    public List<String[]> getBackEdges() {
+        return backEdges.stream().map(key -> key.split("\u0000", 2)).toList();
+    }
+
+    private static String edgeKey(String source, String target) {
+        return source + "\u0000" + target;
+    }
+
+    /**
+     * Iterative three-colour depth-first search from the start event: an edge
+     * into a node still on the current path closes a cycle. O(V+E), so graphs
+     * with many converging branches stay linear. Every cycle reachable from the
+     * start contains at least one such back-edge.
+     */
+    private void classifyBackEdges() {
+        if (startEventId == null) return;
+        Set<String> onPath = new HashSet<>();
+        Set<String> finished = new HashSet<>();
+        Deque<String> nodes = new ArrayDeque<>();
+        Deque<Integer> nextChild = new ArrayDeque<>();
+        nodes.push(startEventId);
+        nextChild.push(0);
+        onPath.add(startEventId);
+        while (!nodes.isEmpty()) {
+            String node = nodes.peek();
+            int index = nextChild.pop();
+            List<String> children = flowGraph.getOrDefault(node, List.of());
+            if (index < children.size()) {
+                nextChild.push(index + 1);
+                String child = children.get(index);
+                if (onPath.contains(child)) {
+                    backEdges.add(edgeKey(node, child));
+                } else if (!finished.contains(child)) {
+                    nodes.push(child);
+                    nextChild.push(0);
+                    onPath.add(child);
+                }
+            } else {
+                nodes.pop();
+                onPath.remove(node);
+                finished.add(node);
+            }
+        }
     }
 
     private void buildFlowGraph() {

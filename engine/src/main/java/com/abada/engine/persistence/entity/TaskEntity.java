@@ -53,6 +53,14 @@ public class TaskEntity {
     @Column(name = "end_date")
     private Instant endDate;
 
+    /** When the task's sla_hours run out (V26); null without a service level. */
+    @Column(name = "due_at")
+    private Instant dueAt;
+
+    /** When the task was escalated for missing its service level (V26). */
+    @Column(name = "escalated_at")
+    private Instant escalatedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "assignment_strategy", nullable = false)
     private AssignmentStrategy assignmentStrategy = AssignmentStrategy.CLAIM;
@@ -144,6 +152,11 @@ public class TaskEntity {
     public void setEndDate(Instant endDate) {
         this.endDate = endDate;
     }
+
+    public Instant getDueAt() { return dueAt; }
+    public void setDueAt(Instant dueAt) { this.dueAt = dueAt; }
+    public Instant getEscalatedAt() { return escalatedAt; }
+    public void setEscalatedAt(Instant escalatedAt) { this.escalatedAt = escalatedAt; }
 
     public long getEntityVersion() { return entityVersion; }
     public void setEntityVersion(long entityVersion) { this.entityVersion = entityVersion; }

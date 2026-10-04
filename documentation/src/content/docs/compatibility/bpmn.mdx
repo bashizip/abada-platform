@@ -5,8 +5,11 @@ description: How BPMN 2.0 fits into an APL-native platform — dialects, the sup
 
 import { Aside } from '@astrojs/starlight/components';
 
-Native APL is Abada's authoring language, but BPMN remains a first-class
-**import and backward-compatibility surface**. Studio transpiles BPMN into APL
+APL is Abada's process language, and BPMN 2.0 is the foundation it builds on.
+Abada keeps BPMN's proven parts — events, gateways, human and service tasks,
+durable waits — and changes the semantics where strict BPMN deadlocks, guesses
+or runs unbounded (see [Where APL improves on BPMN](#where-apl-improves-on-bpmn)).
+BPMN remains a first-class **import and backward-compatibility surface**. Studio transpiles BPMN into APL
 at the import boundary, and the engine accepts BPMN 2.0 XML directly: a
 deployment source starting with `<` is validated and compiled through the
 canonical BPMN path, while `version: abada.io/v1` goes through the native APL
@@ -52,7 +55,11 @@ least two competing catch children: the first child to fire advances the
 instance and every sibling wait state (subscription, timer job and token) is
 cancelled atomically in the same transaction.
 
-Unsupported constructs — such as subprocesses, boundary events,
+Interrupting timer and error boundary events are supported on user tasks and
+external service tasks, with the same runtime as APL `on_timeout` and
+`on_error`; a user task may declare `abada:slaHours` and `abada:escalateTo`.
+Unsupported constructs — such as subprocesses, other boundary events
+(non-interrupting, message, signal, escalation, compensation),
 multi-instance activities, compensation, complex gateways, cyclic timers,
 external DMN 1.3 decision files and CMMN — are **rejected during deployment**
 rather than treated as ambiguous pass-through nodes. A business rule task is
@@ -99,3 +106,37 @@ cannot change an active instance's semantics.
   index](/reference/contracts/). APL-native authoring: [Author processes in
   native APL](/user/authoring/).
 </Aside>
+
+## Where APL improves on BPMN
+
+Native APL and imported BPMN run on the same runtime, so both get these
+behaviors. Each one is covered by an engine test listed in the repository's
+`docs/reference/bpmn-support.md`.
+
+- **No join deadlocks.** A parallel-fork branch that ends before the join no
+  longer blocks it, and paths of an exclusive choice that converge on a
+  parallel gateway merge instead of waiting forever. Joins count execution
+  tokens by id, and the token that forked continues after the join.
+- **Event races count once.** An event-based gateway inside a parallel branch
+  is one branch at the join; the losing waits are cancelled in the same
+  transaction as the winner.
+- **Safe expressions.** Conditions and decision rules are sandboxed CEL,
+  compiled at deployment; an expression that cannot be evaluated fails the
+  step instead of being read as `false`.
+- **Nothing ignored.** Elements the engine does not execute are rejected at
+  deployment.
+- **Governed AI steps.** The `agent` node runs model calls outside the
+  transaction and admits their output only after the engine checks it against
+  a declared schema and confidence threshold.
+- **Bounded loops.** A cycle must declare how many times the step it returns to
+  may run (`abada:maxIterations`); past the limit the process takes its
+  `abada:onExhausted` route or opens an incident. Unbounded cycles and
+  loop or multi-instance markers are rejected at deployment.
+- **No silent stalls.** Work that fails for good takes its error route or
+  opens a retryable incident; a timeout boundary cancels work that takes too
+  long; a missed service level escalates the task instead of being a passive
+  hint.
+
+Abada does not claim full BPMN 2.0 conformance: the supported subset is
+explicit, and everything outside it is rejected.
+

@@ -6,6 +6,12 @@ export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive' | 'event';
 /** A node's `on_error` route: one target, or targets per BPMN error code (a rule without code catches the rest). */
 export type OnErrorRoute = string | { code?: string; then: string }[];
 
+/** An interrupting timeout boundary (`on_timeout`): after the ISO-8601 duration the step's work is cancelled. */
+export interface OnTimeoutRoute {
+  after: string;
+  then: string;
+}
+
 export interface AgentConfig {
   profileVersion?: 'abada.agent/v1';
   model: string;
@@ -18,8 +24,12 @@ export interface AgentConfig {
   onLowConfidence?: string;
   /** Target node when the output violates `output_schema` (`on_invalid_output`). */
   onInvalidOutput?: string;
-  /** Target(s) when the worker reports a BPMN error (`on_error`). */
+  /** Target(s) when the worker reports an error or the last attempt fails (`on_error`). */
   onError?: OnErrorRoute;
+  /** Where the flow continues when the step is not done in time (`on_timeout`). */
+  onTimeout?: OnTimeoutRoute;
+  /** Models tried in order when the model before is unavailable (`fallback_models`). */
+  fallbackModels?: string[];
   inputs?: Record<string, string>;
   resultVariable?: string;
   outputSchema?: Record<string, unknown>;
@@ -60,7 +70,14 @@ export interface DMNConfig {
 
 export interface HumanConfig {
   assignees: string[];
-  slaHours: number;
+  /** Service level in hours: the engine escalates the open task in place when it is missed. */
+  slaHours?: number;
+  /** Groups added as candidates when the task is escalated (`escalate_to`). */
+  escalateTo?: string[];
+  /** Route when the task is failed (`on_error`). */
+  onError?: OnErrorRoute;
+  /** Where the flow continues when the task is not done in time (`on_timeout`). */
+  onTimeout?: OnTimeoutRoute;
   /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
   formKey?: string;
   formFields: string[];
@@ -71,6 +88,8 @@ export interface EngineTaskConfig {
   service: string;
   /** Error-handling route, emitted as `on_error` and drawn as an error edge. */
   onError?: OnErrorRoute;
+  /** Where the flow continues when the task is not done in time (`on_timeout`). */
+  onTimeout?: OnTimeoutRoute;
 }
 
 export interface ScriptConfig {
@@ -100,6 +119,19 @@ export interface WorkflowNode {
   engineTaskConfig?: EngineTaskConfig;
   scriptConfig?: ScriptConfig;
   catchEventConfig?: CatchEventConfig;
+  /** Bound of the loop whose back-edges return to this step (APL `loop`). */
+  loop?: LoopConfig;
+  /**
+   * APL keys of this node that Studio does not edit, kept verbatim so saving
+   * never drops them.
+   */
+  aplExtras?: Record<string, unknown>;
+}
+
+export interface LoopConfig {
+  maxIterations: number;
+  /** Where the token goes when the limit is reached; without it the engine opens an incident. */
+  onExhausted?: string;
 }
 
 export interface WorkflowEdge {
@@ -112,6 +144,8 @@ export interface WorkflowEdge {
 }
 
 export interface WorkflowFile {
+  /** APL `metadata` keys Studio does not edit (description, owner, variables), kept verbatim. */
+  metadataExtras?: Record<string, unknown>;
   id: string;
   name: string;
   category: 'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom';

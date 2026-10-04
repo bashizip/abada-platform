@@ -124,3 +124,124 @@ locked command. No remote call runs while they are held.
 **Out of scope.** Back-edges and the `uk_event_subscription (instance,
 activity)` constraint that loops must relax (E3); incrementing `loop_counter`
 (E3); dropping the legacy JSON columns (after 1.1.0); boundary events (E4).
+
+## E3 — Bounded loops ✅ done
+
+**Goal.** A process may return to an earlier step (agent drafts, human
+rejects, agent revises) but never without a limit, so a modeling slip or a
+disagreeing agent cannot loop forever.
+
+**Files.** `engine/src/main/resources/db/migration/V24__bounded_loops.sql`,
+`ENGINE/core/model/{LoopMeta,ParsedProcessDefinition}.java`,
+`ENGINE/parser/{AplParser,BpmnParser,LoopRules,SupportedBpmnValidator}.java`,
+`ENGINE/core/{ProcessInstance,ProcessToken,AbadaEngine,IncidentService,EventManager,TimerJobCommandService,ExternalTaskCommandService}.java`,
+`ENGINE/api/{ProjectIncidentController,CockpitController}.java`,
+`studio/src/lib/apl/parser.ts`, `studio/src/features/run/DryRunPanel.tsx`.
+
+**Changes.**
+- Language: the node a cycle returns to declares `loop: { max_iterations,
+  on_exhausted }` (BPMN `abada:maxIterations`, `abada:onExhausted`). Back-edges
+  are classified once on the parsed definition (O(V+E)); unbounded cycles,
+  cycles to the start or to a parallel/inclusive gateway, and an
+  `on_exhausted` that re-enters the loop are rejected at deployment only.
+  BPMN loop and multi-instance markers are rejected.
+- Runtime: `<step>_iteration` counts passes (forward entry = 1, back-edge +1),
+  mirrored on the token's loop counter. Past the bound the token takes
+  `on_exhausted`, or stops in the `INCIDENT` state and an incident opens.
+  `LOOP_EXHAUSTED` history in both cases; cancel/fail resolve incidents.
+- V24: `incidents` table and endpoints; `INCIDENT` token state; the
+  `(instance, activity)` subscription uniqueness is dropped and waits are
+  re-armed per token every pass; timers complete before advancing; a
+  successful agent pass clears stale raw output and error code.
+- Studio keeps `loop` and every APL key it does not edit; the dry run honours
+  loop bounds and stops following every outcome route.
+
+**Acceptance tests.**
+- `AplLoopRuntimeTest` (PostgreSQL): rework loop approved after a restart
+  mid-loop; third rejection routes to `on_exhausted`; incident without a
+  route, resolved by cancel; message wait and self-looping timer re-armed.
+- `AplParserTest`, `BpmnLoopDeploymentTest`, `ProcessInstanceTokenTest`
+  (bound without wait states, incident state, forward re-entry resets),
+  `AplSchemaConformanceTest` (bound parity), `PostgresSchemaUpgradeTest`
+  (V1–V23 → V24), `PostgresTokenUpgradeTest` (rc.8 simulation undoes V24).
+- Studio `parser.test.ts` (loop round trip, verbatim keys, no resurrection of
+  removed fields), `elkLayout.test.ts` with the rework fixture.
+
+**Hardening (same milestone).** Passes are counted per token and loop step
+(V25 `process_tokens.loop_counts`; fork children inherit their parent's
+counts); open incidents can be retried by operators (`POST
+.../incidents/{id}/retry`, recorded as `INCIDENT_RETRIED`); a message wait
+without `correlationKey` opens a `MISSING_CORRELATION_KEY` incident instead of
+hanging silently.
+
+**Out of scope.** Studio loop editing (E6); raising a loop bound at runtime.
+
+## E4 — Boundaries, service levels and model fallback ✅ done
+
+**Goal.** A waiting step never stalls silently: it leaves through a declared
+route when its work fails for good or takes too long, a human task's service
+level is enforced, and a rate-limited model neither burns the attempt budget
+nor stops the process.
+
+**Files.** `engine/src/main/resources/db/migration/V26__boundaries.sql`,
+`ENGINE/core/model/{BoundaryMeta,SequenceFlow,ParsedProcessDefinition,TaskMeta,AgentWorkDescriptor}.java`,
+`ENGINE/parser/{AplParser,AplVariables,BpmnParser,SupportedBpmnValidator}.java`,
+`ENGINE/core/{ProcessInstance,AbadaEngine,ExternalTaskCommandService,TimerJobCommandService,JobScheduler,TaskManager,IncidentService}.java`,
+`ENGINE/api/{CockpitController,ProjectIncidentController,JobController,ProjectJobController}.java`,
+`agent-worker/.../{AgentWorkerMain,AbstractAgentGateway,AgentGateway}.java`,
+`sdk/java/.../{AbadaWorkerClient,AgentWorkDescriptor,AgentAttemptMetadata}.java`,
+`studio/src/lib/apl/parser.ts`, `studio/src/lib/run/instanceDetail.ts`.
+
+**Changes.**
+- Language: `on_timeout: { after, then }` on agent, engine-task and
+  human-input; `on_error` also on human-input and catching the last failed
+  attempt (`WORK_FAILED`); `sla_hours` read (alias `slaHours`) with
+  `escalate_to`; agent `fallback_models` (≤3, allow-listed). BPMN interrupting
+  timer and error boundary events on user and external service tasks;
+  `abada:slaHours` / `abada:escalateTo`.
+- Model: routes are `BoundaryMeta` plus boundary flows on the task; the
+  synthetic `<id>__outcome` gateway is gone (suffix still reserved). The
+  runtime takes a boundary flow only when the boundary fires.
+- Runtime: one command fires a boundary — retire the token's work, write
+  `<id>_outcome`/`<id>_error_code`, move the token, record `BOUNDARY_TAKEN`.
+  Timeout and SLA are durable job kinds created when a token parks at a task
+  and cancelled when it leaves. SLA escalation keeps the task open, adds
+  `escalate_to` groups, sets `escalatedAt`, emits `TASK_SLA_BREACHED`.
+  Unrouted last failures open `WORK_FAILED` incidents; retrying reopens the
+  work, optionally on another allowed model with a recorded reason
+  (`external_tasks.model_override`). Cancel/fail retire all unfinished work.
+  Work rows are locked before the instance row.
+- Worker: 429/quota/408/5xx/timeout/unreachable are availability errors;
+  fallback models are tried in order inside one lease; when all are
+  unavailable the failure is a deferral (`deferred: true`, Retry-After) that
+  keeps the attempt budget; the engine grows and caps the delay and turns the
+  deferral into a failed attempt after `abada.agent.max-deferrals`.
+  Idempotency keys name the lease. The SDK ignores unknown fields.
+- Studio: `on_timeout`, `fallback_models`, `escalate_to` round-trip; timeout
+  edges; boundary history lights the route taken; no default `sla_hours`.
+
+**Acceptance tests.**
+- `AplBoundaryRuntimeTest` (PostgreSQL): agent timeout retires the task and
+  rejects the late completion; completion cancels the timeout; SLA escalates
+  in place and reaches the outbox; human timeout; last failure takes
+  `on_error`; unrouted failure → incident → retry on another model with audit
+  and an allow-list/reason check; deferrals keep the budget, grow and are
+  bounded; a pending timeout survives a restart and fires once; cancel
+  retires all work.
+- `AplParserTest`, `SupportedBpmnValidatorTest`, `AgentWorkerResilienceTest`
+  (cancel retires leased work), `PostgresRestartRecoveryTest` (cancel vs
+  correlation without deadlock), `PostgresSchemaUpgradeTest` (V1–V25 → V26),
+  `PostgresTokenUpgradeTest` (rc.8 simulation undoes V26).
+- Worker `AgentWorkerRunnerTest` (fallback order, deferral, no fallback on
+  other errors, per-lease keys), `AgentWorkerMainTest` (Retry-After, 503);
+  SDK `AbadaWorkerClientTest` (unknown fields, deferral flag); Studio
+  `parser.test.ts`, `instanceDetail.test.ts`, `edgeGeometry.test.ts`.
+
+**Deviation from the plan.** An SLA breach does not switch the task to the
+`ESCALATED` status: claiming, completing and every task query work on
+`AVAILABLE`/`CLAIMED`, so escalation is a marker (`escalatedAt`) on a task
+that stays workable.
+
+**Out of scope.** Studio editing of boundaries and fallbacks (E6);
+non-interrupting timers and an `on_sla_breach` branch; per-model cost (E11).
+

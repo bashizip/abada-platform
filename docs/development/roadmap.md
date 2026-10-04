@@ -58,8 +58,8 @@ Full specifications: [`m2-task-specs.md`](m2-task-specs.md) (added as tasks star
 
 - [x] E1 One APL contract: `GET /v1/apl/schema`, `POST /v1/apl/validate`; Studio types generated from the schema; Studio parser reduced to YAML ↔ canvas mapping; typed `metadata.variables` with unknown-identifier warnings (deferred from T2) — [spec](m2-task-specs.md#e1--one-apl-contract--done)
 - [x] E2 Token entity: Flyway `V23` `process_tokens` table (id, instance, activity, scope, parent, loop counter, state); migrate active tokens and join bookkeeping; joins count token ids; upgrade tests from V1–V22 schemas; waiting work names its token; fixes dropped same-command join arrivals — [spec](m2-task-specs.md#e2--token-entity--done)
-- [ ] E3 Bounded loops: back-edges allowed only with `max_iterations`; `on_exhausted` route or incident
-- [ ] E4 Boundaries: `on_error`, `on_timeout` as real boundary events on agent, engine-task and human-input; enforced `sla_hours` with escalation; migrate M1 synthetic outcome gateways
+- [x] E3 Bounded loops: back-edges allowed only with `max_iterations`; `on_exhausted` route or incident (V24 `incidents`); BPMN cycles bounded too and loop/multi-instance markers rejected — [spec](m2-task-specs.md#e3--bounded-loops--done)
+- [x] E4 Boundaries: `on_error`, `on_timeout` as real boundary events on agent, engine-task and human-input; enforced `sla_hours` with escalation; migrate M1 synthetic outcome gateways; agent `fallback_models`, rate-limit deferral and operator retry on another allowed model
 - [ ] E5 Human review primitive: `outcomes: [approve, reject]`, required reject comment written to a variable
 - [ ] E6 Studio: back-edges, boundary events, loop and timeout inspector
 

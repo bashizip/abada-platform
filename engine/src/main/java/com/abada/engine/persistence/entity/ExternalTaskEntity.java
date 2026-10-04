@@ -64,6 +64,14 @@ public class ExternalTaskEntity {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    /** Model chosen by an operator for this task only (V26); replaces the definition's model at fetch. */
+    @Column(name = "model_override")
+    private String modelOverride;
+
+    /** Rate-limit waits that did not consume an attempt (V26). */
+    @Column(name = "deferrals", nullable = false)
+    private int deferrals;
+
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
@@ -73,7 +81,9 @@ public class ExternalTaskEntity {
         LOCKED,
         COMPLETED,
         FAILED,
-        BPMN_ERROR
+        BPMN_ERROR,
+        /** Retired without a result: an on_timeout boundary fired or the instance ended. */
+        CANCELLED
     }
 
     public ExternalTaskEntity() {
@@ -183,6 +193,10 @@ public class ExternalTaskEntity {
 
     public String getRequiredModel() { return requiredModel; }
     public void setRequiredModel(String value) { requiredModel = value; }
+    public String getModelOverride() { return modelOverride; }
+    public void setModelOverride(String value) { modelOverride = value; }
+    public int getDeferrals() { return deferrals; }
+    public void setDeferrals(int value) { deferrals = value; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant value) { createdAt = value; }

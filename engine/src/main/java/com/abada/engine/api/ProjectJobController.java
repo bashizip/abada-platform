@@ -62,9 +62,11 @@ public class ProjectJobController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         access.require(projectId, Role.OPERATOR, Role.OWNER);
         requireJob(projectId, jobId);
-        idempotency.execute(idempotencyKey, "project.external-task.retries",
-                Map.of("projectId", projectId, "jobId", jobId, "retries", request.retries()), () -> {
-                    commands.setRetries(jobId, request.retries());
+        Map<String, Object> fingerprint = new java.util.LinkedHashMap<>(
+                Map.of("projectId", projectId, "jobId", jobId, "retries", request.retries()));
+        if (request.model() != null) fingerprint.put("model", request.model());
+        idempotency.execute(idempotencyKey, "project.external-task.retries", fingerprint, () -> {
+                    commands.setRetries(jobId, request.retries(), request.model(), request.reason());
                     return Map.of("status", "Retries updated", "jobId", jobId);
                 });
         return ResponseEntity.ok().build();

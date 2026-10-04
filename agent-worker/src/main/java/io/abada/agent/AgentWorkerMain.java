@@ -91,7 +91,7 @@ public final class AgentWorkerMain {
                 RequestOptions options);
 
         void fail(LockedExternalTask task, String message, String details, int retries, Duration retryTimeout,
-                AgentAttemptMetadata agent, RequestOptions options);
+                AgentAttemptMetadata agent, boolean deferred, RequestOptions options);
 
         void extendLock(LockedExternalTask task, Duration lockDuration);
 
@@ -111,9 +111,9 @@ public final class AgentWorkerMain {
 
                 @Override
                 public void fail(LockedExternalTask task, String message, String details, int retries,
-                        Duration retryTimeout, AgentAttemptMetadata agent, RequestOptions options) {
+                        Duration retryTimeout, AgentAttemptMetadata agent, boolean deferred, RequestOptions options) {
                     client.fail(task.id(), config.workerId(), message, details, retries, retryTimeout, agent,
-                            options);
+                            deferred, options);
                 }
 
                 @Override
@@ -276,19 +276,47 @@ public final class AgentWorkerMain {
             int configuredAttempts = work == null || work.maxAttempts() == null ? 3 : work.maxAttempts();
             int currentRetries = task.retries() == null ? configuredAttempts : task.retries();
             int attempt = Math.max(1, configuredAttempts - Math.min(currentRetries, configuredAttempts) + 1);
+            String requestedModel = work == null ? config.defaultModel() : resolveModel(config, work);
+            String model = requestedModel;
+            String provider = "unknown";
+            Set<String> requestedTools = work == null || work.tools() == null ? Set.of() : Set.copyOf(work.tools());
             try {
                 if (work == null || !"abada.agent/v1".equals(work.profileVersion())) {
                     throw new IllegalArgumentException("Missing or unsupported abada.agent/v1 descriptor");
                 }
-                Set<String> requestedTools = work.tools() == null ? Set.of() : Set.copyOf(work.tools());
                 if (!config.allowedTools().containsAll(requestedTools)) {
                     throw new IllegalArgumentException("Agent requests tools outside the configured allow-list");
                 }
-                String model = resolveModel(config, work);
-                AgentGateway gateway = gateways.apply(work);
-                long startedNanos = System.nanoTime();
-                AgentGateway.AgentResult result = gateway.execute(work, task.variables());
-                long durationMs = TimeUnit.NANOSECONDS.toMillis(Math.max(0, System.nanoTime() - startedNanos));
+                // The declared model first, then each fallback, but only while the
+                // model before could not run the attempt at all (rate limit, quota,
+                // outage). Any other outcome, including output the engine will
+                // reject, ends the chain: a fallback never "shops" for an answer.
+                AgentGateway.AgentResult result = null;
+                AgentGateway.AgentUnavailableException unavailable = null;
+                Duration retryAfter = null;
+                long durationMs = 0;
+                for (String candidate : modelChain(work, requestedModel)) {
+                    AgentWorkDescriptor attemptWork = candidate.equals(requestedModel) ? work : work.withModel(candidate);
+                    AgentGateway gateway = gateways.apply(attemptWork);
+                    model = candidate;
+                    provider = gateway.provider();
+                    long startedNanos = System.nanoTime();
+                    try {
+                        result = gateway.execute(attemptWork, task.variables());
+                        durationMs = TimeUnit.NANOSECONDS.toMillis(Math.max(0, System.nanoTime() - startedNanos));
+                        break;
+                    } catch (AgentGateway.AgentUnavailableException modelUnavailable) {
+                        unavailable = modelUnavailable;
+                        if (modelUnavailable.retryAfter() != null && (retryAfter == null
+                                || modelUnavailable.retryAfter().compareTo(retryAfter) > 0)) {
+                            retryAfter = modelUnavailable.retryAfter();
+                        }
+                        LOG.log(System.Logger.Level.WARNING,
+                                "agent_model_unavailable task_id={0} activity_id={1} model={2} error_type={3}",
+                                task.id(), task.activityId(), candidate, modelUnavailable.getClass().getSimpleName());
+                    }
+                }
+                if (result == null) throw new Deferral(unavailable, retryAfter);
                 heartbeat.stop();
                 if (heartbeat.lockLost()) {
                     abandon(task, "complete");
@@ -296,10 +324,11 @@ public final class AgentWorkerMain {
                 }
                 String resultVariable = blankToDefault(work.resultVariable(), task.activityId() + "_result");
                 Map<String, Object> variables = Map.of(resultVariable, result.value());
-                AgentAttemptMetadata metadata = new AgentAttemptMetadata(model, gateway.provider(), attempt, durationMs,
+                AgentAttemptMetadata metadata = new AgentAttemptMetadata(model, provider, attempt, durationMs,
                         List.copyOf(requestedTools), resultVariable, promptHash(work.prompt()), null,
-                        result.confidence(), result.promptTokens(), result.completionTokens());
-                RequestOptions options = taskOptions(task.id(), attempt, "complete", task.traceParent());
+                        result.confidence(), result.promptTokens(), result.completionTokens(),
+                        model.equals(requestedModel) ? null : requestedModel);
+                RequestOptions options = taskOptions(task, attempt, "complete");
                 try {
                     engine.complete(task, variables, metadata, options);
                 } catch (WorkerProtocolException conflict) {
@@ -316,35 +345,39 @@ public final class AgentWorkerMain {
                 LOG.log(System.Logger.Level.INFO,
                         "agent_task_completed task_id={0} activity_id={1} model={2} attempt={3} completed_total={4} failed_total={5}",
                         task.id(), task.activityId(), model, attempt, done, failed.get());
-            } catch (Exception exception) {
+            } catch (Exception thrown) {
                 heartbeat.stop();
                 if (heartbeat.lockLost()) {
                     abandon(task, "failure");
                     return;
                 }
-                int remaining = Math.max(0, Math.min(currentRetries, configuredAttempts) - 1);
+                boolean deferred = thrown instanceof Deferral;
+                Exception exception = deferred ? ((Deferral) thrown).unavailable : thrown;
+                // A deferral keeps the attempt budget: the model never ran.
+                int remaining = deferred ? Math.min(currentRetries, configuredAttempts)
+                        : Math.max(0, Math.min(currentRetries, configuredAttempts) - 1);
                 long backoff = work == null || work.retryBackoffMs() == null ? 2_000L : work.retryBackoffMs();
-                String model = work == null ? config.defaultModel() : resolveModel(config, work);
-                String provider = work == null ? "unknown" : gateways.apply(work).provider();
+                Duration retryTimeout = deferred && ((Deferral) thrown).retryAfter != null
+                        ? ((Deferral) thrown).retryAfter : Duration.ofMillis(backoff);
                 Double achieved = exception instanceof AgentGateway.ConfidenceBelowThresholdException below
                         ? below.confidence() : null;
                 try {
                     // The full, redacted stack trace is stored on the task and shown
                     // to operators in Studio's error details.
                     engine.fail(task, redactor.redact(safeMessage(exception)), redactor.stackTrace(exception),
-                            remaining,
-                            Duration.ofMillis(backoff),
+                            remaining, retryTimeout,
                             new AgentAttemptMetadata(model, provider, attempt, null, List.of(), null, null,
-                                    exception.getClass().getSimpleName(), achieved),
-                            taskOptions(task.id(), attempt, "failure", task.traceParent()));
+                                    exception.getClass().getSimpleName(), achieved, null, null,
+                                    model.equals(requestedModel) ? null : requestedModel),
+                            deferred, taskOptions(task, attempt, deferred ? "deferral" : "failure"));
                 } catch (RuntimeException reportFailure) {
                     LOG.log(System.Logger.Level.WARNING, "agent_failure_report_failed task_id={0} message={1}",
                             task.id(), safeMessage(reportFailure));
                 }
                 long total = failed.incrementAndGet();
                 LOG.log(System.Logger.Level.WARNING,
-                        "agent_task_failed task_id={0} activity_id={1} model={2} attempt={3} retries_remaining={4} completed_total={5} failed_total={6}",
-                        task.id(), task.activityId(), model, attempt, remaining, completed.get(), total);
+                        "agent_task_failed task_id={0} activity_id={1} model={2} attempt={3} retries_remaining={4} deferred={5} completed_total={6} failed_total={7}",
+                        task.id(), task.activityId(), model, attempt, remaining, deferred, completed.get(), total);
             }
         }
 
@@ -383,7 +416,8 @@ public final class AgentWorkerMain {
         long bounded = work.timeoutMs() == null ? Math.min(60_000L, max) : max;
         return new AgentWorkDescriptor(work.profileVersion(), work.model(), work.prompt(), work.inputs(),
                 work.resultVariable(), work.outputSchema(), work.tools(), work.confidenceThreshold(),
-                work.temperature(), work.maxTokens(), bounded, work.maxAttempts(), work.retryBackoffMs());
+                work.temperature(), work.maxTokens(), bounded, work.maxAttempts(), work.retryBackoffMs(),
+                work.fallbackModels());
     }
 
     static Map<String, Object> localAcknowledgement(LockedExternalTask task) {
@@ -400,8 +434,38 @@ public final class AgentWorkerMain {
         return value.length() > 300 ? value.substring(0, 300) : value;
     }
 
-    private static RequestOptions taskOptions(String taskId, int attempt, String operation, String traceParent) {
-        return new RequestOptions("agent-" + taskId + "-attempt-" + attempt + "-" + operation, traceParent, null);
+    /**
+     * Idempotency key of a report. It names the lease (its expiry), not only the
+     * attempt: a deferral keeps the attempt number, so two deferrals of the same
+     * attempt must still be two distinct requests.
+     */
+    static RequestOptions taskOptions(LockedExternalTask task, int attempt, String operation) {
+        String lease = task.lockExpirationTime() == null ? "attempt-" + attempt
+                : "lease-" + task.lockExpirationTime().toEpochMilli();
+        return new RequestOptions("agent-" + task.id() + "-" + lease + "-" + operation, task.traceParent(), null);
+    }
+
+    /** The declared model, then each declared fallback once, in order. */
+    static List<String> modelChain(AgentWorkDescriptor work, String requestedModel) {
+        java.util.LinkedHashSet<String> chain = new java.util.LinkedHashSet<>();
+        chain.add(requestedModel);
+        if (work.fallbackModels() != null) {
+            work.fallbackModels().stream().filter(candidate -> candidate != null && !candidate.isBlank())
+                    .forEach(chain::add);
+        }
+        return List.copyOf(chain);
+    }
+
+    /** Every model in the chain was unavailable: report a deferral, not a failed attempt. */
+    private static final class Deferral extends Exception {
+        private final Exception unavailable;
+        private final Duration retryAfter;
+
+        Deferral(Exception cause, Duration retryAfter) {
+            super(cause.getMessage(), cause, false, false);
+            this.unavailable = cause;
+            this.retryAfter = retryAfter;
+        }
     }
 
     private static String blankToDefault(String value, String fallback) {

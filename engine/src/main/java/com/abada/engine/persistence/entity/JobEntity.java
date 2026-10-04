@@ -20,6 +20,14 @@ public class JobEntity {
 
     private String eventId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "job_kind", nullable = false, length = 32)
+    private Kind kind = Kind.EVENT;
+
+    /** For BOUNDARY_TIMEOUT: the boundary of {@link #eventId} (the task) that fires. */
+    @Column(name = "boundary_id")
+    private String boundaryId;
+
     private Instant executionTimestamp;
 
     @Enumerated(EnumType.STRING)
@@ -40,6 +48,9 @@ public class JobEntity {
     /** CANCELLED marks a job that lost a competing-event race: the sibling
      *  wait state fired first and the job must never advance the instance. */
     public enum Status { AVAILABLE, LEASED, COMPLETED, FAILED, CANCELLED }
+
+    /** What a due job does: resume a timer catch event, fire a task's on_timeout, or escalate a task. */
+    public enum Kind { EVENT, BOUNDARY_TIMEOUT, SLA }
 
     public JobEntity() {
         this.id = UUID.randomUUID().toString();
@@ -100,6 +111,10 @@ public class JobEntity {
     public void setLastError(String lastError) { this.lastError = lastError; }
     public long getEntityVersion() { return entityVersion; }
 
+    public Kind getKind() { return kind; }
+    public void setKind(Kind kind) { this.kind = kind; }
+    public String getBoundaryId() { return boundaryId; }
+    public void setBoundaryId(String boundaryId) { this.boundaryId = boundaryId; }
     public String getTokenId() { return tokenId; }
     public void setTokenId(String tokenId) { this.tokenId = tokenId; }
 }

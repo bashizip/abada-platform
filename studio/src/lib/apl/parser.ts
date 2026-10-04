@@ -171,7 +171,15 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
   const nodes: WorkflowNode[] = [];
   const edges: WorkflowEdge[] = [];
 
-  apl.flow.nodes.forEach((aplNode) => {
+  apl.flow.nodes.forEach((rawNode) => {
+    // Record which keys this mapping reads; the others are kept verbatim.
+    const read = new Set<string>();
+    const aplNode = new Proxy(rawNode, {
+      get(target, key, receiver) {
+        if (typeof key === 'string') read.add(key);
+        return Reflect.get(target, key, receiver);
+      },
+    }) as APLNode;
     const wNode: WorkflowNode = {
       id: aplNode.id,
       type: 'agent',
@@ -209,6 +217,8 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onLowConfidence: aplNode.on_low_confidence,
           onInvalidOutput: aplNode.on_invalid_output,
           onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
+          fallbackModels: aplNode.fallback_models,
         };
         break;
       case 'engine-task':
@@ -216,6 +226,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.engineTaskConfig = {
           service: aplNode.service,
           onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
         };
         break;
       case 'script':
@@ -230,7 +241,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.type = 'human';
         wNode.humanConfig = {
           assignees: aplNode.assignees || ['Reviewer'],
-          slaHours: aplNode.sla_hours || 24,
+          slaHours: aplNode.sla_hours ?? ('slaHours' in aplNode ? aplNode.slaHours : undefined),
+          escalateTo: aplNode.escalate_to,
+          onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
           formKey: 'formKey' in aplNode ? aplNode.formKey : undefined,
           formFields: [],
         };
@@ -358,10 +372,24 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         target: aplNode.next,
       });
     }
-    // Outcome routes are drawn as labelled edges after the normal successor.
-    if (aplNode.type === 'agent' || aplNode.type === 'engine-task') {
+    // Boundary routes are drawn as labelled edges after the normal successor.
+    if (aplNode.type === 'agent' || aplNode.type === 'engine-task' || aplNode.type === 'human-input'
+      || aplNode.type === 'approval-gate') {
       outcomeRouteEdges(aplNode).forEach((edge) => edges.push(edge));
     }
+    if ('loop' in aplNode && aplNode.loop) {
+      wNode.loop = { maxIterations: aplNode.loop.max_iterations, onExhausted: aplNode.loop.on_exhausted };
+      if (aplNode.loop.on_exhausted) {
+        edges.push({
+          id: `e_${aplNode.id}_${aplNode.loop.on_exhausted}_on_exhausted`,
+          source: aplNode.id,
+          target: aplNode.loop.on_exhausted,
+          label: 'on_exhausted',
+        });
+      }
+    }
+    const extras = Object.entries(rawNode).filter(([key]) => !read.has(key));
+    if (extras.length > 0) wNode.aplExtras = Object.fromEntries(extras);
   });
 
   // Saved `ui` positions are kept as authored; only missing ones are seeded.
@@ -371,6 +399,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
   return {
     id: `wf-${Date.now()}`,
     name: apl.metadata.name,
+    metadataExtras: metadataExtras(apl.metadata),
     processKey: apl.metadata.key || apl.metadata.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
     category: (apl.metadata.category || 'custom') as any,
     fileType: 'apl',
@@ -466,6 +495,8 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         on_low_confidence: node.agentConfig?.onLowConfidence || undefined,
         on_invalid_output: node.agentConfig?.onInvalidOutput || undefined,
         on_error: node.agentConfig?.onError || undefined,
+        on_timeout: node.agentConfig?.onTimeout || undefined,
+        fallback_models: node.agentConfig?.fallbackModels?.length ? node.agentConfig.fallbackModels : undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
@@ -473,7 +504,10 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         ...baseNode,
         type: 'human-input',
         assignees: node.humanConfig?.assignees || [],
-        sla_hours: node.humanConfig?.slaHours,
+        sla_hours: node.humanConfig?.slaHours || undefined,
+        escalate_to: node.humanConfig?.escalateTo?.length ? node.humanConfig.escalateTo : undefined,
+        on_error: node.humanConfig?.onError || undefined,
+        on_timeout: node.humanConfig?.onTimeout || undefined,
         formKey: node.humanConfig?.formKey,
         next: getNextNode(node.id, node.type),
       } as APLNode);
@@ -566,6 +600,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         type: 'engine-task',
         service: node.engineTaskConfig?.service || 'abada:service',
         on_error: node.engineTaskConfig?.onError,
+        on_timeout: node.engineTaskConfig?.onTimeout || undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'script') {
@@ -599,14 +634,32 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
     }
   });
 
+  // Loop bounds and the APL keys Studio does not edit go back unchanged.
+  const canvasNodes = new Map(wf.nodes.map((node) => [node.id, node]));
+  aplNodes.forEach((aplNode) => {
+    const source = canvasNodes.get(aplNode.id);
+    if (!source) return;
+    const target = aplNode as unknown as Record<string, unknown>;
+    if (source.loop) {
+      target.loop = {
+        max_iterations: source.loop.maxIterations,
+        ...(source.loop.onExhausted ? { on_exhausted: source.loop.onExhausted } : {}),
+      };
+    }
+    Object.entries(source.aplExtras ?? {}).forEach(([key, value]) => {
+      if (!(key in target)) target[key] = value;
+    });
+  });
+
   const entryNode = wf.nodes.find(n => n.type === 'event' && n.subtype === 'start') || wf.nodes[0];
 
   return {
     version: 'abada.io/v1',
     metadata: {
+      owner: 'studio-user',
+      ...wf.metadataExtras,
       key: wf.processKey || wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
       name: wf.name,
-      owner: 'studio-user',
       category: wf.category,
     },
     flow: {
@@ -616,13 +669,24 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
   };
 }
 
-/** Outcome-route edges (on_low_confidence, on_invalid_output, on_error) are labelled `on_*`. */
+/** Metadata keys Studio does not edit (description, owner, variables, …), kept verbatim. */
+function metadataExtras(metadata: APLDocument['metadata']): Record<string, unknown> | undefined {
+  const { key: _key, name: _name, category: _category, ...rest } = metadata;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+/**
+ * Route edges are labelled `on_*`: boundary routes (on_low_confidence,
+ * on_invalid_output, on_error, on_timeout) and the loop's on_exhausted route.
+ */
 export const isOutcomeRouteEdge = (edge: { label?: string }): boolean =>
   typeof edge.label === 'string' && edge.label.startsWith('on_');
 
 function outcomeRouteEdges(aplNode: APLNode): WorkflowEdge[] {
   const routes: { target: string; label: string }[] = [];
-  const node = aplNode as { on_low_confidence?: string; on_invalid_output?: string; on_error?: APLOnError };
+  const node = aplNode as {
+    on_low_confidence?: string; on_invalid_output?: string; on_error?: APLOnError; on_timeout?: { then?: string };
+  };
   if (node.on_low_confidence) routes.push({ target: node.on_low_confidence, label: 'on_low_confidence' });
   if (node.on_invalid_output) routes.push({ target: node.on_invalid_output, label: 'on_invalid_output' });
   if (typeof node.on_error === 'string' && node.on_error) {
@@ -632,6 +696,7 @@ function outcomeRouteEdges(aplNode: APLNode): WorkflowEdge[] {
       if (rule?.then) routes.push({ target: rule.then, label: rule.code ? `on_error: ${rule.code}` : 'on_error' });
     });
   }
+  if (node.on_timeout?.then) routes.push({ target: node.on_timeout.then, label: 'on_timeout' });
   return routes.map((route, index) => ({
     id: `e_${aplNode.id}_${route.target}_${route.label.replace(/[^a-z_]/gi, '')}_${index}`,
     source: aplNode.id,

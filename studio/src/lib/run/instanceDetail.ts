@@ -79,6 +79,14 @@ export function deriveInstancePath(
   };
 }
 
+/** Boundary kind the engine records in BOUNDARY_TAKEN for each route label. */
+const BOUNDARY_KIND: Record<string, string> = {
+  on_low_confidence: 'LOW_CONFIDENCE',
+  on_invalid_output: 'INVALID_OUTPUT',
+  on_error: 'ERROR',
+  on_timeout: 'TIMEOUT',
+};
+
 /** Engine outcome recorded for each agent outcome-route label. */
 const ROUTE_OUTCOME: Record<string, string> = {
   on_low_confidence: 'LOW_CONFIDENCE',
@@ -86,18 +94,26 @@ const ROUTE_OUTCOME: Record<string, string> = {
 };
 
 /**
- * An outcome route (`on_low_confidence`, `on_invalid_output`, `on_error`) is
- * taken only when the engine recorded that outcome for its source: visiting
- * both ends is not enough, since the normal successor may lead there too.
- * Agent verdicts come from `EXTERNAL_TASK_COMPLETED.details.agentOutcome`;
- * error routes from `EXTERNAL_TASK_BPMN_ERROR.details.routedTo` (and the
- * error code when the route names one).
+ * A boundary route (`on_low_confidence`, `on_invalid_output`, `on_error`,
+ * `on_timeout`) is taken only when the engine recorded it for its source:
+ * visiting both ends is not enough, since the normal successor may lead there
+ * too. Since 1.1 every boundary records `BOUNDARY_TAKEN` with its target (and
+ * error code); older history is read from the agent verdict
+ * (`EXTERNAL_TASK_COMPLETED.details.agentOutcome`) and the routed BPMN error
+ * (`EXTERNAL_TASK_BPMN_ERROR.details.routedTo`).
  */
 function outcomeRouteTaken(edge: WorkflowEdge, history: ActivityHistoryDTO[]): boolean {
   const label = edge.label ?? '';
   const fromSource = history.filter((event) => event.activityId === edge.source);
+  const code = label.startsWith('on_error:') ? label.slice('on_error:'.length).trim() : null;
+  const kind = BOUNDARY_KIND[label.split(':')[0]];
+  if (kind && fromSource.some((event) => event.eventType === 'BOUNDARY_TAKEN'
+    && event.details?.kind === kind
+    && event.details?.routedTo === edge.target
+    && (!code || event.details?.code === code))) {
+    return true;
+  }
   if (label.startsWith('on_error')) {
-    const code = label.startsWith('on_error:') ? label.slice('on_error:'.length).trim() : null;
     return fromSource.some((event) => event.eventType === 'EXTERNAL_TASK_BPMN_ERROR'
       && event.details?.routedTo === edge.target
       && (!code || event.details?.errorCode === code));
@@ -132,6 +148,11 @@ export const EVENT_META: Record<string, { label: string; tone: AuditTone }> = {
   EXTERNAL_TASK_LOCK_EXTENDED: { label: 'Job lock extended', tone: 'external' },
   EXTERNAL_TASK_RETRIES_SET: { label: 'Job retries set', tone: 'warning' },
   EXTERNAL_TASK_BPMN_ERROR: { label: 'Job BPMN error', tone: 'failure' },
+  EXTERNAL_TASK_DEFERRED: { label: 'Model unavailable, retry deferred', tone: 'warning' },
+  BOUNDARY_TAKEN: { label: 'Boundary route taken', tone: 'warning' },
+  TASK_SLA_BREACHED: { label: 'SLA missed, task escalated', tone: 'warning' },
+  LOOP_EXHAUSTED: { label: 'Loop limit reached', tone: 'warning' },
+  INCIDENT_RETRIED: { label: 'Incident retried', tone: 'warning' },
 };
 
 export const eventMeta = (eventType: string): { label: string; tone: AuditTone } =>

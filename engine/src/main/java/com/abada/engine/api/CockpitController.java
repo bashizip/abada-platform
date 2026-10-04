@@ -1,5 +1,8 @@
 package com.abada.engine.api;
 
+import com.abada.engine.dto.IncidentDTO;
+import com.abada.engine.persistence.repository.IncidentRepository;
+
 import com.abada.engine.core.AbadaEngine;
 import com.abada.engine.core.ProcessInstance;
 import com.abada.engine.core.IdempotencyService;
@@ -38,13 +41,15 @@ public class CockpitController {
     private final ActivityHistoryRepository historyRepository;
     private final IdempotencyService idempotency;
     private final ObjectMapper objectMapper;
+    private final IncidentRepository incidents;
 
     public CockpitController(AbadaEngine engine, ActivityHistoryRepository historyRepository,
-            IdempotencyService idempotency, ObjectMapper objectMapper) {
+            IdempotencyService idempotency, ObjectMapper objectMapper, IncidentRepository incidents) {
         this.engine = engine;
         this.historyRepository = historyRepository;
         this.idempotency = idempotency;
         this.objectMapper = objectMapper;
+        this.incidents = incidents;
     }
 
     /**
@@ -158,6 +163,34 @@ public class CockpitController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(new ActivityInstanceTree(id, children));
+    }
+
+    /** Incidents of a process instance, open and resolved, oldest first. */
+    @GetMapping("/{id}/incidents")
+    public List<IncidentDTO> getIncidents(@PathVariable String id) {
+        requireInstance(id);
+        return incidents.findByProcessInstanceIdOrderByCreatedAtAsc(id).stream().map(IncidentDTO::from).toList();
+    }
+
+    /** Restarts the token an open incident stopped (operator action, recorded in history). */
+    @PostMapping("/{id}/incidents/{incidentId}/retry")
+    public ResponseEntity<Void> retryIncident(@PathVariable String id, @PathVariable String incidentId,
+            @RequestBody(required = false) com.abada.engine.dto.IncidentRetryRequest body,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        requireInstance(id);
+        if (incidents.findById(incidentId).filter(found -> found.getProcessInstanceId().equals(id)).isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
+                    "Incident not found: " + incidentId);
+        }
+        String model = body == null ? null : body.model();
+        String reason = body == null ? null : body.reason();
+        Map<String, Object> fingerprint = new java.util.LinkedHashMap<>(Map.of("id", id, "incidentId", incidentId));
+        if (model != null) fingerprint.put("model", model);
+        idempotency.execute(idempotencyKey, "incident.retry", fingerprint, () -> {
+            engine.retryIncident(id, incidentId, model, reason);
+            return Map.of("status", "Retried", "incidentId", incidentId);
+        });
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/history")

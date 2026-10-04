@@ -171,7 +171,11 @@ public abstract class AbstractAgentGateway implements AgentGateway {
             } else if (status == 404) {
                 throw new AgentModelNotFoundException(provider() + " model or endpoint not found: '" + model + "' (HTTP 404" + (detail.isBlank() ? "" : ": " + detail) + ")");
             } else if (status == 429) {
-                throw new AgentQuotaExceededException(provider() + " quota or rate limit exceeded (HTTP 429" + (detail.isBlank() ? "" : ": " + detail) + ")");
+                throw new AgentQuotaExceededException(provider() + " quota or rate limit exceeded (HTTP 429" + (detail.isBlank() ? "" : ": " + detail) + ")",
+                        retryAfter(response.headers().firstValue("Retry-After").orElse(null), java.time.Instant.now()));
+            } else if (status == 408 || status >= 500) {
+                throw new AgentUnavailableException(provider() + " API is unavailable (HTTP " + status + (detail.isBlank() ? "" : ": " + detail) + ")",
+                        retryAfter(response.headers().firstValue("Retry-After").orElse(null), java.time.Instant.now()));
             } else {
                 throw new AgentExecutionException(provider() + " API returned error (HTTP " + status + (detail.isBlank() ? "" : ": " + detail) + ")");
             }
@@ -188,6 +192,31 @@ public abstract class AbstractAgentGateway implements AgentGateway {
         Integer completionTokens = usage.path("completion_tokens").isNumber()
                 ? usage.path("completion_tokens").asInt() : null;
         return new AgentResult(decoded.value(), decoded.confidence(), promptTokens, completionTokens);
+    }
+
+    /** Longest Retry-After honoured; a provider asking for longer is re-checked after this. */
+    static final Duration MAX_RETRY_AFTER = Duration.ofHours(1);
+
+    /**
+     * Parses an HTTP Retry-After header: delay seconds or an HTTP-date.
+     * Returns null when absent or unreadable, capped at {@link #MAX_RETRY_AFTER}.
+     */
+    static Duration retryAfter(String header, java.time.Instant now) {
+        if (header == null || header.isBlank()) return null;
+        Duration delay;
+        try {
+            delay = Duration.ofSeconds(Long.parseLong(header.strip()));
+        } catch (NumberFormatException notSeconds) {
+            try {
+                java.time.Instant at = java.time.ZonedDateTime.parse(header.strip(),
+                        java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+                delay = Duration.between(now, at);
+            } catch (java.time.format.DateTimeParseException notDate) {
+                return null;
+            }
+        }
+        if (delay.isNegative()) return Duration.ZERO;
+        return delay.compareTo(MAX_RETRY_AFTER) > 0 ? MAX_RETRY_AFTER : delay;
     }
 
     /**

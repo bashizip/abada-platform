@@ -215,10 +215,44 @@ export interface APLAgentNode {
    * Delay between attempts.
    */
   retry_backoff_ms?: number;
+  /**
+   * Models tried in order when the model before is unavailable (rate limit, quota, outage); never on invalid output or low confidence. Each must be on the engine's allowed list.
+   *
+   * @maxItems 3
+   */
+  fallback_models?: AgentModel[];
   on_low_confidence?: NodeRef;
   on_invalid_output?: NodeRef;
   on_error?: OnError;
+  on_timeout?: OnTimeout;
+  loop?: Loop;
   ui?: UiPosition;
+}
+/**
+ * Interrupting timeout boundary: if the step is not done within 'after' (ISO-8601 duration, PT1S to P365D), its work is cancelled and the flow continues at 'then'.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "onTimeout".
+ */
+export interface OnTimeout {
+  after: IsoDuration;
+  then: NodeRef;
+}
+/**
+ * Bound of the loop whose back-edges return to this node. Every cycle must return to a node that declares one.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "loop".
+ */
+export interface Loop {
+  /**
+   * Times this node may be entered per pass of the loop; the engine exposes the current count as <id>_iteration.
+   */
+  max_iterations: number;
+  /**
+   * Id of a node declared in flow.nodes.
+   */
+  on_exhausted?: string;
 }
 /**
  * This interface was referenced by `APLDocument`'s JSON-Schema
@@ -237,6 +271,8 @@ export interface APLEngineTaskNode {
    */
   service: string;
   on_error?: OnError;
+  on_timeout?: OnTimeout;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -280,6 +316,7 @@ export interface APLDecisionTableNode {
       [k: string]: string | number | boolean | null;
     };
   }[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -298,6 +335,7 @@ export interface APLScriptNode {
   next?: NodeRef;
   script: string;
   format?: string;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -326,9 +364,18 @@ export interface APLApprovalGateNode {
    */
   mode?: 'serial' | 'parallel';
   /**
-   * Service-level target for monitoring; not enforced by the engine yet.
+   * Service level in hours: an open task past it is escalated in place (it stays open; escalate_to groups become candidates; TASK_SLA_BREACHED is emitted).
    */
   sla_hours?: number;
+  /**
+   * Groups added as candidates when the task misses sla_hours (requires sla_hours).
+   *
+   * @minItems 1
+   */
+  escalate_to?: string[];
+  on_error?: OnError;
+  on_timeout?: OnTimeout;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -360,11 +407,10 @@ export interface APLHumanInputNode {
    */
   mode?: 'serial' | 'parallel';
   /**
-   * Service-level target for monitoring; not enforced by the engine yet.
+   * Service level in hours: an open task past it is escalated in place (it stays open; escalate_to groups become candidates; TASK_SLA_BREACHED is emitted).
    */
   sla_hours?: number;
   /**
-   * @deprecated
    * Deprecated alias of sla_hours.
    */
   slaHours?: number;
@@ -372,6 +418,15 @@ export interface APLHumanInputNode {
    * Reserved; currently has no runtime effect.
    */
   requireDoubleSignOff?: boolean;
+  /**
+   * Groups added as candidates when the task misses sla_hours (requires sla_hours).
+   *
+   * @minItems 1
+   */
+  escalate_to?: string[];
+  on_error?: OnError;
+  on_timeout?: OnTimeout;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -402,6 +457,7 @@ export interface APLConditionNode {
     else?: boolean | string;
     then?: NodeRef;
   }[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -432,6 +488,7 @@ export interface APLInclusiveNode {
     else?: boolean | string;
     then?: NodeRef;
   }[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -452,6 +509,7 @@ export interface APLParallelNode {
    * @minItems 2
    */
   branches?: NodeRef[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -470,6 +528,7 @@ export interface APLEventGatewayNode {
    * @minItems 2
    */
   events: APLEventGatewayChild[];
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -497,6 +556,7 @@ export interface APLMessageCatchNode {
   description?: string;
   next?: NodeRef;
   message: string;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -512,6 +572,7 @@ export interface APLTimerNode {
   description?: string;
   next?: NodeRef;
   duration: IsoDuration;
+  loop?: Loop;
   ui?: UiPosition;
 }
 /**
@@ -527,5 +588,6 @@ export interface APLSignalNode {
   description?: string;
   next?: NodeRef;
   signal: string;
+  loop?: Loop;
   ui?: UiPosition;
 }
