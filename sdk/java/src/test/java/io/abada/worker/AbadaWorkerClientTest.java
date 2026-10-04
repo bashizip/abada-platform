@@ -194,6 +194,65 @@ class AbadaWorkerClientTest {
     }
 
     @Test
+    void decodesTheJournalToResumeFrom() {
+        server.removeContext("/api/v1/external-tasks");
+        server.createContext("/api/v1/external-tasks", request -> {
+            byte[] response = ("[{\"id\":\"task-1\",\"topicName\":\"abada:agent\",\"variables\":{},"
+                    + "\"protocolVersion\":\"1\",\"attempt\":2,"
+                    + "\"steps\":[{\"attempt\":2,\"sequence\":1,\"kind\":\"TOOL_CALL\",\"state\":\"STARTED\","
+                    + "\"toolRef\":\"crm/create_ticket\",\"policy\":\"write\",\"idempotencyKey\":\"k1\","
+                    + "\"requestDigest\":\"d1\",\"request\":{\"subject\":\"x\"}}],"
+                    + "\"priorWrites\":[{\"attempt\":1,\"sequence\":3,\"kind\":\"TOOL_CALL\",\"state\":\"COMPLETED\","
+                    + "\"toolRef\":\"crm/notify\",\"requestDigest\":\"d0\",\"result\":{\"sent\":true}}]}]")
+                    .getBytes(StandardCharsets.UTF_8);
+            request.getResponseHeaders().add("X-Abada-Worker-Protocol-Version", "1");
+            request.sendResponseHeaders(200, response.length);
+            request.getResponseBody().write(response);
+            request.close();
+        });
+        LockedExternalTask task = client.fetchAndLock("worker", List.of("abada:agent"),
+                Duration.ofSeconds(30), 1, RequestOptions.defaults()).getFirst();
+        assertEquals(2, task.attempt());
+        assertEquals("k1", task.steps().getFirst().idempotencyKey());
+        assertEquals("x", task.steps().getFirst().request().path("subject").asText());
+        assertTrue(task.priorWrites().getFirst().result().path("sent").asBoolean());
+    }
+
+    @Test
+    void recordsAStepAndExposesWhyTheEngineRefusedOne() {
+        AtomicReference<String> body = new AtomicReference<>();
+        AtomicReference<Integer> calls = new AtomicReference<>(0);
+        server.removeContext("/api/v1/external-tasks");
+        server.createContext("/api/v1/external-tasks", request -> {
+            body.set(new String(request.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            calls.set(calls.get() + 1);
+            boolean refuse = calls.get() > 1;
+            byte[] response = (refuse
+                    ? "{\"code\":\"AGENT_STEP_REJECTED\",\"message\":\"needs approval\","
+                            + "\"details\":{\"reason\":\"APPROVAL_REQUIRED\"}}"
+                    : "{\"attempt\":1,\"sequence\":1,\"kind\":\"TOOL_CALL\",\"state\":\"STARTED\","
+                            + "\"toolRef\":\"crm/create_ticket\",\"policy\":\"write\",\"idempotencyKey\":\"k9\","
+                            + "\"requestDigest\":\"d\",\"futureField\":1}").getBytes(StandardCharsets.UTF_8);
+            request.getResponseHeaders().add("Content-Type", "application/json");
+            request.sendResponseHeaders(refuse ? 409 : 200, response.length);
+            request.getResponseBody().write(response);
+            request.close();
+        });
+
+        AgentStep step = client.recordStep("task-1", "worker-1", 1, 1, "TOOL_CALL", "STARTED", "crm/create_ticket",
+                Map.of("subject", "x"), null, null, "model-a", "p1", null, null);
+        assertEquals("k9", step.idempotencyKey());
+        assertTrue(body.get().contains("\"sequence\":1"), body.get());
+        assertTrue(!body.get().contains("\"result\""), body.get());
+
+        WorkerProtocolException refused = assertThrows(WorkerProtocolException.class, () -> client.recordStep(
+                "task-1", "worker-1", 1, 2, "TOOL_CALL", "STARTED", "crm/refund", Map.of(), null, null, null,
+                null, null, null));
+        assertEquals(409, refused.status());
+        assertEquals("APPROVAL_REQUIRED", refused.reason());
+    }
+
+    @Test
     void reportsADeferralSoTheEngineKeepsTheAttemptBudget() {
         client.fail("task-3", "worker-1", "rate limited", "AgentQuotaExceededException", 3,
                 Duration.ofSeconds(30), null, true, RequestOptions.defaults());
