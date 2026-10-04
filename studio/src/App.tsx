@@ -47,7 +47,7 @@ import { loadAplContract } from '@/lib/aplContract';
 import { isEditableTarget, undoShortcut } from '@/lib/history/shortcuts';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
-import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
+import { dryRunFingerprint as computeDryRunFingerprint } from '@/lib/run/workflowFingerprint';
 import { LEAD_TRIAGE_EXAMPLES, STARTER_PROCESS_KEY } from '@/lib/starter/leadTriage';
 import { runSequentialInsightEvidence } from '@/lib/starter/insightEvidence';
 
@@ -727,7 +727,7 @@ export default function App() {
               isOpen={showRunPanel}
               onClose={() => setShowRunPanel(false)}
               onCompleted={(payload) => {
-                setDryRunFingerprint(workflowFingerprint(currentWorkflow));
+                setDryRunFingerprint(computeDryRunFingerprint(currentWorkflow));
                 setLastDryRunPayload(payload);
                 setIsSimulating(false);
                 setSimulationLogs((logs) => [...logs, {
@@ -796,7 +796,7 @@ export default function App() {
         workflow={currentWorkflow}
         isOpen={showDeployDialog}
         isDeploying={isDeploying}
-        dryRunPassed={dryRunFingerprint === workflowFingerprint(currentWorkflow)}
+        dryRunPassed={dryRunFingerprint === computeDryRunFingerprint(currentWorkflow)}
         defaultPayload={Object.keys(lastDryRunPayload).length
           ? lastDryRunPayload
           : currentWorkflow.processKey === STARTER_PROCESS_KEY
