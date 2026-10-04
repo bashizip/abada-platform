@@ -54,3 +54,26 @@ export const issuesToLogs = (
       message: issue.path && issue.path !== '/' ? `${issue.message} (${issue.code}, ${issue.path})` : `${issue.message} (${issue.code})`,
     };
   });
+
+/**
+ * The canvas node an engine issue is about: its `elementId` when that is a
+ * node, else the node at the issue path's `/flow/nodes/<index>`.
+ */
+export const issueNodeId = (
+  issue: Pick<AplValidationIssue, 'elementId' | 'path'>,
+  nodeIds: string[],
+): string | null => {
+  if (issue.elementId && nodeIds.includes(issue.elementId)) return issue.elementId;
+  const match = /^\/flow\/nodes\/(\d+)(\/|$)/.exec(issue.path ?? '');
+  return match ? nodeIds[Number(match[1])] ?? null : null;
+};
+
+/** Engine issues grouped by the node they are about; issues about no node are left out. */
+export const issuesByNode = (issues: AplValidationIssue[], nodeIds: string[]): Map<string, AplValidationIssue[]> => {
+  const grouped = new Map<string, AplValidationIssue[]>();
+  for (const issue of sortIssues(issues)) {
+    const nodeId = issueNodeId(issue, nodeIds);
+    if (nodeId) grouped.set(nodeId, [...(grouped.get(nodeId) ?? []), issue]);
+  }
+  return grouped;
+};
