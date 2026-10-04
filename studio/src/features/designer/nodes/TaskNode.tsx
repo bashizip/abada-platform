@@ -6,7 +6,7 @@ import { TASK_HEIGHT, TASK_WIDTH, outcomePortPoint } from '@/lib/layout/nodeGeom
 import { EDGE_COLORS } from '../edgeStyle';
 import { useCanvasView, useCompactZoom } from '../canvasContext';
 import { NODE_ACCENT, NODE_TYPE_LABEL, taskFact } from './nodeStyle';
-import { DiffBadge, NodeHandles, StatusBadge } from './NodeChrome';
+import { DiffBadge, NodeBadges, NodeHandles, StatusBadge } from './NodeChrome';
 import { type CanvasNode, stateOutline } from './nodeState';
 
 const SIZE = { width: TASK_WIDTH, height: TASK_HEIGHT };
@@ -91,6 +91,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
 
       <StatusBadge status={data.status} live={data.isLiveCurrent} x={TASK_WIDTH - 2} y={2} />
       <DiffBadge kind={data.diffKind} />
+      <NodeBadges loopState={data.loopState} maxIterations={data.loop?.maxIterations} issueCount={data.issueCount} />
       <NodeHandles />
     </div>
   );

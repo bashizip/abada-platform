@@ -1,3 +1,4 @@
+import type { LoopProblem } from '@/lib/apl/loopAnalysis';
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react';
@@ -85,3 +86,40 @@ export const OutsideLabel: React.FC<{ text: string; size: Size; direction: FlowD
     </span>
   );
 };
+
+/**
+ * Editing badges above a node's top-left corner: the repeat limit of a loop
+ * step (red when a cycle returns here without a usable bound) and the count
+ * of engine validation issues pointing at the node.
+ */
+export const NodeBadges: React.FC<{
+  loopState?: 'bounded' | LoopProblem;
+  maxIterations?: number;
+  issueCount?: number;
+}> = ({ loopState, maxIterations, issueCount }) => {
+  if (!loopState && !issueCount) return null;
+  return (
+    <span className="pointer-events-none absolute -top-3 left-1 z-30 flex gap-1">
+      {loopState && (
+        <span
+          className="rounded-full border px-1.5 text-[9px] font-semibold leading-4"
+          style={loopState === 'bounded'
+            ? { borderColor: '#F4A261', color: '#F4A261', background: '#1A1614' }
+            : { borderColor: '#E76F51', color: '#1A1614', background: '#E76F51' }}
+          title={loopState === 'bounded' ? `Repeats at most ${maxIterations} times` : 'Cycle without a usable repeat limit'}
+        >
+          ↻ {loopState === 'bounded' ? maxIterations : '!'}
+        </span>
+      )}
+      {!!issueCount && (
+        <span
+          className="rounded-full border border-[#E76F51] bg-[#1A1614] px-1.5 text-[9px] font-semibold leading-4 text-[#E76F51]"
+          title={`${issueCount} validation issue${issueCount > 1 ? 's' : ''}`}
+        >
+          ⚠ {issueCount}
+        </span>
+      )}
+    </span>
+  );
+};
+
