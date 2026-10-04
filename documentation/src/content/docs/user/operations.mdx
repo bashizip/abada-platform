@@ -71,6 +71,7 @@ instance — other branches, timers — keeps going.
 | `WORK_FAILED` | A step's last attempt failed and the step has no `on_error` | Fix the cause (provider key, quota, worker), then retry |
 | `LOOP_EXHAUSTED` | A loop reached `max_iterations` and has no `on_exhausted` | Retry (the step starts a fresh pass) or cancel |
 | `MISSING_CORRELATION_KEY` | A message wait has no `correlationKey` value | Set the variable, then retry |
+| `TOOL_OUTCOME_UNKNOWN` | An agent write was interrupted and its tool server takes no idempotency key, so it may or may not have happened | Check the target system, then confirm: **It happened** or **It did not happen**. The agent resumes with that fact; the write is never re-sent blindly |
 
 ### In Studio
 
@@ -98,6 +99,14 @@ curl "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents" -H "Authorization: Beare
 # Retry one
 curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retry" \
   -H "Authorization: Bearer $TOKEN"
+```
+
+A `TOOL_OUTCOME_UNKNOWN` incident needs the confirmed outcome in the body:
+
+```bash
+curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retry" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"toolOutcome":"NOT_PERFORMED"}'
 ```
 
 ### Retry an agent step on another model

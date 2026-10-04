@@ -14,6 +14,7 @@ unknown or missing protocol version rather than guessing payload semantics.
 | Lock extension | `POST /{id}/extend-lock` | Compatibility alias with the same atomic semantics as heartbeat. |
 | Completion | `POST /{id}/complete` | Requires `{workerId, variables}` in secured modes; merges variables and advances once. |
 | BPMN error | `POST /{id}/bpmn-error` | Requires worker ownership and `errorCode`; stores the business error and variables atomically. |
+| Agent step | `POST /{id}/steps` | Journals one model or tool call of the lease holder (`{workerId, attempt, sequence, kind, state, toolRef?, request, result?, errorType?, model?, promptVersion?, promptTokens?, completionTokens?}`). See *Agent step journal*. |
 | Tool credential | `GET /{id}/tool-credentials/{server}?workerId=` | Returns `{server, credential, secret}` for a tool server the task is bound to, only to the worker holding the task's live lease (`409` otherwise, `403` for a server the task is not bound to). Worker principals only, never human administrators; `Cache-Control: no-store`. |
 | Technical failure | `POST /{id}/failure` | Stores error details, retries and retry timeout. Zero retries takes the node's `on_error` (code `WORK_FAILED`) or opens a `WORK_FAILED` incident. With `deferred: true` the attempt is not consumed (see below). |
 
@@ -92,6 +93,43 @@ decision is visible in history (`EXTERNAL_TASK_COMPLETED` or
 external-task record and inside the `EXTERNAL_TASK_*` history event details.
 It never contains prompts, tokens, credentials, or complete sensitive
 payloads; ordinary workers that omit it remain fully compatible.
+
+## Agent step journal
+
+For `abada:agent` tasks, fetch-and-lock also returns `attempt` (the attempt
+the task is on), `steps` (the journaled steps of that attempt, payloads
+included, to resume from) and `priorWrites` (writes earlier attempts
+completed). Older workers ignore these fields.
+
+A worker records every call with `POST /{id}/steps` and resumes after the last
+committed step:
+
+- `kind` is `MODEL_CALL` or `TOOL_CALL` (with `toolRef: <server>/<tool>`);
+  `state` is `STARTED`, `COMPLETED` or `FAILED`. A step may be born finished
+  for model calls and read tools; a **write** must be recorded `STARTED`
+  before the tool is called, then finished with the same `sequence` and
+  `request`.
+- Sequences start at 1 per attempt and have no gaps; a new step needs the
+  previous one finished. Re-sending an identical request returns the same
+  step; a different request or result for a recorded step is refused.
+- The response carries `idempotencyKey` for writes whose server accepts one:
+  send it with the tool call, and the same key again when resuming a
+  `STARTED` write. `reused: true` means an earlier attempt already performed
+  this exact write: use `result` and do not call the tool.
+- On resume: reuse finished steps, re-run a `STARTED` read or model call,
+  re-send a `STARTED` keyed write with its key. A `STARTED` write without a
+  key is never handed out: the engine marks it `OUTCOME_UNKNOWN` and opens a
+  `TOOL_OUTCOME_UNKNOWN` incident.
+- Refusals: `403 WORKER_LOCK_NOT_OWNED`, `403 ACCESS_DENIED`
+  (`details.reason: TOOL_NOT_BOUND`), `409 WORKER_LOCK_EXPIRED`,
+  `409 AGENT_STEP_REJECTED` with `details.reason` one of `STALE_ATTEMPT`,
+  `SEQUENCE`, `OPEN_STEP`, `DIVERGENT_STEP`, `STEP_FINISHED`,
+  `APPROVAL_REQUIRED`, `WRITE_AHEAD_REQUIRED`, `STEP_LIMIT`, and
+  `410 WORK_RETIRED` once the task is completed, cancelled or failed.
+- Payloads are limited to 1 MiB each and 256 steps per task.
+- `Idempotency-Key` is accepted but not needed: the journal is idempotent by
+  attempt, sequence and request, and step responses are never copied into the
+  idempotency store (they may carry decrypted results).
 
 ## BPMN error boundary
 
