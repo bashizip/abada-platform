@@ -100,7 +100,10 @@ public record TaskDetailsDto(
     )
     String projectId,
     @Schema(description = "All process variables visible to this task")
-    Map<String, Object> variables
+    Map<String, Object> variables,
+    @Schema(description = "Decisions a reviewer chooses from (empty for an ordinary task); "
+        + "submit one with the decision endpoint")
+    List<TaskOutcomeDto> outcomes
 ) {
     public static TaskDetailsDto from(
         TaskInstance task,
@@ -114,8 +117,15 @@ public record TaskDetailsDto(
         Instant processEndDate = null;
         String currentActivityId = null;
         Map<String, Object> variables = Map.of();
+        List<TaskOutcomeDto> outcomes = List.of();
 
         if (processInstance != null) {
+            var meta = processInstance.getDefinition() == null ? null
+                : processInstance.getDefinition().getUserTask(task.getTaskDefinitionKey());
+            if (meta != null) {
+                outcomes = meta.getOutcomes().stream()
+                    .map(outcome -> new TaskOutcomeDto(outcome.name(), outcome.commentRequired())).toList();
+            }
             processDefinitionId =
                 processInstance.getDefinition() != null
                     ? processInstance.getDefinition().getId()
@@ -154,7 +164,8 @@ public record TaskDetailsDto(
             processEndDate,
             currentActivityId,
             processInstance != null ? processInstance.getProjectId() : null,
-            variables
+            variables,
+            outcomes
         );
     }
 }

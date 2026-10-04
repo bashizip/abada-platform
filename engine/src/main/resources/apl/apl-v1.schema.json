@@ -155,6 +155,35 @@
         }
       }
     },
+    "outcomes": {
+      "description": "Decisions a reviewer chooses from. Each outcome names where the flow continues and whether a comment is required; the engine writes <id>_outcome and <id>_comment. A node with outcomes declares no 'next'.",
+      "type": "object",
+      "minProperties": 2,
+      "maxProperties": 6,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,31}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "next"
+        ],
+        "properties": {
+          "next": {
+            "$ref": "#/$defs/nodeRef"
+          },
+          "comment": {
+            "enum": [
+              "required",
+              "optional"
+            ],
+            "default": "optional",
+            "description": "Whether this decision must carry a non-blank comment."
+          }
+        }
+      }
+    },
     "loop": {
       "type": "object",
       "additionalProperties": false,
@@ -638,6 +667,9 @@
         "on_timeout": {
           "$ref": "#/$defs/onTimeout"
         },
+        "outcomes": {
+          "$ref": "#/$defs/outcomes"
+        },
         "loop": {
           "$ref": "#/$defs/loop"
         },
@@ -727,6 +759,9 @@
         },
         "on_timeout": {
           "$ref": "#/$defs/onTimeout"
+        },
+        "outcomes": {
+          "$ref": "#/$defs/outcomes"
         },
         "loop": {
           "$ref": "#/$defs/loop"

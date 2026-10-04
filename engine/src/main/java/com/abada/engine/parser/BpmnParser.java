@@ -231,6 +231,7 @@ public class BpmnParser {
             List<BoundaryMeta> boundaries = boundaries(model, flows);
             for (UserTask userTask : model.getModelElementsByType(UserTask.class)) {
                 withSla(userTasks.get(userTask.getId()), userTask);
+                withOutcomes(userTasks.get(userTask.getId()), userTask);
             }
 
             ParsedProcessDefinition definition = new ParsedProcessDefinition(id, name, documentation, startEventId,
@@ -306,6 +307,43 @@ public class BpmnParser {
             if (hours == null) throw boundaryError(userTask.getId(), "abada:escalateTo requires abada:slaHours");
             task.setEscalateTo(Arrays.stream(escalateTo.split("\\s*,\\s*")).filter(group -> !group.isBlank()).toList());
         }
+    }
+
+    /**
+     * {@code abada:outcomes="approve,reject"} and {@code abada:commentRequired="reject"}
+     * on a user task. The task records the decision in {@code <id>_outcome};
+     * the BPMN graph routes on it with an ordinary exclusive gateway.
+     */
+    private static void withOutcomes(TaskMeta task, UserTask userTask) {
+        String declared = blankToNull(
+                userTask.getAttributeValueNs(BpmnCompatibilityDetector.ABADA_NAMESPACE, "outcomes"));
+        String required = blankToNull(
+                userTask.getAttributeValueNs(BpmnCompatibilityDetector.ABADA_NAMESPACE, "commentRequired"));
+        if (declared == null) {
+            if (required != null) throw boundaryError(userTask.getId(), "abada:commentRequired requires abada:outcomes");
+            return;
+        }
+        List<String> names = Arrays.stream(declared.split("\\s*,\\s*")).filter(name -> !name.isBlank()).toList();
+        if (names.size() < OutcomeMeta.MIN_OUTCOMES || names.size() > OutcomeMeta.MAX_OUTCOMES
+                || new HashSet<>(names).size() != names.size()) {
+            throw boundaryError(userTask.getId(), "abada:outcomes must list " + OutcomeMeta.MIN_OUTCOMES + " to "
+                    + OutcomeMeta.MAX_OUTCOMES + " distinct outcomes");
+        }
+        for (String name : names) {
+            if (!name.matches(OutcomeMeta.NAME_PATTERN)) {
+                throw boundaryError(userTask.getId(), "outcome '" + name
+                        + "' must be lowercase letters, digits and underscores, starting with a letter");
+            }
+        }
+        Set<String> withComment = required == null ? Set.of()
+                : Set.copyOf(Arrays.stream(required.split("\\s*,\\s*")).filter(name -> !name.isBlank()).toList());
+        for (String name : withComment) {
+            if (!names.contains(name)) {
+                throw boundaryError(userTask.getId(), "abada:commentRequired names '" + name
+                        + "', which is not one of abada:outcomes");
+            }
+        }
+        task.setOutcomes(names.stream().map(name -> new OutcomeMeta(name, withComment.contains(name), null)).toList());
     }
 
     private static BpmnValidationException boundaryError(String elementId, String message) {

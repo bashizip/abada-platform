@@ -179,10 +179,16 @@ final class AplVariables {
                 written.add(AplParser.errorCodeVariable(nodeId));
                 written.add(AplParser.rawOutputVariable(nodeId));
             }
-            case "engine-task", "human-input", "approval-gate" -> {
+            case "engine-task" -> {
                 // Written when a boundary (on_error, on_timeout) is declared and fires.
                 written.add(AplParser.outcomeVariable(nodeId));
                 written.add(AplParser.errorCodeVariable(nodeId));
+            }
+            case "human-input", "approval-gate" -> {
+                // The reviewer's decision and comment, or a boundary (on_error, on_timeout) that fired.
+                written.add(AplParser.outcomeVariable(nodeId));
+                written.add(AplParser.errorCodeVariable(nodeId));
+                written.add(AplParser.commentVariable(nodeId));
             }
             case "decision-table" -> node.path("rules").forEach(rule -> {
                 rule.path("then").fieldNames().forEachRemaining(written::add);

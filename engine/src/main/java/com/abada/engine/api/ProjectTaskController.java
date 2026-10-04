@@ -143,6 +143,21 @@ public class ProjectTaskController {
                 }));
     }
 
+    @PostMapping("/{taskId}/decision")
+    public ResponseEntity<TaskActionResponse> decide(@PathVariable String projectId,
+            @PathVariable String taskId, @RequestBody com.abada.engine.dto.TaskDecisionRequest decision,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        access.require(projectId, Role.OPERATOR, Role.VIEWER);
+        requireInProject(projectId, taskId);
+        return ResponseEntity.ok(idempotencyService.execute(idempotencyKey, "task.decision",
+                decision.fingerprint(taskId, context.getUsername()),
+                new TypeReference<TaskActionResponse>() {}, () -> {
+                    engine.decideTask(taskId, context.getUsername(), context.getGroups(), decision.outcome(),
+                            decision.comment(), decision.variablesOrEmpty());
+                    return new TaskActionResponse("Decided", taskId);
+                }));
+    }
+
     private TaskInstance requireInProject(String projectId, String taskId) {
         TaskInstance task = engine.getTaskById(taskId).orElseThrow(() -> new ApiException(
                 HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND, "Project task not found"));
