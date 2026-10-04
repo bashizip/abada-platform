@@ -1,5 +1,5 @@
 import React from 'react';
-import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig } from '@/types';
+import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig, toolRefOf } from '@/types';
 import { agentModelOptions, getDefaultAgentModel } from '@/lib/agentModels';
 import { useAplContract } from '@/lib/aplContract';
 import { 
@@ -644,7 +644,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               <label className="text-xs text-[#A89F91] block">Bound Tool APIs</label>
               <div className="rounded-lg border border-[#3A322E] divide-y divide-[#3A322E] bg-[#1A1614] overflow-hidden">
                 {['Database Query', 'Vision OCR Engine', 'ERP Connector', 'Stripe Charge Logs', 'Sanctions Database'].map((tool) => {
-                  const isBound = selectedNode.agentConfig?.tools.includes(tool);
+                  const isBound = selectedNode.agentConfig?.tools.some((entry) => toolRefOf(entry) === tool);
                   return (
                     <label key={tool} className="group flex items-center gap-2 text-xs text-[#EAE3D9] cursor-pointer px-2 py-1.5 hover:bg-[#25201D] transition-colors">
                       <input
@@ -654,7 +654,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           const currentTools = selectedNode.agentConfig?.tools || [];
                           const updated = e.target.checked
                             ? [...currentTools, tool]
-                            : currentTools.filter((t) => t !== tool);
+                            : currentTools.filter((t) => toolRefOf(t) !== tool);
                           handleAgentChange('tools', updated);
                         }}
                         className="accent-[#9D4EDD] rounded"

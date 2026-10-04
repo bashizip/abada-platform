@@ -451,3 +451,31 @@ describe('APL round trip: review outcomes', () => {
     expect(saved.next).toBeUndefined();
   });
 });
+
+describe('APL round trip: tool references', () => {
+  it('keeps <server>/<tool> refs and tightened policies through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'tools', name: 'Tools' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'triage' },
+          {
+            id: 'triage',
+            type: 'agent',
+            model: 'gemini-3.6-flash',
+            prompt: 'Triage the request',
+            tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required' }],
+            next: 'done',
+          },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'triage');
+    expect(saved).toMatchObject({
+      tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required' }],
+    });
+  });
+});
