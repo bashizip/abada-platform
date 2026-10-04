@@ -131,7 +131,41 @@ Every node in `flow.nodes` is a mapping with the following common keys:
 - `ui` is a Studio layout hint with no runtime meaning. Studio keeps saved
   positions as authored and auto-lays-out a document that has none.
 
-### 2.3 Formatting conventions
+### 2.3 Loops
+
+A cycle in the flow is allowed only when the node it returns to — the *loop
+step* — declares its bound:
+
+```yaml
+- id: draft
+  type: agent
+  loop:
+    max_iterations: 3        # required, 1–1000
+    on_exhausted: escalate   # optional: where to go when the limit is reached
+  next: review
+```
+
+- Every cycle must return to a node that declares `loop.max_iterations`;
+  otherwise deployment fails with `ABADA-APL-VALIDATION-001` ("cycle back to
+  node … needs a bound"). A cycle cannot return to the `webhook` start, nor to
+  a `parallel` or `inclusive` gateway (it would become a join waiting for a
+  branch that never comes); return to a task or a `condition` instead.
+- Entering the loop step forward starts a pass at 1; each return through the
+  cycle adds 1. The engine writes the count to the variable `<id>_iteration`
+  (e.g. `draft_iteration`), readable in conditions and prompts. Passes are
+  counted per token, so parallel branches looping on one step are bounded
+  independently.
+- When a return would exceed `max_iterations`, the token goes to
+  `on_exhausted`. Without it the token stops at the loop step and the engine
+  opens a `LOOP_EXHAUSTED` incident; the instance stays running until an
+  operator retries the incident (a fresh pass) or cancels the instance. `on_exhausted` must leave the loop: a target that can
+  reach the loop step again is rejected, because re-entering it forward would
+  restart the count.
+- A `loop` on a node that no cycle returns to is a warning (it has no effect).
+- Waits inside a loop (user tasks, external tasks, message, signal and timer
+  catches) are created afresh on every pass.
+
+### 2.4 Formatting conventions
 
 - Two-space indentation; one node per list item under `flow.nodes`.
 - Node type is always the second key after `id` for readability.
@@ -143,7 +177,7 @@ Every node in `flow.nodes` is a mapping with the following common keys:
   (§5). Free-text labels are descriptions and must never be confused with
   conditions.
 
-### 2.4 Canonical vs. vision-compatible forms
+### 2.5 Canonical vs. vision-compatible forms
 
 APL accepts two shapes for some constructs and always **stringifies to the
 canonical vision form**:
@@ -156,6 +190,68 @@ canonical vision form**:
 `normalizeTableInputs` and `resolveRuleOutcome` (Studio `lib/apl/parser.ts`)
 are the single implementation of these normalizations, so hand-authored,
 AI-generated and Studio-authored APL converge on one shape.
+
+### 2.6 Boundaries, service levels and fallback models
+
+A step that waits for work — `agent`, `engine-task`, `human-input` (and its
+alias `approval-gate`) — can leave through a **boundary** instead of its
+`next`. A boundary is engine semantics, not a gateway: the engine decides when
+it fires, inside the command that observes the condition.
+
+```yaml
+- id: draft
+  type: agent
+  model: gemini-3.6-flash
+  fallback_models: [gemini-3.7-flash]   # tried only while the model before is unavailable
+  on_timeout: { after: PT1H, then: manual }
+  on_error: manual
+  next: review
+- id: review
+  type: human-input
+  assignees: [reviewers]
+  sla_hours: 4                          # escalate in place after 4 hours
+  escalate_to: [managers]
+  on_timeout: { after: P3D, then: expired }
+  next: done
+```
+
+| Boundary | On | Fires when | Outcome variable |
+| --- | --- | --- | --- |
+| `on_low_confidence` | agent | the result's `_confidence` is missing or below `confidence_threshold` | `LOW_CONFIDENCE` |
+| `on_invalid_output` | agent | the result violates `output_schema` or the completion shape | `INVALID_OUTPUT` |
+| `on_error` | agent, engine-task, human-input | the worker reports a BPMN error (matched by `code`), the **last attempt fails** (code `WORK_FAILED`), or a user task is failed (`WORK_FAILED`) | `ERROR`, plus `<id>_error_code` |
+| `on_timeout` | agent, engine-task, human-input | the step was not left within `after` (ISO-8601 duration, `PT1S`–`P365D`), counted from entering it — retries and rate-limit waits included | `TIMEOUT` |
+
+- **Interrupting.** When a boundary fires, the step's unfinished work is
+  retired in the same transaction (the external task or user task becomes
+  `CANCELLED`, its timers are cancelled) and the token continues at the
+  target. A worker or user acting on retired work is rejected.
+- **Variables.** The engine writes `<id>_outcome` (and `<id>_error_code` for
+  errors). A normal completion of a step with boundaries writes
+  `<id>_outcome = 'OK'` and clears an earlier error code.
+- **Unrouted failure fails loudly.** A last failed attempt with no `on_error`
+  catching `WORK_FAILED` opens a `WORK_FAILED` incident; the token keeps
+  waiting until an operator retries the incident or cancels the instance.
+  A BPMN error without a matching route still fails the instance.
+- **Service level.** `sla_hours` (number of hours, `0 < h ≤ 8760`; alias
+  `slaHours`) gives the task a due time. When it passes with the task still
+  open, the engine **escalates it in place**: the task stays open and
+  assigned as it was, the `escalate_to` groups become candidates too, and
+  `TASK_SLA_BREACHED` is recorded in history and the outbox. Use
+  `on_timeout` when the step must stop instead. `escalate_to` requires
+  `sla_hours`.
+- **Fallback models.** `fallback_models` (at most 3, each on
+  `abada.agent.allowed-models`, none repeating `model`) are tried in order by
+  the worker only while the model before is *unavailable* (HTTP 429, quota,
+  408, 5xx, timeout, unreachable). Invalid output and low confidence are
+  contract outcomes and never switch the model. When every model is
+  unavailable the attempt is *deferred*: it does not consume `max_attempts`
+  and is retried after the provider's `Retry-After`, with a growing delay
+  (see runtime semantics).
+- **Loops.** A boundary may return to an earlier step; that cycle needs a
+  `loop` bound like any other (§2.3).
+- Boundaries replace the synthetic `<id>__outcome` gateway used before 1.1;
+  the suffix `__outcome` stays reserved in node ids.
 
 ---
 
@@ -233,9 +329,11 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `timeout_ms` | integer | no | 1–3,600,000 |
 | `max_attempts` | integer | no | 1–20 durable attempts |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |
+| `fallback_models` | string[] | no | up to 3 allowed models tried while the model before is unavailable (§2.6) |
 | `on_low_confidence` | nodeId | no | route when `_confidence` is missing or below `confidence_threshold` |
 | `on_invalid_output` | nodeId | no | route when the result violates `output_schema` or the completion shape |
-| `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error, optionally per error code |
+| `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error (optionally per code) or the last failed attempt (`WORK_FAILED`) |
+| `on_timeout` | `{after, then}` | no | interrupting timeout of the whole step (§2.6) |
 | `next` | nodeId | yes | linear successor |
 
 **Data the agent receives (default-deny).** The locked task carries only the
@@ -267,8 +365,8 @@ the result is kept under `result_variable` for the reviewer; for
 are decremented, and at zero the task becomes an incident. Every decision is
 recorded in history (`agentOutcome`, `outcomeReason`) without variable values.
 
-Routes compile to a synthetic exclusive gateway `<node>__outcome` (the suffix
-`__outcome` is reserved in node ids) whose default flow is `next`.
+Routes are boundaries of the agent (§2.6): a routed outcome leaves the task
+directly for its target, recorded as `BOUNDARY_TAKEN`.
 
 Boundary: with no worker deployed, a run pauses in `ACTIVE` at the agent —
 this is intentional (agents must not advance BPMN state outside engine
@@ -294,7 +392,8 @@ integration, webhook sink). It is the deterministic sibling of `agent`.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `service` | string | yes | external task topic |
-| `on_error` | nodeId or `[{code?, then}]` | no | route taken when the worker reports a BPMN error: a single target, or per `code` with an optional code-less catch-all. The engine writes `<node>_outcome = 'ERROR'` and `<node>_error_code`. A BPMN error without a matching route still fails the instance |
+| `on_error` | nodeId or `[{code?, then}]` | no | route taken when the worker reports a BPMN error (a single target, or per `code` with an optional code-less catch-all) or when the last attempt fails (`WORK_FAILED`). The engine writes `<node>_outcome = 'ERROR'` and `<node>_error_code`. A BPMN error without a matching route still fails the instance; a last failure without one opens a `WORK_FAILED` incident |
+| `on_timeout` | `{after, then}` | no | interrupting timeout of the whole step (§2.6) |
 | `next` | nodeId | yes | linear successor |
 
 ### 3.4 `script` — in-transaction script step
@@ -382,7 +481,10 @@ The engine creates an `AVAILABLE` human task claimable by the listed groups.
 | --- | --- | --- | --- |
 | `assignees` | string[] | yes | candidate groups/users |
 | `mode` | `serial` \| `parallel` | no | Studio hint (parallel + >1 assignee implies double sign-off) |
-| `sla_hours` | number | no | service-level hint for monitoring |
+| `sla_hours` | number | no | service level: the open task is escalated in place when it passes (§2.6) |
+| `escalate_to` | string[] | no | groups added as candidates on escalation; requires `sla_hours` |
+| `on_error` | nodeId or `[{code?, then}]` | no | route when the task is failed (`WORK_FAILED`) |
+| `on_timeout` | `{after, then}` | no | interrupting timeout: the task is cancelled and the flow continues at `then` |
 | `next` | nodeId | yes | linear successor |
 
 Engine behavior: task name = `description` (the Studio Run panel matches this),
@@ -791,8 +893,8 @@ deployment.
 
 An identifier is *written upstream* when an ancestor node in the graph writes
 it: an agent's `result_variable` (default `<id>_result`), `<id>_outcome`,
-`<id>_error_code` and `<id>_raw_output`; an engine-task's `<id>_outcome` and
-`<id>_error_code`; or a decision-table output. `correlationKey` is always
+`<id>_error_code` and `<id>_raw_output`; an engine-task's or human task's
+`<id>_outcome` and `<id>_error_code`; or a decision-table output. `correlationKey` is always
 available.
 
 **Strictness policy.** In the 1.1.0-rc line, schema violations are warnings so
@@ -814,7 +916,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
-| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, cycles, non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, an agent model outside `abada.agent.allowed-models`, invalid or duplicate `metadata.variables` |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while
@@ -838,6 +940,7 @@ still rejecting execution-relevant directives.
 | `UNIQUE` hit policy, >1 rule matched | `ProcessEngineException`; mutation command rolls back |
 | no rule matched and no `otherwise` | `ProcessEngineException`; mutation command rolls back |
 | condition or rule expression cannot be evaluated (missing variable, type mismatch, non-boolean) | `ExpressionEvaluationException` (`ABADA-RUNTIME-EXPRESSION-001`, HTTP 422); mutation command rolls back |
+| task work fails its last attempt, or a user task is failed, with no `on_error` catching `WORK_FAILED` | `WORK_FAILED` incident; the token waits for an operator retry (optionally on another allowed model) or cancel |
 
 ---
 

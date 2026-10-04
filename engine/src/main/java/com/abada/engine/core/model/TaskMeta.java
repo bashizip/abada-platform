@@ -14,6 +14,10 @@ public class TaskMeta implements Serializable {
     private String followUpDate;
     private String priority;
     private String documentation;
+    /** Service level: after this many hours the open task is escalated (null = none). */
+    private Double slaHours;
+    /** Groups added as candidates when the task is escalated. */
+    private List<String> escalateTo = List.of();
 
     // Future fields (e.g., listeners, multi-instance, conditions) can be added here.
 
@@ -96,6 +100,22 @@ public class TaskMeta implements Serializable {
 
     public void setFormKey(String formKey) {
         this.formKey = formKey;
+    }
+
+    public Double getSlaHours() {
+        return slaHours;
+    }
+
+    public void setSlaHours(Double slaHours) {
+        this.slaHours = slaHours;
+    }
+
+    public List<String> getEscalateTo() {
+        return escalateTo;
+    }
+
+    public void setEscalateTo(List<String> escalateTo) {
+        this.escalateTo = escalateTo == null ? List.of() : List.copyOf(escalateTo);
     }
 
     public String getDueDate() {

@@ -85,6 +85,13 @@ All 14 node types share these base fields:
 | `description` | string | no | A human-readable name for the node. Becomes the BPMN element `name`. **For an approval gate this is the task name people see.** |
 | `next` | nodeId | depends | The id of the node that runs next. Required on linear nodes; forbidden on branching nodes (`condition`, `event-gateway`, and `parallel`/`inclusive` forks). |
 | `ui` | `{ x, y }` | no | Canvas layout hint (where Studio draws the node). Ignored by the engine. |
+| `loop` | `{ max_iterations, on_exhausted? }` | when a cycle returns here | Bound of the loop that returns to this node: it may run at most `max_iterations` (1–1000) times per pass; past that the token goes to `on_exhausted`, or an incident is opened. The current count is the variable `<id>_iteration`. Not allowed on `webhook` and `end`; see the APL specification §2.3. |
+
+**Boundaries of wait steps.** `agent`, `engine-task` and `human-input` also
+accept `on_error` and `on_timeout: { after, then }`: the step leaves through
+that route when its work fails for good or is not done in time, and its
+unfinished work is cancelled. Human tasks add an enforced `sla_hours` with
+`escalate_to`. See the APL specification §2.6.
 
 ---
 
@@ -194,8 +201,13 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `temperature` | number | no | 0–2. Higher = more creative, lower = more deterministic. Default 0.2. |
 | `max_tokens` | integer | no | Cap on the model response size. Default 2048. |
 | `timeout_ms` | integer | no | Worker call timeout. Default 60 000. |
-| `max_attempts` | integer | no | Durable retries before the job fails. Default 3. |
+| `max_attempts` | integer | no | Durable retries before the job fails. Default 3. A rate-limited attempt that never ran does not count. |
 | `retry_backoff_ms` | integer | no | Pause between retries. Default 2 000. |
+| `fallback_models` | string[] | no | Up to 3 allowed models tried in order while the model before is rate-limited or unavailable — never because of an answer the engine rejected. |
+| `on_low_confidence` | nodeId | no | Where to go when the result's `_confidence` is missing or below `confidence_threshold`. |
+| `on_invalid_output` | nodeId | no | Where to go when the result does not match `output_schema`. |
+| `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the worker reports an error code, or when the last attempt fails (code `WORK_FAILED`). Without it a last failure opens an incident. |
+| `on_timeout` | `{ after, then }` | no | If the step is not done within `after` (e.g. `PT1H`), its work is cancelled and the flow continues at `then`. |
 | `next` | nodeId | yes | The step that runs after the agent completes. |
 
 **Example.**
@@ -235,7 +247,8 @@ topic. APL replaces the Camunda external-task pattern with a typed node.
 | Property | Type | Required | What it does |
 | --- | --- | --- | --- |
 | `service` | string | yes | The topic workers subscribe to, e.g. `decision.record`. |
-| `on_error` | nodeId | no | A node to route to on failure. Studio draws it as an error edge. |
+| `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the worker reports an error (a single target, or one per error `code` plus an optional catch-all), or when the last attempt fails (code `WORK_FAILED`). Studio draws it as an error edge. |
+| `on_timeout` | `{ after, then }` | no | If the task is not done within `after`, it is cancelled and the flow continues at `then`. |
 | `next` | nodeId | yes | The step that runs after the task completes. |
 
 **Example.**
@@ -311,7 +324,10 @@ new documents (Studio always writes `human-input`).
  | `assignees` | string[] | yes | The candidate groups whose members may claim the task, e.g. `[risk-officers]`. Values are group names, not usernames. At least one is required. |
  | `formKey` | string | no | Form key for task-form rendering (BPMN `camunda:formKey`). Resolved by bare slug to a project FORM resource. `formId` is a deprecated alias. |
  | `mode` | `serial` \| `parallel` | no | Authoring hint only. The engine does not enforce serial or parallel sign-off. |
- | `sla_hours` | number | no | Service-level target for monitoring (e.g. 24 = resolve within 24 h). Not enforced by the engine yet. `slaHours` is a deprecated alias. |
+ | `sla_hours` | number | no | Service level in hours (e.g. 24). When it passes with the task still open, the engine escalates the task in place: it stays open, `escalate_to` groups are added and `TASK_SLA_BREACHED` is emitted. `slaHours` is a deprecated alias. |
+ | `escalate_to` | string[] | no | Groups added as candidates when the task misses `sla_hours`. Requires `sla_hours`. |
+ | `on_error` | nodeId | no | Where to go when the task is failed. Without it a failed task opens an incident. |
+ | `on_timeout` | `{ after, then }` | no | If the task is not done within `after` (e.g. `P3D`), it is cancelled and the flow continues at `then`. |
  | `requireDoubleSignOff` | boolean | no | Reserved; it currently has no runtime effect. |
  | `next` | nodeId | yes | The step that runs after the task is completed. |
 

@@ -66,13 +66,42 @@ public interface AgentGateway {
         }
     }
 
-    class AgentQuotaExceededException extends AgentGatewayException {
-        public AgentQuotaExceededException(String message) {
+    /**
+     * The model could not run the attempt at all (rate limit, quota, timeout,
+     * provider outage). The worker then tries the node's next fallback model;
+     * when none is left the attempt is deferred instead of counted as failed.
+     * Invalid output and low confidence never raise this.
+     */
+    class AgentUnavailableException extends AgentGatewayException {
+        private final java.time.Duration retryAfter;
+
+        public AgentUnavailableException(String message, java.time.Duration retryAfter) {
             super(message);
+            this.retryAfter = retryAfter;
+        }
+
+        public AgentUnavailableException(String message, Throwable cause) {
+            super(message, cause);
+            this.retryAfter = null;
+        }
+
+        /** The provider's Retry-After, or null when it gave none. */
+        public java.time.Duration retryAfter() {
+            return retryAfter;
         }
     }
 
-    class AgentUnreachableException extends AgentGatewayException {
+    class AgentQuotaExceededException extends AgentUnavailableException {
+        public AgentQuotaExceededException(String message) {
+            this(message, null);
+        }
+
+        public AgentQuotaExceededException(String message, java.time.Duration retryAfter) {
+            super(message, retryAfter);
+        }
+    }
+
+    class AgentUnreachableException extends AgentUnavailableException {
         public AgentUnreachableException(String message, Throwable cause) {
             super(message, cause);
         }

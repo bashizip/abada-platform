@@ -386,8 +386,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <div className="space-y-2 p-3 bg-[#1A1614] rounded-xl border border-[#3A322E]">
               <span className="text-xs text-[#EAE3D9] font-medium block">Outcome routes</span>
               <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                Where the instance goes when the engine rejects the agent result. Without a route, a rejected
-                result counts as a failed attempt.
+                Where the instance goes when the engine rejects the agent result, or when the last attempt
+                fails (on_error). Without a route, a rejected result counts as a failed attempt and a last
+                failure opens an incident.
               </p>
               {([
                 ['onLowConfidence', 'Low confidence (on_low_confidence)'],
@@ -414,6 +415,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   )}
                 </div>
               ))}
+              {selectedNode.agentConfig?.onTimeout && (
+                <p className="text-[10px] text-[#A89F91]">
+                  Timeout (on_timeout): after <code>{selectedNode.agentConfig.onTimeout.after}</code> the step is
+                  cancelled and continues at <code>{selectedNode.agentConfig.onTimeout.then}</code> — edit in APL.
+                </p>
+              )}
+              {selectedNode.agentConfig?.fallbackModels?.length ? (
+                <p className="text-[10px] text-[#A89F91]">
+                  Fallback models (used only while the model before is rate-limited or unavailable):{' '}
+                  <code>{selectedNode.agentConfig.fallbackModels.join(' → ')}</code> — edit in APL.
+                </p>
+              ) : null}
             </div>
 
             {/* Temperature Slider */}
@@ -979,11 +992,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">SLA (Hours) · monitoring hint, not enforced until 1.1</label>
+              <label className="text-xs text-[#A89F91] block">SLA (Hours) · escalates the open task when missed</label>
               <input
                 type="number"
-                value={humanConfig.slaHours}
-                onChange={(e) => handleHumanChange('slaHours', Number(e.target.value))}
+                min={0}
+                placeholder="No service level"
+                value={humanConfig.slaHours ?? ''}
+                onChange={(e) => handleHumanChange('slaHours', e.target.value === '' ? undefined : Number(e.target.value))}
                 className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
               />
             </div>

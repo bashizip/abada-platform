@@ -123,6 +123,37 @@ class AbadaWorkerClientTest {
     }
 
     @Test
+    void decodesFallbackModelsAndIgnoresFieldsANewerEngineAdds() {
+        server.removeContext("/api/v1/external-tasks");
+        server.createContext("/api/v1/external-tasks", request -> {
+            byte[] response = ("[{\"id\":\"task-1\",\"topicName\":\"abada:agent\",\"variables\":{},"
+                    + "\"protocolVersion\":\"1\",\"someFutureField\":true,"
+                    + "\"agentWork\":{\"profileVersion\":\"abada.agent/v1\",\"model\":\"model-a\","
+                    + "\"fallbackModels\":[\"model-b\"],\"anotherFutureField\":1,\"prompt\":\"work\","
+                    + "\"inputs\":{},\"resultVariable\":\"result\",\"outputSchema\":{},\"tools\":[]}}]")
+                    .getBytes(StandardCharsets.UTF_8);
+            request.getResponseHeaders().add("X-Abada-Worker-Protocol-Version", "1");
+            request.sendResponseHeaders(200, response.length);
+            request.getResponseBody().write(response);
+            request.close();
+        });
+        LockedExternalTask task = client.fetchAndLock("worker", List.of("abada:agent"),
+                Duration.ofSeconds(30), 1, RequestOptions.defaults()).getFirst();
+        assertEquals(List.of("model-b"), task.agentWork().fallbackModels());
+    }
+
+    @Test
+    void reportsADeferralSoTheEngineKeepsTheAttemptBudget() {
+        client.fail("task-3", "worker-1", "rate limited", "AgentQuotaExceededException", 3,
+                Duration.ofSeconds(30), null, true, RequestOptions.defaults());
+        assertTrue(requestBody.get().contains("\"deferred\":true"), requestBody.get());
+        assertTrue(requestBody.get().contains("\"retries\":3"));
+
+        client.fail("task-4", "worker-1", "boom", "Boom", 1, Duration.ofSeconds(2), RequestOptions.defaults());
+        assertTrue(!requestBody.get().contains("deferred"), "an ordinary failure omits the flag");
+    }
+
+    @Test
     void fetchesAiCredentialsAndNeverPrintsTheKey() {
         AtomicReference<String> authorization = new AtomicReference<>();
         server.createContext("/api/v1/workers/me/ai-credentials", request -> {

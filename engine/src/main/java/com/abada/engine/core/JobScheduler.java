@@ -58,7 +58,8 @@ public class JobScheduler {
         try (var scope = TraceLogContext.open(span)) {
             List<JobEntity.Status> pending = List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED);
             boolean scheduled = tokenId != null
-                    ? jobRepository.existsByProcessInstanceIdAndTokenIdAndStatusIn(processInstanceId, tokenId, pending)
+                    ? jobRepository.existsByProcessInstanceIdAndTokenIdAndKindAndStatusIn(processInstanceId, tokenId,
+                            JobEntity.Kind.EVENT, pending)
                             || jobRepository.existsByProcessInstanceIdAndEventIdAndTokenIdIsNullAndStatusIn(
                                     processInstanceId, eventId, pending)
                     : jobRepository.existsByProcessInstanceIdAndEventIdAndStatusIn(processInstanceId, eventId, pending);
@@ -83,6 +84,27 @@ public class JobScheduler {
         } finally {
             span.end();
         }
+    }
+
+    /**
+     * Schedules a task's boundary timeout or SLA escalation for the token that
+     * just entered it. At most one pending job per token and kind: the caller
+     * holds the instance lock, which serialises this check.
+     */
+    void scheduleTaskJob(String processInstanceId, String activityId, String tokenId, JobEntity.Kind kind,
+            String boundaryId, Instant executionTimestamp) {
+        List<JobEntity.Status> pending = List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED);
+        if (jobRepository.existsByProcessInstanceIdAndTokenIdAndKindAndStatusIn(processInstanceId, tokenId, kind,
+                pending)) {
+            return;
+        }
+        JobEntity job = new JobEntity(processInstanceId, activityId, executionTimestamp);
+        job.setTokenId(tokenId);
+        job.setKind(kind);
+        job.setBoundaryId(boundaryId);
+        jobRepository.save(job);
+        log.info("Scheduled {} job {} for instance {} at {}", kind, job.getId(), processInstanceId,
+                executionTimestamp);
     }
 
     /**

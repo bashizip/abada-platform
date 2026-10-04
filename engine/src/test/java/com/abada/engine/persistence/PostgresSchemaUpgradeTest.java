@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("23");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("26");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -218,7 +218,7 @@ class PostgresSchemaUpgradeTest {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())) {
             var metadata = connection.getMetaData();
             for (String column : java.util.List.of("id", "process_instance_id", "activity_id", "state",
-                    "parent_token_id", "scope_token_id", "loop_counter", "created_at", "updated_at")) {
+                    "parent_token_id", "scope_token_id", "loop_counter", "loop_counts", "created_at", "updated_at")) {
                 try (var columns = metadata.getColumns(null, schema, "process_tokens", column)) {
                     assertThat(columns.next()).as("process_tokens." + column).isTrue();
                 }
@@ -230,6 +230,27 @@ class PostgresSchemaUpgradeTest {
                 try (var columns = metadata.getColumns(null, schema, table, "token_id")) {
                     assertThat(columns.next()).as(table + ".token_id").isTrue();
                 }
+            }
+            // V24: incidents, and a loop may subscribe at the same catch event again.
+            for (String column : java.util.List.of("id", "project_id", "process_instance_id", "token_id",
+                    "activity_id", "incident_type", "message", "created_at", "resolved_at", "resolution")) {
+                try (var columns = metadata.getColumns(null, schema, "incidents", column)) {
+                    assertThat(columns.next()).as("incidents." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "event_subscriptions", true, false)) {
+                assertThat(indexNames(indexes)).doesNotContain("uk_event_subscription");
+            }
+            // V26: job kinds for boundary timeouts and SLA, task service level, model override and deferrals.
+            for (String[] column : new String[][] {{"jobs", "job_kind"}, {"jobs", "boundary_id"},
+                    {"tasks", "due_at"}, {"tasks", "escalated_at"}, {"external_tasks", "model_override"},
+                    {"external_tasks", "deferrals"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
             }
         }
     }

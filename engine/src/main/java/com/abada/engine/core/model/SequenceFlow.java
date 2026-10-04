@@ -10,10 +10,18 @@ public class SequenceFlow implements Serializable {
     private final String conditionExpression;
     private final boolean isDefault;
     private String language; // (optional: to support expression languages like groovy, js, etc.)
+    /** Set when this flow leaves its activity through a boundary (on_error, on_timeout, ...), never as `next`. */
+    private final String boundaryId;
 
 
     public SequenceFlow(String id, String sourceRef, String targetRef,
                         String name, String conditionExpression, boolean isDefault) {
+        this(id, sourceRef, targetRef, name, conditionExpression, isDefault, null);
+    }
+
+    public SequenceFlow(String id, String sourceRef, String targetRef,
+                        String name, String conditionExpression, boolean isDefault, String boundaryId) {
+        this.boundaryId = boundaryId;
         this.id = id;
         this.sourceRef = sourceRef;
         this.targetRef = targetRef;
@@ -24,6 +32,15 @@ public class SequenceFlow implements Serializable {
 
     public boolean isDefault() {
         return isDefault;
+    }
+
+    public String getBoundaryId() {
+        return boundaryId;
+    }
+
+    /** True for a boundary route; the token takes it only when that boundary fires. */
+    public boolean isBoundary() {
+        return boundaryId != null;
     }
 
     public String getId() {

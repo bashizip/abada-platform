@@ -27,6 +27,9 @@ Start with configuration and service state:
 | Instance stays `ACTIVE` at an agent node | Expected without a worker or LLM key; check the Agent Worker is Online and `ABADA_AGENT_LLM_*` is configured in `.env.dev` |
 | Worker shows Error or Offline in Operations | Inspect last rejection and consecutive failures; verify engine URL, OIDC client credentials and LLM endpoint reachability |
 | Agent task fails at deployment with a model error | The node's `model` is outside `ABADA_AGENT_ALLOWED_MODELS`, or requested `tools` are outside `ABADA_AGENT_ALLOWED_TOOLS` |
+| Instance stops with an open incident | `GET /api/v1/process-instances/{id}/incidents`: `LOOP_EXHAUSTED` means a loop hit `max_iterations` with no `on_exhausted` route; `MISSING_CORRELATION_KEY` means a message wait has no `correlationKey` variable; `WORK_FAILED` means a step's last attempt failed and it declares no `on_error`. Fix the cause, then `POST .../incidents/{incidentId}/retry`, or cancel the instance |
+| An agent step waits with `EXTERNAL_TASK_DEFERRED` in its history | Every model of the step is rate-limited or unavailable; the engine retries with a growing delay without using up attempts. Add `fallback_models`, raise the provider quota, or retry a `WORK_FAILED` incident on another allowed model |
+| A human task shows as escalated | It passed its `sla_hours`; the `escalate_to` groups can now claim it. It is still open and completes normally |
 | No Insight proposals appear | Confirm `ABADA_INSIGHT_ENABLED=true` and that enough terminal facts exist (thresholds under `abada.insight.*`); proposals are never auto-approved |
 
 Render the merged configuration without starting anything:

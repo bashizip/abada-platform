@@ -39,7 +39,7 @@ export function taskFact(node: WorkflowNode): string {
     case 'human': {
       const assignees = node.humanConfig?.assignees?.filter(Boolean) ?? [];
       if (assignees.length) return assignees.join(', ');
-      return node.humanConfig?.slaHours ? `SLA hint ${node.humanConfig.slaHours}h` : '';
+      return node.humanConfig?.slaHours ? `SLA ${node.humanConfig.slaHours}h` : '';
     }
     case 'dmn': {
       const rules = node.dmnConfig?.rules?.length ?? 0;

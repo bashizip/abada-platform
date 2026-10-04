@@ -11,7 +11,7 @@ import com.abada.engine.persistence.entity.ExternalTaskEntity;
 import com.abada.engine.persistence.repository.ExternalTaskRepository;
 import com.abada.engine.core.model.ServiceTaskMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
-import com.abada.engine.core.model.SequenceFlow;
+import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.agent.AgentInputs;
 import com.abada.engine.core.agent.AgentOutputValidator;
 import com.abada.engine.parser.AplParser;
@@ -42,9 +42,19 @@ public class ExternalTaskCommandService {
     private final ProjectAccessService access;
     private final EntityManager entityManager;
 
+    /** Rate-limit waits allowed before one counts as a failed attempt, so waiting stays bounded. */
+    private final int maxDeferrals;
+    /** Longest wait between two deferred attempts. */
+    private final java.time.Duration maxDeferralDelay;
+
     public ExternalTaskCommandService(ExternalTaskRepository repository, AbadaEngine engine,
             ActivityHistoryService history, InsightFactWriter insightFactWriter, ObjectMapper objectMapper,
-            WorkerCapabilityService workerCapabilities, ProjectAccessService access, EntityManager entityManager) {
+            WorkerCapabilityService workerCapabilities, ProjectAccessService access, EntityManager entityManager,
+            @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferrals:12}") int maxDeferrals,
+            @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferral-delay:PT15M}")
+            java.time.Duration maxDeferralDelay) {
+        this.maxDeferrals = maxDeferrals;
+        this.maxDeferralDelay = maxDeferralDelay;
         this.repository = repository;
         this.engine = engine;
         this.history = history;
@@ -78,13 +88,18 @@ public class ExternalTaskCommandService {
                 var serviceTask = instance.getDefinition().getServiceTask(task.getActivityId());
                 history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(),
                         lockDetails(task, request.workerId(), topic, serviceTask));
-                Map<String, Object> payload = serviceTask != null && serviceTask.agentWork() != null
-                        ? AgentInputs.resolve(serviceTask.agentWork(), instance.getVariables())
+                AgentWorkDescriptor work = serviceTask == null ? null : serviceTask.agentWork();
+                if (work != null && task.getModelOverride() != null) {
+                    // An operator retried this task on another model; the definition is unchanged.
+                    work = work.withModel(task.getModelOverride());
+                }
+                Map<String, Object> payload = work != null
+                        ? AgentInputs.resolve(work, instance.getVariables())
                         : instance.getVariables();
                 locked.add(new LockedExternalTask(task.getId(), task.getTopicName(), payload,
                         task.getProcessInstanceId(), task.getActivityId(), task.getRetries(),
                         task.getLockExpirationTime(), task.getTraceParent(), "1",
-                        serviceTask == null ? null : serviceTask.agentWork(),
+                        work,
                         instance.getProjectId()));
                 acquired = true;
                 if (locked.size() >= request.effectiveMaxTasks()) break;
@@ -139,7 +154,15 @@ public class ExternalTaskCommandService {
         task.setLockExpirationTime(null);
         persistAgentMetadata(task, agent);
         repository.save(task);
-        engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(), variables);
+        Map<String, Object> merged = new LinkedHashMap<>(variables == null ? Map.of() : variables);
+        if (!owner.getDefinition().boundariesOf(task.getActivityId()).isEmpty()) {
+            // A step that ran again after an error must not keep the earlier error's outcome.
+            merged.put(AplParser.outcomeVariable(task.getActivityId()), AplParser.OUTCOME_OK);
+            if (owner.getVariables().containsKey(AplParser.errorCodeVariable(task.getActivityId()))) {
+                merged.put(AplParser.errorCodeVariable(task.getActivityId()), null);
+            }
+        }
+        engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(), merged);
         history.record("EXTERNAL_TASK_COMPLETED", requireInstance(task), task.getActivityId(),
                 completedDetails(task, agent));
         recordExternalTaskFact(task, true);
@@ -152,15 +175,24 @@ public class ExternalTaskCommandService {
 
         task.setExceptionMessage(failure.errorMessage());
         task.setExceptionStacktrace(failure.errorDetails());
-        task.setRetries(failure.retries());
         persistAgentMetadata(task, failure.agent());
-        if (failure.retries() != null && failure.retries() == 0) {
+        int current = task.getRetries() == null ? 3 : task.getRetries();
+        if (failure.isDeferred() && current > 0 && task.getDeferrals() < maxDeferrals) {
+            defer(task, failure, current);
+            return;
+        }
+        // A deferral past the cap is an ordinary failed attempt.
+        Integer retries = failure.isDeferred() ? Integer.valueOf(Math.max(0, current - 1)) : failure.retries();
+        task.setRetries(retries);
+        if (retries != null && retries == 0) {
             task.setStatus(ExternalTaskEntity.Status.FAILED);
             task.setLockExpirationTime(null);
         } else {
-            boolean delayed = failure.retryTimeout() != null && failure.retryTimeout() > 0;
+            long timeout = failure.isDeferred() ? deferralDelay(task, failure).toMillis()
+                    : failure.retryTimeout() == null ? 0L : failure.retryTimeout();
+            boolean delayed = timeout > 0;
             task.setStatus(delayed ? ExternalTaskEntity.Status.LOCKED : ExternalTaskEntity.Status.OPEN);
-            task.setLockExpirationTime(delayed ? Instant.now().plusMillis(failure.retryTimeout()) : null);
+            task.setLockExpirationTime(delayed ? Instant.now().plusMillis(timeout) : null);
         }
         task.setWorkerId(null);
         repository.save(task);
@@ -168,6 +200,57 @@ public class ExternalTaskCommandService {
                 failedDetails(task, failure));
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
+            exhausted(task, failure.errorMessage());
+        }
+    }
+
+    /**
+     * Every model was unavailable: keep the attempt budget, wait with a delay
+     * that doubles per deferral (at least the provider's Retry-After, at most
+     * {@code abada.agent.max-deferral-delay}).
+     */
+    private void defer(ExternalTaskEntity task, ExternalTaskFailureDto failure, int current) {
+        task.setDeferrals(task.getDeferrals() + 1);
+        java.time.Duration delay = deferralDelay(task, failure);
+        task.setRetries(current);
+        task.setStatus(ExternalTaskEntity.Status.LOCKED);
+        task.setLockExpirationTime(Instant.now().plus(delay));
+        task.setWorkerId(null);
+        repository.save(task);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("deferrals", task.getDeferrals());
+        details.put("delayMs", delay.toMillis());
+        details.put("retries", current);
+        if (failure.agent() != null) details.put("agent", agentDetails(failure.agent()));
+        history.record("EXTERNAL_TASK_DEFERRED", requireInstance(task), task.getActivityId(), details);
+    }
+
+    private java.time.Duration deferralDelay(ExternalTaskEntity task, ExternalTaskFailureDto failure) {
+        ProcessInstance instance = requireInstance(task);
+        ServiceTaskMeta meta = instance.getDefinition().getServiceTask(task.getActivityId());
+        long base = meta != null && meta.agentWork() != null && meta.agentWork().retryBackoffMs() != null
+                ? Math.max(1_000L, meta.agentWork().retryBackoffMs()) : 2_000L;
+        int exponent = Math.min(Math.max(0, task.getDeferrals() - 1), 20);
+        long grown = base * (1L << exponent);
+        long requested = failure.retryTimeout() == null ? 0L : failure.retryTimeout();
+        long cap = maxDeferralDelay.toMillis();
+        return java.time.Duration.ofMillis(Math.min(cap, Math.max(grown, requested)));
+    }
+
+    /**
+     * The task's attempts are spent: an {@code on_error} boundary catching
+     * {@code WORK_FAILED} takes the token, otherwise a {@code WORK_FAILED}
+     * incident opens. A routed task is retired (CANCELLED) so it never shows
+     * as retryable failed work.
+     */
+    private void exhausted(ExternalTaskEntity task, String message) {
+        String routedTo = engine.workFailed(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(),
+                message);
+        if (routedTo != null) {
+            task.setAgentOutcome(AplParser.OUTCOME_ERROR);
+            task.setStatus(ExternalTaskEntity.Status.CANCELLED);
+            repository.save(task);
         }
     }
 
@@ -186,14 +269,30 @@ public class ExternalTaskCommandService {
 
     @AtomicRuntimeCommand
     public void setRetries(String id, int retries) {
+        setRetries(id, retries, null, null);
+    }
+
+    /**
+     * Operator retry of failed work: the task returns to OPEN with
+     * {@code retries} attempts, optionally on another allowed model for agent
+     * work, and its open {@code WORK_FAILED} incident is resolved.
+     */
+    @AtomicRuntimeCommand
+    public void setRetries(String id, int retries, String model, String reason) {
         ExternalTaskEntity task = loadForUpdate(id);
+        if (task.getStatus() == ExternalTaskEntity.Status.COMPLETED
+                || task.getStatus() == ExternalTaskEntity.Status.CANCELLED) {
+            throw new ProcessEngineException("External task " + id + " is " + task.getStatus()
+                    + " and cannot be retried");
+        }
+        ProcessInstance instance = requireInstance(task);
+        Map<String, Object> details = engine.reopenExternalTask(task,
+                instance.getDefinition().getServiceTask(task.getActivityId()), model, reason);
         task.setRetries(retries);
-        task.setStatus(ExternalTaskEntity.Status.OPEN);
-        task.setWorkerId(null);
-        task.setLockExpirationTime(null);
+        details.put("retries", retries);
         repository.save(task);
-        history.record("EXTERNAL_TASK_RETRIES_SET", requireInstance(task), task.getActivityId(),
-                Map.of("externalTaskId", id, "retries", retries));
+        engine.resolveWorkIncident(task.getProcessInstanceId(), task.getTokenId(), task.getActivityId());
+        history.record("EXTERNAL_TASK_RETRIES_SET", instance, task.getActivityId(), details);
     }
 
     @AtomicRuntimeCommand
@@ -210,18 +309,20 @@ public class ExternalTaskCommandService {
         task.setLockExpirationTime(null);
         repository.save(task);
 
-        String routedTo = errorRoute(requireInstance(task), task.getActivityId(), request);
-        if (routedTo != null) {
+        BoundaryMeta boundary = requireInstance(task).getDefinition()
+                .boundaryFor(task.getActivityId(), BoundaryMeta.Kind.ERROR, request.errorCode());
+        if (boundary != null) {
             task.setAgentOutcome(AplParser.OUTCOME_ERROR);
             repository.save(task);
             Map<String, Object> routed = new LinkedHashMap<>(request.effectiveVariables());
             routed.put(AplParser.outcomeVariable(task.getActivityId()), AplParser.OUTCOME_ERROR);
             routed.put(AplParser.errorCodeVariable(task.getActivityId()), request.errorCode());
-            engine.resumeFromEvent(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(), routed);
+            engine.takeBoundary(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(), boundary,
+                    routed, Map.of("externalTaskId", id));
             history.record("EXTERNAL_TASK_BPMN_ERROR", requireInstance(task), task.getActivityId(),
                     Map.of("externalTaskId", id, "errorCode", request.errorCode(),
                             "errorMessage", request.errorMessage() == null ? "" : request.errorMessage(),
-                            "routedTo", routedTo));
+                            "routedTo", boundary.target()));
             recordExternalTaskFact(task, false);
             return;
         }
@@ -259,8 +360,10 @@ public class ExternalTaskCommandService {
         String resultVariable = work.resultVariable() == null || work.resultVariable().isBlank()
                 ? activityId + "_result" : work.resultVariable();
         AgentOutputValidator.Verdict verdict = AgentOutputValidator.validate(work, resultVariable, variables);
-        boolean routed = instance.getDefinition().getGateways().containsKey(AplParser.outcomeGatewayId(activityId));
-        boolean hasRoute = verdict.ok() || routed && routesOutcome(instance, activityId, verdict.outcome());
+        boolean routed = !instance.getDefinition().boundariesOf(activityId).isEmpty();
+        BoundaryMeta outcomeBoundary = verdict.ok() ? null : instance.getDefinition()
+                .boundaryFor(activityId, BoundaryMeta.Kind.valueOf(verdict.outcome()), null);
+        boolean hasRoute = verdict.ok() || outcomeBoundary != null;
         task.setAgentOutcome(verdict.outcome());
         persistAgentMetadata(task, agent);
 
@@ -268,6 +371,12 @@ public class ExternalTaskCommandService {
             Map<String, Object> merged = new LinkedHashMap<>();
             if (!AplParser.OUTCOME_INVALID_OUTPUT.equals(verdict.outcome())) {
                 merged.put(resultVariable, verdict.value());
+                // A step inside a loop runs again: output rejected or errors
+                // reported by an earlier iteration must not leak into this one.
+                for (String stale : List.of(AplParser.rawOutputVariable(activityId),
+                        AplParser.errorCodeVariable(activityId))) {
+                    if (instance.getVariables().containsKey(stale)) merged.put(stale, null);
+                }
             } else {
                 merged.put(AplParser.rawOutputVariable(activityId), truncatedJson(variables == null
                         ? null : variables.get(resultVariable)));
@@ -276,7 +385,12 @@ public class ExternalTaskCommandService {
             task.setStatus(ExternalTaskEntity.Status.COMPLETED);
             task.setLockExpirationTime(null);
             repository.save(task);
-            engine.resumeFromEvent(task.getProcessInstanceId(), activityId, task.getTokenId(), merged);
+            if (outcomeBoundary == null) {
+                engine.resumeFromEvent(task.getProcessInstanceId(), activityId, task.getTokenId(), merged);
+            } else {
+                engine.takeBoundary(task.getProcessInstanceId(), activityId, task.getTokenId(), outcomeBoundary,
+                        merged, Map.of("externalTaskId", task.getId()));
+            }
             Map<String, Object> details = new LinkedHashMap<>(completedDetails(task, agent));
             details.put("agentOutcome", verdict.outcome());
             if (verdict.reason() != null) details.put("outcomeReason", verdict.reason());
@@ -309,31 +423,8 @@ public class ExternalTaskCommandService {
         history.record("EXTERNAL_TASK_OUTPUT_REJECTED", requireInstance(task), activityId, details);
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
+            exhausted(task, task.getExceptionMessage());
         }
-    }
-
-    /** True when the node's outcome gateway has a conditional flow for this outcome. */
-    private static boolean routesOutcome(ProcessInstance instance, String activityId, String outcome) {
-        String gatewayId = AplParser.outcomeGatewayId(activityId);
-        return instance.getDefinition().getOutgoing(gatewayId).stream()
-                .map(SequenceFlow::getConditionExpression)
-                .anyMatch(condition -> condition != null && condition.contains("'" + outcome + "'"));
-    }
-
-    /** Returns the target a BPMN error routes to through {@code on_error}, or null when unrouted. */
-    private static String errorRoute(ProcessInstance instance, String activityId, ExternalTaskBpmnErrorRequest request) {
-        String gatewayId = AplParser.outcomeGatewayId(activityId);
-        var gateway = instance.getDefinition().getGateways().get(gatewayId);
-        if (gateway == null) return null;
-        Map<String, Object> probe = new java.util.HashMap<>(instance.getVariables());
-        probe.putAll(request.effectiveVariables());
-        probe.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_ERROR);
-        probe.put(AplParser.errorCodeVariable(activityId), request.errorCode());
-        List<SequenceFlow> outgoing = instance.getDefinition().getOutgoing(gatewayId);
-        String chosen = new GatewaySelector().chooseOutgoing(gateway, outgoing, probe);
-        if (chosen == null || chosen.equals(gateway.defaultFlowId())) return null;
-        return outgoing.stream().filter(flow -> flow.getId().equals(chosen)).map(SequenceFlow::getTargetRef)
-                .findFirst().orElse(null);
     }
 
     private String truncatedJson(Object value) {
@@ -356,7 +447,8 @@ public class ExternalTaskCommandService {
         if (serviceTask != null && serviceTask.agentWork() != null) {
             var work = serviceTask.agentWork();
             Map<String, Object> requested = new LinkedHashMap<>();
-            requested.put("model", valueOrEmpty(work.model()));
+            requested.put("model", valueOrEmpty(task.getModelOverride() != null ? task.getModelOverride() : work.model()));
+            if (!work.fallbackModels().isEmpty()) requested.put("fallbackModels", work.fallbackModels());
             requested.put("resultVariable", valueOrEmpty(work.resultVariable()));
             if (work.tools() != null && !work.tools().isEmpty()) {
                 requested.put("tools", work.tools());

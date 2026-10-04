@@ -61,11 +61,11 @@ public class EventManager {
     }
 
     private void registerMessageSubscription(ProcessInstance instance, EventMeta eventMeta, String tokenId) {
-        String correlationKey = (String) instance.getVariable("correlationKey");
-        if (correlationKey == null) {
-            log.warn("Instance {} is waiting for message '{}' but has no correlationKey variable.", instance.getId(), eventMeta.definitionRef());
-            return;
-        }
+        // A wait without a key never reaches here: the token stops with a
+        // MISSING_CORRELATION_KEY incident instead (ProcessInstance).
+        Object key = instance.getVariable("correlationKey");
+        if (key == null || key.toString().isBlank()) return;
+        String correlationKey = key.toString();
         persistSubscription(instance, eventMeta, EventSubscriptionEntity.Type.MESSAGE, correlationKey, tokenId);
     }
 
@@ -75,7 +75,10 @@ public class EventManager {
 
     private void persistSubscription(ProcessInstance instance, EventMeta eventMeta,
             EventSubscriptionEntity.Type type, String correlationKey, String tokenId) {
-        if (subscriptionRepository.existsByProcessInstanceIdAndActivityId(instance.getId(), eventMeta.id())) return;
+        boolean waiting = subscriptionRepository.existsByProcessInstanceIdAndActivityIdAndTokenIdIsNullAndConsumedAtIsNull(
+                instance.getId(), eventMeta.id())
+                || tokenId != null && subscriptionRepository.existsByTokenIdAndConsumedAtIsNull(tokenId);
+        if (waiting) return;
         EventSubscriptionEntity subscription = new EventSubscriptionEntity();
         subscription.setProcessInstanceId(instance.getId());
         subscription.setActivityId(eventMeta.id());

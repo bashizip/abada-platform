@@ -30,6 +30,23 @@ public class ProcessInstance {
     private boolean storedTokensStale;
 
     private final List<DecisionTableAudit> decisionAudits = new ArrayList<>();
+    private final List<LoopExhaustion> loopExhaustions = new ArrayList<>();
+    private final List<RuntimeIncident> incidents = new ArrayList<>();
+    /** Tokens that parked at a task in this command; their boundary and SLA timers start now. */
+    private final List<Parked> parked = new ArrayList<>();
+
+    /** A token stopped in the INCIDENT state during advance(); the engine opens the incident. */
+    public record RuntimeIncident(String tokenId, String activityId,
+            com.abada.engine.persistence.entity.IncidentEntity.Type type, String message) {}
+
+    /**
+     * A loop step whose limit was reached: the token went to {@code routedTo},
+     * or stopped in {@link ProcessToken.State#INCIDENT} when it is null.
+     */
+    public record LoopExhaustion(String tokenId, String headerId, int maxIterations, String routedTo) {}
+
+    /** A token that entered a wait-state task in the current command. */
+    public record Parked(String tokenId, String activityId) {}
 
     public ProcessInstance(ParsedProcessDefinition definition) {
         this.id = UUID.randomUUID().toString();
@@ -340,7 +357,11 @@ public class ProcessInstance {
 
     private record Step(ProcessToken token, String pointer, String previous) {}
 
-    private static final int MAX_HOPS = 2048;
+    /**
+     * Safety net per token and command. Every loop is bounded by its
+     * max_iterations, so a well-formed definition stays far below it.
+     */
+    private static final int MAX_HOPS = 10_000;
 
     private List<UserTaskPayload> run(Deque<Step> queue, List<UserTaskPayload> newUserTasks) {
         while (!queue.isEmpty()) {
@@ -356,6 +377,7 @@ public class ProcessInstance {
     private void move(Step step, Deque<Step> queue, List<UserTaskPayload> newUserTasks) {
         ProcessToken token = step.token();
         String current = step.pointer();
+        String previous = step.previous();
         int hops = 0;
         while (current != null) {
             if (++hops > MAX_HOPS) {
@@ -363,8 +385,16 @@ public class ProcessInstance {
                         "advance() exceeded max hops; possible cycle without wait state. pi=" + id);
             }
             String pointer = current;
-            token.moveTo(pointer, ProcessToken.State.ACTIVE);
             current = null;
+            LoopMeta loop = definition.getLoop(pointer);
+            if (loop != null && !enterLoopStep(token, loop, previous)) {
+                if (loop.onExhausted() == null) return;
+                previous = pointer;
+                current = loop.onExhausted();
+                continue;
+            }
+            previous = pointer;
+            token.moveTo(pointer, ProcessToken.State.ACTIVE);
 
             ServiceTaskMeta serviceTaskMeta = definition.getServiceTask(pointer);
             boolean isExternalServiceTask = serviceTaskMeta != null && serviceTaskMeta.topicName() != null;
@@ -372,7 +402,18 @@ public class ProcessInstance {
             ScriptTaskMeta scriptTaskMeta = definition.getScriptTask(pointer);
 
             if (definition.isUserTask(pointer) || definition.isCatchEvent(pointer) || isExternalServiceTask) {
+                if (missingCorrelationKey(pointer)) {
+                    // Without a key the message could never be correlated: stop
+                    // loudly instead of waiting forever.
+                    token.moveTo(pointer, ProcessToken.State.INCIDENT);
+                    incidents.add(new RuntimeIncident(token.id(), pointer,
+                            com.abada.engine.persistence.entity.IncidentEntity.Type.MISSING_CORRELATION_KEY,
+                            "message wait '" + pointer + "' was reached without a correlationKey variable; set it "
+                                    + "and retry the incident"));
+                    return;
+                }
                 token.moveTo(pointer, ProcessToken.State.WAITING);
+                if (!definition.isCatchEvent(pointer)) parked.add(new Parked(token.id(), pointer));
                 if (definition.isUserTask(pointer)) {
                     TaskMeta ut = definition.getUserTask(pointer);
                     var resolved = new AssignmentEvaluator().evaluate(ut.getAssignment(), variables);
@@ -439,7 +480,16 @@ public class ProcessInstance {
                 // engine cancels the sibling wait states in the same transaction.
                 token.moveTo(pointer, ProcessToken.State.EVENT_WAIT);
                 for (String child : definition.getEventGatewayChildren(pointer)) {
-                    tokens.add(newToken(child, ProcessToken.State.WAITING, token.id(), token.scopeTokenId()));
+                    ProcessToken waiting = newToken(child, ProcessToken.State.WAITING, token.id(),
+                            token.scopeTokenId());
+                    tokens.add(waiting);
+                    if (missingCorrelationKey(child)) {
+                        waiting.moveTo(child, ProcessToken.State.INCIDENT);
+                        incidents.add(new RuntimeIncident(waiting.id(), child,
+                                com.abada.engine.persistence.entity.IncidentEntity.Type.MISSING_CORRELATION_KEY,
+                                "message wait '" + child + "' was reached without a correlationKey variable; "
+                                        + "set it and retry the incident"));
+                    }
                 }
                 return;
             } else if ((definition.isParallelGateway(pointer) || definition.isInclusiveGateway(pointer))
@@ -458,6 +508,113 @@ public class ProcessInstance {
                 return;
             }
         }
+    }
+
+    /**
+     * Counts an entry into a loop step. A forward entry starts a new pass at 1;
+     * an entry through a back-edge adds one. Past {@code max_iterations} the
+     * loop is exhausted: the token goes to {@code on_exhausted}, or stops in the
+     * INCIDENT state at the step when no route is declared.
+     *
+     * @return true when the token may enter the step
+     */
+    private boolean enterLoopStep(ProcessToken token, LoopMeta loop, String previous) {
+        String variable = com.abada.engine.parser.AplParser.iterationVariable(loop.headerId());
+        boolean backEdge = previous != null && definition.isBackEdge(previous, loop.headerId());
+        // Passes are counted per token, so parallel branches looping on the same
+        // step each get their own bound. Tokens stored before V25 have no
+        // per-step count; the instance variable they wrote stands in for it.
+        Integer counted = token.loopCount(loop.headerId());
+        if (counted == null && variables.get(variable) instanceof Number legacy) counted = legacy.intValue();
+        int iteration = backEdge && counted != null ? counted + 1 : 1;
+        if (iteration > loop.maxIterations()) {
+            loopExhaustions.add(new LoopExhaustion(token.id(), loop.headerId(), loop.maxIterations(),
+                    loop.onExhausted()));
+            if (loop.onExhausted() == null) {
+                token.moveTo(loop.headerId(), ProcessToken.State.INCIDENT);
+                incidents.add(new RuntimeIncident(token.id(), loop.headerId(),
+                        com.abada.engine.persistence.entity.IncidentEntity.Type.LOOP_EXHAUSTED,
+                        "loop at '" + loop.headerId() + "' reached max_iterations " + loop.maxIterations()
+                                + " and declares no on_exhausted route"));
+            }
+            return false;
+        }
+        variables.put(variable, iteration);
+        token.setLoopCount(loop.headerId(), iteration);
+        return true;
+    }
+
+    private boolean missingCorrelationKey(String activityId) {
+        EventMeta event = definition.getEvents().get(activityId);
+        if (event == null || event.type() != EventMeta.EventType.MESSAGE) return false;
+        Object key = variables.get("correlationKey");
+        return key == null || key.toString().isBlank();
+    }
+
+    /** Returns and clears the incidents raised by advance(). */
+    public List<RuntimeIncident> takeIncidents() {
+        List<RuntimeIncident> snapshot = List.copyOf(incidents);
+        incidents.clear();
+        return snapshot;
+    }
+
+    /**
+     * Restarts a token stopped in the INCIDENT state at its activity, as an
+     * operator decision: a loop step starts a fresh pass (count 1), a message
+     * wait re-reads the correlationKey variable.
+     */
+    public List<UserTaskPayload> retryIncident(String tokenId) {
+        ProcessToken token = find(tokenId);
+        if (token == null || token.state() != ProcessToken.State.INCIDENT) {
+            throw new com.abada.engine.core.exception.ProcessEngineException(
+                    "Token " + tokenId + " of process instance " + id + " is not stopped by an incident");
+        }
+        token.moveTo(token.activityId(), ProcessToken.State.ACTIVE);
+        Deque<Step> queue = new ArrayDeque<>();
+        queue.add(new Step(token, token.activityId(), null));
+        return run(queue, new ArrayList<>());
+    }
+
+    /** Returns and clears the tokens that parked at a task during advance(). */
+    public List<Parked> takeParked() {
+        List<Parked> snapshot = List.copyOf(parked);
+        parked.clear();
+        return snapshot;
+    }
+
+    /**
+     * Leaves a waiting task through one of its boundaries: the token goes to the
+     * boundary's target instead of the task's next step. The caller has already
+     * written the outcome variables and retired the task's work.
+     */
+    public List<UserTaskPayload> leaveViaBoundary(String tokenRef, com.abada.engine.core.model.BoundaryMeta boundary) {
+        ProcessToken token = waitingToken(tokenRef);
+        if (!token.activityId().equals(boundary.attachedTo())) {
+            throw new com.abada.engine.core.exception.ProcessEngineException("Token " + token.id()
+                    + " waits at '" + token.activityId() + "', not at '" + boundary.attachedTo() + "'");
+        }
+        token.moveTo(boundary.attachedTo(), ProcessToken.State.ACTIVE);
+        Deque<Step> queue = new ArrayDeque<>();
+        queue.add(new Step(token, boundary.target(), boundary.attachedTo()));
+        return run(queue, new ArrayList<>());
+    }
+
+    /** True when the token is still waiting at the activity (it has not left it in an earlier command). */
+    public boolean isWaitingAt(String tokenId, String activityId) {
+        ProcessToken token = find(tokenId);
+        return token != null && token.state() == ProcessToken.State.WAITING && activityId.equals(token.activityId());
+    }
+
+    /** The id of the token waiting at {@code tokenRef} (a token id, or an activity for pre-V23 work). */
+    public String waitingTokenId(String tokenRef) {
+        return waitingToken(tokenRef).id();
+    }
+
+    /** Returns and clears the loop exhaustions produced by advance(). */
+    public List<LoopExhaustion> takeLoopExhaustions() {
+        List<LoopExhaustion> snapshot = List.copyOf(loopExhaustions);
+        loopExhaustions.clear();
+        return snapshot;
     }
 
     /** The forking token waits; one child token per chosen branch runs in this command. */
@@ -536,9 +693,12 @@ public class ProcessInstance {
         }
     }
 
+    /** The normal next step; boundary flows are taken only when their boundary fires. */
     private String firstTarget(String activity) {
-        List<SequenceFlow> outgoing = definition.getOutgoing(activity);
-        return outgoing.isEmpty() ? null : outgoing.get(0).getTargetRef();
+        for (SequenceFlow flow : definition.getOutgoing(activity)) {
+            if (!flow.isBoundary()) return flow.getTargetRef();
+        }
+        return null;
     }
 
     private ProcessToken waitingToken(String tokenRef) {
@@ -600,7 +760,11 @@ public class ProcessInstance {
         Instant now = Instant.now();
         // Strictly increasing creation times keep the stored order stable.
         lastTokenCreatedAt = now.isAfter(lastTokenCreatedAt) ? now : lastTokenCreatedAt.plusNanos(1_000);
-        return ProcessToken.create(activityId, state, parentTokenId, scopeTokenId, lastTokenCreatedAt);
+        // A child carries its parent's loop counts: a cycle that leaves the
+        // fork and re-enters it keeps counting instead of starting over.
+        ProcessToken parent = find(parentTokenId);
+        return ProcessToken.create(activityId, state, parentTokenId, scopeTokenId,
+                parent == null ? Map.of() : parent.loopCounts(), lastTokenCreatedAt);
     }
 
     /** Immutable view of decision tables applied during the last advance(). */

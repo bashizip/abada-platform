@@ -61,3 +61,48 @@ Unknown Abada elements, invalid hit policies, duplicate `otherwise` rules and
 unsupported `camunda:*` directives on the business rule task remain deployment
 errors.
 
+## Bounded loops (`abada:maxIterations`, `abada:onExhausted`)
+
+Every cycle in a BPMN process must return to a flow node that declares how many
+times it may run per pass:
+
+```xml
+<bpmn:userTask id="review" name="Review" abada:maxIterations="3"
+    abada:onExhausted="escalate" camunda:candidateGroups="reviewers"/>
+```
+
+- `abada:maxIterations` (required on the node a cycle returns to): an integer
+  from 1 to 1000. Without it, a process containing the cycle is rejected with
+  `ABADA-BPMN-LOOP-001`.
+- `abada:onExhausted` (optional): the id of the flow node to continue at when
+  the limit is reached. It must leave the loop. Without it the engine stops the
+  token and opens a `LOOP_EXHAUSTED` incident.
+- The current pass is exposed as the process variable `<nodeId>_iteration`.
+
+`standardLoopCharacteristics` and `multiInstanceLoopCharacteristics` are
+rejected; model the repetition as a bounded cycle.
+
+
+## Task service level (`abada:slaHours`, `abada:escalateTo`)
+
+A user task may declare a service level in hours and the groups to add when it
+is missed:
+
+```xml
+<bpmn:userTask id="review" name="Review the draft"
+    camunda:candidateGroups="reviewers"
+    abada:slaHours="4" abada:escalateTo="managers, directors"/>
+```
+
+When the hours pass with the task still open, the engine escalates it in
+place: the task stays open and assigned as it was, the listed groups become
+candidates too, and `TASK_SLA_BREACHED` is recorded in history and the outbox.
+`abada:slaHours` must be a number between 0 (exclusive) and 8760;
+`abada:escalateTo` requires it. The APL equivalent is `sla_hours` and
+`escalate_to` (APL specification §2.6).
+
+To stop the task instead, attach an interrupting timer boundary event; error
+boundary events catch a worker-reported error code (or every error, plus the
+last failed attempt, when they declare no code). Both are part of the
+supported subset on user tasks and external service tasks; see
+[bpmn-support.md](../reference/bpmn-support.md).
