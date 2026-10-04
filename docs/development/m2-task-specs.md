@@ -245,3 +245,48 @@ that stays workable.
 **Out of scope.** Studio editing of boundaries and fallbacks (E6);
 non-interrupting timers and an `on_sla_breach` branch; per-model cost (E11).
 
+## E5 — Human review primitive ✅ done
+
+**Goal.** A reviewer's decision is part of the process contract: the task
+declares its outcomes, the engine accepts only those, a rejection carries a
+comment, and the next step (typically the agent revising its draft) receives
+that comment.
+
+**Files.** `ENGINE/core/model/{OutcomeMeta,TaskMeta,BoundaryMeta,ParsedProcessDefinition}.java`,
+`ENGINE/parser/{AplParser,AplVariables,BpmnParser}.java`, `ENGINE/core/AbadaEngine.java`,
+`ENGINE/api/{TaskController,ProjectTaskController}.java`,
+`ENGINE/dto/{TaskDecisionRequest,TaskOutcomeDto,TaskDetailsDto}.java`,
+`engine/src/main/resources/apl/apl-v1.schema.json`,
+`studio/src/features/inbox/{TaskInbox.tsx,decision.ts}`, `studio/src/api/engine.ts`,
+`studio/src/lib/apl/parser.ts`, `studio/src/features/run/DryRunPanel.tsx`.
+
+**Changes.**
+- Language: `outcomes: { <name>: { next, comment: required|optional } }` on
+  human-input (2–6 outcomes, no node-level `next`); each outcome compiles to a
+  boundary of kind `OUTCOME`, so back-edges and loop bounds apply. BPMN:
+  `abada:outcomes` and `abada:commentRequired` on a user task, routed by an
+  ordinary gateway on `<id>_outcome`.
+- Runtime: `decideTask` shares the completion command (same locks and
+  authorization); it validates outcome, comment (required, ≤4 000 chars) and
+  engine-owned variables, writes `<id>_outcome` / `<id>_comment` (null clears
+  a previous pass), then leaves through the outcome boundary or advances
+  (BPMN). `completeTask` refuses tasks with outcomes. `TASK_COMPLETED`
+  records outcome and comment length, never the text; completion logs list
+  variable names only.
+- API: `POST .../tasks/{taskId}/decision` (project and default), idempotent
+  with a comment digest in the fingerprint; `outcomes` on the task detail.
+- Studio: outcome buttons plus a comment box in the inbox (client-side rules
+  mirror the engine), outcome edges, history lights the chosen outcome, dry
+  run offers routes as explicit choices.
+
+**Acceptance tests.** `AplReviewRuntimeTest` (PostgreSQL): reject with a
+comment → the revised draft's inputs carry it across an engine restart →
+approve clears it; invalid decisions change nothing; the third rejection
+escalates. `TaskDecisionApiTest` (detail outcomes, idempotent decision, 400s,
+404 for strangers, default-project endpoint), `AplParserTest`,
+`SupportedBpmnValidatorTest`, `OpenApiContractTest`; Studio `decision.test.ts`,
+`parser.test.ts`, `instanceDetail.test.ts`.
+
+**Out of scope.** Multi-reviewer and double sign-off; Studio editing of
+outcomes (E6); outcomes in insight facts.
+

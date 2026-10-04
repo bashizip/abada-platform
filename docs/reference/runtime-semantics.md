@@ -53,6 +53,18 @@ should use external tasks and an idempotent worker operation.
 - Claiming locks the task row; one concurrent claimant wins.
 - Completion requires the assignee, or an authorized candidate when the task
   is still available. Completion locks both task and process rows.
+- A task that declares `outcomes` is finished with a **decision**
+  (`POST .../tasks/{taskId}/decision`), never a plain completion. In the same
+  locked command the engine checks that the outcome is declared, that a
+  required comment is present and at most 4 000 characters, and that the
+  submitted variables do not set `<id>_outcome` or `<id>_comment`; any
+  violation is rejected with no change. It then writes `<id>_outcome` and
+  `<id>_comment` (`null` without a comment), completes the task and continues
+  at the outcome's `next` (APL, recorded as `BOUNDARY_TAKEN` kind `OUTCOME`)
+  or after the task (BPMN, which routes on `<id>_outcome`). `TASK_COMPLETED`
+  records the outcome and the comment length, never the comment text.
+  Evidence: [`AplReviewRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/AplReviewRuntimeTest.java),
+  [`TaskDecisionApiTest`](../../engine/src/test/java/com/abada/engine/api/TaskDecisionApiTest.java).
 - A completed, failed or cancelled task cannot transition again.
 - Failure is terminal for the task but does not implicitly fail the process:
   the token leaves through the task's `on_error`, or a `WORK_FAILED` incident

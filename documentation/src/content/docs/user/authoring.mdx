@@ -174,6 +174,33 @@ curl -X POST "$ABADA_URL/api/v1/process-instances/$ID/incidents/$INCIDENT_ID/ret
 A message wait opens an incident too when its `correlationKey` variable is
 missing, instead of waiting for a message that can never match.
 
+## Review steps: approve, or reject with a comment
+
+A human step can ask for a decision. Each outcome says where the process goes
+and whether the reviewer must explain it:
+
+```yaml
+- id: draft
+  type: agent
+  prompt: "Draft the offer. Reviewer feedback on the previous draft, if any: ${review_comment}"
+  loop: { max_iterations: 3, on_exhausted: escalate }
+  next: review
+- id: review
+  type: human-input
+  assignees: [reviewers]
+  outcomes:
+    approve: { next: done }
+    reject: { next: draft, comment: required }
+```
+
+In the Studio inbox the reviewer sees one button per outcome and a comment
+box; *reject* cannot be sent without a comment. The engine checks the same
+rules, stores the decision in `review_outcome` and the comment in
+`review_comment`, and sends the process to the outcome's `next`. Here a
+rejection returns to the agent, whose next draft receives the comment — at
+most three times, then a manager takes over. A review step with outcomes has
+no `next` of its own.
+
 ## Boundaries: when a step fails or takes too long
 
 A step that waits for work (an agent, an engine task, a human task) can say

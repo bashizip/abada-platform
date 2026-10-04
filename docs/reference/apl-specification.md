@@ -253,6 +253,48 @@ it fires, inside the command that observes the condition.
 - Boundaries replace the synthetic `<id>__outcome` gateway used before 1.1;
   the suffix `__outcome` stays reserved in node ids.
 
+
+### 2.7 Review outcomes
+
+A human task can ask its reviewer for a **decision** instead of a plain
+completion:
+
+```yaml
+- id: review
+  type: human-input
+  assignees: [reviewers]
+  outcomes:
+    approve: { next: publish }
+    reject:  { next: draft, comment: required }
+```
+
+- `outcomes` declares 2–6 decisions. Names are lowercase letters, digits and
+  underscores, starting with a letter (at most 32 characters). Each has a
+  `next` and an optional `comment: required | optional` (default `optional`).
+- A node with `outcomes` declares no `next`: every exit is an outcome's
+  `next`. It may still declare `sla_hours`, `escalate_to`, `on_timeout` and
+  `on_error`. An outcome that returns to an earlier step is a cycle and needs
+  a `loop` bound there (§2.3).
+- The reviewer submits the decision with the decision endpoint
+  (`POST .../tasks/{taskId}/decision {outcome, comment, variables}`). The
+  engine rejects an undeclared outcome, a missing required comment, a comment
+  over 4 000 characters, and a plain completion of the task — with no change.
+- The engine writes `<id>_outcome` (the decision) and `<id>_comment` (the
+  trimmed comment, or `null` when none is given, so an earlier pass's comment
+  never carries over). A later step reads them like any variable; an agent's
+  prompt can quote the comment:
+
+  ```yaml
+  - id: draft
+    type: agent
+    prompt: "Draft the offer. Reviewer feedback on the previous draft, if any: ${review_comment}"
+    loop: { max_iterations: 3, on_exhausted: escalate }
+    next: review
+  ```
+
+- History records `TASK_COMPLETED` with the outcome and the comment length;
+  the comment text stays in the process variable only.
+
 ---
 
 ## 3. Node Types & Primitives Reference
@@ -485,7 +527,8 @@ The engine creates an `AVAILABLE` human task claimable by the listed groups.
 | `escalate_to` | string[] | no | groups added as candidates on escalation; requires `sla_hours` |
 | `on_error` | nodeId or `[{code?, then}]` | no | route when the task is failed (`WORK_FAILED`) |
 | `on_timeout` | `{after, then}` | no | interrupting timeout: the task is cancelled and the flow continues at `then` |
-| `next` | nodeId | yes | linear successor |
+| `outcomes` | map of `{next, comment}` | no | review decisions, each with its own exit (§2.7); replaces `next` |
+| `next` | nodeId | yes, unless `outcomes` | linear successor |
 
 Engine behavior: task name = `description` (the Studio Run panel matches this),
 assignment follows the Abada assignment semantics (`direct`/`claim`, see
@@ -916,7 +959,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
-| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, invalid `outcomes` (count, name, target, comment rule, or `outcomes` together with `next`), an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while

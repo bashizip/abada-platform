@@ -328,8 +328,9 @@ new documents (Studio always writes `human-input`).
  | `escalate_to` | string[] | no | Groups added as candidates when the task misses `sla_hours`. Requires `sla_hours`. |
  | `on_error` | nodeId | no | Where to go when the task is failed. Without it a failed task opens an incident. |
  | `on_timeout` | `{ after, then }` | no | If the task is not done within `after` (e.g. `P3D`), it is cancelled and the flow continues at `then`. |
+ | `outcomes` | map | no | Decisions the reviewer chooses from, e.g. `approve: { next: publish }` and `reject: { next: draft, comment: required }`. Each outcome has its own `next`; the node then declares no `next`. The engine writes `<id>_outcome` and `<id>_comment`. See the APL specification §2.7. |
  | `requireDoubleSignOff` | boolean | no | Reserved; it currently has no runtime effect. |
- | `next` | nodeId | yes | The step that runs after the task is completed. |
+ | `next` | nodeId | yes, unless `outcomes` | The step that runs after the task is completed. |
 
 **Example.**
 
@@ -341,6 +342,19 @@ new documents (Studio always writes `human-input`).
   formKey: credit-sign-off
   sla_hours: 24
   next: routing
+```
+
+**Example with a decision.** The reviewer approves, or rejects with a comment
+that the agent reads on its next attempt as `${review_comment}`:
+
+```yaml
+- id: review
+  type: human-input
+  description: Review the draft
+  assignees: [reviewers]
+  outcomes:
+    approve: { next: done }
+    reject: { next: draft, comment: required }
 ```
 
 ---
