@@ -217,6 +217,8 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onLowConfidence: aplNode.on_low_confidence,
           onInvalidOutput: aplNode.on_invalid_output,
           onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
+          fallbackModels: aplNode.fallback_models,
         };
         break;
       case 'engine-task':
@@ -224,6 +226,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.engineTaskConfig = {
           service: aplNode.service,
           onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
         };
         break;
       case 'script':
@@ -238,7 +241,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.type = 'human';
         wNode.humanConfig = {
           assignees: aplNode.assignees || ['Reviewer'],
-          slaHours: aplNode.sla_hours || 24,
+          slaHours: aplNode.sla_hours ?? ('slaHours' in aplNode ? aplNode.slaHours : undefined),
+          escalateTo: aplNode.escalate_to,
+          onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
           formKey: 'formKey' in aplNode ? aplNode.formKey : undefined,
           formFields: [],
         };
@@ -366,8 +372,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         target: aplNode.next,
       });
     }
-    // Outcome routes are drawn as labelled edges after the normal successor.
-    if (aplNode.type === 'agent' || aplNode.type === 'engine-task') {
+    // Boundary routes are drawn as labelled edges after the normal successor.
+    if (aplNode.type === 'agent' || aplNode.type === 'engine-task' || aplNode.type === 'human-input'
+      || aplNode.type === 'approval-gate') {
       outcomeRouteEdges(aplNode).forEach((edge) => edges.push(edge));
     }
     if ('loop' in aplNode && aplNode.loop) {
@@ -488,6 +495,8 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         on_low_confidence: node.agentConfig?.onLowConfidence || undefined,
         on_invalid_output: node.agentConfig?.onInvalidOutput || undefined,
         on_error: node.agentConfig?.onError || undefined,
+        on_timeout: node.agentConfig?.onTimeout || undefined,
+        fallback_models: node.agentConfig?.fallbackModels?.length ? node.agentConfig.fallbackModels : undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
@@ -495,7 +504,10 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         ...baseNode,
         type: 'human-input',
         assignees: node.humanConfig?.assignees || [],
-        sla_hours: node.humanConfig?.slaHours,
+        sla_hours: node.humanConfig?.slaHours || undefined,
+        escalate_to: node.humanConfig?.escalateTo?.length ? node.humanConfig.escalateTo : undefined,
+        on_error: node.humanConfig?.onError || undefined,
+        on_timeout: node.humanConfig?.onTimeout || undefined,
         formKey: node.humanConfig?.formKey,
         next: getNextNode(node.id, node.type),
       } as APLNode);
@@ -588,6 +600,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         type: 'engine-task',
         service: node.engineTaskConfig?.service || 'abada:service',
         on_error: node.engineTaskConfig?.onError,
+        on_timeout: node.engineTaskConfig?.onTimeout || undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'script') {
@@ -663,15 +676,17 @@ function metadataExtras(metadata: APLDocument['metadata']): Record<string, unkno
 }
 
 /**
- * Route edges are labelled `on_*`: outcome routes (on_low_confidence,
- * on_invalid_output, on_error) and the loop's on_exhausted route.
+ * Route edges are labelled `on_*`: boundary routes (on_low_confidence,
+ * on_invalid_output, on_error, on_timeout) and the loop's on_exhausted route.
  */
 export const isOutcomeRouteEdge = (edge: { label?: string }): boolean =>
   typeof edge.label === 'string' && edge.label.startsWith('on_');
 
 function outcomeRouteEdges(aplNode: APLNode): WorkflowEdge[] {
   const routes: { target: string; label: string }[] = [];
-  const node = aplNode as { on_low_confidence?: string; on_invalid_output?: string; on_error?: APLOnError };
+  const node = aplNode as {
+    on_low_confidence?: string; on_invalid_output?: string; on_error?: APLOnError; on_timeout?: { then?: string };
+  };
   if (node.on_low_confidence) routes.push({ target: node.on_low_confidence, label: 'on_low_confidence' });
   if (node.on_invalid_output) routes.push({ target: node.on_invalid_output, label: 'on_invalid_output' });
   if (typeof node.on_error === 'string' && node.on_error) {
@@ -681,6 +696,7 @@ function outcomeRouteEdges(aplNode: APLNode): WorkflowEdge[] {
       if (rule?.then) routes.push({ target: rule.then, label: rule.code ? `on_error: ${rule.code}` : 'on_error' });
     });
   }
+  if (node.on_timeout?.then) routes.push({ target: node.on_timeout.then, label: 'on_timeout' });
   return routes.map((route, index) => ({
     id: `e_${aplNode.id}_${route.target}_${route.label.replace(/[^a-z_]/gi, '')}_${index}`,
     source: aplNode.id,
