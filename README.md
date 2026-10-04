@@ -188,14 +188,15 @@ only through an engine command that validates it — see
 
 ## Status
 
-The current release is **`1.0.0-rc.8`**, an evaluation release candidate
-([release notes](docs/release-notes/1.0.0-rc.8-release-notes.md),
-[gate report](docs/development/1.0-rc.8-gate-report-2026-10-01.md)). It targets
-self-hosted Docker Compose deployments with one or more engine instances on PostgreSQL.
+The current release is **`1.1.0-rc.1`**, an evaluation release candidate
+([release notes](docs/release-notes/1.1.0-rc.1-release-notes.md),
+[gate report](docs/development/1.1-rc.1-gate-report-2026-10-04.md)): bounded rework
+loops, error and timeout routes, enforced service levels, model fallback and review
+decisions with a required comment, all editable in Studio. It targets self-hosted
+Docker Compose deployments with one or more engine instances on PostgreSQL.
 
-Next on the [roadmap](docs/development/roadmap.md): enforced SLAs, timeouts and bounded
-rework loops (`1.1.0-rc.1`), then tool-using agents with human-approved writes
-(`1.1.0-rc.2`). Public-cloud production certification and an independent security review
+Next on the [roadmap](docs/development/roadmap.md): tool-using agents with
+human-approved writes (`1.1.0-rc.2`). Public-cloud production certification and an independent security review
 are not yet scheduled; see the [deployment support matrix](docs/reference/deployment-support.md).
 
 ---

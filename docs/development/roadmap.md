@@ -62,8 +62,11 @@ Full specifications: [`m2-task-specs.md`](m2-task-specs.md) (added as tasks star
 - [x] E4 Boundaries: `on_error`, `on_timeout` as real boundary events on agent, engine-task and human-input; enforced `sla_hours` with escalation; migrate M1 synthetic outcome gateways; agent `fallback_models`, rate-limit deferral and operator retry on another allowed model
 - [x] E5 Human review primitive: `outcomes: [approve, reject]`, required reject comment written to a variable
 - [x] E6 Studio: back-edges, boundary events, loop and timeout inspector
+- [x] 1.1.0-rc.1 — M2 release candidate: E1–E6, Studio incident list and retry on another model, Dry Run kept across layout-only edits, end-to-end tutorial with screenshots; exit demo covered by `AplReviewRuntimeTest` on PostgreSQL (rejection with comment, engine stopped mid-loop, revised draft and approval after restart) — [report](1.1-rc.1-gate-report-2026-10-04.md)
 
 ## M3 — Agents that act
+
+Full specifications: [`m3-task-specs.md`](m3-task-specs.md).
 
 - [ ] E7 Tool registry: `TOOL_SERVER` project resources (MCP), per-tool policy read / write / approval-required, deploy-time resolution
 - [ ] E8 Tool loop in the worker with `max_turns`, `max_tokens_total`, `budget_usd`
