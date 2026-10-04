@@ -902,6 +902,64 @@ class AplParserTest {
                 .isInstanceOf(BpmnValidationException.class).hasMessageContaining("max_iterations");
     }
 
+    private static byte[] review(String outcomes, String extras) {
+        return ("version: abada.io/v1\nmetadata:\n  name: Review Outcomes\nflow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: draft\n"
+                + "    - id: draft\n      type: engine-task\n      service: draft\n" + extras + "      next: review\n"
+                + "    - id: review\n      type: human-input\n      assignees: [reviewers]\n"
+                + "      outcomes:\n" + outcomes
+                + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void compilesReviewOutcomesIntoTheTaskAndOneBoundaryEach() {
+        ParsedProcessDefinition definition = parser.parseDetailed(review(
+                "        approve: { next: done }\n        reject: { next: draft, comment: required }\n",
+                "      loop: { max_iterations: 3 }\n")).definition();
+        assertThat(definition.getUserTask("review").getOutcomes()).containsExactly(
+                new com.abada.engine.core.model.OutcomeMeta("approve", false, "done"),
+                new com.abada.engine.core.model.OutcomeMeta("reject", true, "draft"));
+        assertThat(definition.boundaryFor("review", BoundaryMeta.Kind.OUTCOME, "reject").target()).isEqualTo("draft");
+        // A rejection that returns to the draft is a bounded loop like any other cycle.
+        assertThat(definition.isBackEdge("review", "draft")).isTrue();
+        assertThat(definition.getOutgoing("review")).allMatch(SequenceFlow::isBoundary);
+    }
+
+    @Test
+    void rejectsOutcomesItCannotHonour() {
+        String ok = "        approve: { next: done }\n        reject: { next: draft, comment: required }\n";
+        String bounded = "      loop: { max_iterations: 3 }\n";
+        assertThatThrownBy(() -> parser.parseDetailed(review(ok, "")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("max_iterations");
+        assertThatThrownBy(() -> parser.parseDetailed(review("        approve: { next: done }\n", bounded)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("between 2 and 6 outcomes");
+        assertThatThrownBy(() -> parser.parseDetailed(review(ok.replace("reject:", "Reject:"), bounded)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("lowercase");
+        assertThatThrownBy(() -> parser.parseDetailed(review(ok.replace("next: done", "next: nowhere"), bounded)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("not a declared node");
+        assertThatThrownBy(() -> parser.parseDetailed(review(ok.replace("comment: required", "comment: always"),
+                bounded)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("'required' or 'optional'");
+        byte[] withNext = new String(review(ok, bounded), StandardCharsets.UTF_8)
+                .replace("      outcomes:", "      next: done\n      outcomes:").getBytes(StandardCharsets.UTF_8);
+        assertThatThrownBy(() -> parser.parseDetailed(withNext))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("both 'next' and 'outcomes'");
+    }
+
+    @Test
+    void aReviseStepMayReadTheReviewCommentWithoutAVariableWarning() {
+        byte[] source = ("version: abada.io/v1\nmetadata:\n  name: Revise\n  variables:\n"
+                + "    - { name: brief, type: string }\nflow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: review\n"
+                + "    - id: review\n      type: human-input\n      assignees: [reviewers]\n"
+                + "      outcomes:\n        approve: { next: done }\n        reject: { next: revise }\n"
+                + "    - id: revise\n      type: condition\n      rules:\n"
+                + "        - if: \"${review_comment != null}\"\n          then: done\n        - else: done\n"
+                + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
+        assertThat(parser.parseDetailed(source).report().issues())
+                .noneMatch(issue -> issue.message().contains("review_comment"));
+    }
+
     @Test
     void rejectsReservedIdsAndUnknownRouteTargets() {
         assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      on_low_confidence: nowhere\n")))
