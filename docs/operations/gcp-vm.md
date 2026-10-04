@@ -75,7 +75,7 @@ the stack's memory limits (about 6 GB with the agent worker); use
 `e2-standard-4` if you add `--telemetry`.
 
 ```bash
-gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags "$TAGS" --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.0.0-rc.8
+gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags "$TAGS" --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.1.0-rc.1
 ```
 
 On every boot, [`deployment/gcp/startup.sh`](../../deployment/gcp/startup.sh)
@@ -215,7 +215,7 @@ before the engine and Keycloak are ready. It waits for them: registration is
 retried with backoff (log lines `agent_startup_retry`) for up to
 `ABADA_AGENT_STARTUP_RETRY_MS`, five minutes by default, and the worker
 container is not restarted. If the engine is still not ready after that, the
-worker exits and Docker restarts it. Workers older than `1.0.0-rc.8` exit on
+worker exits and Docker restarts it. Workers older than `1.1.0-rc.1` exit on
 the first failed registration instead and show several restarts after a
 reboot. Check the result with:
 

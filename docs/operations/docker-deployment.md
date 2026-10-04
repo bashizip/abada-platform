@@ -61,7 +61,7 @@ procedure.
 ## Release artifact
 
 ```bash
-./release/build-bundle.sh 1.0.0-rc.8
+./release/build-bundle.sh 1.1.0-rc.1
 ```
 
 The result under `release/dist/` contains all Compose/configuration assets,
@@ -82,7 +82,7 @@ passing the override to `bash`:
 
 ```bash
 curl -fsSL https://install.abadaplatform.com/install.sh | \
-  ABADA_VERSION=1.0.0-rc.8 bash
+  ABADA_VERSION=1.1.0-rc.1 bash
 ```
 
 The `abada-install` Cloudflare Worker serves the short-cached installer from
