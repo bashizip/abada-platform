@@ -73,6 +73,20 @@ own.
 - Recapture a screenshot when the screen it shows changes; a stale image is a
   wrong claim.
 
+## Publishing
+
+The public site (`https://docs.abadaplatform.com`) is the Vercel project
+`abada-engine-docs`, connected to this repository. Vercel builds it with
+`npm run build` (including the link check):
+
+- a push to `main` publishes the production site;
+- a push to any other branch builds a protected preview, and only when
+  `documentation/` changed (a build that would not change the site is skipped).
+
+Before this connection existed, the project was deployed by hand and stayed on
+a September build through two releases. After a release, check that the pages
+the release added answer on the public domain, not only the home page.
+
 ## Links and source-of-truth
 
 Use site-relative links such as `/architecture/runtime/` for curated pages.
