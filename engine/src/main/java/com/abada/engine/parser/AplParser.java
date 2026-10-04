@@ -7,6 +7,7 @@ import com.abada.engine.bpmn.compatibility.CompatibilityMapping;
 import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.bpmn.compatibility.CompatibilityReport;
 import com.abada.engine.bpmn.compatibility.ValidationSeverity;
+import com.abada.engine.core.model.ToolPolicy;
 import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
 import com.abada.engine.core.model.LoopMeta;
@@ -321,7 +322,7 @@ public final class AplParser {
                     }
                     case "agent" -> serviceTasks.put(nodeId,
                             new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
-                                    parseAgentWork(node, nodeId)));
+                                    parseAgentWork(node, nodeId, pointerById.get(nodeId), warnings)));
                     case "engine-task" -> {
                         String topic = node.path("service").asText(null);
                         if (topic == null || topic.isBlank()) {
@@ -733,7 +734,8 @@ public final class AplParser {
         return new LoopMeta(nodeId, max.asInt(), onExhausted);
     }
 
-    private AgentWorkDescriptor parseAgentWork(JsonNode node, String nodeId) {
+    private AgentWorkDescriptor parseAgentWork(JsonNode node, String nodeId, String nodePointer,
+            List<BpmnValidationIssue> warnings) {
         String profile = node.path("profile").asText("abada.agent/v1");
         if (!"abada.agent/v1".equals(profile)) {
             throw validation("profile", "agent node '" + nodeId + "' declares unsupported profile '" + profile + "'");
@@ -787,9 +789,51 @@ public final class AplParser {
             }
         }
         List<String> tools = new ArrayList<>();
+        Map<String, ToolPolicy> toolPolicies = new LinkedHashMap<>();
         JsonNode rawTools = node.path("tools");
-        if (rawTools.isArray()) rawTools.forEach(tool -> tools.add(tool.asText()));
-        else if (!rawTools.isMissingNode() && !rawTools.isNull()) {
+        if (rawTools.isArray()) {
+            for (int index = 0; index < rawTools.size(); index++) {
+                JsonNode entry = rawTools.get(index);
+                String field = "tools/" + index;
+                String ref;
+                if (entry.isTextual()) {
+                    ref = entry.asText().strip();
+                } else if (entry.isObject()) {
+                    ref = entry.path("ref").asText("").strip();
+                    if (!isToolRef(ref)) {
+                        throw validation(field + "/ref", "agent node '" + nodeId
+                                + "' tool entries in object form need ref: <server>/<tool>");
+                    }
+                    ToolPolicy policy = ToolPolicy.fromWire(entry.path("policy").asText(null));
+                    if (policy == null) {
+                        throw validation(field + "/policy", "agent node '" + nodeId + "' tool '" + ref
+                                + "' policy must be read, write or approval_required");
+                    }
+                    toolPolicies.put(ref, policy);
+                } else {
+                    throw validation(field, "agent node '" + nodeId
+                            + "' tools entries must be <server>/<tool> or { ref, policy }");
+                }
+                if (ref.isEmpty()) {
+                    throw validation(field, "agent node '" + nodeId + "' declares an empty tool");
+                }
+                if (tools.contains(ref)) {
+                    throw validation(field, "agent node '" + nodeId + "' lists tool '" + ref + "' more than once");
+                }
+                if (ref.contains("/") && !isToolRef(ref)) {
+                    throw validation(field, "agent node '" + nodeId + "' tool '" + ref
+                            + "' must be <server>/<tool>");
+                }
+                if (!ref.contains("/")) {
+                    warnings.add(new BpmnValidationIssue(TOOL_ADVISORY_CODE, ValidationSeverity.WARNING,
+                            "agent node '" + nodeId + "' names tool '" + ref + "' without a server: it is"
+                                    + " advisory only and never executed; use <server>/<tool> from a project"
+                                    + " tool server (an error from 1.1.0)",
+                            null, nodeId, LANGUAGE_VERSION, null, null, nodePointer + "/" + field));
+                }
+                tools.add(ref);
+            }
+        } else if (!rawTools.isMissingNode() && !rawTools.isNull()) {
             throw validation("tools", "agent node '" + nodeId + "' tools must be a list");
         }
         String model = node.path("model").asText(null);
@@ -828,7 +872,19 @@ public final class AplParser {
         return new AgentWorkDescriptor(profile, model,
                 prompt, inputs,
                 node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
-                confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels);
+                confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels,
+                toolPolicies, List.of());
+    }
+
+    /** {@code tools:} names without a server (rc.x): advisory, never executed. */
+    public static final String TOOL_ADVISORY_CODE = "ABADA-APL-TOOL-001";
+
+    private static final java.util.regex.Pattern TOOL_REF =
+            java.util.regex.Pattern.compile("[a-z][a-z0-9_-]{0,63}/[A-Za-z0-9_.-]{1,128}");
+
+    /** A resolvable tool reference: {@code <server>/<tool>}. */
+    public static boolean isToolRef(String value) {
+        return value != null && TOOL_REF.matcher(value).matches();
     }
 
     /** Fallback models an agent node may declare: tried in order only when the model before is unavailable. */

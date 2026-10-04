@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://abada.io/schemas/tool-server-v1.schema.json",
+  "title": "Abada tool server",
+  "description": "An MCP tool server a project's agents may use, with the policy of each tool. A tool not listed is denied.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "transport",
+    "url",
+    "tools"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Server name used in APL tool references (<name>/<tool>). Unique per project.",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "transport": {
+      "const": "streamable-http",
+      "description": "Only MCP streamable HTTP in 1.1; stdio is not supported."
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048
+    },
+    "credential": {
+      "type": "string",
+      "description": "Name of a project tool credential sent as a bearer token. Never the secret itself.",
+      "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+    },
+    "tools": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 100,
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/tool"
+      }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "policy": {
+          "enum": [
+            "read",
+            "write",
+            "approval_required"
+          ]
+        },
+        "idempotency": {
+          "enum": [
+            "key",
+            "none"
+          ],
+          "description": "key: the server accepts an idempotency key, so a resumed write is re-sent with the same key. none: a write interrupted by a crash is never re-sent; it opens an incident. Required for write and approval_required."
+        },
+        "approvers": {
+          "type": "array",
+          "description": "Groups that may approve an approval_required call.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "maxItems": 20
+        },
+        "approval_sla_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 8760
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    }
+  }
+}

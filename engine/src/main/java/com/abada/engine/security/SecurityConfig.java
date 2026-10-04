@@ -90,8 +90,9 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_operations:read", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
                 .requestMatchers("/v1/jobs/**", "/v1/process-instances/**")
                         .hasAnyAuthority("SCOPE_operations:write", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
-                // Plaintext provider keys: worker principals only, never human administrators.
-                .requestMatchers(HttpMethod.GET, "/v1/workers/me/ai-credentials")
+                // Plaintext provider keys and tool credentials: worker principals only, never human administrators.
+                .requestMatchers(HttpMethod.GET, "/v1/workers/me/ai-credentials",
+                                "/v1/external-tasks/*/tool-credentials/*")
                         .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER)
                 .requestMatchers("/v1/external-tasks/**", "/v1/workers/**")
                         .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER, AbadaRoles.ADMIN)

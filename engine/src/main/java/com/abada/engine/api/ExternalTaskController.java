@@ -40,12 +40,15 @@ public class ExternalTaskController {
     private final WorkerCapabilityService workerCapabilities;
     private final ProjectAccessService access;
     private final WorkerHealthService workerHealth;
+    private final com.abada.engine.tools.ToolCredentialService toolCredentials;
 
     public ExternalTaskController(ExternalTaskCommandService commands, IdempotencyService idempotency,
             ObjectMapper objectMapper, @Value("${abada.security.mode:disabled}") String securityMode,
             ProjectWorkerService projectWorkers, WorkerCapabilityService workerCapabilities,
             ProjectAccessService access,
-            WorkerHealthService workerHealth) {
+            WorkerHealthService workerHealth,
+            com.abada.engine.tools.ToolCredentialService toolCredentials) {
+        this.toolCredentials = toolCredentials;
         this.commands = commands;
         this.idempotency = idempotency;
         this.objectMapper = objectMapper;
@@ -144,6 +147,18 @@ public class ExternalTaskController {
             return Map.of("status", "Failure recorded", "externalTaskId", id);
         });
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * The credential of a tool server this task is bound to, for the worker
+     * holding its lease. Never cached; only names are logged.
+     */
+    @GetMapping("/{id}/tool-credentials/{server}")
+    public ResponseEntity<com.abada.engine.tools.ToolCredentialService.IssuedCredential> toolCredential(
+            @PathVariable String id, @PathVariable String server, @RequestParam String workerId) {
+        if (!"disabled".equalsIgnoreCase(securityMode)) workerCapabilities.requireWorkerForTask(id);
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .header("Pragma", "no-cache").body(toolCredentials.issueForTask(id, workerId, server));
     }
 
     @PostMapping("/{id}/extend-lock")

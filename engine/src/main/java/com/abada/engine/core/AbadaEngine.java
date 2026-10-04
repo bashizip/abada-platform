@@ -18,6 +18,7 @@ import com.abada.engine.llm.AiProviderRegistry;
 import com.abada.engine.observability.EngineMetrics;
 import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.parser.AplParser;
+import com.abada.engine.tools.ToolRegistryService;
 import com.abada.engine.parser.BpmnParser;
 import com.abada.engine.persistence.PersistenceService;
 import com.abada.engine.persistence.entity.EventSubscriptionEntity;
@@ -75,6 +76,7 @@ public class AbadaEngine {
     private final PersistenceService persistenceService;
     private final BpmnParser parser;
     private final AplParser aplParser;
+    private final ToolRegistryService toolRegistry;
 
     private final TaskManager taskManager;
     private final EventManager eventManager;
@@ -105,7 +107,8 @@ public class AbadaEngine {
             InsightFactWriter insightFactWriter,
             TaskGroupResolver taskGroupResolver,
             @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels,
-            @Autowired(required = false) AiProviderRegistry aiProviders) {
+            @Autowired(required = false) AiProviderRegistry aiProviders,
+            ToolRegistryService toolRegistry) {
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
         this.aplParser = new AplParser(allowedAgentModels);
@@ -125,6 +128,7 @@ public class AbadaEngine {
         this.insightFactWriter = insightFactWriter;
         this.taskGroupResolver = taskGroupResolver;
         this.aiProviders = aiProviders;
+        this.toolRegistry = toolRegistry;
     }
 
     @PostConstruct
@@ -192,7 +196,19 @@ public class AbadaEngine {
                 }
             }
             ParsedProcessDefinition definition = parseResult.definition();
-            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId);
+            String toolBindings = null;
+            if (schema == DefinitionSchema.APL_NATIVE) {
+                // Tool references resolve against the project's tool servers now and stay frozen with this version.
+                ToolRegistryService.Resolution tools = toolRegistry.resolve(projectId, source);
+                if (!tools.ok()) {
+                    List<com.abada.engine.bpmn.compatibility.BpmnValidationIssue> issues =
+                            new ArrayList<>(tools.errors());
+                    issues.addAll(parseResult.report().issues());
+                    throw new com.abada.engine.bpmn.compatibility.BpmnValidationException(issues);
+                }
+                toolBindings = toolRegistry.toJson(tools.bindings());
+            }
+            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId, toolBindings);
             historyService.record("PROCESS_DEFINITION_DEPLOYED", null, definition.getId(), null,
                     Map.of("deploymentId", persisted.getDeploymentId(), "version", persisted.getVersion(),
                             "projectId", projectId));
@@ -234,6 +250,19 @@ public class AbadaEngine {
     public ParsedProcessDefinition getParsedProcessDefinition(String processDefinitionId) {
         ProcessDefinitionEntity latest = persistenceService.findProcessDefinitionById(processDefinitionId);
         return latest == null ? null : cacheDefinition(latest);
+    }
+
+    /**
+     * The tool bindings an agent activity of this instance may use, as frozen
+     * when its definition version was deployed. Empty when it binds none.
+     */
+    public List<com.abada.engine.core.model.ToolBinding> toolBindings(ProcessInstance instance, String activityId) {
+        String deploymentId = instance.getProcessDefinitionDeploymentId();
+        if (deploymentId == null) return List.of();
+        ProcessDefinitionEntity deployment = persistenceService.findProcessDefinitionByDeploymentId(deploymentId);
+        if (deployment == null) return List.of();
+        return toolRegistry.bindingsFor(deploymentId, deployment.getToolBindings())
+                .getOrDefault(activityId, List.of());
     }
 
     private void registerDefinition(ParsedProcessDefinition definition, ProcessDefinitionEntity entity) {
@@ -1534,11 +1563,18 @@ public class AbadaEngine {
 
     private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema,
             String projectId) {
+        return saveProcessDefinition(parseResult, schema, projectId, null);
+    }
+
+    private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema,
+            String projectId, String toolBindings) {
         ParsedProcessDefinition definition = parseResult.definition();
         String checksum = sha256(definition.getRawXml());
         ProcessDefinitionEntity latest = persistenceService
                 .findProcessDefinitionByProjectAndId(projectId, definition.getId());
-        if (latest != null && checksum.equals(latest.getChecksum())) {
+        // Same source and same resolved tools: nothing changed. A changed tool server makes a new version.
+        if (latest != null && checksum.equals(latest.getChecksum())
+                && java.util.Objects.equals(toolBindings, latest.getToolBindings())) {
             return latest;
         }
         ProcessDefinitionEntity entity = new ProcessDefinitionEntity();
@@ -1554,6 +1590,7 @@ public class AbadaEngine {
         entity.setCompatibilityProfiles(String.join(",", parseResult.activeProfiles()));
         entity.setDetectedNamespaces(String.join(",", new TreeSet<>(parseResult.detectedNamespaces())));
         entity.setCompilerVersion(schema == DefinitionSchema.APL_NATIVE ? "apl-1" : "1");
+        entity.setToolBindings(toolBindings);
         try {
             entity.setCompatibilityReport(om.writeValueAsString(parseResult.report()));
         } catch (JsonProcessingException exception) {

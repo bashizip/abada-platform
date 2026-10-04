@@ -296,6 +296,39 @@ class SecurityAuthorizationContractTest {
     }
 
     @Test
+    void toolCredentialsAreServedOnlyToWorkersAndManagedOnlyByProjectMaintainers() throws Exception {
+        String credential = "/v1/external-tasks/missing/tool-credentials/crm";
+        mvc.perform(get(credential).param("workerId", "w")).andExpect(status().isUnauthorized());
+        mvc.perform(get(credential).param("workerId", "w").header("X-Auth-Request-User", "forged-worker")
+                        .header("X-Auth-Request-Groups", "abada-worker"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get(credential).param("workerId", "w").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get(credential).param("workerId", "w").header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(get(credential).param("workerId", "w"), "admin");
+        assertForbidden(get(credential).param("workerId", "w"), "operator");
+        // A worker reaches the endpoint, which then requires the task's lease (unknown task here).
+        mvc.perform(get(credential).param("workerId", "w").header("Authorization", "Bearer worker"))
+                .andExpect(status().isNotFound());
+
+        String manage = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/tool-credentials/crm-token";
+        String body = "{\"secret\":\"never-stored\"}";
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        // Not a member of the project: it does not exist for them.
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer tasks"))
+                .andExpect(status().isNotFound());
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer worker"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void aiProviderManagementRequiresInsightConfigure() throws Exception {
         assertForbidden(put("/v1/ai-providers/gemini").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"apiKey\":\"k\"}"), "insight-reviewer");

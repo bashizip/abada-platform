@@ -93,6 +93,9 @@ public class ExternalTaskCommandService {
                     // An operator retried this task on another model; the definition is unchanged.
                     work = work.withModel(task.getModelOverride());
                 }
+                if (work != null && !work.tools().isEmpty()) {
+                    work = work.withToolBindings(engine.toolBindings(instance, task.getActivityId()));
+                }
                 Map<String, Object> payload = work != null
                         ? AgentInputs.resolve(work, instance.getVariables())
                         : instance.getVariables();
