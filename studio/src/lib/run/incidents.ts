@@ -12,6 +12,7 @@ export const INCIDENT_KIND_META: Record<string, { label: string; hint: string }>
   WORK_FAILED: { label: 'Work failed', hint: 'The step used up its attempts. Retry reopens it with a fresh attempt budget.' },
   LOOP_EXHAUSTED: { label: 'Loop exhausted', hint: 'A loop reached its limit with no exhaustion route. Retry restarts the step.' },
   MISSING_CORRELATION_KEY: { label: 'Missing correlation key', hint: 'A message wait could not compute its correlation key. Retry restarts the step.' },
+  TOOL_OUTCOME_UNKNOWN: { label: 'Write outcome unknown', hint: 'An agent write was interrupted and its server takes no idempotency key, so it is never re-sent. Check the target system, then say whether it happened; the agent resumes with that fact.' },
 };
 
 export const incidentKindLabel = (kind: string): string => INCIDENT_KIND_META[kind]?.label ?? kind;

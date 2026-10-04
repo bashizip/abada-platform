@@ -113,4 +113,17 @@ describe('incidents panel', () => {
     expect(byLabel(container, 'Incident inc-1')).not.toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('403 Project role OPERATOR required');
   });
+
+  it('asks whether an interrupted write happened instead of offering a blind retry', async () => {
+    api.getIncidents.mockResolvedValueOnce([incident({ type: 'TOOL_OUTCOME_UNKNOWN', message: "write 'crm/notify' was interrupted" })])
+      .mockResolvedValue([]);
+    const container = render(<IncidentsPanel projectId="proj" canRetry modelFor={() => null} />);
+    await settle();
+
+    expect(container.textContent).toContain('Write outcome unknown');
+    expect(button(container, 'Retry')).toBeUndefined();
+    await act(async () => { click(button(container, 'It did not happen')!); });
+    await settle();
+    expect(api.retryIncident).toHaveBeenCalledWith('proj', 'inc-1', { toolOutcome: 'NOT_PERFORMED' });
+  });
 });
