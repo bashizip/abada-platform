@@ -94,6 +94,12 @@ bundle, performs an unauthenticated clean-runner install, and promotes
 reproducible Cloudflare setup, scoped secrets, retry procedure and cache
 contract.
 
+Image publication follows the branch flow. A push to `dev` only builds the
+four images on the runner (amd64) to prove they build; nothing is tagged or
+pushed. A push to `main` (a merged promotion pull request) publishes them to
+GHCR as `sha-<commit>` and `main`, and a `v*` tag publishes the version tag
+and the release bundle.
+
 ## Verification
 
 ```bash
