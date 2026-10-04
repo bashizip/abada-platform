@@ -61,7 +61,7 @@ Full specifications: [`m2-task-specs.md`](m2-task-specs.md) (added as tasks star
 - [x] E3 Bounded loops: back-edges allowed only with `max_iterations`; `on_exhausted` route or incident (V24 `incidents`); BPMN cycles bounded too and loop/multi-instance markers rejected — [spec](m2-task-specs.md#e3--bounded-loops--done)
 - [x] E4 Boundaries: `on_error`, `on_timeout` as real boundary events on agent, engine-task and human-input; enforced `sla_hours` with escalation; migrate M1 synthetic outcome gateways; agent `fallback_models`, rate-limit deferral and operator retry on another allowed model
 - [x] E5 Human review primitive: `outcomes: [approve, reject]`, required reject comment written to a variable
-- [ ] E6 Studio: back-edges, boundary events, loop and timeout inspector
+- [x] E6 Studio: back-edges, boundary events, loop and timeout inspector
 
 ## M3 — Agents that act
 

@@ -246,6 +246,30 @@ curl -X POST "$ABADA_URL/api/v1/process-instances/$ID/incidents/$INCIDENT_ID/ret
   -d '{"model": "gemini-3.7-flash", "reason": "provider quota exhausted"}'
 ```
 
+## Editing loops, boundaries and outcomes in Studio
+
+Everything above can be edited on the canvas; the APL stays the source of truth
+and Studio writes each change to it.
+
+- **Draw a connection** from a task to another step: a menu asks what it
+  means — *Next step*, *On error* (optionally for one error code), *On
+  timeout…* (with its ISO-8601 duration, e.g. `PT2H`), *Low confidence* and
+  *Invalid output* for agents, each review *Outcome*, or *Loop limit reached*
+  on a loop step. Only the kinds that step supports are offered, and a new
+  *Next step* replaces the old one instead of being silently dropped.
+- **Delete an edge**: click it and press Delete. Deleting a route edge clears
+  the route it stands for (an error code, a timeout, an outcome's target, a
+  loop's exhausted route); deleting a step clears every route that pointed at
+  it.
+- **The inspector** edits the same routes: error routes per code, the
+  timeout, fallback models, escalation groups, review outcomes (name, target,
+  comment required) and the step's repeat limit.
+- **Badges** on the canvas show `↻ 3` on a loop step, a red `↻ !` when a cycle
+  returns to a step without a usable repeat limit (with **Add loop bound** in
+  the inspector), and `⚠ n` for engine validation issues about the step,
+  listed in the inspector.
+- Every edit is one undo step (Cmd/Ctrl+Z).
+
 ## Authoring surfaces in Studio
 
 - **Canvas and YAML are one document.** The designer and the APL editor

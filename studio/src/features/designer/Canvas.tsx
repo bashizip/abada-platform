@@ -46,6 +46,9 @@ import type { LayoutMode } from '@/lib/layout/elkLayout';
 import { savePreferredLayout, hasSavedLayout } from '@/lib/run/layoutPrefs';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
 import { WorkflowNode, WorkflowEdge, EventSubtype, GatewaySubtype } from '@/types';
+import { analyzeLoops } from '@/lib/apl/loopAnalysis';
+import type { Route } from '@/lib/apl/routes';
+import { ConnectMenu } from './ConnectMenu';
 
 interface CanvasProps {
   nodes: WorkflowNode[];
@@ -56,7 +59,12 @@ interface CanvasProps {
   onSelectNode: (id: string | null) => void;
   onNodeMove: (id: string, x: number, y: number) => void;
   onDeleteNode: (id: string) => void;
-  onConnectNodes: (sourceId: string, targetId: string) => void;
+  /** A new connection; `route` says what it means (next when omitted). */
+  onConnectNodes: (sourceId: string, targetId: string, route?: Route) => void;
+  /** Deletes an edge; a route edge also clears the route it stands for. */
+  onDeleteEdge?: (edgeId: string) => void;
+  /** Engine validation issues per node id (count), shown as node badges. */
+  issueCounts?: Map<string, number>;
   /** Receives auto-laid-out nodes on editable canvases (read-only ones keep a local view). */
   onAutoLayout?: (nodes: WorkflowNode[]) => void;
   onAddNode: (type: WorkflowNode['type'], subtype?: EventSubtype | GatewaySubtype) => void;
@@ -116,6 +124,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
   onNodeMove,
   onDeleteNode,
   onConnectNodes,
+  onDeleteEdge,
+  issueCounts,
   onAutoLayout,
   onAddNode,
   onOpenAplEditor,
@@ -156,6 +166,10 @@ const CanvasInner: React.FC<CanvasProps> = ({
   );
 
   const outcomeKinds = useMemo(() => outcomeKindsBySource(rawEdges), [rawEdges]);
+  const loops = useMemo(() => analyzeLoops({ nodes: rawNodes, edges: rawEdges }), [rawNodes, rawEdges]);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [pendingConnect, setPendingConnect] = useState<{ source: string; target: string } | null>(null);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const slots = useMemo(() => outcomeSlots(rawEdges), [rawEdges]);
   const lanes = useMemo(() => parallelLanes(rawEdges), [rawEdges]);
 
@@ -165,9 +179,14 @@ const CanvasInner: React.FC<CanvasProps> = ({
       isActiveSim: activeSimulationNodeId === node.id,
       isLiveCurrent: activeLiveNodeIds.includes(node.id),
       outcomeKinds: outcomeKinds.get(node.id),
+      // A loop step shows its bound; a cycle into a step without a usable one is flagged.
+      loopState: loops.targets.has(node.id) ? loops.targets.get(node.id) ?? 'bounded'
+        : node.loop ? 'bounded' : undefined,
+      issueCount: issueCounts?.get(node.id),
       selected: selectedNodeId === node.id,
     })),
-  [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds]);
+  [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
+    loops, issueCounts]);
 
   const reactFlowEdges: Edge<AbadaEdgeData>[] = useMemo(() =>
     rawEdges.map(edge => {
@@ -179,6 +198,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
         source: edge.source,
         target: edge.target,
         type: 'abadaEdge',
+        selected: selectedEdgeId === edge.id,
         data: {
           label: edge.label,
           kind: edgeKindOf(edge),
@@ -188,18 +208,42 @@ const CanvasInner: React.FC<CanvasProps> = ({
           isFlowing: hasToken || isNext
             || (isSimulating && (activeSimulationNodeId === edge.source || activeSimulationNodeId === edge.target)),
           hasToken,
-          isHighlighted: incident,
+          isHighlighted: incident || selectedEdgeId === edge.id,
           // Focus: while editing, the selected node's connections stand out.
           isDimmed: !readOnly && !!selectedNodeId && !incident,
         },
       };
-    }), [rawEdges, slots, lanes, selectedNodeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges]);
+    }), [rawEdges, slots, lanes, selectedNodeId, selectedEdgeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges]);
 
+  /**
+   * A connection from a task asks what it means (next, error, timeout, an
+   * outcome…); from a gateway or an event it is a plain flow.
+   */
   const onConnect = useCallback((connection: Connection) => {
-    if (connection.source && connection.target) {
-      onConnectNodes(connection.source, connection.target);
+    if (!connection.source || !connection.target || connection.source === connection.target) return;
+    const source = rawNodes.find((node) => node.id === connection.source);
+    if (source && (source.type === 'agent' || source.type === 'engine-task' || source.type === 'human')) {
+      setPendingConnect({ source: connection.source, target: connection.target });
+      return;
     }
-  }, [onConnectNodes]);
+    onConnectNodes(connection.source, connection.target);
+  }, [onConnectNodes, rawNodes]);
+
+  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent) => {
+    const point = 'changedTouches' in event ? event.changedTouches[0] : event;
+    const bounds = wrapperRef.current?.getBoundingClientRect();
+    if (!point || !bounds) return;
+    setMenuAt({ x: point.clientX - bounds.left, y: point.clientY - bounds.top });
+  }, []);
+
+  const closeMenu = useCallback(() => { setPendingConnect(null); setMenuAt(null); }, []);
+
+  const onEdgeClick = useCallback((_: unknown, edge: Edge) => {
+    if (readOnly) return;
+    setSelectedEdgeId(edge.id);
+    onSelectNode(null);
+    wrapperRef.current?.focus({ preventScroll: true });
+  }, [readOnly, onSelectNode]);
 
   const onNodeDrag = useCallback((_: unknown, node: Node) => {
     const next = alignTo(layout.displayNodes, node.id, node.position);
@@ -220,6 +264,12 @@ const CanvasInner: React.FC<CanvasProps> = ({
    */
   const onKeyDown = useCallback((event: React.KeyboardEvent) => {
     if (isTextInput(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedEdgeId && !readOnly && onDeleteEdge) {
+      event.preventDefault();
+      onDeleteEdge(selectedEdgeId);
+      setSelectedEdgeId(null);
+      return;
+    }
     if (event.shiftKey && event.code === 'KeyL') {
       event.preventDefault();
       void layout.runLayout(layout.mode);
@@ -238,7 +288,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
       const step = event.shiftKey ? 32 : 8;
       onNodeMove(node.id, node.x + nudge[0] * step, node.y + nudge[1] * step);
     }
-  }, [layout, fitView, readOnly, selectedNodeId, rawNodes, onNodeMove]);
+  }, [layout, fitView, readOnly, selectedNodeId, selectedEdgeId, onDeleteEdge, rawNodes, onNodeMove]);
 
   const focusCanvas = useCallback(() => wrapperRef.current?.focus({ preventScroll: true }), []);
 
@@ -248,11 +298,13 @@ const CanvasInner: React.FC<CanvasProps> = ({
   }, [onDeleteNode, readOnly]);
 
   const onNodeClick = useCallback((_: unknown, node: Node) => {
+    setSelectedEdgeId(null);
     onSelectNode(node.id);
     focusCanvas();
   }, [onSelectNode, focusCanvas]);
 
   const onPaneClick = useCallback(() => {
+    setSelectedEdgeId(null);
     onSelectNode(null);
     focusCanvas();
   }, [onSelectNode, focusCanvas]);
@@ -266,6 +318,23 @@ const CanvasInner: React.FC<CanvasProps> = ({
       className="flex-1 h-full w-full bg-[#1A1614] relative outline-none"
     >
       <CanvasMarkers prefix={markerPrefix} />
+      {pendingConnect && menuAt && (() => {
+        const source = rawNodes.find((node) => node.id === pendingConnect.source);
+        const target = rawNodes.find((node) => node.id === pendingConnect.target);
+        return source && target ? (
+          <ConnectMenu
+            source={source}
+            target={target}
+            x={menuAt.x}
+            y={menuAt.y}
+            onCancel={closeMenu}
+            onChoose={(route) => {
+              onConnectNodes(source.id, target.id, route);
+              closeMenu();
+            }}
+          />
+        ) : null;
+      })()}
       <MarkerPrefixProvider value={markerPrefix}>
         <CanvasViewContext.Provider value={view}>
           <ReactFlow
@@ -274,6 +343,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
             nodeTypes={canvasNodeTypes}
             edgeTypes={edgeTypes}
             onConnect={onConnect}
+            onConnectEnd={onConnectEnd}
+            onEdgeClick={onEdgeClick}
             onNodeClick={onNodeClick}
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}

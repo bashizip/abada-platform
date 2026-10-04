@@ -39,6 +39,8 @@ import { useProjectWorkspace } from '@/hooks/useProjectWorkspace';
 import { useLiveInstanceOverlay } from '@/hooks/useLiveInstanceOverlay';
 import { useDryRunSimulation } from '@/hooks/useDryRunSimulation';
 import { useAplAuthoringState } from '@/hooks/useAplAuthoringState';
+import { useAplValidation } from '@/hooks/useAplValidation';
+import { dropNodeReferences, isOutcomeRouteEdge, removeEdge, setRoute, type Route } from '@/lib/apl/routes';
 import { deriveDefaultPayload } from '@/lib/run/liveRun';
 import { getDefaultAgentModel, initAgentModel } from '@/lib/agentModels';
 import { loadAplContract } from '@/lib/aplContract';
@@ -100,6 +102,8 @@ export default function App() {
   const displayedWorkflow = selectedLiveInstance && liveWorkflow ? liveWorkflow : currentWorkflow;
   const isLiveReadOnly = !!selectedLiveInstance;
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
+  // Engine validation of the document on the canvas, badged on the nodes it is about.
+  const validation = useAplValidation(currentWorkflow, designerMode === 'diagram' && !!activeProject);
 
   // Undo/redo for the open process. Text fields keep their own native undo,
   // and nothing happens while a modal dialog is open.
@@ -200,12 +204,14 @@ export default function App() {
   };
 
   const handleDeleteNode = (id: string) => {
-    updateActiveWorkflow((wf) => ({
-      ...wf,
-      nodes: wf.nodes.filter((n) => n.id !== id),
-      edges: wf.edges.filter((e) => e.source !== id && e.target !== id),
-    }));
+    // Routes elsewhere that pointed at the node are cleared, so saving never references it.
+    updateActiveWorkflow((wf) => dropNodeReferences(wf, id));
     if (selectedNodeId === id) setSelectedNodeId(null);
+  };
+
+  /** Deletes an edge; a route edge clears the route it stands for. One undo step. */
+  const handleDeleteEdge = (edgeId: string) => {
+    updateActiveWorkflow((wf) => removeEdge(wf, edgeId));
   };
 
   const _handleDuplicateNode = (id: string) => {
@@ -261,19 +267,24 @@ export default function App() {
       return {
         ...wf,
         nodes: [...wf.nodes, newNode],
-        edges: sourceExists ? [...wf.edges, { id: `e-${Date.now()}`, source: selectedNodeId, target: id, label: 'Next' }] : wf.edges,
+        edges: sourceExists ? [...wf.edges, { id: `e-${Date.now()}`, source: selectedNodeId, target: id }] : wf.edges,
       };
     });
     setSelectedNodeId(id);
   };
 
-  const handleConnectNodes = (sourceId: string, targetId: string) => {
+  /**
+   * A new connection. From a task it carries the route chosen in the connect
+   * menu (next replaces the step's successor); from a gateway or an event it
+   * adds a flow, never a duplicate of an existing one.
+   */
+  const handleConnectNodes = (sourceId: string, targetId: string, route: Route = { kind: 'next' }) => {
     if (sourceId === targetId) return;
-    if (currentWorkflow.edges.some((e) => e.source === sourceId && e.target === targetId)) return;
-    updateActiveWorkflow((wf) => ({
-      ...wf,
-      edges: [...wf.edges, { id: `e-${Date.now()}`, source: sourceId, target: targetId }],
-    }));
+    if (route.kind === 'next'
+      && currentWorkflow.edges.some((e) => e.source === sourceId && e.target === targetId && !isOutcomeRouteEdge(e))) {
+      return;
+    }
+    updateActiveWorkflow((wf) => setRoute(wf, sourceId, route, targetId));
   };
 
   const _handleAddDownstreamNode = (sourceId: string, type: NodeType) => {
@@ -655,6 +666,8 @@ export default function App() {
                     onNodeMove={handleNodeMove}
                     onDeleteNode={handleDeleteNode}
                     onConnectNodes={handleConnectNodes}
+                    onDeleteEdge={handleDeleteEdge}
+                    issueCounts={validation.issueCounts}
                     onAutoLayout={handleAutoLayout}
                     onAddNode={handleAddNode}
                     onOpenAplEditor={() => setDesignerMode('apl')}
@@ -679,6 +692,7 @@ export default function App() {
                     workflow={currentWorkflow}
                     nodeCount={currentWorkflow.nodes.length}
                     projectId={activeProject?.id}
+                    issues={selectedNode ? validation.issuesByNode.get(selectedNode.id) : undefined}
                   />
 
                   <NLInputBar

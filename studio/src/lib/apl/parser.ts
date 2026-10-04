@@ -7,12 +7,12 @@ import {
   APLEventGatewayChild,
   APLEventGatewayNode,
   APLNode,
-  APLOnError,
   APLValue,
 } from './types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, DMNConfig } from '@/types';
 import { getDefaultAgentModel } from '@/lib/agentModels';
 import { seedMissingPositions } from '@/lib/layout/seedLayout';
+import { isOutcomeRouteEdge, routeEdges } from './routes';
 
 /**
  * Parses an APL YAML string into an APLDocument object.
@@ -373,22 +373,12 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         target: aplNode.next,
       });
     }
-    // Boundary routes are drawn as labelled edges after the normal successor.
-    if (aplNode.type === 'agent' || aplNode.type === 'engine-task' || aplNode.type === 'human-input'
-      || aplNode.type === 'approval-gate') {
-      outcomeRouteEdges(aplNode).forEach((edge) => edges.push(edge));
-    }
     if ('loop' in aplNode && aplNode.loop) {
       wNode.loop = { maxIterations: aplNode.loop.max_iterations, onExhausted: aplNode.loop.on_exhausted };
-      if (aplNode.loop.on_exhausted) {
-        edges.push({
-          id: `e_${aplNode.id}_${aplNode.loop.on_exhausted}_on_exhausted`,
-          source: aplNode.id,
-          target: aplNode.loop.on_exhausted,
-          label: 'on_exhausted',
-        });
-      }
     }
+    // Routes (boundaries, outcomes, loop exhaustion) are drawn after the normal
+    // successor, derived from the node config exactly as editing derives them.
+    routeEdges(wNode).forEach((edge) => edges.push(edge));
     const extras = Object.entries(rawNode).filter(([key]) => !read.has(key));
     if (extras.length > 0) wNode.aplExtras = Object.fromEntries(extras);
   });
@@ -680,37 +670,6 @@ function metadataExtras(metadata: APLDocument['metadata']): Record<string, unkno
   return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
-/**
- * Route edges are labelled `on_*`: boundary routes (on_low_confidence,
- * on_invalid_output, on_error, on_timeout), a review's `outcome: <name>`
- * exits and the loop's on_exhausted route.
- */
-export const isOutcomeRouteEdge = (edge: { label?: string }): boolean =>
-  typeof edge.label === 'string' && (edge.label.startsWith('on_') || edge.label.startsWith('outcome:'));
+/** Route edges are labelled `on_*` or `outcome: <name>`; see `routes.ts`. */
+export { isOutcomeRouteEdge };
 
-function outcomeRouteEdges(aplNode: APLNode): WorkflowEdge[] {
-  const routes: { target: string; label: string }[] = [];
-  const node = aplNode as {
-    on_low_confidence?: string; on_invalid_output?: string; on_error?: APLOnError; on_timeout?: { then?: string };
-    outcomes?: Record<string, { next?: string }>;
-  };
-  Object.entries(node.outcomes ?? {}).forEach(([name, outcome]) => {
-    if (outcome?.next) routes.push({ target: outcome.next, label: `outcome: ${name}` });
-  });
-  if (node.on_low_confidence) routes.push({ target: node.on_low_confidence, label: 'on_low_confidence' });
-  if (node.on_invalid_output) routes.push({ target: node.on_invalid_output, label: 'on_invalid_output' });
-  if (typeof node.on_error === 'string' && node.on_error) {
-    routes.push({ target: node.on_error, label: 'on_error' });
-  } else if (Array.isArray(node.on_error)) {
-    node.on_error.forEach((rule) => {
-      if (rule?.then) routes.push({ target: rule.then, label: rule.code ? `on_error: ${rule.code}` : 'on_error' });
-    });
-  }
-  if (node.on_timeout?.then) routes.push({ target: node.on_timeout.then, label: 'on_timeout' });
-  return routes.map((route, index) => ({
-    id: `e_${aplNode.id}_${route.target}_${route.label.replace(/[^a-z_]/gi, '')}_${index}`,
-    source: aplNode.id,
-    target: route.target,
-    label: route.label,
-  }));
-}

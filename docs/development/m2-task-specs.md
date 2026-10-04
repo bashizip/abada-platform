@@ -290,3 +290,43 @@ escalates. `TaskDecisionApiTest` (detail outcomes, idempotent decision, 400s,
 **Out of scope.** Multi-reviewer and double sign-off; Studio editing of
 outcomes (E6); outcomes in insight facts.
 
+## E6 — Studio: back-edges, boundaries, loop and timeout editing ✅ done
+
+**Goal.** Everything E3–E5 added to APL is editable on the Studio canvas,
+with the node config as the single source of truth and the canvas edges always
+derived from it.
+
+**Files.** `studio/src/lib/apl/{routes,loopAnalysis,issues,parser}.ts`,
+`studio/src/features/designer/{Canvas,ConnectMenu}.tsx`,
+`studio/src/features/designer/nodes/{TaskNode,GatewayNode,EventNode,NodeChrome,nodeState}`,
+`studio/src/components/{PropertiesInspector.tsx,inspector/RouteEditors.tsx}`,
+`studio/src/hooks/useAplValidation.ts`, `studio/src/App.tsx`.
+
+**Changes.**
+- `routes.ts`: `routeEdges` (shared by parsing and editing), `syncRouteEdges`,
+  `setRoute`, `removeEdge`, `dropNodeReferences`, `routesFor`, and the
+  engine's timeout and outcome-name rules.
+- Canvas: a connect menu per source kind; edge selection and delete; loop
+  (`↻ n` / red `↻ !`) and issue (`⚠ n`) badges; `on_exhausted` labelled
+  "limit reached".
+- `loopAnalysis.ts`: back-edges in the layout's DFS model order, judged by the
+  engine's loop rules (unbounded, to the start, to a parallel/inclusive join).
+- Inspector: route selects, error routes per code, timeout, fallback models,
+  escalation groups, review outcomes, repeat limit; a new engine-task section;
+  the selected node's engine issues (debounced `/v1/apl/validate`, mapped to
+  nodes by element id or node path).
+- Every edit goes through one workflow updater, so each is one undo step.
+
+**Acceptance tests.** `routes.test.ts` (each route kind set, saved and
+re-parsed; edge delete clears config; node delete leaves no reference; menu
+kinds; timeout rules), `loopAnalysis.test.ts`, `issues.test.ts`,
+`edgeGeometry.test.ts`; component tests `ConnectMenu.test.tsx`,
+`RouteEditors.test.tsx`, `PropertiesInspector.test.tsx`. Browser check against
+an isolated engine: outcome edges and loop badge, the connect menu with
+outcomes, a `PT2H` timeout saved exactly, edge delete clearing
+`loop.on_exhausted`, the unbounded-cycle badge and engine issue in the
+inspector, one-step undo.
+
+**Out of scope.** Graphical BPMN boundary-event rendering for imports;
+multi-reviewer outcomes; output-schema editing.
+
