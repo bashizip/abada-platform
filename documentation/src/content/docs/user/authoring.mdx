@@ -161,6 +161,19 @@ The engine counts each pass in `draft_iteration` (handy in a prompt:
 at `escalate`; without `on_exhausted` it stops at `draft` and opens an incident
 that operators see. A cycle without a bound is rejected at deployment.
 
+Each parallel branch counts its own passes, so two branches looping on the same
+step are each limited separately. An operator resolves an incident by fixing
+the cause and retrying it (the step starts a fresh pass) or by cancelling the
+instance:
+
+```bash
+curl -X POST "$ABADA_URL/api/v1/process-instances/$ID/incidents/$INCIDENT_ID/retry" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+A message wait opens an incident too when its `correlationKey` variable is
+missing, instead of waiting for a message that can never match.
+
 ## Authoring surfaces in Studio
 
 - **Canvas and YAML are one document.** The designer and the APL editor

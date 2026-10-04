@@ -52,4 +52,10 @@ migration.
 Running processes need no action: each one is converted the first time it
 moves after the upgrade. Until 1.1.0 the engine still writes the token state
 1.0.0-rc.8 reads, so going back to the rc.8 images works without restoring the
-backup. Details: `docs/operations/upgrading.md` in the repository.
+backup.
+
+**1.1.0-rc.1 (migrations V24, V25).** Incidents and bounded loops. New
+deployments must give every cycle a limit; processes already deployed keep
+running. Before going back to rc.8, cancel instances that have an open
+incident: rc.8 does not know them and would leave those instances stopped.
+Details: `docs/operations/upgrading.md` in the repository.
