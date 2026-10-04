@@ -1,107 +1,94 @@
 ---
-title: Studio administration (users, groups, projects)
-description: Add users, manage groups and project membership from the Studio Administration tab without opening the Keycloak console.
+title: Users, groups and project access
+description: Create users, assign platform groups, and give people roles and task groups in a project — from the Studio Admin tab, without opening the Keycloak console.
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-The Studio **Administration** tab is the supported surface for managing
-people, IdP groups and platform projects. It talks to a thin REST proxy in
-the engine (`/api/v1/admin/**`) so you do not need the Keycloak console at
-all in self-hosted deployments.
+Access in Abada has two layers:
 
-<Aside type="tip" title="Who sees this tab">
-  The Administration tab only appears when your account belongs to the
-  `abada-admin` **group** (not just a realm role). Platform administrators
-  opt in by adding themselves in Studio, then handing the same provisioning
-  path to the next operator.
+- **Platform groups** in the identity provider (Keycloak) say what a person
+  may do at all: deploy, start processes, work on tasks, operate.
+- **Project membership** says where: each project lists its members, their
+  project roles, and the task groups they hold in that project.
+
+The Studio **Admin** tab manages both. It talks to the engine
+(`/api/v1/admin/**`), which talks to Keycloak, so you do not need the Keycloak
+console.
+
+<Aside type="tip" title="Who sees the Admin tab">
+  Members of the `abada-admin` group. The tab also needs the engine's
+  Keycloak admin client (`ABADA_KEYCLOAK_*`); the development and server
+  profiles configure it.
 </Aside>
 
-## Three sub-tabs
+## Platform groups
 
-| Sub-tab | What you can do | Where state lives |
-| --- | --- | --- |
-| **Users** | List Keycloak users, search by name/email, create new users, set initial password, assign or revoke groups, enable / disable. | IdP (Keycloak). The engine holds no user record. |
-| **Groups** | List IdP groups with member counts, create new business groups. | IdP (Keycloak). |
-| **Projects** | List engine projects, inspect members, **search users to add as members**, remove members. | Engine database (`principal_project_membership`). |
+| Group | Lets a person… |
+| --- | --- |
+| `abada-task-user` | See and work on human tasks |
+| `abada-process-controller` | Start processes, correlate messages and signals |
+| `abada-deployer` | Deploy process versions |
+| `abada-operator` | Read and act on instances, variables, history, incidents and retries |
+| `abada-project-creator` | Create projects |
+| `abada-insight-reviewer` | Review Insight proposals |
+| `abada-admin` | Everything, including the Admin tab |
 
-## Add a new user
+`abada-worker` is for **service accounts** of external workers (such as the
+Agent Worker), not for people. Business groups such as `managers` grant no
+engine permission by themselves; they matter as task candidates.
 
-<Steps>
-
-1. Sign in to Studio as a user in the `abada-admin` group.
-
-2. Open **Administration → Users → Create user**.
-
-3. Fill in at least `username`. Optionally set `email`, `firstName`,
-   `lastName` and an initial password. If you leave the password blank,
-   the user resets on first login via the standard Keycloak "forgot
-   password" flow.
-
-4. Tick at least the `abada-worker` group. Without it the user can sign in
-   to Keycloak but Studio will load as anonymous (no `groups` claim, every
-   `/api/v1/**` call returns `403`).
-
-5. Hand the credentials to the new user.
-
-</Steps>
-
-The new user becomes searchable inside **Projects → Members → search "…"**
-only after they have signed in to Studio at least once. That sign-in
-populates the engine's `PrincipalEntity` cache; until then only the IdP
-list endpoint returns them. See
-[`identity.mdx`](./identity#manage-users-and-groups-from-studio-not-keycloak)
-for the lookup flow.
-
-## Add an existing user to a project
+## Add a user
 
 <Steps>
 
-1. Open **Administration → Projects → &lt;project name&gt;**.
+1. Open **Admin → Users → New User**.
 
-2. Type at least three characters of the user's name in the search box.
-   Studio calls `GET /v1/admin/principals/search?query=…` against the
-   engine. Results are limited to users who have signed in to Studio at
-   least once.
+2. Enter a username, and optionally an email, a name and an initial password.
 
-3. Pick the row, choose a membership role (`OWNER`, `OPERATOR` or
-   `VIEWER`), and confirm.
+3. Add the platform groups the person needs — usually `abada-task-user`, plus
+   `abada-process-controller` and `abada-deployer` for people who build and
+   run processes.
 
-4. The project member list refreshes in place.
+4. Ask the person to sign in to Studio once. Until then the engine does not
+   know them and they cannot be added to a project.
 
 </Steps>
 
-To remove a member, hover the row and click **Remove**. The change is
-immediate; downstream authorizations update on the next request through
-`IdentityContextInterceptor`.
+## Give someone access to a project
 
-## Group hygiene
+Open the project in Studio, then **Admin → Projects → Add Member**, pick the
+person and set:
 
-- Group names inherit Keycloak's rules: use a short slug (`finance`,
-  `oncall`) and avoid rebuilding the same business group under multiple
-  names.
-- Adding a user to a group immediately changes the next JWT they are
-  issued. Existing tokens may need a refresh (Studio's keycloak-js
-  adapter handles this when the access token expires, normally within
-  five minutes).
-- Removing a user from `abada-worker` revokes their access to Studio on
-  the next token refresh. Their historical audit rows are preserved.
+- **Roles** — Owner, Maintainer, Operator, Reviewer, Viewer. Project creators
+  get every role except Reviewer, so that nobody approves their own Insight
+  proposals.
+- **Review lanes** — the Insight review lanes the member may approve, such as
+  `TECHNICAL` or `COMPLIANCE`.
+- **Task groups** — candidate groups the member holds **in this project
+  only**. A task assigned to `support-leads` can be claimed by members with
+  that task group, even if the identity provider has no such group.
 
-## Limitations and what is coming next
+![Editing a member: the Viewer role and the task group support-leads](../../../assets/screens/tutorial/04-add-reviewer.webp)
 
-- **No bulk import (CSV / SCIM)**. The proxy supports it programmatically
-  via `POST /v1/admin/users` in a loop; the UI does not yet expose a
-  bulk form. Use it for one-off users.
-- **No dedicated audit tab**. Mutations are recorded server-side with the
-  operator's JWT subject and a trace ID; the UI table is deferred to
-  the next release line.
-- **No project-level group assignment**. Users are added to projects
-  individually. Group-driven project access is on the roadmap.
+![The project members table with roles, review lanes and task groups](../../../assets/screens/tutorial/05-members.webp)
+
+Changes apply on the member's next request; group changes in Keycloak apply
+when their token refreshes (within about five minutes).
+
+Project owners can do the same through
+`PUT /api/v1/projects/{projectId}/members/{principalId}` with `roles`,
+`reviewLanes` and `taskGroups`.
+
+## Limitations
+
+- No bulk import (CSV or SCIM) in the UI; script `POST /api/v1/admin/users`.
+- The **Audit** sub-tab is a placeholder. Admin changes are recorded on the
+  server with the caller, action, target and trace ID.
 
 ## Reference
 
-- API contract: `docs/reference/api-v1.md` — Platform administration
-- Operations: `docs/operations/studio-administration.md` — env vars,
-  token caching and failure modes
-- Security model: `docs/reference/security-and-rbac.md` —
-  `abada-admin-api` client and `abada-admin` group
+- API: `docs/reference/api-v1.md` (Platform administration, Projects)
+- Operations: `docs/operations/studio-administration.md` — Keycloak admin
+  client setup, environment variables, failure modes
+- Security model: `docs/reference/security-and-rbac.md`

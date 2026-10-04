@@ -15,7 +15,7 @@ export default defineConfig({
     }),
     starlight({
       title: 'Abada Platform',
-      description: 'Agentic orchestration on a transactional ACID rail — Studio authoring, native APL, the durable Agent Worker and the governed Insight Engine.',
+      description: 'The self-hosted runtime for governed AI-driven business processes: APL, Studio, the Agent Worker and Insight on a PostgreSQL-authoritative engine.',
       favicon: '/favicon.svg',
       logo: {
         light: './src/assets/abada-mark-deep.svg',
@@ -42,15 +42,33 @@ export default defineConfig({
           ],
         },
         {
-          label: 'User guide',
+          label: 'Get started',
+          items: [
+            { label: 'Quickstart', slug: 'user/quickstart' },
+            { label: 'Tutorial: a reviewed AI reply', slug: 'user/first-workflow' },
+          ],
+        },
+        {
+          label: 'Build processes',
+          items: [
+            { label: 'Author processes in APL', slug: 'user/authoring' },
+            { label: 'Loops, routes and review decisions', slug: 'user/process-patterns' },
+            { label: 'Agent nodes and the Agent Worker', slug: 'user/agent-worker' },
+          ],
+        },
+        {
+          label: 'Run and govern',
+          items: [
+            { label: 'Operate running processes', slug: 'user/operations' },
+            { label: 'Insight: governed AI optimization', slug: 'user/studio-insight' },
+            { label: 'Users, groups and project access', slug: 'user/studio-administration' },
+            { label: 'Troubleshooting', slug: 'user/troubleshooting' },
+          ],
+        },
+        {
+          label: 'Deploy the platform',
           items: [
             { label: 'Choose a deployment', slug: 'user' },
-            { label: 'Quickstart', slug: 'user/quickstart' },
-            { label: 'Your first agentic workflow', slug: 'user/first-workflow' },
-            { label: 'Author processes in native APL', slug: 'user/authoring' },
-            { label: 'Agent nodes and the Agent Worker', slug: 'user/agent-worker' },
-            { label: 'Studio administration', slug: 'user/studio-administration' },
-            { label: 'Insight: governed AI optimization', slug: 'user/studio-insight' },
             { label: 'Development deployment', slug: 'user/development' },
             { label: 'Production deployment', slug: 'user/production' },
             { label: 'Production identity', slug: 'user/identity' },
@@ -58,7 +76,6 @@ export default defineConfig({
             { label: 'Telemetry', slug: 'user/telemetry' },
             { label: 'Scaling', slug: 'user/scaling' },
             { label: 'Backup and upgrades', slug: 'user/backup-upgrade' },
-            { label: 'Troubleshooting', slug: 'user/troubleshooting' },
           ],
         },
         {

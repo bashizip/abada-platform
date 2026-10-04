@@ -1,0 +1,121 @@
+---
+title: Operate running processes
+description: Follow instances in Studio Operations, read the audit trail and agent telemetry, suspend, cancel and retry work, resolve incidents and retry an agent step on another model.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Everything a running process does is stored in PostgreSQL first and shown in
+Studio second. This page is the operator's guide: where to look, what each
+state means, and how to unblock an instance.
+
+## The Operations view
+
+**Operations** lists every instance of the open project. The counters show
+what is running, what finished in the last day and what **needs
+intervention**; the worker strip shows each agent worker and its last
+heartbeat.
+
+![Operations: instance counters, the agent worker online, and the instance list with status, process, version, duration and starter](../../../assets/screens/tutorial/21-operations.webp)
+
+Filter by status (*Running*, *Completed*, *Suspended*, *Failed*), definition or
+time range, or search by instance id, process or node.
+
+| Worker state | Meaning |
+| --- | --- |
+| Online | The worker polled recently |
+| Error | Its last fetch was rejected (identity, permission or configuration) |
+| Offline | No recent heartbeat |
+
+## One instance
+
+Open an instance to see the path it took on the canvas and three tabs:
+
+- **Telemetry** — for the selected step: its configuration and, for an agent,
+  each attempt: model and provider, attempt number, latency, confidence
+  against the threshold, the output contract result, token counts, prompt
+  hash and worker. When a fallback model answered, **Fallback for** names the
+  model it replaced.
+- **Variables** — the current process variables.
+- **Audit Trail** — every event in order, with its actor: process started,
+  jobs locked and completed by workers, tasks claimed and completed, and the
+  route a step took (`outcome reject → draft`, `timeout → triage`). Click an
+  event for its details.
+
+![A completed instance: the taken path, including the way back to Draft, and the audit trail](../../../assets/screens/tutorial/22-instance-history.webp)
+
+The engine stores attempt metadata only — never prompts, model responses or
+provider keys.
+
+## Instance actions
+
+| Action | In Studio | Effect |
+| --- | --- | --- |
+| Suspend / Resume | Instance header | A suspended instance accepts no completion; late worker reports are rejected and retried after resume |
+| Cancel | Instance header | Ends the instance and retires all its open work (tasks, jobs, timers) in one transaction |
+| Retry a failed job | Failed step in the inspector | Gives the job one more attempt and resolves its `WORK_FAILED` incident |
+
+The same actions exist under `/api/v1/projects/{projectId}/instances/{instanceId}`
+(`DELETE` to cancel, `PUT …/suspension`) and
+`/api/v1/projects/{projectId}/jobs/{jobId}/retries`.
+
+## Incidents
+
+An incident stops one path of an instance until someone acts. The rest of the
+instance — other branches, timers — keeps going.
+
+| Incident | Cause | Fix |
+| --- | --- | --- |
+| `WORK_FAILED` | A step's last attempt failed and the step has no `on_error` | Fix the cause (provider key, quota, worker), then retry |
+| `LOOP_EXHAUSTED` | A loop reached `max_iterations` and has no `on_exhausted` | Retry (the step starts a fresh pass) or cancel |
+| `MISSING_CORRELATION_KEY` | A message wait has no `correlationKey` value | Set the variable, then retry |
+
+List and retry them through the project API:
+
+```bash
+# Open incidents of a project
+curl "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents" -H "Authorization: Bearer $TOKEN"
+
+# Retry one
+curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retry" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Retry an agent step on another model
+
+When a provider is down or out of quota, an operator can retry a failed agent
+step on another allowed model, for that task only. The reason is required and
+recorded with the old and new model and the operator in the history
+(`INCIDENT_RETRIED`):
+
+```bash
+curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retry" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"model": "gemini-3.7-flash", "reason": "provider quota exhausted"}'
+```
+
+Only project Operators and Owners may retry.
+
+## Waiting is not failing
+
+Some states look stuck but are working as designed:
+
+| You see | What it means |
+| --- | --- |
+| An agent step stays active, no attempt yet | No worker is online, or no AI provider serves the model. Nothing is lost; the step runs when a worker can take it |
+| `EXTERNAL_TASK_DEFERRED` in the history | Every model of the step is rate-limited or unavailable. The attempt waits and retries without using up `max_attempts`; `on_timeout` bounds the wait |
+| A human task marked as escalated | It passed its `sla_hours`; the `escalate_to` groups can claim it too. It is still open |
+| Two attempts on one agent step | A worker died or lost its lease; another worker took the task. The engine advanced the process once |
+
+<Aside type="note" title="Restarts are safe">
+  Instances, tasks, jobs, timers and loop counters live in PostgreSQL. Restart
+  or replace an engine at any time: every instance continues where it stopped.
+</Aside>
+
+## Related
+
+- [Loops, routes and review decisions](/user/process-patterns/) — where each
+  route comes from.
+- [Agent nodes and the Agent Worker](/user/agent-worker/) — providers, models
+  and worker configuration.
+- [Troubleshooting](/user/troubleshooting/) — platform-level problems.

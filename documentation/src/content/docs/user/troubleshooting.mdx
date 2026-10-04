@@ -18,16 +18,17 @@ Start with configuration and service state:
 | Browser shows `TRAEFIK DEFAULT CERT` on the server profile | DNS for the domain and its wildcard does not reach the VM yet, port 80 is closed, or the records are proxied; see `./release/abada-platform logs server` |
 | Server sign-in returns "Invalid redirect uri" | `ABADA_DOMAIN` changed after the first start; rerun `./release/abada-platform up server` |
 | Port 80/443 already used | Stop the conflicting service or move Abada to a dedicated host |
-| `no matching manifest for linux/arm64/v8` with `1.0.0-rc.1` | Use the current repository launcher; it detects the immutable amd64-only RC.1 images and enables Docker compatibility mode |
 | Studio shows configuration error | Inspect the generated `/config.js`; all four runtime values are mandatory and URLs must be HTTP(S) |
 | Login loops | Match redirect URI, web origin, issuer, realm and client ID exactly |
 | Engine unhealthy | Check PostgreSQL health and engine logs; telemetry must not be the cause |
 | No Grafana data | Confirm the telemetry overlay is present, then inspect Collector, Alloy and Grafana containers |
 | Workflow succeeds while collector is down | Expected: telemetry export is best-effort and independent of workflow correctness |
-| Instance stays `ACTIVE` at an agent node | Expected without a worker or LLM key; check the Agent Worker is Online and `ABADA_AGENT_LLM_*` is configured in `.env.dev` |
+| Instance stays `ACTIVE` at an agent node | Expected without a worker or AI provider; check the Agent Worker is Online in Operations and a provider serving the node's model is set in Studio → Settings → AI Providers |
 | Worker shows Error or Offline in Operations | Inspect last rejection and consecutive failures; verify engine URL, OIDC client credentials and LLM endpoint reachability |
-| Agent task fails at deployment with a model error | The node's `model` is outside `ABADA_AGENT_ALLOWED_MODELS`, or requested `tools` are outside `ABADA_AGENT_ALLOWED_TOOLS` |
-| Instance stops with an open incident | `GET /api/v1/process-instances/{id}/incidents`: `LOOP_EXHAUSTED` means a loop hit `max_iterations` with no `on_exhausted` route; `MISSING_CORRELATION_KEY` means a message wait has no `correlationKey` variable; `WORK_FAILED` means a step's last attempt failed and it declares no `on_error`. Fix the cause, then `POST .../incidents/{incidentId}/retry`, or cancel the instance |
+| Deployment refused with a model error | The node's `model` (or one of its `fallback_models`) is outside `ABADA_AGENT_ALLOWED_MODELS`, or requested `tools` are outside `ABADA_AGENT_ALLOWED_TOOLS` |
+| Deployment refused: "cycle back to node … needs a bound" | A route goes back to an earlier step that declares no `loop`. Add `loop: { max_iterations: N }` to that step (Studio: **Add loop bound**) |
+| A reviewer cannot see a task | The task's `assignees` must match one of their identity groups or a project task group (Admin → Projects), and they need `abada-task-user` |
+| Instance stops with an open incident | List them with `GET /api/v1/projects/{projectId}/incidents`. `WORK_FAILED`: a step's last attempt failed and it has no `on_error`; `LOOP_EXHAUSTED`: a loop hit `max_iterations` with no `on_exhausted`; `MISSING_CORRELATION_KEY`: a message wait has no `correlationKey` value. Fix the cause, then `POST .../incidents/{incidentId}/retry` or cancel the instance — see [Operate running processes](/user/operations/#incidents) |
 | An agent step waits with `EXTERNAL_TASK_DEFERRED` in its history | Every model of the step is rate-limited or unavailable; the engine retries with a growing delay without using up attempts. Add `fallback_models`, raise the provider quota, or retry a `WORK_FAILED` incident on another allowed model |
 | A human task shows as escalated | It passed its `sla_hours`; the `escalate_to` groups can now claim it. It is still open and completes normally |
 | No Insight proposals appear | Confirm `ABADA_INSIGHT_ENABLED=true` and that enough terminal facts exist (thresholds under `abada.insight.*`); proposals are never auto-approved |

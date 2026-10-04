@@ -1,143 +1,373 @@
 ---
-title: Your first agentic workflow
-description: Author a native-APL process in Studio, dry-run it locally, then deploy and run it with an agent node, a human review and live inspection.
+title: "Tutorial: a reviewed AI reply"
+description: Build, test and run a complete governed AI process in Studio — two agents, a bounded rework loop, a human decision with a required comment, a timeout, a fallback model and the audit trail — with a screenshot at every step.
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside, LinkCard } from '@astrojs/starlight/components';
 
-This guide walks one small end-to-end loop on the development profile: an
-**agent node** classifies an incoming payload, a **human approval gate**
-reviews it, and an **end** node closes the instance. You will author in native
-APL, dry-run locally, then let the engine and the Agent Worker execute the
-real, durable version.
+In this tutorial you build a process that answers customer complaints. An
+agent classifies the complaint, a second agent drafts the reply, and a support
+lead approves the draft or rejects it **with a comment**. A rejected draft goes
+back to the agent, which rewrites it using that comment, at most three times.
 
-Prerequisites: the [quickstart](/user/quickstart/) development profile is
-running and you can sign in to Studio at `http://studio.localhost` as `alice`.
+Along the way you use everything a real process needs:
 
-## 1. Create a project and a process
+| You will see | Where |
+| --- | --- |
+| Paste APL and get a diagram | [Step 3](#3-paste-the-process) |
+| A repeat limit on a loop (`↻ 3`) and named routes | [Step 4](#4-read-the-diagram) |
+| Review outcomes with a required comment | [Step 5](#5-look-at-the-steps) |
+| A route drawn on the canvas (a two-day timeout) | [Step 6](#6-draw-a-route-a-two-day-timeout) |
+| A local, mocked Dry Run | [Step 8](#8-dry-run-it) |
+| Real agents, a human decision and a revised draft | [Steps 9–12](#9-deploy-and-start) |
+| The audit trail and a fallback model | [Steps 13–14](#13-follow-it-in-operations) |
 
-1. In Studio, create a new project (**New project**). You become its Owner,
-   Maintainer, Operator and Viewer.
-2. Inside the project, open the **Project Explorer** and create a new process
-   document. Studio seeds an empty canvas.
-3. The new file carries the `[APL Native]` format badge — Studio authors
-   `abada.io/v1` YAML, not BPMN. (Importing an existing BPMN file is possible;
-   see [BPMN import and compatibility](/compatibility/bpmn/).)
+It takes about 20 minutes.
 
-<Aside type="tip" title="Natural-language scaffold">
-  In the designer you can describe the process in natural language (for
-  example: "classify the lead with an agent, then a human reviews HIGH
-  results") and Studio scaffolds an APL document through the configured
-  provider — or a deterministic local scaffold when no provider is reachable.
+**Before you start**
+
+- The [development platform](/user/quickstart/) is running and you can sign
+  in to Studio at `http://studio.localhost`.
+- An AI provider is set in **Studio → Settings → AI Providers** (for example
+  a Gemini key). Without one, agent steps wait — nothing breaks.
+- Two development accounts: **alice** (`alice` / `alice`) builds and runs the
+  process, **bob** (`bob` / `bob`) reviews the drafts.
+
+<Aside type="note" title="About these screenshots">
+  They were taken on the development profile with a deterministic test model,
+  so the drafts you get from a real model will read differently. Everything
+  else — steps, routes, variables, history — is what you will see.
 </Aside>
 
-## 2. Build the flow
+## 1. Create a project
 
-Add and connect these nodes on the canvas:
+Sign in as **alice**. Click the project name in the header, open **New
+project**, and name it `Customer care`. You become its Owner, Maintainer,
+Operator and Viewer.
+
+![The New project tab of the project dialog, filled with "Customer care"](../../../assets/screens/tutorial/01-new-project.webp)
+
+## 2. Let bob review
+
+The review step will be offered to the `support-leads` group. Bob is not in
+that group in the identity provider, so you give it to him **inside this
+project** only:
+
+1. Ask bob to sign in to Studio once, so the platform knows him.
+2. As alice, open **Admin → Projects → Add Member**, pick `bob`, tick
+   **Viewer**, and type `support-leads` under **Task Groups (Human Tasks)**.
+
+![Editing bob's project roles: Viewer, with the task group support-leads](../../../assets/screens/tutorial/04-add-reviewer.webp)
+
+![The project members table: alice with all roles, bob as Viewer with the task group support-leads](../../../assets/screens/tutorial/05-members.webp)
+
+A project task group works exactly like an identity group for human tasks,
+but only in this project. Without the **Admin** tab (it needs the
+`abada-admin` group), an owner can do the same through the API:
+
+```bash
+# Find bob's principal id, then make him a Viewer with the task group.
+curl "$ABADA_URL/api/v1/projects/$PROJECT_ID/principals?query=bob" -H "Authorization: Bearer $TOKEN"
+curl -X PUT "$ABADA_URL/api/v1/projects/$PROJECT_ID/members/$BOB_PRINCIPAL_ID" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"roles": ["VIEWER"], "reviewLanes": [], "taskGroups": ["support-leads"]}'
+```
+
+## 3. Paste the process
+
+In the **Project** panel, click **+** next to *Project* (New Process), choose
+**Paste APL**, paste the document below and name the file `complaint_reply`.
+
+![The New Process dialog with Paste APL selected and the document pasted](../../../assets/screens/tutorial/02-paste-apl.webp)
+
+```yaml title="complaint-reply.apl.yaml"
+version: abada.io/v1
+metadata:
+  key: complaint_reply
+  name: Complaint reply
+  owner: customer-care
+  variables:
+    - name: complaint
+      type: object
+      required: true
+
+flow:
+  entry: complaint-received
+  nodes:
+    - id: complaint-received
+      type: webhook
+      description: Complaint received
+      next: classify
+
+    # Advice, checked by the engine: the answer must match the schema and be confident enough.
+    - id: classify
+      type: agent
+      description: Classify the complaint
+      model: gemini-3.6-flash
+      prompt: |
+        Classify this customer complaint. Give its category, its severity
+        (low, medium or high) and a one-sentence summary.
+      inputs:
+        complaint: ${complaint}
+      result_variable: classification
+      output_schema:
+        type: object
+        required: [category, severity, summary]
+        properties:
+          category: { type: string }
+          severity: { enum: [low, medium, high] }
+          summary: { type: string }
+      confidence_threshold: 70
+      on_low_confidence: triage
+      next: draft
+
+    # Rewritten after each rejection with the reviewer's comment, three times at most.
+    - id: draft
+      type: agent
+      description: Draft the reply
+      model: gemini-3.6-flash
+      fallback_models: [gpt-5-mini]
+      prompt: |
+        Write a short, polite reply to the customer. Offer a remedy that fits
+        the severity. Reviewer feedback on the previous draft, if any: ${review_comment}
+      inputs:
+        complaint: ${complaint}
+        classification: ${classification}
+        review_comment: ${review_comment}
+      result_variable: reply
+      output_schema:
+        type: object
+        required: [subject, body]
+        properties:
+          subject: { type: string }
+          body: { type: string }
+      loop:
+        max_iterations: 3
+        on_exhausted: triage
+      on_timeout: { after: PT30M, then: triage }
+      next: review
+
+    # A person decides; a rejection must say why.
+    - id: review
+      type: human-input
+      description: Review the reply
+      assignees: [support-leads]
+      sla_hours: 4
+      escalate_to: [managers]
+      outcomes:
+        approve: { next: sent }
+        reject: { next: draft, comment: required }
+
+    - id: triage
+      type: human-input
+      description: Handle the complaint by hand
+      assignees: [managers]
+      next: sent
+
+    - id: sent
+      type: end
+      description: Reply approved
+```
+
+The same file is in the repository:
+[`examples/apl/complaint-reply.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/complaint-reply.apl.yaml).
+
+What each part asks the engine to guarantee:
+
+- **`classify`** is advice. Its answer must match `output_schema` and carry a
+  confidence of at least 70; otherwise the engine sends the case to `triage`
+  instead of trusting it.
+- **`draft`** reads `review_comment`, which is empty on the first pass and
+  holds the reviewer's comment after a rejection. Its `loop` lets the process
+  come back here **three times at most**, then hands the case to `triage`.
+  `on_timeout` stops a draft that takes more than 30 minutes, and
+  `fallback_models` keeps it going if `gemini-3.6-flash` is rate-limited.
+- **`review`** has two **outcomes**. *Reject* goes back to `draft` and cannot
+  be sent without a comment. After four hours (`sla_hours`) the task stays
+  open but `managers` can pick it up too.
+
+## 4. Read the diagram
+
+Studio draws the document. The `↻ 3` badge marks the repeat limit, and each
+route carries its name: *approve* and *reject* leave the review, *low
+confidence*, *timeout* and *limit reached* lead to `triage`.
+
+![The diagram: Complaint received, Classify, Draft with a ↻ 3 badge, Review, Triage and Sent, with labelled routes](../../../assets/screens/tutorial/03-canvas.webp)
+
+## 5. Look at the steps
+
+Click **Review**. The inspector shows the assignees, the service level, the
+escalation group and the outcomes, each with its target and a **comment
+required** switch.
+
+![The Review inspector: support-leads, SLA 4 hours, escalate to managers, approve to Sent, reject to Draft with comment required](../../../assets/screens/tutorial/07-review-inspector.webp)
+
+Click **Draft**. The **Loop** section holds the repeat limit (3, then
+Triage); further down, **Routes** holds the timeout and the fallback models.
+
+![The Draft inspector: repeat limit 3 then Triage, model gemini-3.6-flash and the prompt](../../../assets/screens/tutorial/08-draft-inspector-top.webp)
+
+![The Draft routes: timeout PT30M to Triage and the fallback model gpt-5-mini](../../../assets/screens/tutorial/09-draft-routes.webp)
+
+Everything you change here is written to the APL, and every change is one
+undo step (<kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd>).
+
+## 6. Draw a route: a two-day timeout
+
+Nobody should forget a draft for a week. Drag from the right edge of
+**Review** to **Triage**. Studio asks what the connection means and offers
+only the routes a review step supports:
+
+![The connect menu from Review to Triage: Outcome approve, Outcome reject, On error, On timeout…](../../../assets/screens/tutorial/10-connect-menu.webp)
+
+Choose **On timeout…**, type `P2D` (two days, ISO-8601) and click **Add
+timeout**. Studio checks the duration the way the engine does (between one
+second and 365 days).
+
+![The timeout form with P2D and the Add timeout button](../../../assets/screens/tutorial/11-connect-timeout.webp)
+
+The new route appears at once:
+
+![The diagram with a new timeout route from Review to Triage](../../../assets/screens/tutorial/12-canvas-final.webp)
+
+## 7. Check the APL
+
+Switch to **APL YAML**. The drawn route is now an `on_timeout` block on the
+review step, and the status bar says **Valid APL**: the engine checked the
+draft while you edited.
+
+![The APL YAML view showing on_timeout after P2D then triage on the review step, and Valid APL in the status bar](../../../assets/screens/tutorial/13-apl-yaml.webp)
+
+<Aside type="tip" title="What happens if a loop has no limit">
+  Studio warns you before the engine does. Remove the repeat limit from
+  **Draft** and the step turns red with `↻ !` and `⚠ 1`; the inspector shows
+  the engine's message and an **Add loop bound** button. A deployment would be
+  refused. Undo puts the limit back.
+
+  ![Draft without a repeat limit: red ↻ ! and ⚠ 1 badges, the validation error and the Add loop bound action](../../../assets/screens/tutorial/24-unbounded-loop.webp)
+</Aside>
+
+## 8. Dry Run it
+
+Click **Dry Run**, paste this payload and start:
+
+```json
+{
+  "complaint": {
+    "customer": "Claire Dupont",
+    "order": "A-1042",
+    "message": "My order arrived nine days late. I paid 7.90 EUR for shipping and want it back."
+  }
+}
+```
+
+Dry Run runs **in your browser**: nothing is saved, deployed or sent to a
+model. It stops at each agent so you can type a mocked answer, and at the
+review it offers every route of the step — *Approve*, *Reject* and the new
+*Timeout*. Try *Reject* to watch the token go back to **Draft**.
+
+![Dry Run stopped at Review with the buttons Approve → Sent, Reject → Draft and Timeout → Triage, and the run log](../../../assets/screens/tutorial/14-dry-run-review.webp)
+
+Finish with *Approve → Sent*. Studio remembers that this exact revision passed
+a Dry Run.
+
+## 9. Deploy and start
+
+Click **Deploy & Start**, paste the same payload, and confirm. Studio saves the
+document, deploys it as an **immutable version** (`v1`) and starts an instance.
+
+![The Deploy & Start dialog with the complaint payload](../../../assets/screens/tutorial/15-deploy-start.webp)
+
+## 10. Watch the agents
+
+The live instance opens on the canvas. Both agents run through the Agent
+Worker, outside any database transaction, and the instance stops at
+**Review**. Click **Draft** to see its attempt: the model that answered, the
+confidence, the token counts, and **Output contract OK** — the engine checked
+the answer against the schema before storing it.
+
+![The live instance waiting at Review, with the Draft attempt telemetry: model, provider, latency, output contract OK and tokens](../../../assets/screens/tutorial/16-live-instance.webp)
+
+The **Variables** tab shows what the agents produced:
+
+![The instance variables: classification and the first draft of the reply](../../../assets/screens/tutorial/17-live-variables.webp)
+
+## 11. Bob rejects the draft
+
+Sign in as **bob** and open **Task Inbox**. *Review the reply* is waiting for
+the `support-leads` group. Open it and click **Claim**.
+
+![Bob's inbox with the Review the reply task](../../../assets/screens/tutorial/18-inbox.webp)
+
+The **Decision** panel shows one button per outcome. Bob finds the draft too
+thin, writes why, and clicks **Reject**. Without the comment, Studio — and the
+engine — would refuse the rejection.
+
+![The Decision panel with the comment "Too short for a 9-day delay. Add a 10% voucher for the next order." and the Approve and Reject buttons](../../../assets/screens/tutorial/19-reject-with-comment.webp)
+
+## 12. The agent revises; bob approves
+
+The engine stores the decision in `review_outcome`, the comment in
+`review_comment`, and sends the process back to **Draft**. The agent writes a
+second draft with the comment in its inputs, and a new review task appears.
+
+In the new task, `draft_iteration` is `2`, `review_comment` holds bob's words,
+and the reply now offers the voucher:
+
+![The second review task: draft_iteration 2, review_outcome reject, review_comment, and a reply that adds a 10% voucher](../../../assets/screens/tutorial/20-revised-draft.webp)
+
+Bob claims it and clicks **Approve**. The instance completes.
+
+## 13. Follow it in Operations
+
+Sign in as alice again and open **Operations**: the instance is
+*Completed*, and the Agent Worker is online.
+
+![Operations: completed Complaint reply instances, no instance needing intervention, the agent worker online](../../../assets/screens/tutorial/21-operations.webp)
+
+Open the instance. The canvas highlights the path it took — including the way
+back from Review to Draft — and the **Audit Trail** lists every step: who
+claimed and decided each task, which worker ran each agent, and the route each
+decision took (*outcome reject → draft*).
+
+![The completed instance: the taken path including the loop back to Draft, and the audit trail with "outcome reject → draft" by bob](../../../assets/screens/tutorial/22-instance-history.webp)
+
+The history records that bob wrote a comment and how long it was, never the
+text itself; the text lives in the instance variables.
+
+## 14. When the model is rate-limited
+
+If `gemini-3.6-flash` answers *429 Too Many Requests*, the worker tries the
+next model of `fallback_models` instead of failing. The attempt shows which
+model actually answered and which one it replaced:
+
+![Attempt telemetry: executed model gpt-5-mini, fallback for gemini-3.6-flash, output contract OK](../../../assets/screens/tutorial/23-fallback-telemetry.webp)
+
+If every model is unavailable, the attempt waits and retries without using up
+`max_attempts`; `on_timeout` (30 minutes here) bounds the wait. See
+[Operate running processes](/user/operations/) for incidents and retries.
+
+## What you built
 
 ```mermaid
 flowchart LR
-    A[webhook · lead received] --> B[agent · classify lead]
-    B --> C[approval-gate · review by bob]
-    C --> D[end]
+    S([Complaint received]) --> C[classify · agent]
+    C -->|low confidence| T[triage · managers]
+    C --> D[draft · agent ↻ 3]
+    D -->|timeout 30 min| T
+    D -->|limit reached| T
+    D --> R{review · support-leads}
+    R -->|approve| E([Sent])
+    R -->|reject + comment| D
+    R -->|timeout 2 days| T
+    T --> E
 ```
 
-- **`webhook`** — the single start node.
-- **`agent`** — probabilistic work. Give it a `model`, a `prompt`, bind
-  `inputs` to payload variables, declare `result_variable` and an
-  `output_schema`, and set a `confidence_threshold`. It compiles to a durable
-  external task on the `abada:agent` topic.
-- **`human-input`** — human validation. Set `assignees` to the
-  `lead-triage-human-reviewer` project group (or `bob` directly in dev).
-- **`end`** — the terminal node.
+The agents advise; the engine checks every answer and every decision; people
+approve; and PostgreSQL keeps the whole story.
 
-Canvas and YAML stay in sync: the same document is visible in the YAML editor
-as `version: abada.io/v1` with `metadata`, `flow.entry` and `flow.nodes`.
-Hand-edited YAML reparses into the canvas. If you prefer keyboard over canvas,
-paste the YAML from an [example](/user/authoring/#a-compact-example) and watch
-the diagram build itself.
+## Next steps
 
-## 3. Dry Run — local and mocked
-
-Open **Dry Run**. It executes *locally*: nothing is saved, deployed or sent to
-a model. Tokens animate node by node and pause where the scenario is
-non-deterministic:
-
-- at the **agent** node, mock the model output and its `_confidence`;
-- at the **approval-gate**, simulate Bob's completion.
-
-Dry Run never creates engine state. Its value is checking that the flow and
-its variable bindings behave as designed before anything durable happens.
-
-<Aside type="caution" title="Dry Run is not execution">
-  Deploying a revision that was never dry-run requires an explicit warning
-  acknowledgement in **Deploy &amp; Start**. Only that dialog persists state.
-</Aside>
-
-## 4. Deploy & Start — the durable action
-
-1. Open **Deploy &amp; Start** from the header.
-2. Provide the start payload (for example `{"lead": {...}}`).
-3. Confirm. Studio saves the project document, deploys the exact revision as
-   an **immutable definition version**, and starts a project-scoped instance.
-
-The instance opens as a read-only canvas projection that shows only
-engine-reported state — Studio never fakes live progress.
-
-## 5. Watch the agent run
-
-The instance pauses in `ACTIVE` at the **agent** node with a durable external
-task. The first-party Agent Worker (started automatically by the dev
-launcher) fetches and locks it, calls the configured model outside any
-workflow transaction, and completes it.
-
-In the instance view and the Operations tab you can now inspect:
-
-- the **agent attempt metadata** — model actually used, provider, attempt
-  number, latency, tools, `promptHash` and the achieved `confidence` against
-  the declared threshold;
-- the **worker health** panel — the `abada-agent-worker` entry shows
-  Online/Error/Offline with last heartbeat, last rejection and consecutive
-  failures.
-
-<Aside type="note" title="No worker? The run waits — on purpose">
-  Agent work must not advance engine state outside a command. With no worker
-  (or no configured LLM key) the instance stays `ACTIVE` at the agent node.
-  See [Agent nodes and the Agent Worker](/user/agent-worker/).
-</Aside>
-
-## 6. Complete the human review
-
-Bob signs in to Studio (dev credentials `bob` / `bob`), opens the project and
-finds the task in the **Task Inbox**. Bob claims it and completes it — with a
-form when the approval gate declares a `formKey`, or with the **Complete task**
-button otherwise. A review step that declares `outcomes` shows one button per
-outcome and a comment box instead (see [Authoring](/user/authoring/)).
-Completing the task advances the instance to `end`.
-
-## 7. Verify in Operations
-
-Open the **Operations** tab and locate the instance. Its activity history must
-show the start event, the agent external task (locked/completed with attempt
-metadata), the user task and the end event, and the instance must be
-`COMPLETED`.
-
-Restart recovery check:
-
-```bash
-docker compose --env-file .env.dev \
-  -f compose.yaml -f compose.dev.yaml restart abada-engine
-./release/abada-platform status dev
-```
-
-Previously deployed definitions, running instances and agent tasks remain
-visible because PostgreSQL, not engine memory, owns workflow state.
-
-## Also try: the AI Lead Triage starter
-
-On first login the development profile creates and deploys the **AI Lead
-Triage** starter in the `Abada Starter` project. Start it from **Deploy
-&amp; Start** with HIGH, MEDIUM or LOW inputs, then run four LOW samples to
-let the Insight Engine produce its first governed proposal. That flow is the
-platform's own demonstration of the loop you just built by hand. See
-[Insight: governed AI optimization](/user/studio-insight/).
+<LinkCard title="Loops, routes and review decisions" href="/user/process-patterns/" description="Every route a step can take, and how to edit them in Studio." />
+<LinkCard title="Operate running processes" href="/user/operations/" description="Instances, incidents, retries on another model, service levels." />
+<LinkCard title="Author processes in APL" href="/user/authoring/" description="The language, its nodes and how Studio validates it." />

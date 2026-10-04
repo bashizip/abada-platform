@@ -58,6 +58,10 @@ cancelled atomically in the same transaction.
 Interrupting timer and error boundary events are supported on user tasks and
 external service tasks, with the same runtime as APL `on_timeout` and
 `on_error`; a user task may declare `abada:slaHours` and `abada:escalateTo`.
+A user task with `abada:outcomes="approve,reject"` (and optionally
+`abada:commentRequired="reject"`) is finished by a validated decision, like an
+APL review step: the engine writes `<taskId>_outcome` and `<taskId>_comment`,
+and the exclusive gateway after the task routes on the outcome.
 Unsupported constructs — such as subprocesses, other boundary events
 (non-interrupting, message, signal, escalation, compensation),
 multi-instance activities, compensation, complex gateways, cyclic timers,
@@ -132,6 +136,9 @@ behaviors. Each one is covered by an engine test listed in the repository's
   may run (`abada:maxIterations`); past the limit the process takes its
   `abada:onExhausted` route or opens an incident. Unbounded cycles and
   loop or multi-instance markers are rejected at deployment.
+- **Decisions, not just completions.** A review task with outcomes refuses
+  an unknown outcome or a missing required comment, and records who decided
+  what.
 - **No silent stalls.** Work that fails for good takes its error route or
   opens a retryable incident; a timeout boundary cancels work that takes too
   long; a missed service level escalates the task instead of being a passive
