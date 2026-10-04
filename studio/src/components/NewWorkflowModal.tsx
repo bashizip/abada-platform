@@ -16,6 +16,9 @@ const ensureAplName = (raw: string): string => {
   return trimmed.endsWith(APL_EXT) ? trimmed : `${trimmed}${APL_EXT}`;
 };
 
+/** The process name a file name stands for when the source names none: `claims_intake.apl.yaml` → `claims_intake`. */
+const nameFromFile = (file: string): string => file.replace(/\.apl\.yaml$/, '');
+
 const sanitizeKey = (name: string): string =>
   name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase().replace(/^[0-9]+/, 'process_') || `process_${Date.now()}`;
 
@@ -87,10 +90,12 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
     try {
       let workflow: WorkflowFile;
       if (mode === 'empty') {
-        const name = ensureAplName(fileName);
+        const file = ensureAplName(fileName);
+        const name = nameFromFile(file);
         workflow = {
           id: 'pending',
           name,
+          fileName: file,
           processKey: sanitizeKey(name),
           category,
           fileType: 'apl',
@@ -107,8 +112,10 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
           return;
         }
         const converted = aplToWorkflow(transpileBPMNToAPL(bpmnSource));
-        const name = ensureAplName(fileName || converted.name || bpmnFileName.replace(/\.(bpmn|xml)$/i, ''));
-        workflow = { ...converted, name, processKey: converted.processKey || sanitizeKey(name) };
+        const file = ensureAplName(fileName || converted.name || bpmnFileName.replace(/\.(bpmn|xml)$/i, ''));
+        // The file name never replaces the process name the source declares.
+        const name = converted.name || nameFromFile(file);
+        workflow = { ...converted, name, fileName: file, processKey: converted.processKey || sanitizeKey(name) };
       } else {
         if (!aplSource.trim()) {
           setError('Paste or type the APL YAML source');
@@ -122,8 +129,9 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
           return;
         }
         const converted = aplToWorkflow(parsed);
-        const name = ensureAplName(fileName || converted.name);
-        workflow = { ...converted, name, processKey: converted.processKey || sanitizeKey(name) };
+        const file = ensureAplName(fileName || converted.name);
+        const name = converted.name || nameFromFile(file);
+        workflow = { ...converted, name, fileName: file, processKey: converted.processKey || sanitizeKey(name) };
       }
       onCreateWorkflow(workflow, folderId || undefined);
       onClose();

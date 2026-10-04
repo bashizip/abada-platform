@@ -157,12 +157,22 @@ export const EVENT_META: Record<string, { label: string; tone: AuditTone }> = {
   INCIDENT_RETRIED: { label: 'Incident retried', tone: 'warning' },
 };
 
+/** One line for a BOUNDARY_TAKEN event: which route left the step, e.g. `outcome reject → draft`. */
+export function boundarySummary(details: Record<string, unknown>): string | undefined {
+  if (typeof details.kind !== 'string' || typeof details.routedTo !== 'string') return undefined;
+  const kind = details.kind.toLowerCase().replace(/_/g, ' ');
+  const code = typeof details.code === 'string' ? ` ${details.code}` : '';
+  return `${kind}${code} → ${details.routedTo}`;
+}
+
 export const eventMeta = (eventType: string): { label: string; tone: AuditTone } =>
   EVENT_META[eventType] ?? { label: eventType.replace(/_/g, ' ').toLowerCase(), tone: 'info' };
 
 /** Aggregates the agent attempt telemetry recorded in history details for one activity. */
 export interface AgentTelemetry {
   model?: string;
+  /** The node's declared model when the worker ran a fallback model instead. */
+  requestedModel?: string;
   provider?: string;
   attempt?: number;
   durationMs?: number;
@@ -207,6 +217,7 @@ export function aggregateNodeTelemetry(
       agent = {
         ...(agent ?? {}),
         model: typeof rawAgent.model === 'string' ? rawAgent.model : undefined,
+        requestedModel: typeof rawAgent.requestedModel === 'string' ? rawAgent.requestedModel : undefined,
         provider: typeof rawAgent.provider === 'string' ? rawAgent.provider : undefined,
         attempt: typeof rawAgent.attempt === 'number' ? rawAgent.attempt : undefined,
         durationMs: typeof rawAgent.durationMs === 'number' ? rawAgent.durationMs : undefined,

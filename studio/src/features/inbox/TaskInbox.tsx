@@ -66,7 +66,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
     try {
       const data = await EngineAPI.getTasks(filter === 'all' ? undefined : filter, projectId);
       setTasks(data);
-      setSelectedTask((current) => (current && data.some((t) => t.id === current.id) ? current : null));
+      // Keep the open task open, with its refreshed status (claimed, unclaimed…).
+      setSelectedTask((current) => (current ? data.find((t) => t.id === current.id) ?? null : null));
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
@@ -108,12 +109,13 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
     void loadForm(task);
   };
 
-  const runAction = async (action: () => Promise<unknown>, success: string) => {
+  /** Runs a task command; `closes` is false for claim/unclaim, which keep the task open. */
+  const runAction = async (action: () => Promise<unknown>, success: string, closes = true) => {
     setActionLoading(true);
     try {
       await action();
       showToast('success', success);
-      if (selectedTask) setSelectedTask(null);
+      if (closes && selectedTask) setSelectedTask(null);
       await fetchTasks();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Action failed');
@@ -124,12 +126,12 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   const handleClaim = () => {
     if (!selectedTask?.projectId) return;
-    void runAction(() => EngineAPI.claimTask(selectedTask.id, selectedTask.projectId!), 'Task claimed');
+    void runAction(() => EngineAPI.claimTask(selectedTask.id, selectedTask.projectId!), 'Task claimed', false);
   };
 
   const handleUnclaim = () => {
     if (!selectedTask?.projectId) return;
-    void runAction(() => EngineAPI.unclaimTask(selectedTask.id, selectedTask.projectId!), 'Task unclaimed');
+    void runAction(() => EngineAPI.unclaimTask(selectedTask.id, selectedTask.projectId!), 'Task unclaimed', false);
   };
 
   const handleFail = () => {
@@ -304,14 +306,17 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                         <RotateCcw className="w-3.5 h-3.5" />
                         Unclaim
                       </button>
-                      <button
-                        onClick={handleComplete}
-                        disabled={actionLoading}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        Complete
-                      </button>
+                      {/* A review with outcomes is finished by a decision, not a plain completion. */}
+                      {outcomes.length === 0 && (
+                        <button
+                          onClick={handleComplete}
+                          disabled={actionLoading}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Complete
+                        </button>
+                      )}
                     </>
                   )}
                   {(selectedTask.status === 'AVAILABLE' || selectedTask.status === 'CLAIMED') && (

@@ -73,7 +73,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           <Info className="w-6 h-6 text-[#A89F91] mx-auto" />
           <p className="text-xs text-[#EAE3D9] font-medium">No Node Selected</p>
           <p className="text-[11px] text-[#A89F91] leading-relaxed">
-            Click any node on the BPMN canvas to inspect and modify AI agent prompts, confidence thresholds, or DMN decision rules.
+            Select a step on the canvas to edit its settings: agent prompts and models, routes, review outcomes, repeat limits or decision rules.
           </p>
         </div>
 
@@ -603,7 +603,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-[10px] font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD] resize-y"
                   placeholder='{"approved": true}'
                 />
-                <p className="text-[10px] text-[#A89F91]">Expected JSON shape; the worker validates against it.</p>
+                <p className="text-[10px] text-[#A89F91]">Expected JSON shape; the engine checks every result against it before it is stored.</p>
               </div>
             </div>
 
