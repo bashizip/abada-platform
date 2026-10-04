@@ -160,7 +160,7 @@ export interface EngineInfoResponse {
 }
 
 /** What stopped a token: failed work, an exhausted loop, or a message with no correlation key. */
-export type IncidentKind = 'WORK_FAILED' | 'LOOP_EXHAUSTED' | 'MISSING_CORRELATION_KEY';
+export type IncidentKind = 'WORK_FAILED' | 'LOOP_EXHAUSTED' | 'MISSING_CORRELATION_KEY' | 'TOOL_OUTCOME_UNKNOWN';
 
 /** An operator-visible runtime incident (`GET /v1/projects/{projectId}/incidents`). */
 export interface IncidentDTO {
@@ -182,9 +182,14 @@ export interface IncidentDTO {
  * model for this task only and needs a `reason`; the engine rejects it for
  * any other incident.
  */
+/**
+ * Optional retry body: another allowed model (with a reason) for failed agent
+ * work, or, required for TOOL_OUTCOME_UNKNOWN, whether the interrupted write happened.
+ */
 export interface IncidentRetryRequest {
-  model: string;
-  reason: string;
+  model?: string;
+  reason?: string;
+  toolOutcome?: 'PERFORMED' | 'NOT_PERFORMED';
 }
 
 /** Liveness and incident record for one external worker topic in a project. */
@@ -383,7 +388,7 @@ export class EngineAPI {
           ...this.getHeaders(),
           ...(typeof crypto?.randomUUID === 'function' ? { 'Idempotency-Key': crypto.randomUUID() } : {}),
         },
-        body: override ? JSON.stringify({ model: override.model, reason: override.reason }) : undefined,
+        body: override ? JSON.stringify(override) : undefined,
       },
     );
     if (!res.ok) throw await apiError(res);

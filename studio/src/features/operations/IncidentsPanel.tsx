@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCcw, Shuffle, Siren } from 'lucide-react';
-import { EngineAPI, IncidentDTO } from '@/api/engine';
+import { EngineAPI, IncidentDTO, IncidentRetryRequest } from '@/api/engine';
 import { useAplContract } from '@/lib/aplContract';
 import { formatWhen, humanize } from '@/lib/run/instanceFormat';
 import {
@@ -169,7 +169,7 @@ const IncidentRow: React.FC<{
   const canChooseModel = canRetry && offersModelRetry(incident, model) && options.length > 0;
   const formId = `incident-${incident.id}`;
 
-  const retry = async (override?: { model: string; reason: string }) => {
+  const retry = async (override?: IncidentRetryRequest) => {
     setBusy(true);
     setError(null);
     try {
@@ -214,6 +214,28 @@ const IncidentRow: React.FC<{
                 <Shuffle className="h-3 w-3" /> Retry on another model
               </button>
             )}
+            {incident.type === 'TOOL_OUTCOME_UNKNOWN' ? (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void retry({ toolOutcome: 'PERFORMED' })}
+                  className="flex items-center gap-1 rounded-md border border-[#90A955]/40 bg-[#90A955]/10 px-2 py-1 text-[10px] font-semibold text-[#90A955] transition-all hover:bg-[#90A955]/20 disabled:opacity-50"
+                  title="The write reached the target system: the agent resumes knowing it is done"
+                >
+                  It happened
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void retry({ toolOutcome: 'NOT_PERFORMED' })}
+                  className="flex items-center gap-1 rounded-md border border-[#F4A261]/40 bg-[#F4A261]/10 px-2 py-1 text-[10px] font-semibold text-[#F4A261] transition-all hover:bg-[#F4A261]/20 disabled:opacity-50"
+                  title="The write did not reach the target system: the agent resumes and decides again"
+                >
+                  It did not happen
+                </button>
+              </>
+            ) : (
             <button
               type="button"
               disabled={busy}
@@ -223,6 +245,7 @@ const IncidentRow: React.FC<{
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />} Retry
             </button>
+            )}
           </span>
         )}
       </div>

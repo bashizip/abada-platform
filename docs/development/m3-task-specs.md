@@ -241,7 +241,7 @@ result is still validated by `AgentOutputValidator`; the worker decides nothing.
 **Out of scope.** Parallel tool calls in one turn (run them in order);
 streaming model output; MCP resources, prompts and sampling.
 
-## E9 — Journaled steps ✱ never cut
+## E9 — Journaled steps ✱ never cut (engine side ✅ done; worker resume with E8)
 
 **Goal.** Every model and tool call is a durable step. After a crash or a lost
 lease the agent resumes after the last committed step: a completed model turn
@@ -313,6 +313,40 @@ No remote call inside the step transaction.
 **Out of scope.** Journaling for non-agent external workers (the SDK exposes
 the endpoint, the first-party worker is the only user in 1.1); compensation of
 completed writes.
+
+**As built (engine side).** V28 adds `external_tasks.attempt` and
+`agent_steps`; `AgentStepService` records steps under the external-task row
+lock only, and fetch-and-lock returns `attempt`, `steps` and `priorWrites`.
+Tests: `PostgresAgentStepJournalTest` (PostgreSQL: sequence, replay and
+lease-holder rules; tool policies; a keyed write resumed across a lost lease
+and an engine restart takes effect once; an unkeyed interrupted write opens
+`TOOL_OUTCOME_UNKNOWN` and resumes only after the operator confirms its
+outcome; a later attempt reuses an identical completed write; retired work
+`410`; concurrent identical posts journal one row; payloads encrypted at
+rest), `SecurityAuthorizationContractTest` (steps endpoint), the schema and
+token upgrade tests (→ V28), SDK `AbadaWorkerClientTest`, Studio
+`IncidentsPanel.test.tsx`.
+
+**Deviations from the plan.**
+- The engine, not the worker, marks an interrupted unkeyed write
+  `OUTCOME_UNKNOWN`, when the task would be locked again; the task stops
+  (`FAILED`) and is never handed out. Retrying the incident takes
+  `toolOutcome: PERFORMED | NOT_PERFORMED` and resumes the same attempt; a job
+  retry is refused while such a step is open. Studio offers **It happened** /
+  **It did not happen** on the incident.
+- Model calls and read tools may be journaled already finished in one call;
+  writes must be journaled `STARTED` first (`WRITE_AHEAD_REQUIRED`).
+- An identical write (same tool, same request digest) in a later attempt is
+  answered from the journal with `reused: true` instead of being re-sent.
+- Refusals use typed codes: `AGENT_STEP_REJECTED` with `details.reason`, and
+  `WORK_RETIRED` (`410`).
+- `max_turns`, `max_tokens_total` and `budget_usd` are refused at step time
+  when E8 adds them to APL (and E11 the prices); E9 enforces the step and
+  payload limits and the tool policy.
+- Step payloads are AES-GCM encrypted from the start; the evidence policy
+  (redaction modes, retention) is E11.
+- The worker side (rebuilding the conversation from `steps`) lands with the
+  E8 loop, which is the first worker code that journals steps.
 
 ## E10 — Approval-required tools ✱ never cut
 

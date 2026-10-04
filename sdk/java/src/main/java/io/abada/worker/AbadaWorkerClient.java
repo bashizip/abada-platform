@@ -84,6 +84,42 @@ public final class AbadaWorkerClient {
         send("/" + segment(taskId) + "/complete", body, options);
     }
 
+    /**
+     * Journals one agent step for the task this worker holds. Record a write
+     * as {@code STARTED} before calling the tool (with the returned
+     * {@code idempotencyKey}, when there is one) and again when it finishes.
+     * The engine computes digests itself; a refused step raises a
+     * {@link WorkerProtocolException} whose {@code reason()} names the rule.
+     *
+     * @param request what is sent (tool arguments, or the model call's input summary)
+     * @param result what came back; null while {@code STARTED}
+     */
+    public AgentStep recordStep(String taskId, String workerId, int attempt, int sequence, String kind,
+            String state, String toolRef, Object request, Object result, String errorType, String model,
+            String promptVersion, Integer promptTokens, Integer completionTokens) {
+        java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("workerId", workerId);
+        body.put("attempt", attempt);
+        body.put("sequence", sequence);
+        body.put("kind", kind);
+        body.put("state", state);
+        if (toolRef != null) body.put("toolRef", toolRef);
+        body.put("request", request);
+        if (result != null) body.put("result", result);
+        if (errorType != null) body.put("errorType", errorType);
+        if (model != null) body.put("model", model);
+        if (promptVersion != null) body.put("promptVersion", promptVersion);
+        if (promptTokens != null) body.put("promptTokens", promptTokens);
+        if (completionTokens != null) body.put("completionTokens", completionTokens);
+        HttpResponse<String> response = send("/" + segment(taskId) + "/steps", body, RequestOptions.defaults());
+        try {
+            return objectMapper.readValue(response.body(), AgentStep.class);
+        } catch (IOException exception) {
+            throw new WorkerProtocolException(response.statusCode(), "INVALID_RESPONSE",
+                    "Could not decode agent step response");
+        }
+    }
+
     public void heartbeat(String taskId, String workerId, Duration lockDuration, RequestOptions options) {
         send("/" + segment(taskId) + "/heartbeat",
                 Map.of("workerId", workerId, "lockDuration", lockDuration.toMillis()), options);
@@ -251,8 +287,9 @@ public final class AbadaWorkerClient {
     private WorkerProtocolException protocolError(HttpResponse<String> response) {
         try {
             JsonNode error = objectMapper.readTree(response.body());
+            String reason = error.path("details").path("reason").asText(null);
             return new WorkerProtocolException(response.statusCode(), error.path("code").asText("HTTP_ERROR"),
-                    error.path("message").asText("Engine rejected worker request"));
+                    error.path("message").asText("Engine rejected worker request"), reason);
         } catch (Exception ignored) {
             return new WorkerProtocolException(response.statusCode(), "HTTP_ERROR", "Engine rejected worker request");
         }

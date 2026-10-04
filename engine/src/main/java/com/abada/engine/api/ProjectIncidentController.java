@@ -61,11 +61,13 @@ public class ProjectIncidentController {
                         "Incident not found: " + incidentId));
         String model = body == null ? null : body.model();
         String reason = body == null ? null : body.reason();
+        String toolOutcome = body == null ? null : body.toolOutcome();
         Map<String, Object> fingerprint = new java.util.LinkedHashMap<>(
                 Map.of("projectId", projectId, "incidentId", incidentId));
         if (model != null) fingerprint.put("model", model);
+        if (toolOutcome != null) fingerprint.put("toolOutcome", toolOutcome);
         idempotency.execute(idempotencyKey, "project.incident.retry", fingerprint, () -> {
-                    engine.retryIncident(incident.getProcessInstanceId(), incidentId, model, reason);
+                    engine.retryIncident(incident.getProcessInstanceId(), incidentId, model, reason, toolOutcome);
                     return Map.of("status", "Retried", "incidentId", incidentId);
                 });
         return ResponseEntity.noContent().build();

@@ -176,6 +176,15 @@ should use external tasks and an idempotent worker operation.
   their model — and history records `fromModel`, `toModel`, `reason` and the
   actor. The output contract (schema, confidence threshold, tools) is
   unchanged.
+- `TOOL_OUTCOME_UNKNOWN` opens when an agent's write tool, whose server takes
+  no idempotency key (`idempotency: none`), was journaled `STARTED` and its
+  lease was lost before the result came back: the write may or may not have
+  happened, so the engine never hands it out again. The step becomes
+  `OUTCOME_UNKNOWN`, the external task `FAILED`, and no boundary routes it.
+  Retrying requires `{ "toolOutcome": "PERFORMED" | "NOT_PERFORMED" }`: the step
+  is finished with the confirmed fate (and the actor), the task reopens on the
+  **same** attempt, and the agent resumes from its journal. A job retry
+  (`POST .../jobs/{jobId}/retries`) is refused while such a step is open.
 - `POST .../incidents/{incidentId}/retry` restarts the stopped token at its
   activity in one transaction: a loop step begins a fresh pass, a message wait
   re-reads `correlationKey` (set it first with the variables endpoint). The
@@ -308,6 +317,25 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   The model that produced a result is recorded in the attempt metadata and the
   step's `EXTERNAL_TASK_COMPLETED` / `EXTERNAL_TASK_FAILED` history, with
   `requestedModel` when a fallback replaced the declared model.
+- **Attempts and the step journal (agent work).** An agent task is on an
+  `attempt` (1 at first). A counted failure that will run again, or an
+  operator retry, starts the next attempt (a fresh conversation); a lost lease
+  or a deferral resumes the same one. The worker holding the lease journals
+  every model and tool call with `POST /v1/external-tasks/{id}/steps`, which
+  locks only the external-task row, never advances the process and never
+  holds the instance lock. The engine accepts only sequence `last + 1` (an
+  identical replay is idempotent, a divergent one is `409`), only tools
+  frozen in the definition's bindings (`403` otherwise), no
+  `approval_required` tool until E10, and at most 256 steps per task. A write
+  must be journaled `STARTED` before it runs; when its server accepts a key,
+  the engine returns `sha256(externalTaskId:attempt:sequence)` as its
+  idempotency key, the same key on every resumed lease. Fetch-and-lock
+  returns the attempt's steps (with decrypted payloads, to the lease holder
+  only) and the writes earlier attempts completed; an identical write in a
+  later attempt is answered from the journal (`reused`) instead of being sent
+  again. Retired work answers `410`. Digests are computed by the engine from
+  canonical JSON; payloads are AES-GCM encrypted at rest. Evidence:
+  [`PostgresAgentStepJournalTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresAgentStepJournalTest.java).
 - Worker death mid-task is served by lease expiry: an expired `LOCKED` task is
   re-acquired with `SKIP LOCKED`, so another worker retries it without the
   engine re-creating work or advancing state twice. Restarting the engine does

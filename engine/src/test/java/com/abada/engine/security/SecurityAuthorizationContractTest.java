@@ -312,6 +312,20 @@ class SecurityAuthorizationContractTest {
         mvc.perform(get(credential).param("workerId", "w").header("Authorization", "Bearer worker"))
                 .andExpect(status().isNotFound());
 
+        String steps = "/v1/external-tasks/missing/steps";
+        String step = "{\"workerId\":\"w\",\"attempt\":1,\"sequence\":1,\"kind\":\"MODEL_CALL\","
+                + "\"state\":\"COMPLETED\",\"request\":{},\"result\":{}}";
+        mvc.perform(post(steps).contentType(MediaType.APPLICATION_JSON).content(step))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(steps).contentType(MediaType.APPLICATION_JSON).content(step)
+                        .header("X-Auth-Request-User", "forged-worker").header("X-Auth-Request-Groups", "abada-worker"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(steps).contentType(MediaType.APPLICATION_JSON).content(step)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(post(steps).contentType(MediaType.APPLICATION_JSON).content(step), "operator");
+        assertForbidden(post(steps).contentType(MediaType.APPLICATION_JSON).content(step), "tasks");
+
         String manage = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/tool-credentials/crm-token";
         String body = "{\"secret\":\"never-stored\"}";
         mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body))

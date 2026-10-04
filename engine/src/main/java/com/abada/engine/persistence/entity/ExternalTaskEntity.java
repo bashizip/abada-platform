@@ -72,9 +72,19 @@ public class ExternalTaskEntity {
     @Column(name = "deferrals", nullable = false)
     private int deferrals;
 
+    /**
+     * The attempt this task is on (V28): a counted failure or an operator retry
+     * starts the next one; a lost lease or a deferral resumes the same one.
+     */
+    @Column(name = "attempt", nullable = false)
+    private int attempt = 1;
+
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
+
+    public int getAttempt() { return attempt; }
+    public void setAttempt(int value) { this.attempt = value; }
 
     public enum Status {
         OPEN,

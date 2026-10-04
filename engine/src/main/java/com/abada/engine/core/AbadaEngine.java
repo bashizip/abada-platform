@@ -77,6 +77,7 @@ public class AbadaEngine {
     private final BpmnParser parser;
     private final AplParser aplParser;
     private final ToolRegistryService toolRegistry;
+    private final com.abada.engine.persistence.repository.AgentStepRepository agentSteps;
 
     private final TaskManager taskManager;
     private final EventManager eventManager;
@@ -108,7 +109,8 @@ public class AbadaEngine {
             TaskGroupResolver taskGroupResolver,
             @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels,
             @Autowired(required = false) AiProviderRegistry aiProviders,
-            ToolRegistryService toolRegistry) {
+            ToolRegistryService toolRegistry,
+            com.abada.engine.persistence.repository.AgentStepRepository agentSteps) {
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
         this.aplParser = new AplParser(allowedAgentModels);
@@ -129,6 +131,7 @@ public class AbadaEngine {
         this.taskGroupResolver = taskGroupResolver;
         this.aiProviders = aiProviders;
         this.toolRegistry = toolRegistry;
+        this.agentSteps = agentSteps;
     }
 
     @PostConstruct
@@ -815,6 +818,18 @@ public class AbadaEngine {
      */
     @AtomicRuntimeCommand
     public void retryIncident(String processInstanceId, String incidentId, String model, String reason) {
+        retryIncident(processInstanceId, incidentId, model, reason, null);
+    }
+
+    /**
+     * Retries an incident. For {@code TOOL_OUTCOME_UNKNOWN} the operator must
+     * first say whether the interrupted write happened ({@code PERFORMED}) or
+     * not ({@code NOT_PERFORMED}); the agent then resumes its attempt with
+     * that fact and the write is never re-sent blindly.
+     */
+    @AtomicRuntimeCommand
+    public void retryIncident(String processInstanceId, String incidentId, String model, String reason,
+            String toolOutcome) {
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null) {
             throw new ProcessEngineException("No process instance found for id=" + processInstanceId);
@@ -824,6 +839,18 @@ public class AbadaEngine {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("incidentId", incidentId);
         details.put("type", incident.getType());
+        if (IncidentEntity.Type.TOOL_OUTCOME_UNKNOWN.name().equals(incident.getType())) {
+            if (model != null) {
+                throw new ProcessEngineException("A model cannot be chosen when confirming a tool outcome");
+            }
+            details.putAll(resolveUnknownToolOutcome(instance, incident, toolOutcome));
+            incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
+            historyService.record("INCIDENT_RETRIED", instance, incident.getActivityId(), details);
+            return;
+        }
+        if (toolOutcome != null) {
+            throw new ProcessEngineException("A tool outcome is only confirmed for a TOOL_OUTCOME_UNKNOWN incident");
+        }
         if (IncidentEntity.Type.WORK_FAILED.name().equals(incident.getType())) {
             details.putAll(reopenFailedWork(instance, incident.getTokenId(), incident.getActivityId(), model, reason));
             incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
@@ -890,6 +917,13 @@ public class AbadaEngine {
      */
     Map<String, Object> reopenExternalTask(ExternalTaskEntity task, ServiceTaskMeta meta, String model,
             String reason) {
+        boolean unknownWrite = agentSteps.findByExternalTaskIdOrderByAttemptAscSequenceAsc(task.getId()).stream()
+                .anyMatch(step -> step.getState()
+                        == com.abada.engine.persistence.entity.AgentStepEntity.State.OUTCOME_UNKNOWN);
+        if (unknownWrite) {
+            throw new ProcessEngineException("Task " + task.getId() + " stopped on a write with an unknown outcome;"
+                    + " retry its TOOL_OUTCOME_UNKNOWN incident with the confirmed outcome instead");
+        }
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("externalTaskId", task.getId());
         if (model != null) {
@@ -916,10 +950,85 @@ public class AbadaEngine {
                 ? meta.agentWork().maxAttempts() : 3;
         task.setRetries(attempts);
         task.setDeferrals(0);
+        // A retry is a new attempt: a fresh conversation, with earlier completed writes passed on as done.
+        task.setAttempt(task.getAttempt() + 1);
         task.setStatus(ExternalTaskEntity.Status.OPEN);
         task.setWorkerId(null);
         task.setLockExpirationTime(null);
         details.put("retries", attempts);
+        return details;
+    }
+
+    /**
+     * An agent write without an idempotency key was interrupted (E9): the
+     * engine never re-sends it. Opens a {@code TOOL_OUTCOME_UNKNOWN} incident
+     * for a person to confirm what happened; no boundary routes it.
+     */
+    public void toolOutcomeUnknown(String processInstanceId, String tokenId, String activityId, String toolRef,
+            int sequence) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null || isTerminal(instance)) return;
+        String token = instance.waitingTokenId(tokenId != null ? tokenId : activityId);
+        incidentService.open(instance, token, activityId, IncidentEntity.Type.TOOL_OUTCOME_UNKNOWN,
+                "write '" + toolRef + "' (step " + sequence + ") at '" + activityId
+                        + "' was interrupted and its server accepts no idempotency key; confirm whether it happened");
+        historyService.record("TOOL_OUTCOME_UNKNOWN", instance, activityId,
+                Map.of("toolRef", toolRef, "sequence", sequence));
+        log.warn("Process instance {}: write {} at '{}' has an unknown outcome; incident opened",
+                instance.getId(), toolRef, activityId);
+    }
+
+    private Map<String, Object> resolveUnknownToolOutcome(ProcessInstance instance, IncidentEntity incident,
+            String toolOutcome) {
+        String outcome = toolOutcome == null ? "" : toolOutcome.strip().toUpperCase(java.util.Locale.ROOT);
+        if (!outcome.equals("PERFORMED") && !outcome.equals("NOT_PERFORMED")) {
+            throw new ProcessEngineException("Confirm the interrupted write first: toolOutcome must be PERFORMED"
+                    + " or NOT_PERFORMED");
+        }
+        java.util.function.Predicate<String> ofToken = token -> incident.getTokenId() == null ? token == null
+                : incident.getTokenId().equals(token);
+        ExternalTaskEntity task = externalTaskRepository
+                .findByProcessInstanceIdAndStatusInForUpdate(instance.getId(),
+                        List.of(ExternalTaskEntity.Status.FAILED)).stream()
+                .filter(candidate -> ofToken.test(candidate.getTokenId())
+                        && incident.getActivityId().equals(candidate.getActivityId()))
+                .findFirst()
+                .orElseThrow(() -> new ProcessEngineException("No stopped agent work found at '"
+                        + incident.getActivityId() + "' of process instance " + instance.getId()));
+        com.abada.engine.persistence.entity.AgentStepEntity step = agentSteps
+                .findByExternalTaskIdOrderByAttemptAscSequenceAsc(task.getId()).stream()
+                .filter(candidate -> candidate.getState()
+                        == com.abada.engine.persistence.entity.AgentStepEntity.State.OUTCOME_UNKNOWN)
+                .findFirst()
+                .orElseThrow(() -> new ProcessEngineException("No write with an unknown outcome found for task "
+                        + task.getId()));
+        boolean performed = outcome.equals("PERFORMED");
+        String actor = com.abada.engine.security.IdentityContext.get()
+                .map(com.abada.engine.security.Identity::username).orElse("system");
+        step.setState(performed ? com.abada.engine.persistence.entity.AgentStepEntity.State.COMPLETED
+                : com.abada.engine.persistence.entity.AgentStepEntity.State.FAILED);
+        if (performed) {
+            // The tool's own answer is lost; the agent continues with the operator's confirmation.
+            com.fasterxml.jackson.databind.node.ObjectNode result = om.createObjectNode()
+                    .put("confirmedByOperator", true).put("performed", true);
+            step.setResultDigest(com.abada.engine.core.agent.AgentStepService.digest(result));
+            step.setResultEnc(null);
+        } else {
+            step.setErrorType("NOT_PERFORMED_CONFIRMED");
+        }
+        step.setResolvedBy(actor);
+        agentSteps.save(step);
+        // Resume the same attempt: the journal already says what happened.
+        task.setStatus(ExternalTaskEntity.Status.OPEN);
+        task.setWorkerId(null);
+        task.setLockExpirationTime(null);
+        if (task.getRetries() == null || task.getRetries() < 1) task.setRetries(1);
+        externalTaskRepository.save(task);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("toolRef", step.getToolRef());
+        details.put("sequence", step.getSequence());
+        details.put("toolOutcome", outcome);
         return details;
     }
 
