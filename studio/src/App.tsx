@@ -451,7 +451,8 @@ export default function App() {
   const handleCreateNewWorkflow = (workflow: WorkflowFile, folderId?: string) => {
     const fileName = (workflow.fileName || workflow.name).endsWith('.apl.yaml') ? (workflow.fileName || workflow.name) : `${workflow.fileName || workflow.name}.apl.yaml`;
     const seeded: WorkflowFile = workflow.nodes.length > 0 ? workflow : { ...workflow, nodes: [{ id: 'start', type: 'event', subtype: 'start', title: 'Start Process', description: 'Webhook trigger that begins the APL process', x: 120, y: 220 }] };
-    const draft: WorkflowFile = { ...seeded, id: `draft-${Date.now()}`, name: fileName, fileName, processKey: seeded.processKey || fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}` };
+    // `name` is the APL metadata.name; the file name is kept apart in `fileName`.
+    const draft: WorkflowFile = { ...seeded, id: `draft-${Date.now()}`, name: seeded.name || fileName, fileName, processKey: seeded.processKey || fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}` };
     if (folderId) draft.folderId = folderId;
     setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
     setAuthoringCandidate(null);

@@ -5,7 +5,7 @@ import type {
   ProcessInstanceDTO,
 } from '@/api/engine';
 import type { WorkflowFile, WorkflowNode } from '@/types';
-import { deriveInstancePath } from './instanceDetail';
+import { boundarySummary, deriveInstancePath } from './instanceDetail';
 
 const node = (
   id: string,
@@ -210,5 +210,14 @@ describe('deriveInstancePath outcome routes', () => {
       [completed('start'), boundary('ERROR', 'TIMEOUT')]);
     expect(failed.activePathEdgeIds).toContain('analyze-review-error');
     expect(failed.activePathEdgeIds).not.toContain('analyze-review-timeout');
+  });
+});
+
+describe('boundarySummary', () => {
+  it('names the route a step left by', () => {
+    expect(boundarySummary({ kind: 'OUTCOME', code: 'reject', routedTo: 'draft' })).toBe('outcome reject → draft');
+    expect(boundarySummary({ kind: 'TIMEOUT', routedTo: 'triage' })).toBe('timeout → triage');
+    expect(boundarySummary({ kind: 'LOW_CONFIDENCE', routedTo: 'triage' })).toBe('low confidence → triage');
+    expect(boundarySummary({ routedTo: 'x' })).toBeUndefined();
   });
 });

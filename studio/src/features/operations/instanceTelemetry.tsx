@@ -24,7 +24,7 @@ import { ActivityHistoryDTO, ProjectJob } from '@/api/engine';
 import { ErrorDetailsDialog } from '@/features/operations/ErrorDetailsDialog';
 import { failureOf, type FailureContext } from '@/lib/run/errorReport';
 import { WorkflowFile } from '@/types';
-import { aggregateNodeTelemetry, eventMeta } from '@/lib/run/instanceDetail';
+import { aggregateNodeTelemetry, boundarySummary, eventMeta } from '@/lib/run/instanceDetail';
 import { formatDuration, humanize, unwrapVariable } from '@/lib/run/instanceFormat';
 
 /* ------------------------------------------------------------------ */
@@ -246,6 +246,7 @@ export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ his
         const Icon = EVENT_ICON[event.eventType] ?? Activity;
         const details = (event.details ?? {}) as Record<string, unknown>;
         const workerId = typeof details.workerId === 'string' ? details.workerId : undefined;
+        const route = event.eventType === 'BOUNDARY_TAKEN' ? boundarySummary(details) : undefined;
         const expanded = expandedEvent === event.id;
         return (
           <li key={event.id} className="relative pb-3">
@@ -266,6 +267,7 @@ export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ his
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#A89F91]">
                 {event.activityId && <span className="font-mono">{humanize(event.activityId)}</span>}
                 {workerId && <span className="font-mono text-[#2A9D8F]">worker {workerId}</span>}
+                {route && <span className="font-mono text-[#F4A261]">{route}</span>}
                 {event.actor && <span>by {event.actor}</span>}
                 {event.traceId && <span className="font-mono text-[#A89F91]/70">trace {event.traceId.slice(0, 10)}</span>}
               </div>
@@ -393,6 +395,9 @@ export const NodeTelemetry: React.FC<{
                 />
               )}
               {telemetry.agent.model && <InfoRow label="Executed model"><span className="font-mono">{telemetry.agent.model}</span></InfoRow>}
+              {telemetry.agent.requestedModel && telemetry.agent.requestedModel !== telemetry.agent.model && (
+                <InfoRow label="Fallback for"><span className="font-mono text-[#F4A261]">{telemetry.agent.requestedModel}</span></InfoRow>
+              )}
               {telemetry.agent.provider && <InfoRow label="Provider">{telemetry.agent.provider}</InfoRow>}
               {telemetry.agent.attempt !== undefined && <InfoRow label="Attempt">{telemetry.agent.attempt}</InfoRow>}
               {telemetry.agent.durationMs !== undefined && <InfoRow label="Latency">{formatDuration(telemetry.agent.durationMs)}</InfoRow>}
@@ -430,7 +435,7 @@ export const NodeTelemetry: React.FC<{
           )}
 
           <p className="rounded-xl border border-dashed border-[#3A322E] bg-[#1A1614] p-3 text-[10px] leading-relaxed text-[#A89F91]">
-            The engine persists model/tool metadata only — prompts, request/response payloads and token counts are not stored (privacy by design). The APL-declared prompt is available in the definition source.
+            The engine persists attempt metadata only (model, tools, token counts, prompt hash) — prompts and request/response payloads are never stored (privacy by design). The APL-declared prompt is available in the definition source.
           </p>
         </div>
       )}

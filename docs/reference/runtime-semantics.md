@@ -305,7 +305,8 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   `abada.agent.max-deferral-delay` (default `PT15M`). After
   `abada.agent.max-deferrals` (default 12) a deferral counts as a failed
   attempt, so waiting is always bounded; `on_timeout` bounds it earlier.
-  The model that produced a result is recorded in the attempt metadata, with
+  The model that produced a result is recorded in the attempt metadata and the
+  step's `EXTERNAL_TASK_COMPLETED` / `EXTERNAL_TASK_FAILED` history, with
   `requestedModel` when a fallback replaced the declared model.
 - Worker death mid-task is served by lease expiry: an expired `LOCKED` task is
   re-acquired with `SKIP LOCKED`, so another worker retries it without the

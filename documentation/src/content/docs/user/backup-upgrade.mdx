@@ -48,19 +48,19 @@ Never edit a released Flyway migration or downgrade a database without a
 release-specific rollback procedure. Image rollback alone cannot undo a schema
 migration.
 
-**1.1.0-rc.1 (migration V23).** Execution tokens move to their own table.
-Running processes need no action: each one is converted the first time it
-moves after the upgrade. Until 1.1.0 the engine still writes the token state
-1.0.0-rc.8 reads, so going back to the rc.8 images works without restoring the
-backup.
+## Upgrading to 1.1.0-rc.1
 
-**1.1.0-rc.1 (migrations V24, V25).** Incidents and bounded loops. New
-deployments must give every cycle a limit; processes already deployed keep
-running. Before going back to rc.8, cancel instances that have an open
-incident: rc.8 does not know them and would leave those instances stopped.
-**1.1.0-rc.1 (migration V26).** Timeouts, service levels and model fallback.
-Upgrade the engine and the agent worker together. `sla_hours` is now
-enforced, and a task whose work fails for good opens an incident. Going back
-to rc.8 needs the two SQL clean-ups listed in the release notes (pending
-timeout/SLA jobs, retired external tasks).
-Details: `docs/operations/upgrading.md` in the repository.
+Upgrade the engine and the Agent Worker together. Flyway applies four
+migrations:
+
+| Migration | Change | Action |
+| --- | --- | --- |
+| `V23` | Execution tokens move to their own table | None: each running instance is converted the first time it moves |
+| `V24`, `V25` | Incidents and bounded loops | New deployments must give every cycle a repeat limit; deployed processes keep running |
+| `V26` | Timeouts, service levels and model fallback | `sla_hours` is now enforced, and a step whose work fails for good opens an incident |
+
+**Going back to 1.0.0-rc.8** works without restoring the backup, with two
+precautions: cancel instances that have an open incident (rc.8 does not know
+them), and run the two SQL clean-ups listed in the release notes (pending
+timeout/SLA jobs, retired external tasks). Details: `docs/operations/upgrading.md`
+in the repository.

@@ -43,7 +43,7 @@ imports produce:
 | --- | --- |
 | `webhook` | Start event |
 | `end` | End event |
-| `approval-gate` | User task (candidate groups from `assignees`) |
+| `human-input` | User task (candidate groups from `assignees`); with `outcomes`, a decision that routes like an exclusive choice (`approval-gate` is a deprecated alias) |
 | `engine-task` | External service task on `service` |
 | `agent` | External service task on the fixed `abada:agent` topic |
 | `script` | In-transaction script task (the APL form of an embedded Java delegate) |
@@ -62,8 +62,10 @@ APL↔BPMN round-trip check — the two surfaces really do compile to one model.
 
 APL closes and tightens holes relative to XML:
 
-- Documents are **strictly acyclic**; any loop over `next` or branch targets
-  is rejected at deployment.
+- A cycle is allowed only when the step it returns to declares
+  `loop.max_iterations`; any other cycle — or a cycle back to the start node or
+  a parallel or inclusive gateway — is rejected at deployment. Cycle detection
+  is linear in the size of the graph.
 - Duplicate ids, a second `webhook`, a missing `metadata.name`, undeclared
   routing targets, unrecognized node types and invalid bounds fail deployment
   with index-friendly stable error codes and roll back — nothing partial
@@ -79,6 +81,25 @@ APL closes and tightens holes relative to XML:
 - `POST /api/v1/apl/validate` runs this whole pipeline without persisting
   anything; Studio uses it instead of keeping its own rules, and generates its
   APL types from the same schema.
+
+## Routes that leave a step
+
+Besides `next`, a waiting step can leave through named routes, all compiled
+into the same canonical graph as boundary routes attached to the step:
+
+| APL | Taken when |
+| --- | --- |
+| `on_error` (optionally per error code) | A worker reports an error, or the last attempt fails |
+| `on_timeout: { after, then }` | The step is still running after the duration; its work is cancelled |
+| `on_low_confidence`, `on_invalid_output` | The engine rejects an agent result |
+| `outcomes.<name>.next` | A reviewer decides that outcome |
+| `loop.on_exhausted` | A loop step is reached once more than `max_iterations` allows |
+
+Timers behind `on_timeout` and `sla_hours` are durable jobs, so a restart never
+loses them. A route that a step needs but does not declare becomes an
+**incident** (`WORK_FAILED`, `LOOP_EXHAUSTED`) instead of a silent stop. BPMN
+timer and error boundary events compile to the same routes. Details and
+examples: [Loops, routes and review decisions](/user/process-patterns/).
 
 ## Immutable versions
 

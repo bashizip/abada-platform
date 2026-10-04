@@ -55,6 +55,24 @@ Diagram rules:
 - avoid encoding guarantees that are not backed by a contract and test;
 - run the production build so invalid Mermaid syntax fails before review.
 
+## Screenshots
+
+Screenshots show readers what to expect; they never prove a claim on their
+own.
+
+- Store them under `documentation/src/assets/screens/<page>/` as WebP and
+  reference them with a relative Markdown image, so Astro optimizes them:
+  `![What the reader sees](../../../assets/screens/tutorial/03-canvas.webp)`.
+- Write alt text that says what the image shows, not "screenshot".
+- Capture Studio at 1440×900 with a device scale factor of 2, from the
+  development profile, and crop to the part the text discusses. Keep files
+  under about 100 KB (`cwebp -q 84 -resize 2200 0`).
+- Use the development accounts and invented data only — never real customer
+  data, tokens or keys. When a deterministic test model stands in for a real
+  provider, say so on the page.
+- Recapture a screenshot when the screen it shows changes; a stale image is a
+  wrong claim.
+
 ## Links and source-of-truth
 
 Use site-relative links such as `/architecture/runtime/` for curated pages.
@@ -76,5 +94,6 @@ npm run check
 npm run build
 ```
 
-Starlight validates internal links during the production build. CI runs the
-same commands on every pull request.
+The production build fails when a page links to a page or heading that does
+not exist (`scripts/check-links.mjs` checks the built site). CI runs the same
+commands on every pull request.

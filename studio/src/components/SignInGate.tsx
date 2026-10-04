@@ -21,7 +21,7 @@ export const SignInGate: React.FC = () => (
     <div className="max-w-sm text-center space-y-4">
       <h2 className="text-sm font-semibold">Welcome to Abada Studio</h2>
       <p className="text-xs text-[#A89F91] leading-relaxed">
-        Design, preview and deploy BPMN processes as APL documents. Sign in to
+        Design, test and run governed AI processes written in APL. Sign in to
         reach your projects, processes, forms and workflows.
       </p>
       <button type="button"

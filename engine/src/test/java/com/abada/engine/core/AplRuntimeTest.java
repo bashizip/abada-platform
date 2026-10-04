@@ -241,18 +241,20 @@ class AplRuntimeTest {
                     .contains("\"agent\"")
                     .contains("\"confidenceThreshold\":85.0");
 
-            // A real worker reports attempt metadata on the durable completion command.
+            // A real worker reports attempt metadata on the durable completion command;
+            // here the declared model was rate-limited and a fallback model answered.
             externalTaskService.complete(agentJobs.getFirst().id(), "worker-1",
                     Map.of("notify_result", Map.of("handled", true, "_confidence", 93)),
-                    new AgentAttemptMetadata("gemini-3.6-flash", "google-gemini", 1, 1_234L,
-                            List.of("crm.read"), "notify_result", "abc123", null, 93.0));
+                    new AgentAttemptMetadata("gpt-5-mini", "openai-compatible", 1, 1_234L,
+                            List.of("crm.read"), "notify_result", "abc123", null, 93.0, 412, 96,
+                            "gemini-3.6-flash"));
 
             // The durable worker record carries the attempt metadata JSON.
             var task = context.getBean(ExternalTaskRepository.class)
                     .findById(agentJobs.getFirst().id()).orElseThrow();
             assertThat(task.getAgentMetadataJson())
-                    .contains("\"model\":\"gemini-3.6-flash\"")
-                    .contains("\"provider\":\"google-gemini\"")
+                    .contains("\"model\":\"gpt-5-mini\"")
+                    .contains("\"provider\":\"openai-compatible\"")
                     .contains("\"attempt\":1")
                     .contains("\"confidence\":93.0");
 
@@ -263,7 +265,8 @@ class AplRuntimeTest {
                     .findFirst().orElseThrow();
             assertThat(completed.getDetailsJson())
                     .contains("\"agent\"")
-                    .contains("\"model\":\"gemini-3.6-flash\"")
+                    .contains("\"model\":\"gpt-5-mini\"")
+                    .contains("\"requestedModel\":\"gemini-3.6-flash\"")
                     .contains("\"tools\":[\"crm.read\"]")
                     .contains("\"confidence\":93.0");
         }
