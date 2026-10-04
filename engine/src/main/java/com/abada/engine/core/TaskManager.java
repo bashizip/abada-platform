@@ -39,7 +39,7 @@ public class TaskManager {
     private static final List<TaskStatus> ACTIVE_STATUSES =
             List.of(TaskStatus.AVAILABLE, TaskStatus.CLAIMED);
     private static final List<TaskStatus> TERMINAL_STATUSES =
-            List.of(TaskStatus.COMPLETED, TaskStatus.FAILED);
+            List.of(TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED);
     private static final String EMPTY_GROUP_SENTINEL = "__abada_no_group__";
 
     private final TaskRepository taskRepository;
@@ -149,6 +149,16 @@ public class TaskManager {
         }
     }
 
+    /** Retires an open task without a result: a boundary fired or the instance ended. */
+    public void cancelTask(TaskInstance task) {
+        if (task.getStatus() == TaskStatus.COMPLETED || task.getStatus() == TaskStatus.FAILED
+                || task.getStatus() == TaskStatus.CANCELLED) {
+            return;
+        }
+        task.setStatus(TaskStatus.CANCELLED);
+        task.setEndDate(Instant.now());
+    }
+
     public void unclaimTask(TaskInstance task, String user) {
         if (task.getStatus() != TaskStatus.CLAIMED || task.getAssignee() == null)
             throw new ProcessEngineException("Task is not currently assigned");
@@ -164,6 +174,9 @@ public class TaskManager {
         }
         if (task.getStatus() == TaskStatus.FAILED) {
             throw new ProcessEngineException("Task has failed and cannot be completed.");
+        }
+        if (task.getStatus() == TaskStatus.CANCELLED) {
+            throw new ProcessEngineException("Task was cancelled and cannot be completed.");
         }
 
         boolean isAssignee = user != null && user.equals(task.getAssignee());
@@ -325,6 +338,8 @@ public class TaskManager {
         task.setStatus(entity.getStatus());
         task.setStartDate(entity.getStartDate());
         task.setEndDate(entity.getEndDate());
+        task.setDueAt(entity.getDueAt());
+        task.setEscalatedAt(entity.getEscalatedAt());
         task.setEntityVersion(entity.getEntityVersion());
         task.setFormKey(entity.getFormKey());
         task.setTokenId(entity.getTokenId());

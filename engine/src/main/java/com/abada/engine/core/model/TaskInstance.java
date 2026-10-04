@@ -20,6 +20,8 @@ public class TaskInstance {
     private TaskStatus status;
     private Instant startDate;
     private Instant endDate;
+    private Instant dueAt;
+    private Instant escalatedAt;
     private List<String> candidateUsers = new ArrayList<>();
     private List<String> candidateGroups = new ArrayList<>();
     private AssignmentStrategy assignmentStrategy = AssignmentStrategy.CLAIM;
@@ -93,6 +95,22 @@ public class TaskInstance {
 
     public void setStartDate(Instant startDate) {
         this.startDate = startDate;
+    }
+
+    public Instant getDueAt() {
+        return dueAt;
+    }
+
+    public void setDueAt(Instant dueAt) {
+        this.dueAt = dueAt;
+    }
+
+    public Instant getEscalatedAt() {
+        return escalatedAt;
+    }
+
+    public void setEscalatedAt(Instant escalatedAt) {
+        this.escalatedAt = escalatedAt;
     }
 
     public Instant getEndDate() {

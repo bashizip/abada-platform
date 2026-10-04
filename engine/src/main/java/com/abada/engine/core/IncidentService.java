@@ -56,6 +56,21 @@ public class IncidentService {
         incidents.save(incident);
     }
 
+    /**
+     * Resolves the open incident of one kind on a token (or, for work created
+     * before V23, at an activity): an operator acted on the failed work directly.
+     */
+    void resolveFor(String processInstanceId, String tokenId, String activityId, IncidentEntity.Type type,
+            String resolution) {
+        List<IncidentEntity> matching = incidents.findByProcessInstanceIdAndResolvedAtIsNull(processInstanceId)
+                .stream()
+                .filter(incident -> type.name().equals(incident.getType()))
+                .filter(incident -> tokenId != null ? tokenId.equals(incident.getTokenId())
+                        : activityId.equals(incident.getActivityId()))
+                .toList();
+        matching.forEach(incident -> resolve(incident, resolution));
+    }
+
     /** Marks the open incidents of an instance resolved, e.g. when an operator cancels it. */
     void resolveAll(String processInstanceId, String resolution) {
         List<IncidentEntity> open = incidents.findByProcessInstanceIdAndResolvedAtIsNull(processInstanceId);

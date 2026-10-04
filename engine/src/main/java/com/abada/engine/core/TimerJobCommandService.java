@@ -21,6 +21,9 @@ public class TimerJobCommandService {
         this.history = history;
     }
 
+    /** How long a due job of a suspended instance waits before it is checked again. */
+    private static final java.time.Duration SUSPENDED_RECHECK = java.time.Duration.ofMinutes(1);
+
     /** Executes one timer and its workflow advancement in a single transaction. */
     @AtomicRuntimeCommand
     public List<JobEntity> claimDue(String leaseOwner, Instant now, int batchSize) {
@@ -42,16 +45,37 @@ public class TimerJobCommandService {
                 || !leaseOwner.equals(job.getLeaseOwner()) || job.getLeaseExpiresAt() == null
                 || !job.getLeaseExpiresAt().isAfter(now)) return false;
 
+        ProcessInstance owner = engine.getProcessInstanceById(job.getProcessInstanceId());
+        if (owner != null && owner.isSuspended()) {
+            // A suspended instance must not move: the timer fires after it is resumed.
+            job.setStatus(JobEntity.Status.AVAILABLE);
+            job.setLeaseOwner(null);
+            job.setLeaseExpiresAt(null);
+            job.setAttempts(Math.max(0, job.getAttempts() - 1));
+            job.setExecutionTimestamp(now.plus(SUSPENDED_RECHECK));
+            repository.save(job);
+            return false;
+        }
+
         // Completed before the instance advances: a loop that returns to this
         // timer must be able to schedule the next one for the same token.
         job.setStatus(JobEntity.Status.COMPLETED);
         job.setLeaseOwner(null);
         job.setLeaseExpiresAt(null);
         repository.saveAndFlush(job);
-        engine.resumeFromEvent(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(), Map.of());
+        boolean fired = switch (job.getKind()) {
+            case EVENT -> {
+                engine.resumeFromEvent(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(), Map.of());
+                yield true;
+            }
+            case BOUNDARY_TIMEOUT -> engine.fireTimeout(job.getProcessInstanceId(), job.getEventId(),
+                    job.getTokenId(), job.getBoundaryId());
+            case SLA -> engine.escalateTask(job.getProcessInstanceId(), job.getEventId(), job.getTokenId());
+        };
 
         ProcessInstance instance = engine.getProcessInstanceById(job.getProcessInstanceId());
-        history.record("TIMER_JOB_COMPLETED", instance, job.getEventId(), Map.of("jobId", jobId));
+        history.record("TIMER_JOB_COMPLETED", instance, job.getEventId(),
+                Map.of("jobId", jobId, "kind", job.getKind().name(), "fired", fired));
         return true;
     }
 

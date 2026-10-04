@@ -179,7 +179,8 @@ final class AplVariables {
                 written.add(AplParser.errorCodeVariable(nodeId));
                 written.add(AplParser.rawOutputVariable(nodeId));
             }
-            case "engine-task" -> {
+            case "engine-task", "human-input", "approval-gate" -> {
+                // Written when a boundary (on_error, on_timeout) is declared and fires.
                 written.add(AplParser.outcomeVariable(nodeId));
                 written.add(AplParser.errorCodeVariable(nodeId));
             }

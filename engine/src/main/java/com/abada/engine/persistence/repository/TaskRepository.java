@@ -19,6 +19,19 @@ public interface TaskRepository extends JpaRepository<TaskEntity, String> {
     List<TaskEntity> findByProcessInstanceIdAndStatusNotIn(
             String processInstanceId, Collection<TaskStatus> terminalStatuses);
 
+    /** Tasks of one token, locked before its instance (the engine's lock order: work, then instance). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TaskEntity t WHERE t.processInstanceId = :processInstanceId AND t.tokenId = :tokenId "
+            + "AND t.status IN :statuses")
+    List<TaskEntity> findByTokenAndStatusInForUpdate(@Param("processInstanceId") String processInstanceId,
+            @Param("tokenId") String tokenId, @Param("statuses") Collection<TaskStatus> statuses);
+
+    /** Tasks of an instance in the given statuses, locked so a boundary or the instance end retires them. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TaskEntity t WHERE t.processInstanceId = :processInstanceId AND t.status IN :statuses")
+    List<TaskEntity> findByProcessInstanceIdAndStatusInForUpdate(@Param("processInstanceId") String processInstanceId,
+            @Param("statuses") Collection<TaskStatus> statuses);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM TaskEntity t WHERE t.id = :taskId")
     Optional<TaskEntity> findByIdForUpdate(@Param("taskId") String taskId);

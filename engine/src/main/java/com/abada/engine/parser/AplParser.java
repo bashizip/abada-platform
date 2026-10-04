@@ -7,6 +7,7 @@ import com.abada.engine.bpmn.compatibility.CompatibilityMapping;
 import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.bpmn.compatibility.CompatibilityReport;
 import com.abada.engine.bpmn.compatibility.ValidationSeverity;
+import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
 import com.abada.engine.core.model.LoopMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
@@ -30,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -361,8 +363,9 @@ public final class AplParser {
                             }
                             groups.add(group);
                         }
-                        userTasks.put(nodeId,
-                                new TaskMeta(nodeId, nodeName, null, List.of(), groups, null, null, null, null, null));
+                        userTasks.put(nodeId, withSla(
+                                new TaskMeta(nodeId, nodeName, null, List.of(), groups, null, null, null, null, null),
+                                node, nodeId));
                     }
                     case "condition" -> {
                         if (node.hasNonNull("next")) {
@@ -612,13 +615,9 @@ public final class AplParser {
                             }
                             groups.add(group);
                         }
-                        // Parse optional fields
-                        JsonNode slaHoursNode = node.path("slaHours");
-                        Long slaHours = slaHoursNode.isNumber() ? slaHoursNode.asLong() : null;
-                        JsonNode requireDoubleSignOffNode = node.path("requireDoubleSignOff");
-                        Boolean requireDoubleSignOff = requireDoubleSignOffNode.isBoolean() ? requireDoubleSignOffNode.asBoolean() : null;
-                        userTasks.put(nodeId,
-                                new TaskMeta(nodeId, nodeName, null, List.of(), groups, formKey, null, null, null, null));
+                        userTasks.put(nodeId, withSla(
+                                new TaskMeta(nodeId, nodeName, null, List.of(), groups, formKey, null, null, null, null),
+                                node, nodeId));
                     }
                     default -> throw validation("type", "unsupported node type '" + type + "' for node '" + nodeId
                             + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
@@ -646,8 +645,9 @@ public final class AplParser {
             }
         }
 
+        List<BoundaryMeta> boundaries = new ArrayList<>();
         if (errors.isEmpty()) {
-            addOutcomeRoutes(nodesById, pointerById, flows, flowIds, gateways, errors);
+            addBoundaries(nodesById, pointerById, flows, flowIds, boundaries, errors);
         }
         if (!errors.isEmpty()) throw new BpmnValidationException(errors);
 
@@ -655,7 +655,7 @@ public final class AplParser {
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
-                rawSource, null, null).withLoops(loops);
+                rawSource, null, null).withLoops(loops).withBoundaries(boundaries);
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
             // execution policy, so reloading stored definitions never changes.
@@ -795,10 +795,72 @@ public final class AplParser {
                     + "' which is not on the allowed model list ("
                     + String.join(", ", allowedAgentModels) + ")");
         }
+        List<String> fallbackModels = new ArrayList<>();
+        JsonNode rawFallbacks = node.path("fallback_models");
+        if (rawFallbacks.isArray()) {
+            for (JsonNode fallback : rawFallbacks) {
+                String candidate = fallback.asText("").strip();
+                if (candidate.isEmpty()) {
+                    throw validation("fallback_models", "agent node '" + nodeId + "' declares an empty fallback model");
+                }
+                if (candidate.equals(model == null ? null : model.strip()) || fallbackModels.contains(candidate)) {
+                    throw validation("fallback_models", "agent node '" + nodeId + "' lists model '" + candidate
+                            + "' more than once across model and fallback_models");
+                }
+                if (!allowedAgentModels.isEmpty() && !allowedAgentModels.contains(candidate)) {
+                    throw validation("fallback_models", "agent node '" + nodeId + "' declares fallback model '"
+                            + candidate + "' which is not on the allowed model list ("
+                            + String.join(", ", allowedAgentModels) + ")");
+                }
+                fallbackModels.add(candidate);
+            }
+            if (fallbackModels.size() > MAX_FALLBACK_MODELS) {
+                throw validation("fallback_models", "agent node '" + nodeId + "' declares more than "
+                        + MAX_FALLBACK_MODELS + " fallback models");
+            }
+        } else if (!rawFallbacks.isMissingNode() && !rawFallbacks.isNull()) {
+            throw validation("fallback_models", "agent node '" + nodeId + "' fallback_models must be a list");
+        }
         return new AgentWorkDescriptor(profile, model,
                 prompt, inputs,
                 node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
-                confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs);
+                confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels);
+    }
+
+    /** Fallback models an agent node may declare: tried in order only when the model before is unavailable. */
+    public static final int MAX_FALLBACK_MODELS = 3;
+
+    /**
+     * {@code sla_hours} (alias {@code slaHours}) and {@code escalate_to} of a
+     * human task: after that many hours the open task is escalated in place.
+     */
+    private static TaskMeta withSla(TaskMeta task, JsonNode node, String nodeId) {
+        JsonNode sla = node.has("sla_hours") ? node.path("sla_hours") : node.path("slaHours");
+        if (!sla.isMissingNode() && !sla.isNull()) {
+            if (!sla.isNumber() || sla.asDouble() <= 0 || sla.asDouble() > 8760) {
+                throw validation("sla_hours", "node '" + nodeId + "' sla_hours must be a number of hours between 0 and 8760");
+            }
+            task.setSlaHours(sla.asDouble());
+        }
+        JsonNode escalateTo = node.path("escalate_to");
+        if (!escalateTo.isMissingNode() && !escalateTo.isNull()) {
+            if (task.getSlaHours() == null) {
+                throw validation("escalate_to", "node '" + nodeId + "' declares escalate_to without sla_hours");
+            }
+            if (!escalateTo.isArray() || escalateTo.isEmpty()) {
+                throw validation("escalate_to", "node '" + nodeId + "' escalate_to must be a non-empty list of groups");
+            }
+            List<String> groups = new ArrayList<>();
+            for (JsonNode group : escalateTo) {
+                String value = group.asText("").strip();
+                if (value.isEmpty()) {
+                    throw validation("escalate_to", "node '" + nodeId + "' escalate_to has an empty group");
+                }
+                groups.add(value);
+            }
+            task.setEscalateTo(groups);
+        }
+        return task;
     }
 
     private static List<DecisionTableMeta.DecisionTableInput> parseInputs(JsonNode node, String nodeId) {
@@ -882,22 +944,22 @@ public final class AplParser {
         return candidate;
     }
 
-    /** Reserved suffix of the synthetic gateway that routes agent/engine-task outcomes. */
+    /**
+     * Reserved node-id suffix. Until 1.1 outcome routes compiled to a synthetic
+     * gateway with this suffix; they are boundaries now, and the suffix stays
+     * reserved so stored definitions and history never clash with a node id.
+     */
     public static final String OUTCOME_GATEWAY_SUFFIX = "__outcome";
     public static final String OUTCOME_OK = "OK";
     public static final String OUTCOME_LOW_CONFIDENCE = "LOW_CONFIDENCE";
     public static final String OUTCOME_INVALID_OUTPUT = "INVALID_OUTPUT";
     public static final String OUTCOME_ERROR = "ERROR";
+    public static final String OUTCOME_TIMEOUT = "TIMEOUT";
 
     private static final java.util.regex.Pattern PROMPT_REFERENCE =
             java.util.regex.Pattern.compile("\\$\\{([^}]*)}");
     private static final java.util.regex.Pattern VARIABLE_PATH =
             java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*");
-
-    /** Id of the synthetic exclusive gateway placed after a node that declares outcome routes. */
-    public static String outcomeGatewayId(String nodeId) {
-        return nodeId + OUTCOME_GATEWAY_SUFFIX;
-    }
 
     /** Process variable holding a routed node's outcome (OK, LOW_CONFIDENCE, INVALID_OUTPUT, ERROR). */
     public static String outcomeVariable(String nodeId) {
@@ -934,92 +996,129 @@ public final class AplParser {
     }
 
     /**
-     * Compiles {@code on_low_confidence}, {@code on_invalid_output} (agent) and
-     * {@code on_error} (agent, engine-task) into a synthetic exclusive gateway
-     * after the node. Its conditional flows test the engine-written outcome
-     * variables; its default flow is the node's {@code next}.
+     * Compiles the boundary routes of wait-state nodes: {@code on_low_confidence}
+     * and {@code on_invalid_output} (agent), {@code on_error} and
+     * {@code on_timeout} (agent, engine-task, human-input, approval-gate). Each
+     * becomes a {@link BoundaryMeta} plus a boundary flow from the node to its
+     * target; the engine takes that flow only when the boundary fires, so the
+     * node's {@code next} stays its only normal exit.
      */
-    private static void addOutcomeRoutes(Map<String, JsonNode> nodesById, Map<String, String> pointerById,
-            List<SequenceFlow> flows, Set<String> flowIds, Map<String, GatewayMeta> gateways,
+    private static void addBoundaries(Map<String, JsonNode> nodesById, Map<String, String> pointerById,
+            List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries,
             List<BpmnValidationIssue> errors) {
         for (Map.Entry<String, JsonNode> entry : nodesById.entrySet()) {
             try {
-                addOutcomeRoute(entry.getKey(), entry.getValue(), nodesById, flows, flowIds, gateways);
+                addBoundary(entry.getKey(), entry.getValue(), nodesById, flows, flowIds, boundaries);
             } catch (BpmnValidationException exception) {
                 errors.addAll(locate(exception, entry.getKey(), pointerById.get(entry.getKey())));
             }
         }
     }
 
-    private static void addOutcomeRoute(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
-            List<SequenceFlow> flows, Set<String> flowIds, Map<String, GatewayMeta> gateways) {
-        {
-            String type = node.path("type").asText();
-            boolean agent = "agent".equals(type);
-            boolean routable = agent || "engine-task".equals(type);
-            List<String[]> routes = new ArrayList<>();
-            String outcome = outcomeVariable(nodeId);
-            if (agent) {
-                addRoute(routes, nodesById, nodeId, node.path("on_invalid_output"), "on_invalid_output",
-                        "${" + outcome + " == '" + OUTCOME_INVALID_OUTPUT + "'}");
-                addRoute(routes, nodesById, nodeId, node.path("on_low_confidence"), "on_low_confidence",
-                        "${" + outcome + " == '" + OUTCOME_LOW_CONFIDENCE + "'}");
-            } else {
-                for (String field : List.of("on_invalid_output", "on_low_confidence")) {
-                    if (node.has(field)) {
-                        throw validation(field, "node '" + nodeId + "' declares '" + field + "', which only agent nodes support");
-                    }
-                }
-            }
-            JsonNode onError = node.path("on_error");
-            if (!onError.isMissingNode() && !onError.isNull()) {
-                if (!routable) {
-                    throw validation("on_error", "node '" + nodeId + "' declares 'on_error', which only agent and engine-task nodes support");
-                }
-                String errorCode = errorCodeVariable(nodeId);
-                if (onError.isTextual()) {
-                    addRoute(routes, nodesById, nodeId, onError, "on_error", "${" + outcome + " == '" + OUTCOME_ERROR + "'}");
-                } else if (onError.isArray()) {
-                    List<String[]> catchAll = new ArrayList<>();
-                    for (JsonNode rule : onError) {
-                        String code = rule.path("code").asText(null);
-                        if (code != null && !code.matches("[A-Za-z0-9_.:-]{1,128}")) {
-                            throw validation("on_error", "node '" + nodeId + "' on_error code '" + code + "' is not a valid error code");
-                        }
-                        String condition = code == null
-                                ? "${" + outcome + " == '" + OUTCOME_ERROR + "'}"
-                                : "${" + outcome + " == '" + OUTCOME_ERROR + "' && " + errorCode + " == '" + code + "'}";
-                        addRoute(code == null ? catchAll : routes, nodesById, nodeId, rule.path("then"), "on_error.then",
-                                condition);
-                    }
-                    if (catchAll.size() > 1) {
-                        throw validation("on_error", "node '" + nodeId + "' declares more than one on_error rule without a code");
-                    }
-                    routes.addAll(catchAll);
-                } else {
-                    throw validation("on_error", "node '" + nodeId + "' on_error must be a node id or a list of {code, then}");
-                }
-            }
-            if (routes.isEmpty()) return;
+    private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate");
 
-            SequenceFlow normal = flows.stream().filter(flow -> flow.getSourceRef().equals(nodeId)).findFirst()
-                    .orElseThrow(() -> validation("node '" + nodeId + "' declares outcome routes but no 'next'"));
-            String gatewayId = outcomeGatewayId(nodeId);
-            flows.remove(normal);
-            flows.add(new SequenceFlow(flowIdFor(nodeId, gatewayId, flowIds), nodeId, gatewayId, null, null, false));
-            for (String[] route : routes) {
-                flows.add(new SequenceFlow(flowIdFor(gatewayId, route[0], flowIds), gatewayId, route[0], null,
-                        route[1], false));
+    private static void addBoundary(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
+            List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries) {
+        String type = node.path("type").asText();
+        boolean agent = "agent".equals(type);
+        List<BoundaryMeta> declared = new ArrayList<>();
+        if (agent) {
+            declared.add(boundary(nodesById, nodeId, node.path("on_invalid_output"), "on_invalid_output",
+                    BoundaryMeta.Kind.INVALID_OUTPUT, null, null));
+            declared.add(boundary(nodesById, nodeId, node.path("on_low_confidence"), "on_low_confidence",
+                    BoundaryMeta.Kind.LOW_CONFIDENCE, null, null));
+        } else {
+            for (String field : List.of("on_invalid_output", "on_low_confidence")) {
+                if (node.has(field)) {
+                    throw validation(field, "node '" + nodeId + "' declares '" + field + "', which only agent nodes support");
+                }
             }
-            String defaultFlowId = flowIdFor(gatewayId, normal.getTargetRef(), flowIds);
-            flows.add(new SequenceFlow(defaultFlowId, gatewayId, normal.getTargetRef(), null, null, true));
-            gateways.put(gatewayId, new GatewayMeta(gatewayId, GatewayMeta.Type.EXCLUSIVE, defaultFlowId));
+        }
+        for (String field : List.of("on_error", "on_timeout")) {
+            if (present(node.path(field)) && !BOUNDARY_TYPES.contains(type)) {
+                throw validation(field, "node '" + nodeId + "' declares '" + field
+                        + "', which only agent, engine-task and human-input nodes support");
+            }
+        }
+        JsonNode onError = node.path("on_error");
+        if (present(onError)) {
+            if (onError.isTextual()) {
+                declared.add(boundary(nodesById, nodeId, onError, "on_error", BoundaryMeta.Kind.ERROR, null, null));
+            } else if (onError.isArray()) {
+                List<BoundaryMeta> catchAll = new ArrayList<>();
+                Set<String> codes = new HashSet<>();
+                for (JsonNode rule : onError) {
+                    String code = rule.path("code").asText(null);
+                    if (code != null && !code.matches("[A-Za-z0-9_.:-]{1,128}")) {
+                        throw validation("on_error", "node '" + nodeId + "' on_error code '" + code + "' is not a valid error code");
+                    }
+                    if (code != null && !codes.add(code)) {
+                        throw validation("on_error", "node '" + nodeId + "' declares on_error code '" + code + "' twice");
+                    }
+                    BoundaryMeta route = boundary(nodesById, nodeId, rule.path("then"), "on_error.then",
+                            BoundaryMeta.Kind.ERROR, code, null);
+                    (code == null ? catchAll : declared).add(route);
+                }
+                if (catchAll.size() > 1) {
+                    throw validation("on_error", "node '" + nodeId + "' declares more than one on_error rule without a code");
+                }
+                // Code-specific rules are matched first; the catch-all comes last.
+                declared.addAll(catchAll);
+            } else {
+                throw validation("on_error", "node '" + nodeId + "' on_error must be a node id or a list of {code, then}");
+            }
+        }
+        JsonNode onTimeout = node.path("on_timeout");
+        if (present(onTimeout)) {
+            if (!onTimeout.isObject()) {
+                throw validation("on_timeout", "node '" + nodeId + "' on_timeout must be a mapping with 'after' and 'then'");
+            }
+            declared.add(boundary(nodesById, nodeId, onTimeout.path("then"), "on_timeout.then",
+                    BoundaryMeta.Kind.TIMEOUT, null, timeoutAfter(onTimeout.path("after"), nodeId)));
+        }
+        declared.removeIf(Objects::isNull);
+        if (declared.isEmpty()) return;
+        if (flows.stream().noneMatch(flow -> flow.getSourceRef().equals(nodeId))) {
+            throw validation("node '" + nodeId + "' declares boundary routes but no 'next'");
+        }
+        for (BoundaryMeta route : declared) {
+            flows.add(new SequenceFlow(flowIdFor(nodeId, route.target(), flowIds), nodeId, route.target(), null,
+                    null, false, route.id()));
+            boundaries.add(route);
         }
     }
 
-    private static void addRoute(List<String[]> routes, Map<String, JsonNode> nodesById, String nodeId,
-            JsonNode target, String field, String condition) {
-        if (target == null || target.isMissingNode() || target.isNull()) return;
+    /** Shortest and longest {@code on_timeout.after}: one second to one year. */
+    private static final Duration MIN_TIMEOUT = Duration.ofSeconds(1);
+    private static final Duration MAX_TIMEOUT = Duration.ofDays(365);
+
+    private static Duration timeoutAfter(JsonNode after, String nodeId) {
+        Duration duration;
+        try {
+            duration = Duration.parse(after.asText(""));
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw validation("on_timeout", "node '" + nodeId + "' on_timeout.after must be an ISO-8601 duration such as PT4H or P2D");
+        }
+        if (duration.compareTo(MIN_TIMEOUT) < 0 || duration.compareTo(MAX_TIMEOUT) > 0) {
+            throw validation("on_timeout", "node '" + nodeId + "' on_timeout.after must be between PT1S and P365D");
+        }
+        return duration;
+    }
+
+    private static boolean present(JsonNode value) {
+        return value != null && !value.isMissingNode() && !value.isNull();
+    }
+
+    private static BoundaryMeta boundary(Map<String, JsonNode> nodesById, String nodeId, JsonNode target,
+            String field, BoundaryMeta.Kind kind, String code, Duration after) {
+        if (!present(target)) {
+            if (kind == BoundaryMeta.Kind.ERROR && field.endsWith(".then")
+                    || kind == BoundaryMeta.Kind.TIMEOUT) {
+                throw validation(field.split("\\.")[0], "node '" + nodeId + "' declares " + field.split("\\.")[0]
+                        + " without a 'then' target");
+            }
+            return null;
+        }
         String targetId = target.asText(null);
         if (targetId == null || targetId.isBlank()) {
             throw validation(field.split("\\.")[0], "node '" + nodeId + "' declares an empty '" + field + "' target");
@@ -1028,7 +1127,8 @@ public final class AplParser {
             throw validation(field.split("\\.")[0], "node '" + nodeId + "' " + field + " target '" + targetId
                     + "' is not a declared node");
         }
-        routes.add(new String[]{targetId, condition});
+        String id = field.split("\\.")[0] + (code == null ? "" : ":" + code);
+        return new BoundaryMeta(id, nodeId, kind, code, after, targetId);
     }
 
     /** Reads a text field by its canonical name, falling back to a legacy alias. */

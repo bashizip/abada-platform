@@ -32,6 +32,28 @@ public interface JobRepository extends JpaRepository<JobEntity, String> {
     boolean existsByProcessInstanceIdAndTokenIdAndStatusIn(
             String processInstanceId, String tokenId, List<JobEntity.Status> statuses);
 
+    boolean existsByProcessInstanceIdAndTokenIdAndKindAndStatusIn(
+            String processInstanceId, String tokenId, JobEntity.Kind kind, List<JobEntity.Status> statuses);
+
+    /**
+     * Pending jobs of the given tokens, locked to retire them with the command.
+     * A job another transaction holds (its timer is firing right now) is
+     * skipped: that timer finds the token gone and does nothing, so skipping
+     * never loses a cancellation and never waits in the reverse lock order.
+     */
+    @Query(value = "select * from jobs where process_instance_id = :processInstanceId "
+            + "and token_id in (:tokenIds) and status in ('AVAILABLE', 'LEASED') for update skip locked",
+            nativeQuery = true)
+    List<JobEntity> findPendingForTokensSkipLocked(@Param("processInstanceId") String processInstanceId,
+            @Param("tokenIds") java.util.Collection<String> tokenIds);
+
+    /** Every pending job of an instance, locked, for cancellation or failure of the instance. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select job from JobEntity job where job.processInstanceId = :processInstanceId "
+            + "and job.status in :statuses")
+    List<JobEntity> findByProcessInstanceIdAndStatusIn(@Param("processInstanceId") String processInstanceId,
+            @Param("statuses") List<JobEntity.Status> statuses);
+
     /** Pending timers created before V23 (no token) for this event. */
     boolean existsByProcessInstanceIdAndEventIdAndTokenIdIsNullAndStatusIn(
             String processInstanceId, String eventId, List<JobEntity.Status> statuses);

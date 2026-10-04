@@ -138,6 +138,23 @@
         }
       ]
     },
+    "onTimeout": {
+      "description": "Interrupting timeout boundary: if the step is not done within 'after' (ISO-8601 duration, PT1S to P365D), its work is cancelled and the flow continues at 'then'.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "after",
+        "then"
+      ],
+      "properties": {
+        "after": {
+          "$ref": "#/$defs/isoDuration"
+        },
+        "then": {
+          "$ref": "#/$defs/nodeRef"
+        }
+      }
+    },
     "loop": {
       "type": "object",
       "additionalProperties": false,
@@ -330,6 +347,15 @@
           "default": 2000,
           "description": "Delay between attempts."
         },
+        "fallback_models": {
+          "description": "Models tried in order when the model before is unavailable (rate limit, quota, outage); never on invalid output or low confidence. Each must be on the engine's allowed list.",
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/agentModel"
+          }
+        },
         "on_low_confidence": {
           "$ref": "#/$defs/nodeRef"
         },
@@ -338,6 +364,9 @@
         },
         "on_error": {
           "$ref": "#/$defs/onError"
+        },
+        "on_timeout": {
+          "$ref": "#/$defs/onTimeout"
         },
         "loop": {
           "$ref": "#/$defs/loop"
@@ -376,6 +405,9 @@
         },
         "on_error": {
           "$ref": "#/$defs/onError"
+        },
+        "on_timeout": {
+          "$ref": "#/$defs/onTimeout"
         },
         "loop": {
           "$ref": "#/$defs/loop"
@@ -587,8 +619,24 @@
         },
         "sla_hours": {
           "type": "number",
-          "minimum": 0,
-          "description": "Service-level target for monitoring; not enforced by the engine yet."
+          "exclusiveMinimum": 0,
+          "maximum": 8760,
+          "description": "Service level in hours: an open task past it is escalated in place (it stays open; escalate_to groups become candidates; TASK_SLA_BREACHED is emitted)."
+        },
+        "escalate_to": {
+          "description": "Groups added as candidates when the task misses sla_hours (requires sla_hours).",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        },
+        "on_timeout": {
+          "$ref": "#/$defs/onTimeout"
         },
         "loop": {
           "$ref": "#/$defs/loop"
@@ -651,18 +699,34 @@
         },
         "sla_hours": {
           "type": "number",
-          "minimum": 0,
-          "description": "Service-level target for monitoring; not enforced by the engine yet."
+          "exclusiveMinimum": 0,
+          "maximum": 8760,
+          "description": "Service level in hours: an open task past it is escalated in place (it stays open; escalate_to groups become candidates; TASK_SLA_BREACHED is emitted)."
         },
         "slaHours": {
           "type": "number",
-          "minimum": 0,
-          "deprecated": true,
+          "exclusiveMinimum": 0,
+          "maximum": 8760,
           "description": "Deprecated alias of sla_hours."
         },
         "requireDoubleSignOff": {
           "type": "boolean",
           "description": "Reserved; currently has no runtime effect."
+        },
+        "escalate_to": {
+          "description": "Groups added as candidates when the task misses sla_hours (requires sla_hours).",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        },
+        "on_timeout": {
+          "$ref": "#/$defs/onTimeout"
         },
         "loop": {
           "$ref": "#/$defs/loop"
