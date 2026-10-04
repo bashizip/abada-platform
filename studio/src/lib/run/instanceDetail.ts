@@ -85,6 +85,7 @@ const BOUNDARY_KIND: Record<string, string> = {
   on_invalid_output: 'INVALID_OUTPUT',
   on_error: 'ERROR',
   on_timeout: 'TIMEOUT',
+  outcome: 'OUTCOME',
 };
 
 /** Engine outcome recorded for each agent outcome-route label. */
@@ -105,7 +106,8 @@ const ROUTE_OUTCOME: Record<string, string> = {
 function outcomeRouteTaken(edge: WorkflowEdge, history: ActivityHistoryDTO[]): boolean {
   const label = edge.label ?? '';
   const fromSource = history.filter((event) => event.activityId === edge.source);
-  const code = label.startsWith('on_error:') ? label.slice('on_error:'.length).trim() : null;
+  const code = label.startsWith('on_error:') || label.startsWith('outcome:')
+    ? label.slice(label.indexOf(':') + 1).trim() : null;
   const kind = BOUNDARY_KIND[label.split(':')[0]];
   if (kind && fromSource.some((event) => event.eventType === 'BOUNDARY_TAKEN'
     && event.details?.kind === kind

@@ -11,6 +11,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { EngineAPI, EngineUserTaskDTO } from '@/api/engine';
+import { decisionError, decisionPayload, humanize, TaskOutcome } from './decision';
 import { ProjectAPI } from '@/api/projects';
 import { useToast } from '@/components/ToastContext';
 import {
@@ -56,6 +57,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const [schema, setSchema] = useState<FormSchema | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
+  const [comment, setComment] = useState('');
+  const [commentError, setCommentError] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const fetchTasks = useCallback(async () => {
@@ -100,6 +103,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   const selectTask = (task: EngineUserTaskDTO) => {
     setSelectedTask(task);
+    setComment('');
+    setCommentError(null);
     void loadForm(task);
   };
 
@@ -143,11 +148,29 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
         return;
       }
       variables = { ...formValues };
-    } else {
-      variables = { decision: 'APPROVED', notes: 'Completed from the Studio Task Inbox' };
     }
     void runAction(() => EngineAPI.completeTask(selectedTask.id, variables, selectedTask.projectId!), 'Task completed');
   };
+
+  const handleDecision = (outcome: TaskOutcome) => {
+    if (!selectedTask?.projectId) return;
+    if (schema) {
+      const errors = validateForm(schema, formValues);
+      setFormErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        showToast('error', 'Please fix the highlighted form fields');
+        return;
+      }
+    }
+    const problem = decisionError(outcome, comment);
+    setCommentError(problem);
+    if (problem) return;
+    const decision = decisionPayload(outcome, comment, formValues, schema?.fields.map((field) => field.id) ?? []);
+    void runAction(() => EngineAPI.decideTask(selectedTask.id, decision, selectedTask.projectId!),
+      `Decision recorded: ${humanize(outcome.name)}`);
+  };
+
+  const outcomes = selectedTask?.outcomes ?? [];
 
   const sortedTasks = useMemo(
     () => [...tasks].sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? '')),
@@ -329,7 +352,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                     errors={formErrors}
                     readOnly={selectedTask.status !== 'CLAIMED'}
                   />
-                  {selectedTask.status === 'CLAIMED' && (
+                  {selectedTask.status === 'CLAIMED' && outcomes.length === 0 && (
                     <div className="mt-4 flex justify-end">
                       <button
                         onClick={handleComplete}
@@ -347,32 +370,53 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   <ShieldAlert className="w-8 h-8 mb-2 opacity-40" />
                   <p className="text-sm">Could not load form <span className="font-mono text-[#E76F51]">{selectedTask.formKey}</span></p>
                 </div>
-              ) : (
+              ) : outcomes.length === 0 ? (
                 <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-5 shadow-warm-md">
-                  <h3 className="text-sm font-semibold text-[#F4A261] mb-3">Decision</h3>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleComplete}
-                      disabled={actionLoading || selectedTask.status !== 'CLAIMED'}
-                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!selectedTask.projectId) return;
-                        void runAction(
-                          () => EngineAPI.completeTask(selectedTask.id, { decision: 'REJECTED', notes: 'Rejected from the Studio Task Inbox' }, selectedTask.projectId!),
-                          'Task completed',
-                        );
-                      }}
-                      disabled={actionLoading || selectedTask.status !== 'CLAIMED'}
-                      className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-[#E76F51] hover:bg-[#f07b5d] text-[#1A1614] disabled:opacity-40 transition-all"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      Reject
-                    </button>
+                  <h3 className="text-sm font-semibold text-[#F4A261] mb-3">Complete</h3>
+                  <button
+                    onClick={handleComplete}
+                    disabled={actionLoading || selectedTask.status !== 'CLAIMED'}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Complete task
+                  </button>
+                </div>
+              ) : null}
+
+              {!formLoading && outcomes.length > 0 && (
+                <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-5 shadow-warm-md space-y-3">
+                  <h3 className="text-sm font-semibold text-[#F4A261]">Decision</h3>
+                  <label className="block text-xs text-[#A89F91]" htmlFor="review-comment">
+                    Comment
+                    {outcomes.some((outcome) => outcome.commentRequired) && (
+                      <span> · required to {outcomes.filter((outcome) => outcome.commentRequired)
+                        .map((outcome) => humanize(outcome.name)).join(' or ')}</span>
+                    )}
+                  </label>
+                  <textarea
+                    id="review-comment"
+                    value={comment}
+                    onChange={(event) => { setComment(event.target.value); setCommentError(null); }}
+                    disabled={selectedTask.status !== 'CLAIMED'}
+                    rows={3}
+                    placeholder="Explain your decision; the next step receives this comment."
+                    className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51] disabled:opacity-50"
+                  />
+                  {commentError && <p className="text-[11px] text-[#E76F51]">{commentError}</p>}
+                  <div className="flex flex-wrap gap-3">
+                    {outcomes.map((outcome) => (
+                      <button
+                        key={outcome.name}
+                        onClick={() => handleDecision(outcome)}
+                        disabled={actionLoading || selectedTask.status !== 'CLAIMED'}
+                        className={`flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg text-[#1A1614] disabled:opacity-40 transition-all capitalize ${
+                          outcome.commentRequired ? 'bg-[#E76F51] hover:bg-[#f07b5d]' : 'bg-[#2A9D8F] hover:bg-[#34bdae]'}`}
+                      >
+                        {outcome.commentRequired ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                        {humanize(outcome.name)}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}

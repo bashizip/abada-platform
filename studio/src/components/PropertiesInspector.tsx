@@ -1003,6 +1003,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               />
             </div>
 
+            {humanConfig.outcomes && Object.keys(humanConfig.outcomes).length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-xs text-[#A89F91] block">Review outcomes · edit in APL</span>
+                {Object.entries(humanConfig.outcomes).map(([name, outcome]) => (
+                  <p key={name} className="text-[11px] text-[#EAE3D9] font-mono">
+                    {name} → {outcome.next}{outcome.comment === 'required' ? ' · comment required' : ''}
+                  </p>
+                ))}
+              </div>
+            )}
+
           </div>
         )}
       </div>

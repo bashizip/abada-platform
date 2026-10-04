@@ -217,6 +217,26 @@ public class TaskController {
     }
 
     /**
+     * Submits a reviewer's decision on a task that declares outcomes.
+     */
+    @PostMapping("/{taskId}/decision")
+    public ResponseEntity<TaskActionResponse> decide(
+        @PathVariable String taskId,
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+        @RequestBody com.abada.engine.dto.TaskDecisionRequest decision
+    ) {
+        requireDefaultProject(taskId);
+        TaskActionResponse response = idempotencyService.execute(idempotencyKey, "task.decision",
+                decision.fingerprint(taskId, context.getUsername()),
+                new TypeReference<TaskActionResponse>() {}, () -> {
+                    engine.decideTask(taskId, context.getUsername(), context.getGroups(), decision.outcome(),
+                            decision.comment(), decision.variablesOrEmpty());
+                    return new TaskActionResponse("Decided", taskId);
+                });
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Marks a task as FAILED.
      * Any exceptions (e.g., task not found) are handled by the GlobalExceptionHandler.
      *

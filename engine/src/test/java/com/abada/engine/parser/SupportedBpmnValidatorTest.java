@@ -194,6 +194,27 @@ class SupportedBpmnValidatorTest {
                 .contains("user tasks and external"));
     }
 
+    @Test
+    void readsUserTaskOutcomesFromAbadaAttributes() {
+        String xml = boundaryModel("""
+                <bpmn:userTask id="review" abada:outcomes="approve, reject" abada:commentRequired="reject"/>
+                """, """
+                <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+                <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="end"/>
+                """);
+        assertEquals(java.util.List.of(
+                new com.abada.engine.core.model.OutcomeMeta("approve", false, null),
+                new com.abada.engine.core.model.OutcomeMeta("reject", true, null)),
+                parse(xml).getUserTask("review").getOutcomes());
+
+        String unknown = xml.replace("abada:commentRequired=\"reject\"", "abada:commentRequired=\"refuse\"");
+        assertTrue(assertThrows(RuntimeException.class, () -> parse(unknown)).getMessage()
+                .contains("not one of abada:outcomes"));
+        String single = xml.replace("approve, reject", "approve").replace(" abada:commentRequired=\"reject\"", "");
+        assertTrue(assertThrows(RuntimeException.class, () -> parse(single)).getMessage()
+                .contains("distinct outcomes"));
+    }
+
     private static String boundaryModel(String nodes, String flows) {
         return """
                 <?xml version="1.0" encoding="UTF-8"?>

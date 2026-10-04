@@ -3,6 +3,7 @@ import { AlertTriangle, Braces, CheckCircle2, ChevronRight, FlaskConical, Play, 
 import { WorkflowEdge, WorkflowFile, WorkflowNode } from '@/types';
 import { deriveDefaultPayload, NodeRunStatus, sleep } from '@/lib/run/liveRun';
 import { isOutcomeRouteEdge } from '@/lib/apl/parser';
+import { cleanEdgeLabel } from '@/lib/layout/edgeGeometry';
 import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
 import { AiProvidersAPI } from '@/api/aiProviders';
 import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
@@ -208,8 +209,23 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
     const resultVariable = pause.node.agentConfig?.resultVariable || `${pause.node.id}_result`;
     variables.current[resultVariable] = mockOutput.trim();
     setMessages((items) => [...items, `Mocked ${resultVariable} = ${mockOutput.trim()}.`]);
-    finishPause(pause.edges);
+    // An accepted result follows the normal successor; routes are explicit choices below.
+    finishPause(pause.edges.filter((edge) => !isOutcomeRouteEdge(edge)));
   };
+
+  /** Takes one route (a review outcome, on_error, on_timeout…) instead of the normal successor. */
+  const takeRoute = (edge: WorkflowEdge) => {
+    if (!pause) return;
+    setMessages((items) => [...items, `Took ${cleanEdgeLabel(edge.label)} at ${pause.node.title}.`]);
+    finishPause([edge]);
+  };
+
+  const routeButtons = (edges: WorkflowEdge[]) => edges.filter(isOutcomeRouteEdge).map((edge) => (
+    <button key={edge.id} onClick={() => takeRoute(edge)}
+      className="w-full py-1.5 rounded-lg border border-[#3A322E] bg-[#1A1614] text-[11px] text-[#EAE3D9] capitalize">
+      {cleanEdgeLabel(edge.label).replace(/_/g, ' ')} → {edge.target}
+    </button>
+  ));
 
   const continueGateway = () => {
     if (!pause || pause.kind !== 'gateway' || selectedEdges.length === 0) return;
@@ -244,6 +260,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
             <textarea aria-label="Mock agent output" value={mockOutput} onChange={(event) => setMockOutput(event.target.value)}
               placeholder="Example: HIGH" className="w-full h-20 rounded-lg bg-[#1A1614] border border-[#3A322E] p-2 font-mono text-[11px] outline-none" />
             <button onClick={continueAgent} disabled={!mockOutput.trim()} className="w-full py-2 rounded-lg bg-[#9D4EDD] text-xs font-semibold disabled:opacity-40">Use mocked output</button>
+            {routeButtons(pause.edges)}
           </div>
         )}
 
@@ -267,7 +284,11 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
         {pause?.kind === 'human' && (
           <div className="rounded-xl border border-[#E76F51]/40 bg-[#E76F51]/10 p-3 space-y-2">
             <p className="text-xs font-semibold">Simulated human task · {pause.node.title}</p>
-            <button onClick={() => finishPause(pause.edges)} className="w-full py-2 rounded-lg bg-[#E76F51] text-[#1A1614] text-xs font-semibold">Complete simulated task</button>
+            {pause.edges.some((edge) => !isOutcomeRouteEdge(edge)) && (
+              <button onClick={() => finishPause(pause.edges.filter((edge) => !isOutcomeRouteEdge(edge)))}
+                className="w-full py-2 rounded-lg bg-[#E76F51] text-[#1A1614] text-xs font-semibold">Complete simulated task</button>
+            )}
+            {routeButtons(pause.edges)}
           </div>
         )}
 

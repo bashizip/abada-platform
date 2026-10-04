@@ -131,7 +131,11 @@ public class ParsedProcessDefinition implements Serializable {
     public BoundaryMeta boundaryFor(String activityId, BoundaryMeta.Kind kind, String code) {
         for (BoundaryMeta boundary : boundariesOf(activityId)) {
             if (boundary.kind() != kind) continue;
-            if (kind != BoundaryMeta.Kind.ERROR || boundary.catches(code)) return boundary;
+            if (kind == BoundaryMeta.Kind.OUTCOME) {
+                if (boundary.code().equals(code)) return boundary;
+            } else if (kind != BoundaryMeta.Kind.ERROR || boundary.catches(code)) {
+                return boundary;
+            }
         }
         return null;
     }

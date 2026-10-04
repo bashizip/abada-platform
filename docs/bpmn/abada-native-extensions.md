@@ -106,3 +106,26 @@ boundary events catch a worker-reported error code (or every error, plus the
 last failed attempt, when they declare no code). Both are part of the
 supported subset on user tasks and external service tasks; see
 [bpmn-support.md](../reference/bpmn-support.md).
+
+## Review outcomes (`abada:outcomes`, `abada:commentRequired`)
+
+A user task may declare the decisions its reviewer chooses from:
+
+```xml
+<bpmn:userTask id="review" name="Review the draft"
+    camunda:candidateGroups="reviewers"
+    abada:outcomes="approve,reject" abada:commentRequired="reject"/>
+<bpmn:exclusiveGateway id="decided" default="toPublish"/>
+<bpmn:sequenceFlow id="toDraft" sourceRef="decided" targetRef="draft">
+  <bpmn:conditionExpression>${review_outcome == 'reject'}</bpmn:conditionExpression>
+</bpmn:sequenceFlow>
+```
+
+The task is then finished with a decision (`POST .../tasks/{taskId}/decision`)
+instead of a plain completion. The engine accepts only a declared outcome,
+requires a non-blank comment for the outcomes listed in
+`abada:commentRequired`, and writes `<id>_outcome` and `<id>_comment`; the
+exclusive gateway after the task routes on the outcome. `abada:outcomes` lists
+2–6 distinct names (lowercase letters, digits, underscores, starting with a
+letter). The APL equivalent is `outcomes` (APL specification §2.7).
+

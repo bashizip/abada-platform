@@ -83,6 +83,21 @@ responses carry the same warnings: `compatibilityReport.issues` from
 deploy (omitted when empty). Codes and the warning policy are in
 [the APL specification §6.1](apl-specification.md#61-the-apl-contract-endpoints).
 
+## Task decisions
+
+A task whose definition declares outcomes (APL `outcomes`, BPMN
+`abada:outcomes`) lists them on its detail as `outcomes: [{name,
+commentRequired}]` (empty for an ordinary task). It is finished with
+`POST /api/v1/projects/{projectId}/tasks/{taskId}/decision` (project
+operators and viewers who may complete the task) or
+`POST /api/v1/tasks/{taskId}/decision` (default project), with the body
+`TaskDecisionRequest { outcome, comment?, variables? }`. The response is a
+`TaskActionResponse` with status `Decided`. `400` for an undeclared outcome, a
+missing required comment, a comment over 4 000 characters, variables that set
+`<id>_outcome`/`<id>_comment`, or a task without outcomes; `/complete` on a
+task with outcomes is `400` too. `Idempotency-Key` is honoured; its fingerprint
+uses a digest of the comment, never the text.
+
 ## Incidents
 
 `GET /api/v1/projects/{projectId}/incidents` lists a project's incidents,

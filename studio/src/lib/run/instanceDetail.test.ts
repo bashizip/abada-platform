@@ -173,6 +173,25 @@ describe('deriveInstancePath outcome routes', () => {
     expect(otherCode.activePathEdgeIds).not.toContain('analyze-review-error');
   });
 
+  it('lights the review outcome the reviewer chose', () => {
+    const review = workflow(
+      [node('start', 'event', 'start'), node('review', 'human'), node('done', 'event', 'end'), node('draft', 'agent')],
+      [
+        { id: 'start-review', source: 'start', target: 'review' },
+        { id: 'review-done', source: 'review', target: 'done', label: 'outcome: approve' },
+        { id: 'review-draft', source: 'review', target: 'draft', label: 'outcome: reject' },
+      ],
+    );
+    const decided: ActivityHistoryDTO = {
+      ...completed('review'),
+      eventType: 'BOUNDARY_TAKEN',
+      details: { kind: 'OUTCOME', code: 'reject', routedTo: 'draft' },
+    };
+    const path = deriveInstancePath(review, instance('draft'), [activity('draft')], [completed('start'), decided]);
+    expect(path.activePathEdgeIds).toContain('review-draft');
+    expect(path.activePathEdgeIds).not.toContain('review-done');
+  });
+
   it('lights the boundary the engine recorded, matching its kind and code', () => {
     const withTimeout = workflow(model.nodes, [
       ...model.edges,

@@ -18,6 +18,8 @@ public class TaskMeta implements Serializable {
     private Double slaHours;
     /** Groups added as candidates when the task is escalated. */
     private List<String> escalateTo = List.of();
+    /** Decisions a reviewer chooses from; empty for an ordinary task. */
+    private List<OutcomeMeta> outcomes = List.of();
 
     // Future fields (e.g., listeners, multi-instance, conditions) can be added here.
 
@@ -116,6 +118,19 @@ public class TaskMeta implements Serializable {
 
     public void setEscalateTo(List<String> escalateTo) {
         this.escalateTo = escalateTo == null ? List.of() : List.copyOf(escalateTo);
+    }
+
+    public List<OutcomeMeta> getOutcomes() {
+        return outcomes;
+    }
+
+    public void setOutcomes(List<OutcomeMeta> outcomes) {
+        this.outcomes = outcomes == null ? List.of() : List.copyOf(outcomes);
+    }
+
+    /** The declared outcome with this name, or null. */
+    public OutcomeMeta getOutcome(String name) {
+        return outcomes.stream().filter(outcome -> outcome.name().equals(name)).findFirst().orElse(null);
     }
 
     public String getDueDate() {

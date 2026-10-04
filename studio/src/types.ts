@@ -6,6 +6,12 @@ export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive' | 'event';
 /** A node's `on_error` route: one target, or targets per BPMN error code (a rule without code catches the rest). */
 export type OnErrorRoute = string | { code?: string; then: string }[];
 
+/** One reviewer decision of a human task: where it leads and whether it needs a comment. */
+export interface ReviewOutcome {
+  next: string;
+  comment?: 'required' | 'optional';
+}
+
 /** An interrupting timeout boundary (`on_timeout`): after the ISO-8601 duration the step's work is cancelled. */
 export interface OnTimeoutRoute {
   after: string;
@@ -78,6 +84,8 @@ export interface HumanConfig {
   onError?: OnErrorRoute;
   /** Where the flow continues when the task is not done in time (`on_timeout`). */
   onTimeout?: OnTimeoutRoute;
+  /** Decisions a reviewer chooses from (`outcomes`); each has its own exit and comment rule. */
+  outcomes?: Record<string, ReviewOutcome>;
   /** Optional form key for task-form rendering (BPMN `camunda:formKey`). */
   formKey?: string;
   formFields: string[];

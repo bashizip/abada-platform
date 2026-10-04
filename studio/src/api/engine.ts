@@ -88,6 +88,8 @@ export interface EngineUserTaskDTO {
   processDefinitionName?: string;
   projectId?: string;
   variables?: Record<string, unknown>;
+  /** Decisions a reviewer chooses from; empty for an ordinary task. */
+  outcomes?: { name: string; commentRequired: boolean }[];
 }
 
 export interface TaskOperationResultDTO {
@@ -500,7 +502,33 @@ export class EngineAPI {
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
     });
-    if (!res.ok) throw new Error(`Failed to complete task: ${res.statusText}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Failed to complete task: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Submits a reviewer's decision on a task that declares outcomes. The engine
+   * checks the outcome and any required comment.
+   */
+  static async decideTask(
+    taskId: string,
+    decision: { outcome: string; comment?: string; variables?: Record<string, unknown> },
+    projectId?: string,
+  ): Promise<TaskOperationResultDTO> {
+    const path = projectId ? `/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/decision`
+      : `/tasks/${encodeURIComponent(taskId)}/decision`;
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(decision)
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Failed to submit the decision: ${res.statusText}`);
+    }
     return res.json();
   }
 

@@ -245,6 +245,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           escalateTo: aplNode.escalate_to,
           onError: aplNode.on_error,
           onTimeout: aplNode.on_timeout,
+          outcomes: aplNode.outcomes,
           formKey: 'formKey' in aplNode ? aplNode.formKey : undefined,
           formFields: [],
         };
@@ -509,7 +510,11 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         on_error: node.humanConfig?.onError || undefined,
         on_timeout: node.humanConfig?.onTimeout || undefined,
         formKey: node.humanConfig?.formKey,
-        next: getNextNode(node.id, node.type),
+        // With outcomes every exit is an outcome's `next`.
+        outcomes: node.humanConfig?.outcomes && Object.keys(node.humanConfig.outcomes).length
+          ? node.humanConfig.outcomes : undefined,
+        next: node.humanConfig?.outcomes && Object.keys(node.humanConfig.outcomes).length
+          ? undefined : getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'gateway') {
       const outEdges = wf.edges.filter(e => e.source === node.id);
@@ -677,16 +682,21 @@ function metadataExtras(metadata: APLDocument['metadata']): Record<string, unkno
 
 /**
  * Route edges are labelled `on_*`: boundary routes (on_low_confidence,
- * on_invalid_output, on_error, on_timeout) and the loop's on_exhausted route.
+ * on_invalid_output, on_error, on_timeout), a review's `outcome: <name>`
+ * exits and the loop's on_exhausted route.
  */
 export const isOutcomeRouteEdge = (edge: { label?: string }): boolean =>
-  typeof edge.label === 'string' && edge.label.startsWith('on_');
+  typeof edge.label === 'string' && (edge.label.startsWith('on_') || edge.label.startsWith('outcome:'));
 
 function outcomeRouteEdges(aplNode: APLNode): WorkflowEdge[] {
   const routes: { target: string; label: string }[] = [];
   const node = aplNode as {
     on_low_confidence?: string; on_invalid_output?: string; on_error?: APLOnError; on_timeout?: { then?: string };
+    outcomes?: Record<string, { next?: string }>;
   };
+  Object.entries(node.outcomes ?? {}).forEach(([name, outcome]) => {
+    if (outcome?.next) routes.push({ target: outcome.next, label: `outcome: ${name}` });
+  });
   if (node.on_low_confidence) routes.push({ target: node.on_low_confidence, label: 'on_low_confidence' });
   if (node.on_invalid_output) routes.push({ target: node.on_invalid_output, label: 'on_invalid_output' });
   if (typeof node.on_error === 'string' && node.on_error) {
