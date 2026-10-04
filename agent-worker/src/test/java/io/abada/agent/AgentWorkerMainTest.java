@@ -111,6 +111,19 @@ class AgentWorkerMainTest {
     }
 
     @Test
+    void theToolAllowListNamesServersSoADeploymentCannotWidenIt() {
+        Set<String> allowed = Set.of("crm", "web_search", "billing/charge");
+        assertTrue(AgentWorkerMain.toolAllowed(allowed, "crm/get_customer"));
+        assertTrue(AgentWorkerMain.toolAllowed(allowed, "crm/refund"));
+        assertTrue(AgentWorkerMain.toolAllowed(allowed, "billing/charge"));
+        assertTrue(AgentWorkerMain.toolAllowed(allowed, "web_search"));
+        assertTrue(!AgentWorkerMain.toolAllowed(allowed, "billing/refund"));
+        assertTrue(!AgentWorkerMain.toolAllowed(allowed, "erp/get_order"));
+        assertTrue(!AgentWorkerMain.toolAllowed(allowed, "web_fetch"));
+        assertTrue(!AgentWorkerMain.toolAllowed(Set.of(), "crm/get_customer"));
+    }
+
+    @Test
     void structuredOutputModesParse() {
         assertEquals(WorkerConfig.StructuredOutput.JSON_OBJECT, WorkerConfig.StructuredOutput.parse(null));
         assertEquals(WorkerConfig.StructuredOutput.OFF, WorkerConfig.StructuredOutput.parse("off"));

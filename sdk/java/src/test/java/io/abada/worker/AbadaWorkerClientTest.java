@@ -143,6 +143,57 @@ class AbadaWorkerClientTest {
     }
 
     @Test
+    void decodesFrozenToolBindingsAndTightenedPolicies() {
+        server.removeContext("/api/v1/external-tasks");
+        server.createContext("/api/v1/external-tasks", request -> {
+            byte[] response = ("[{\"id\":\"task-1\",\"topicName\":\"abada:agent\",\"variables\":{},"
+                    + "\"protocolVersion\":\"1\",\"agentWork\":{\"profileVersion\":\"abada.agent/v1\","
+                    + "\"model\":\"model-a\",\"prompt\":\"work\",\"inputs\":{},\"resultVariable\":\"result\","
+                    + "\"outputSchema\":{},\"tools\":[\"crm/get_customer\",\"crm/refund\"],"
+                    + "\"toolPolicies\":{\"crm/refund\":\"approval_required\"},"
+                    + "\"toolBindings\":[{\"server\":\"crm\",\"tool\":\"refund\",\"policy\":\"approval_required\","
+                    + "\"idempotency\":\"key\",\"approvers\":[\"finance\"],\"url\":\"https://crm/mcp\","
+                    + "\"transport\":\"streamable-http\",\"credential\":\"crm-token\",\"resourceId\":\"r1\","
+                    + "\"resourceRevision\":2,\"futureField\":1}]}}]")
+                    .getBytes(StandardCharsets.UTF_8);
+            request.getResponseHeaders().add("X-Abada-Worker-Protocol-Version", "1");
+            request.sendResponseHeaders(200, response.length);
+            request.getResponseBody().write(response);
+            request.close();
+        });
+        AgentWorkDescriptor work = client.fetchAndLock("worker", List.of("abada:agent"),
+                Duration.ofSeconds(30), 1, RequestOptions.defaults()).getFirst().agentWork();
+        assertEquals("approval_required", work.toolPolicies().get("crm/refund"));
+        ToolBinding binding = work.toolBindings().getFirst();
+        assertEquals("crm/refund", binding.ref());
+        assertEquals("key", binding.idempotency());
+        assertEquals(List.of("finance"), binding.approvers());
+        assertEquals("crm-token", binding.credential());
+        assertEquals(2L, binding.resourceRevision());
+    }
+
+    @Test
+    void fetchesAToolCredentialForTheLockedTaskAndNeverPrintsTheSecret() {
+        AtomicReference<String> uri = new AtomicReference<>();
+        server.removeContext("/api/v1/external-tasks");
+        server.createContext("/api/v1/external-tasks", request -> {
+            uri.set(request.getRequestURI().toString());
+            byte[] response = "{\"server\":\"crm\",\"credential\":\"crm-token\",\"secret\":\"s3cr3t\",\"x\":1}"
+                    .getBytes(StandardCharsets.UTF_8);
+            request.getResponseHeaders().add("Content-Type", "application/json");
+            request.sendResponseHeaders(200, response.length);
+            request.getResponseBody().write(response);
+            request.close();
+        });
+
+        ToolCredential credential = client.toolCredential("task 1", "worker-1", "crm");
+
+        assertEquals("/api/v1/external-tasks/task%201/tool-credentials/crm?workerId=worker-1", uri.get());
+        assertEquals("s3cr3t", credential.secret());
+        assertTrue(!credential.toString().contains("s3cr3t"));
+    }
+
+    @Test
     void reportsADeferralSoTheEngineKeepsTheAttemptBudget() {
         client.fail("task-3", "worker-1", "rate limited", "AgentQuotaExceededException", 3,
                 Duration.ofSeconds(30), null, true, RequestOptions.defaults());

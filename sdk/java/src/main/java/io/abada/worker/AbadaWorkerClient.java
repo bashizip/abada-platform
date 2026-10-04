@@ -162,6 +162,26 @@ public final class AbadaWorkerClient {
         }
     }
 
+    /**
+     * The credential of a tool server the locked task is bound to. The engine
+     * issues it only to the worker holding the task's lease, so fetch it after
+     * {@code fetchAndLock} and drop it when the task ends. Callers must never
+     * log the secret.
+     */
+    public ToolCredential toolCredential(String taskId, String workerId, String server) {
+        String path = "/v1/external-tasks/" + segment(taskId) + "/tool-credentials/" + segment(server)
+                + "?workerId=" + segment(workerId);
+        HttpResponse<String> response = sendEngine(path, "GET", null);
+        try {
+            return objectMapper.readerFor(ToolCredential.class)
+                    .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(response.body());
+        } catch (IOException exception) {
+            throw new WorkerProtocolException(response.statusCode(), "INVALID_RESPONSE",
+                    "Could not decode tool credential response");
+        }
+    }
+
     /** Returns the worker's registered global capabilities. */
     public String capabilities() {
         return sendEngine("/v1/workers/me", "GET", null).body();
