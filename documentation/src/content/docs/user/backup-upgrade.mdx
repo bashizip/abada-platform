@@ -58,4 +58,9 @@ backup.
 deployments must give every cycle a limit; processes already deployed keep
 running. Before going back to rc.8, cancel instances that have an open
 incident: rc.8 does not know them and would leave those instances stopped.
+**1.1.0-rc.1 (migration V26).** Timeouts, service levels and model fallback.
+Upgrade the engine and the agent worker together. `sla_hours` is now
+enforced, and a task whose work fails for good opens an incident. Going back
+to rc.8 needs the two SQL clean-ups listed in the release notes (pending
+timeout/SLA jobs, retired external tasks).
 Details: `docs/operations/upgrading.md` in the repository.

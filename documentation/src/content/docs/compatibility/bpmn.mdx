@@ -55,7 +55,11 @@ least two competing catch children: the first child to fire advances the
 instance and every sibling wait state (subscription, timer job and token) is
 cancelled atomically in the same transaction.
 
-Unsupported constructs — such as subprocesses, boundary events,
+Interrupting timer and error boundary events are supported on user tasks and
+external service tasks, with the same runtime as APL `on_timeout` and
+`on_error`; a user task may declare `abada:slaHours` and `abada:escalateTo`.
+Unsupported constructs — such as subprocesses, other boundary events
+(non-interrupting, message, signal, escalation, compensation),
 multi-instance activities, compensation, complex gateways, cyclic timers,
 external DMN 1.3 decision files and CMMN — are **rejected during deployment**
 rather than treated as ambiguous pass-through nodes. A business rule task is
@@ -128,6 +132,10 @@ behaviors. Each one is covered by an engine test listed in the repository's
   may run (`abada:maxIterations`); past the limit the process takes its
   `abada:onExhausted` route or opens an incident. Unbounded cycles and
   loop or multi-instance markers are rejected at deployment.
+- **No silent stalls.** Work that fails for good takes its error route or
+  opens a retryable incident; a timeout boundary cancels work that takes too
+  long; a missed service level escalates the task instead of being a passive
+  hint.
 
 Abada does not claim full BPMN 2.0 conformance: the supported subset is
 explicit, and everything outside it is rejected.

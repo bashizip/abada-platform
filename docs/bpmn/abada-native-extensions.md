@@ -82,3 +82,27 @@ times it may run per pass:
 `standardLoopCharacteristics` and `multiInstanceLoopCharacteristics` are
 rejected; model the repetition as a bounded cycle.
 
+
+## Task service level (`abada:slaHours`, `abada:escalateTo`)
+
+A user task may declare a service level in hours and the groups to add when it
+is missed:
+
+```xml
+<bpmn:userTask id="review" name="Review the draft"
+    camunda:candidateGroups="reviewers"
+    abada:slaHours="4" abada:escalateTo="managers, directors"/>
+```
+
+When the hours pass with the task still open, the engine escalates it in
+place: the task stays open and assigned as it was, the listed groups become
+candidates too, and `TASK_SLA_BREACHED` is recorded in history and the outbox.
+`abada:slaHours` must be a number between 0 (exclusive) and 8760;
+`abada:escalateTo` requires it. The APL equivalent is `sla_hours` and
+`escalate_to` (APL specification §2.6).
+
+To stop the task instead, attach an interrupting timer boundary event; error
+boundary events catch a worker-reported error code (or every error, plus the
+last failed attempt, when they declare no code). Both are part of the
+supported subset on user tasks and external service tasks; see
+[bpmn-support.md](../reference/bpmn-support.md).

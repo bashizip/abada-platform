@@ -78,10 +78,18 @@ ABADA_LLM_GEMINI_API_KEY=...
   duplicate transitions; transient failures return tasks to the pool; retries
   are seeded from the APL `max_attempts`; suspension and cancellation reject
   late completion atomically. Technical failures consume a durable retry
-  budget; zero retries left creates an incident.
-- **Idempotency.** Completion and failure use task ID + attempt ordinal +
-  operation as the idempotency key, so re-sent reports deduplicate and a
-  stored failure never shadows a later completion of the same attempt.
+  budget; with zero retries left the step takes its `on_error` route or
+  opens a `WORK_FAILED` incident.
+- **Rate limits.** HTTP 429/quota, 408, 5xx, timeouts and unreachable
+  providers make a model *unavailable*: the worker tries the node's
+  `fallback_models` in order, and when none can run it defers the attempt
+  (the provider's `Retry-After`, then a growing delay capped at 15 minutes)
+  without spending `max_attempts`. After 12 deferrals the next one counts as a
+  failed attempt. Invalid output or low confidence never switch the model.
+- **Idempotency.** Completion and failure use task ID + lease + operation as
+  the idempotency key, so re-sent reports deduplicate, a deferral of the same
+  attempt is a new request, and a stored failure never shadows a later
+  completion.
 
 <Aside type="caution" title="External effects are at-least-once">
   A model call or a downstream tool effect cannot be rolled back by

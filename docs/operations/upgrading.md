@@ -46,6 +46,21 @@ Check `GET /api/v1/projects/{projectId}/incidents?open=true` after the upgrade:
 an in-flight message wait without a `correlationKey` variable now opens a
 `MISSING_CORRELATION_KEY` incident instead of waiting silently.
 
+### Upgrading to 1.1.0-rc.1 (V26 boundaries)
+
+V26 adds job kinds (`job_kind`, `boundary_id`), `tasks.due_at` and
+`escalated_at`, and `external_tasks.model_override` and `deferrals`. It
+rewrites no rows. Upgrade the engine and the agent worker together: workers
+built on an earlier SDK cannot read agent tasks whose nodes declare
+`fallback_models`. After the upgrade:
+
+- `sla_hours` is enforced. Check deployed documents that used it as a
+  monitoring hint; a task entered after the upgrade is escalated when it
+  passes.
+- A last failed attempt with no `on_error` opens a `WORK_FAILED` incident.
+  Jobs that failed before the upgrade stay in the failed-jobs list and are
+  retried as before.
+
 Process definitions are immutable after deployment. Redeploying changed BPMN
 under the same process key creates a new version. New instances use the latest
 version, while existing instances retain their original deployment ID.
@@ -59,5 +74,7 @@ rc.8 ignores the new table and columns. Instances advanced by 1.1.0-rc.1 keep
 running on rc.8 with rc.8's join semantics; upgrading again rebuilds the token
 rows of any instance rc.8 advanced. rc.8 also ignores the V24 and V25
 objects, but it does not know bounded loops or incidents: cancel instances
-with open incidents before rolling back. Rolling back further, or past a
+with open incidents before rolling back. After V26, also cancel pending
+timeout and SLA jobs and mark retired external tasks finished, as the
+1.1.0-rc.1 release notes show, so rc.8 never fires them as timers. Rolling back further, or past a
 release whose notes do not state this, requires the pre-upgrade backup.
