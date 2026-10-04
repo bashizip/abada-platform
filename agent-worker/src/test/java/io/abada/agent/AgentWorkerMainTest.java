@@ -268,6 +268,53 @@ class AgentWorkerMainTest {
     }
 
     @Test
+    void http429CarriesTheProvidersRetryAfter() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/openai/chat/completions", exchange -> {
+            byte[] response = "{\"error\":{\"message\":\"slow down\"}}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Retry-After", "37");
+            exchange.sendResponseHeaders(429, response.length);
+            try (var output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        URI baseUrl = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        var gateway = new GoogleGeminiGateway(config(baseUrl));
+
+        var error = assertThrows(AgentGateway.AgentQuotaExceededException.class,
+                () -> gateway.execute(descriptor(80.0, "gemini-3.6-flash"), Map.of()));
+        assertEquals(java.time.Duration.ofSeconds(37), error.retryAfter());
+    }
+
+    @Test
+    void http503IsAnAvailabilityErrorNotAFailedCall() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/openai/chat/completions", exchange -> {
+            byte[] response = "{\"error\":{\"message\":\"overloaded\"}}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(503, response.length);
+            try (var output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        URI baseUrl = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        var gateway = new GoogleGeminiGateway(config(baseUrl));
+
+        var error = assertThrows(AgentGateway.AgentUnavailableException.class,
+                () -> gateway.execute(descriptor(80.0, "gemini-3.6-flash"), Map.of()));
+        assertTrue(error.getMessage().contains("HTTP 503"));
+        assertEquals(null, error.retryAfter());
+    }
+
+    @Test
+    void retryAfterAcceptsSecondsAndHttpDatesAndIsCapped() {
+        java.time.Instant now = java.time.Instant.parse("2026-10-04T10:00:00Z");
+        assertEquals(java.time.Duration.ofSeconds(120), AbstractAgentGateway.retryAfter("120", now));
+        assertEquals(java.time.Duration.ofSeconds(90),
+                AbstractAgentGateway.retryAfter("Sun, 4 Oct 2026 10:01:30 GMT", now));
+        assertEquals(AbstractAgentGateway.MAX_RETRY_AFTER, AbstractAgentGateway.retryAfter("999999", now));
+        assertEquals(null, AbstractAgentGateway.retryAfter("soon", now));
+        assertEquals(null, AbstractAgentGateway.retryAfter(null, now));
+    }
+
+    @Test
     void unreachableEndpointThrowsAgentUnreachableException() throws Exception {
         int closedPort;
         try (var socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {

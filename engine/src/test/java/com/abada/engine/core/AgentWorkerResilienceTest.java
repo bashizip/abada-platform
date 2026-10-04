@@ -218,24 +218,20 @@ class AgentWorkerResilienceTest {
 
             engine.cancelProcessInstance(instanceId, "lead rejected upstream");
 
+            // Cancelling the instance retires its in-flight work in the same
+            // transaction: the late completion finds no live lock to act on.
             assertThatThrownBy(() -> commands.complete(taskId, "worker-1", Map.of("notify_result", Map.of("handled", true, "_confidence", 91))))
                     .isInstanceOf(ProcessEngineException.class)
-                    .hasMessageContaining("terminal state");
-            assertThat(taskState(context, taskId).getStatus()).isEqualTo(ExternalTaskEntity.Status.LOCKED);
+                    .hasMessageContaining("not locked");
+            assertThat(taskState(context, taskId).getStatus()).isEqualTo(ExternalTaskEntity.Status.CANCELLED);
             assertThat(engine.getProcessInstanceById(instanceId).getStatus()).isEqualTo(ProcessStatus.CANCELLED);
             assertThat(completedHistoryCount(context, instanceId)).isZero();
 
-            // Even after the lease passes to a new worker, a completion can
-            // never resurrect the cancelled instance: rejection stays atomic
-            // and idempotent, and the terminal state is preserved.
+            // Retired work is never handed to another worker, even after the
+            // lease time passes, so nothing can resurrect the cancelled instance.
             expireLease(context, taskId);
-            var reclaimed = commands.fetchAndLock(new FetchAndLockRequest(
-                    "worker-2", List.of("abada:agent"), 10_000L));
-            assertThat(reclaimed).singleElement();
-            assertThatThrownBy(() -> commands.complete(reclaimed.getFirst().id(), "worker-2",
-                    Map.of("notify_result", Map.of("handled", true, "_confidence", 91))))
-                    .isInstanceOf(ProcessEngineException.class)
-                    .hasMessageContaining("terminal state");
+            assertThat(commands.fetchAndLock(new FetchAndLockRequest(
+                    "worker-2", List.of("abada:agent"), 10_000L))).isEmpty();
             assertThat(engine.getProcessInstanceById(instanceId).getStatus()).isEqualTo(ProcessStatus.CANCELLED);
             assertThat(completedHistoryCount(context, instanceId)).isZero();
         }
