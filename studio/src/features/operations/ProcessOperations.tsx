@@ -25,6 +25,7 @@ import {
 } from '@/api/engine';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { WorkerHealthPanel } from './WorkerHealthPanel';
+import { IncidentsPanel } from './IncidentsPanel';
 import {
   InstanceStatus,
   STATUS_META,
@@ -112,9 +113,11 @@ type RangeFilter = 'ALL' | '24h' | '7d' | '30d';
 
 export const ProcessOperations: React.FC<{
   projectId?: string;
+  /** Project OPERATOR or OWNER: may retry incidents (the engine enforces it too). */
+  canRetryIncidents?: boolean;
   onOpenInstance?: (instance: ProcessInstanceDTO) => void;
   onOpenDetail?: (instance: ProcessInstanceDTO) => void;
-}> = ({ projectId, onOpenInstance, onOpenDetail }) => {
+}> = ({ projectId, canRetryIncidents = false, onOpenInstance, onOpenDetail }) => {
   const [instances, setInstances] = useState<ProcessInstanceDTO[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -138,6 +141,7 @@ export const ProcessOperations: React.FC<{
   const [variablesLoading, setVariablesLoading] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [openIncidents, setOpenIncidents] = useState(0);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   /** Monotonic request id so a slow, stale response can never overwrite a newer one. */
@@ -410,10 +414,12 @@ export const ProcessOperations: React.FC<{
         <KpiCard
           icon={<AlertTriangle className="h-4 w-4 text-[#E76F51]" />}
           label="Needs Intervention"
-          value={String(kpis.failed)}
-          hint={kpis.failed > 0 ? 'Failed instances require attention' : 'No failed executions'}
+          value={String(kpis.failed + openIncidents)}
+          hint={kpis.failed + openIncidents > 0
+            ? `${kpis.failed} failed ${kpis.failed === 1 ? 'instance' : 'instances'} · ${openIncidents} open ${openIncidents === 1 ? 'incident' : 'incidents'}`
+            : 'No failed executions or open incidents'}
           accent="bg-[#E76F51]"
-          alert={kpis.failed > 0}
+          alert={kpis.failed + openIncidents > 0}
         />
         <KpiCard
           icon={<Gauge className="h-4 w-4 text-[#9D4EDD]" />}
@@ -426,6 +432,20 @@ export const ProcessOperations: React.FC<{
 
       {/* ===== Agent worker liveness ===== */}
       <WorkerHealthPanel projectId={projectId} />
+
+      {/* ===== Open incidents ===== */}
+      <IncidentsPanel
+        projectId={projectId}
+        canRetry={canRetryIncidents}
+        onCountChange={setOpenIncidents}
+        onRetried={(incident) => {
+          setToast(`Retried ${humanize(incident.activityId)}`);
+          if (projectId) {
+            void fetchPage(projectId, 0, false, true);
+            void fetchKpis(projectId);
+          }
+        }}
+      />
 
       {/* ===== Filter toolbar ===== */}
       <div className="flex shrink-0 flex-wrap items-center gap-3 px-6 pt-4">

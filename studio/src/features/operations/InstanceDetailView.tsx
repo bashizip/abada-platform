@@ -31,6 +31,8 @@ import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
+import { IncidentsPanel } from '@/features/operations/IncidentsPanel';
+import { agentStepModel } from '@/lib/run/incidents';
 import {
   deriveBusinessLabel,
   formatDuration,
@@ -55,6 +57,8 @@ import { WorkflowFile } from '@/types';
 interface InstanceDetailViewProps {
   instanceId: string;
   projectId?: string;
+  /** Project OPERATOR or OWNER: may retry incidents (the engine enforces it too). */
+  canRetryIncidents?: boolean;
   initialInstance: ProcessInstanceDTO;
   onBack: () => void;
   onOpenCanvas: (instance: ProcessInstanceDTO) => void;
@@ -65,6 +69,7 @@ type InspectorTab = 'telemetry' | 'variables' | 'audit';
 export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   instanceId,
   projectId,
+  canRetryIncidents = false,
   initialInstance,
   onBack,
   onOpenCanvas,
@@ -387,6 +392,20 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* ===== Open incidents of this instance ===== */}
+      <IncidentsPanel
+        projectId={projectId}
+        instanceId={instanceId}
+        canRetry={canRetryIncidents}
+        modelFor={workflow ? (incident) => agentStepModel(workflow, incident.activityId, history) : undefined}
+        hideWhenEmpty
+        onRetried={(incident) => {
+          setToast(`Retried ${humanize(incident.activityId)}`);
+          void load(false);
+          void loadVariablesAndJobs();
+        }}
+      />
 
       {/* ===== Split workspace ===== */}
       <div className="relative flex min-h-0 flex-1">

@@ -48,6 +48,7 @@ import { isEditableTarget, undoShortcut } from '@/lib/history/shortcuts';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
 import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
+import { canRetryIncidents } from '@/lib/run/incidents';
 import { LEAD_TRIAGE_EXAMPLES, STARTER_PROCESS_KEY } from '@/lib/starter/leadTriage';
 import { runSequentialInsightEvidence } from '@/lib/starter/insightEvidence';
 
@@ -534,6 +535,7 @@ export default function App() {
           <InstanceDetailView
             instanceId={detailInstance.id}
             projectId={activeProject?.id}
+            canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
             initialInstance={detailInstance}
             onBack={() => {
               setDetailInstance(null);
@@ -770,6 +772,7 @@ export default function App() {
         {currentView === 'operations' && (
           <ProcessOperations
             projectId={activeProject?.id}
+            canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
             onOpenInstance={(instance) => {
               setCurrentView('designer');
               void openLiveInstance(instance);
