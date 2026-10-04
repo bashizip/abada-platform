@@ -26,7 +26,11 @@ public final class AbadaWorkerClient {
     public AbadaWorkerClient(URI engineBaseUri, Supplier<String> bearerToken) {
         this(engineBaseUri, bearerToken, HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(10)).build(),
-                JsonMapper.builder().addModule(new JavaTimeModule()).build());
+                // Fields added by newer engines are ignored, so this client keeps
+                // working against them (protocol v1 only ever adds fields).
+                JsonMapper.builder().addModule(new JavaTimeModule())
+                        .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                        .build());
     }
 
     AbadaWorkerClient(URI engineBaseUri, Supplier<String> bearerToken, HttpClient httpClient,
@@ -97,6 +101,17 @@ public final class AbadaWorkerClient {
 
     public void fail(String taskId, String workerId, String message, String details, Integer retries,
             Duration retryTimeout, AgentAttemptMetadata agent, RequestOptions options) {
+        fail(taskId, workerId, message, details, retries, retryTimeout, agent, false, options);
+    }
+
+    /**
+     * Reports a failed attempt. With {@code deferred} the attempt never ran
+     * because every model was unavailable (rate limit, quota, outage): the
+     * engine keeps the attempt budget and retries after at least
+     * {@code retryTimeout}, with a growing, capped delay.
+     */
+    public void fail(String taskId, String workerId, String message, String details, Integer retries,
+            Duration retryTimeout, AgentAttemptMetadata agent, boolean deferred, RequestOptions options) {
         java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("workerId", workerId);
         body.put("errorMessage", message);
@@ -104,6 +119,7 @@ public final class AbadaWorkerClient {
         body.put("retries", retries);
         body.put("retryTimeout", retryTimeout == null ? null : retryTimeout.toMillis());
         if (agent != null) body.put("agent", agent);
+        if (deferred) body.put("deferred", true);
         send("/" + segment(taskId) + "/failure", body, options);
     }
 

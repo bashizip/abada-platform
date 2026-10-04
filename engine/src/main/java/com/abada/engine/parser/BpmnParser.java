@@ -15,6 +15,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 
 public class BpmnParser {
@@ -227,16 +228,90 @@ public class BpmnParser {
                 candidateStarterUsers = Arrays.asList(starterUsers.split("\\s*,\\s*"));
             }
 
+            List<BoundaryMeta> boundaries = boundaries(model, flows);
+            for (UserTask userTask : model.getModelElementsByType(UserTask.class)) {
+                withSla(userTasks.get(userTask.getId()), userTask);
+            }
+
             ParsedProcessDefinition definition = new ParsedProcessDefinition(id, name, documentation, startEventId,
                     userTasks, serviceTasks, scriptTasks, decisionTables, flows, gateways, events, endEvents, rawXml,
                     candidateStarterGroups, candidateStarterUsers);
-            return definition.withLoops(loops(model));
+            return definition.withLoops(loops(model)).withBoundaries(boundaries);
 
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse BPMN", e);
         }
+    }
+
+    /**
+     * Interrupting timer and error boundary events. Each becomes a
+     * {@link BoundaryMeta} of the activity it is attached to; its outgoing flow
+     * is re-sourced at that activity and marked as a boundary flow, so the
+     * runtime treats it exactly like an APL on_timeout / on_error route.
+     */
+    private static List<BoundaryMeta> boundaries(BpmnModelInstance model, List<SequenceFlow> flows) {
+        List<BoundaryMeta> boundaries = new ArrayList<>();
+        for (BoundaryEvent boundary : model.getModelElementsByType(BoundaryEvent.class)) {
+            String attachedTo = boundary.getAttachedTo().getId();
+            org.camunda.bpm.model.bpmn.instance.SequenceFlow outgoing = SupportedBpmnValidator.flowsFrom(boundary).get(0);
+            EventDefinition definition = boundary.getEventDefinitions().iterator().next();
+            BoundaryMeta meta;
+            if (definition instanceof TimerEventDefinition timer) {
+                Duration after;
+                try {
+                    after = Duration.parse(timer.getTimeDuration().getTextContent().strip());
+                } catch (java.time.format.DateTimeParseException exception) {
+                    throw boundaryError(boundary.getId(), "timeDuration must be an ISO-8601 duration such as PT4H");
+                }
+                if (after.compareTo(Duration.ofSeconds(1)) < 0 || after.compareTo(Duration.ofDays(365)) > 0) {
+                    throw boundaryError(boundary.getId(), "timeDuration must be between PT1S and P365D");
+                }
+                meta = new BoundaryMeta(boundary.getId(), attachedTo, BoundaryMeta.Kind.TIMEOUT, null, after,
+                        outgoing.getTarget().getId());
+            } else {
+                ErrorEventDefinition error = (ErrorEventDefinition) definition;
+                String code = error.getError() == null ? null : blankToNull(error.getError().getErrorCode());
+                meta = new BoundaryMeta(boundary.getId(), attachedTo, BoundaryMeta.Kind.ERROR, code, null,
+                        outgoing.getTarget().getId());
+            }
+            flows.removeIf(flow -> flow.getId().equals(outgoing.getId()));
+            flows.add(new SequenceFlow(outgoing.getId(), attachedTo, meta.target(), outgoing.getName(), null, false,
+                    meta.id()));
+            boundaries.add(meta);
+        }
+        // Code-specific error boundaries are matched before catch-alls.
+        boundaries.sort(java.util.Comparator.comparing(meta -> meta.kind() == BoundaryMeta.Kind.ERROR
+                && meta.code() == null));
+        return boundaries;
+    }
+
+    /** {@code abada:slaHours} and {@code abada:escalateTo} (comma-separated groups) on a user task. */
+    private static void withSla(TaskMeta task, UserTask userTask) {
+        String hours = blankToNull(userTask.getAttributeValueNs(BpmnCompatibilityDetector.ABADA_NAMESPACE, "slaHours"));
+        String escalateTo = blankToNull(
+                userTask.getAttributeValueNs(BpmnCompatibilityDetector.ABADA_NAMESPACE, "escalateTo"));
+        if (hours != null) {
+            double value;
+            try {
+                value = Double.parseDouble(hours.strip());
+            } catch (NumberFormatException exception) {
+                throw boundaryError(userTask.getId(), "abada:slaHours must be a number of hours");
+            }
+            if (value <= 0 || value > 8760) throw boundaryError(userTask.getId(), "abada:slaHours must be between 0 and 8760");
+            task.setSlaHours(value);
+        }
+        if (escalateTo != null) {
+            if (hours == null) throw boundaryError(userTask.getId(), "abada:escalateTo requires abada:slaHours");
+            task.setEscalateTo(Arrays.stream(escalateTo.split("\\s*,\\s*")).filter(group -> !group.isBlank()).toList());
+        }
+    }
+
+    private static BpmnValidationException boundaryError(String elementId, String message) {
+        return BpmnValidationException.single(new BpmnValidationIssue(BpmnErrorCodes.UNSUPPORTED_EXTENSION,
+                ValidationSeverity.ERROR, "'" + elementId + "': " + message, null, elementId,
+                BpmnCompatibilityDetector.ABADA_NAMESPACE, null, null));
     }
 
     /**

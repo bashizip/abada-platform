@@ -9,6 +9,8 @@ import com.abada.engine.core.model.EventMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.ServiceTaskMeta;
 import com.abada.engine.core.model.TaskInstance;
+import com.abada.engine.core.model.TaskMeta;
+import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.ProcessStatus;
 import com.abada.engine.dto.UserTaskPayload;
 import com.abada.engine.insight.InsightFactWriter;
@@ -87,6 +89,7 @@ public class AbadaEngine {
     private final InsightFactWriter insightFactWriter;
     private final TaskGroupResolver taskGroupResolver;
     private final ProcessTokenRepository processTokenRepository;
+    private final com.abada.engine.persistence.repository.TaskRepository taskRepository;
     private final IncidentService incidentService;
     private final AiProviderRegistry aiProviders;
     private final Map<String, ParsedProcessDefinition> definitionsByDeploymentId = new ConcurrentHashMap<>();
@@ -95,7 +98,9 @@ public class AbadaEngine {
     public AbadaEngine(PersistenceService persistenceService, TaskManager taskManager, @Lazy EventManager eventManager,
             @Lazy JobScheduler jobScheduler, ExternalTaskRepository externalTaskRepository,
             EventSubscriptionRepository eventSubscriptionRepository, JobRepository jobRepository,
-            ProcessTokenRepository processTokenRepository, IncidentService incidentService, ObjectMapper om,
+            ProcessTokenRepository processTokenRepository,
+            com.abada.engine.persistence.repository.TaskRepository taskRepository,
+            IncidentService incidentService, ObjectMapper om,
             EngineMetrics engineMetrics, Tracer tracer, ActivityHistoryService historyService,
             InsightFactWriter insightFactWriter,
             TaskGroupResolver taskGroupResolver,
@@ -111,6 +116,7 @@ public class AbadaEngine {
         this.eventSubscriptionRepository = eventSubscriptionRepository;
         this.jobRepository = jobRepository;
         this.processTokenRepository = processTokenRepository;
+        this.taskRepository = taskRepository;
         this.incidentService = incidentService;
         this.om = om;
         this.engineMetrics = engineMetrics;
@@ -313,13 +319,7 @@ public class AbadaEngine {
             recordDecisionTableAudits(instance);
             recordLoopExhaustions(instance);
 
-            for (UserTaskPayload task : userTasks) {
-                createAndPersistTask(task, instance);
-            }
-
-            eventManager.registerWaitStates(instance);
-            scheduleWaitingTimerEvents(instance);
-            createExternalTaskJobs(instance);
+            armWork(instance, userTasks);
             engineMetrics.recordProcessDuration(sample, processDefinitionId);
             return instance;
         } catch (Exception e) {
@@ -390,8 +390,10 @@ public class AbadaEngine {
         recordUserTaskFact(instance, currentTask);
         persistRuntimeState(instance);
 
-        List<UserTaskPayload> nextTasks = instance.advance(currentTask.getTokenId() != null
-                ? currentTask.getTokenId() : currentTask.getTaskDefinitionKey());
+        String completedTokenRef = currentTask.getTokenId() != null
+                ? currentTask.getTokenId() : currentTask.getTaskDefinitionKey();
+        retireTaskJobs(instance, instance.waitingTokenId(completedTokenRef));
+        List<UserTaskPayload> nextTasks = instance.advance(completedTokenRef);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -399,13 +401,7 @@ public class AbadaEngine {
         }
         persistRuntimeState(instance);
 
-        for (UserTaskPayload task : nextTasks) {
-            createAndPersistTask(task, instance);
-        }
-
-        eventManager.registerWaitStates(instance);
-        scheduleWaitingTimerEvents(instance);
-        createExternalTaskJobs(instance);
+        armWork(instance, nextTasks);
     }
 
     @AtomicRuntimeCommand
@@ -416,10 +412,15 @@ public class AbadaEngine {
         persistTask(task);
         historyService.record("TASK_FAILED", loadProcessInstance(task.getProcessInstanceId()),
                 task.getTaskDefinitionKey(), Map.of());
+        // The token is still waiting at the task: route it through on_error, or open an incident.
+        workFailed(task.getProcessInstanceId(), task.getTaskDefinitionKey(), task.getTokenId(),
+                "task " + task.getId() + " was failed");
     }
 
     @AtomicRuntimeCommand
     public boolean failProcess(String processInstanceId) {
+        // Work rows first, then the instance: the lock order of every work command.
+        retireAllWork(processInstanceId);
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null || instance.getStatus() == ProcessStatus.COMPLETED
                 || instance.getStatus() == ProcessStatus.FAILED
@@ -445,6 +446,9 @@ public class AbadaEngine {
     @AtomicRuntimeCommand
     public void cancelProcessInstance(String processInstanceId, String reason) {
         log.info("Cancelling process instance {} for reason: {}", processInstanceId, reason);
+        // Work rows first, then the instance: the lock order of every work command
+        // (a racing message correlation holds its subscription, then waits for the instance).
+        retireAllWork(processInstanceId);
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null) {
             throw new ProcessEngineException("Process instance not found: " + processInstanceId);
@@ -534,6 +538,8 @@ public class AbadaEngine {
         // marks the instance COMPLETED in the same transaction.
         String tokenRef = tokenId != null ? tokenId : eventId;
         cancelEventGatewaySiblings(instance, tokenRef);
+        // The token leaves its task normally: its timeout and SLA timers must never fire.
+        retireTaskJobs(instance, instance.waitingTokenId(tokenRef));
         List<UserTaskPayload> nextTasks = instance.advance(tokenRef);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
@@ -543,13 +549,7 @@ public class AbadaEngine {
         persistRuntimeState(instance);
         historyService.record("EVENT_CORRELATED", instance, eventId, Map.of());
 
-        for (UserTaskPayload task : nextTasks) {
-            createAndPersistTask(task, instance);
-        }
-
-        eventManager.registerWaitStates(instance);
-        scheduleWaitingTimerEvents(instance);
-        createExternalTaskJobs(instance);
+        armWork(instance, nextTasks);
     }
 
     /**
@@ -701,12 +701,35 @@ public class AbadaEngine {
      */
     @AtomicRuntimeCommand
     public void retryIncident(String processInstanceId, String incidentId) {
+        retryIncident(processInstanceId, incidentId, null, null);
+    }
+
+    /**
+     * Retries an incident. A stopped token restarts at its activity. Failed
+     * work ({@code WORK_FAILED}) is reopened with a fresh attempt budget; for
+     * agent work the operator may name another allowed {@code model} (with a
+     * {@code reason}) for this task only.
+     */
+    @AtomicRuntimeCommand
+    public void retryIncident(String processInstanceId, String incidentId, String model, String reason) {
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null) {
             throw new ProcessEngineException("No process instance found for id=" + processInstanceId);
         }
         requireActive(instance);
         IncidentEntity incident = incidentService.requireOpen(processInstanceId, incidentId);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("incidentId", incidentId);
+        details.put("type", incident.getType());
+        if (IncidentEntity.Type.WORK_FAILED.name().equals(incident.getType())) {
+            details.putAll(reopenFailedWork(instance, incident.getTokenId(), incident.getActivityId(), model, reason));
+            incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
+            historyService.record("INCIDENT_RETRIED", instance, incident.getActivityId(), details);
+            return;
+        }
+        if (model != null) {
+            throw new ProcessEngineException("A model can only be chosen when retrying failed agent work");
+        }
         List<UserTaskPayload> nextTasks = instance.retryIncident(incident.getTokenId());
         incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
         recordDecisionTableAudits(instance);
@@ -715,14 +738,345 @@ public class AbadaEngine {
             instance.setEndDate(Instant.now());
         }
         persistRuntimeState(instance);
-        historyService.record("INCIDENT_RETRIED", instance, incident.getActivityId(),
-                Map.of("incidentId", incidentId, "type", incident.getType()));
-        for (UserTaskPayload task : nextTasks) {
+        historyService.record("INCIDENT_RETRIED", instance, incident.getActivityId(), details);
+        armWork(instance, nextTasks);
+    }
+
+    /**
+     * Reopens the failed work of a token: its external task returns to OPEN
+     * with the node's full attempt budget, or its failed user task becomes
+     * available again. The token never left the activity, so nothing else moves.
+     */
+    private Map<String, Object> reopenFailedWork(ProcessInstance instance, String tokenId, String activityId,
+            String model, String reason) {
+        java.util.function.Predicate<String> ofToken = token -> tokenId == null ? token == null
+                : tokenId.equals(token);
+        Optional<ExternalTaskEntity> failed = externalTaskRepository
+                .findByProcessInstanceIdAndStatusInForUpdate(instance.getId(),
+                        List.of(ExternalTaskEntity.Status.FAILED)).stream()
+                .filter(task -> ofToken.test(task.getTokenId()) && activityId.equals(task.getActivityId()))
+                .findFirst();
+        if (failed.isPresent()) {
+            ExternalTaskEntity task = failed.get();
+            ServiceTaskMeta meta = instance.getDefinition().getServiceTask(activityId);
+            Map<String, Object> details = reopenExternalTask(task, meta, model, reason);
+            externalTaskRepository.save(task);
+            return details;
+        }
+        if (model != null) {
+            throw new ProcessEngineException("A model can only be chosen when retrying failed agent work");
+        }
+        TaskEntity userTask = taskRepository.findByProcessInstanceIdAndStatusInForUpdate(instance.getId(),
+                        List.of(com.abada.engine.core.model.TaskStatus.FAILED)).stream()
+                .filter(task -> ofToken.test(task.getTokenId()) && activityId.equals(task.getTaskDefinitionKey()))
+                .findFirst()
+                .orElseThrow(() -> new ProcessEngineException("No failed work found at '" + activityId
+                        + "' of process instance " + instance.getId()));
+        userTask.setStatus(com.abada.engine.core.model.TaskStatus.AVAILABLE);
+        userTask.setAssignee(null);
+        userTask.setEndDate(null);
+        taskRepository.save(userTask);
+        return Map.of("taskId", userTask.getId());
+    }
+
+    /**
+     * Returns failed external work to OPEN with the node's attempt budget,
+     * optionally on an operator-chosen model. The model must be on the engine
+     * allow-list, needs a reason, and only applies to agent work; the deployed
+     * definition is not changed.
+     */
+    Map<String, Object> reopenExternalTask(ExternalTaskEntity task, ServiceTaskMeta meta, String model,
+            String reason) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        if (model != null) {
+            if (meta == null || meta.agentWork() == null) {
+                throw new ProcessEngineException("A model can only be chosen when retrying failed agent work");
+            }
+            String chosen = model.strip();
+            Set<String> allowed = aplParser.allowedAgentModels();
+            if (chosen.isEmpty() || !allowed.isEmpty() && !allowed.contains(chosen)) {
+                throw new ProcessEngineException("Model '" + chosen + "' is not on the allowed model list ("
+                        + String.join(", ", allowed) + ")");
+            }
+            if (reason == null || reason.isBlank()) {
+                throw new ProcessEngineException("A reason is required when retrying on another model");
+            }
+            String from = task.getModelOverride() != null ? task.getModelOverride() : meta.agentWork().model();
+            task.setModelOverride(chosen);
+            task.setRequiredModel(chosen);
+            details.put("fromModel", from == null ? "" : from);
+            details.put("toModel", chosen);
+            details.put("reason", reason.strip().length() > 500 ? reason.strip().substring(0, 500) : reason.strip());
+        }
+        int attempts = meta != null && meta.agentWork() != null && meta.agentWork().maxAttempts() != null
+                ? meta.agentWork().maxAttempts() : 3;
+        task.setRetries(attempts);
+        task.setDeferrals(0);
+        task.setStatus(ExternalTaskEntity.Status.OPEN);
+        task.setWorkerId(null);
+        task.setLockExpirationTime(null);
+        details.put("retries", attempts);
+        return details;
+    }
+
+    /** Resolves the open WORK_FAILED incident of failed work an operator retried directly. */
+    void resolveWorkIncident(String processInstanceId, String tokenId, String activityId) {
+        incidentService.resolveFor(processInstanceId, tokenId, activityId, IncidentEntity.Type.WORK_FAILED,
+                IncidentService.RESOLVED_BY_RETRY);
+    }
+
+    /**
+     * Leaves a waiting task through one of its boundaries, atomically: the
+     * task's remaining work (external task, user task, timers) is retired, the
+     * engine-written variables are set, and the token continues at the
+     * boundary's target.
+     */
+    @AtomicRuntimeCommand
+    public void takeBoundary(String processInstanceId, String activityId, String tokenId, BoundaryMeta boundary,
+            Map<String, Object> variables, Map<String, Object> details) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null) {
+            throw new ProcessEngineException("No process instance found for id=" + processInstanceId);
+        }
+        requireActive(instance);
+        String token = instance.waitingTokenId(tokenId != null ? tokenId : activityId);
+        leaveViaBoundary(instance, token, boundary, variables, details);
+    }
+
+    private void leaveViaBoundary(ProcessInstance instance, String token, BoundaryMeta boundary,
+            Map<String, Object> variables, Map<String, Object> details) {
+        if (variables != null && !variables.isEmpty()) {
+            instance.putAllVariables(variables);
+        }
+        retireWork(instance, Set.of(token));
+        List<UserTaskPayload> nextTasks = instance.leaveViaBoundary(token, boundary);
+        recordDecisionTableAudits(instance);
+        recordLoopExhaustions(instance);
+        if (instance.isCompleted() && instance.getEndDate() == null) {
+            instance.setEndDate(Instant.now());
+        }
+        persistRuntimeState(instance);
+        Map<String, Object> taken = new LinkedHashMap<>(details == null ? Map.of() : details);
+        taken.put("boundary", boundary.id());
+        taken.put("kind", boundary.kind().name());
+        if (boundary.code() != null) taken.put("code", boundary.code());
+        taken.put("routedTo", boundary.target());
+        historyService.record("BOUNDARY_TAKEN", instance, boundary.attachedTo(), taken);
+        armWork(instance, nextTasks);
+    }
+
+    /**
+     * Fires a task's {@code on_timeout}: the task's work is cancelled and the
+     * token leaves through the timeout boundary. A token that already left the
+     * task (the job lost a race with the completion) is left alone.
+     *
+     * @return true when the boundary fired
+     */
+    @AtomicRuntimeCommand
+    public boolean fireTimeout(String processInstanceId, String activityId, String tokenId, String boundaryId) {
+        // The token's work before its instance, as a completing worker or user locks them.
+        externalTaskRepository.findByTokenAndStatusInForUpdate(processInstanceId, tokenId, OPEN_EXTERNAL);
+        taskRepository.findByTokenAndStatusInForUpdate(processInstanceId, tokenId, OPEN_TASKS);
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null || isTerminal(instance)) return false;
+        BoundaryMeta boundary = instance.getDefinition().getBoundary(activityId, boundaryId);
+        if (boundary == null || !instance.isWaitingAt(tokenId, activityId)) return false;
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_TIMEOUT);
+        leaveViaBoundary(instance, tokenId, boundary, variables, Map.of("after", boundary.after().toString()));
+        return true;
+    }
+
+    /**
+     * Escalates an open human task that missed its {@code sla_hours}: the task
+     * stays open and assigned as it was, the {@code escalate_to} groups become
+     * candidates too, and {@code TASK_SLA_BREACHED} goes to history and the
+     * outbox. The token does not move.
+     *
+     * @return true when a task was escalated
+     */
+    @AtomicRuntimeCommand
+    public boolean escalateTask(String processInstanceId, String activityId, String tokenId) {
+        // The task before its instance, as completing it locks them.
+        Optional<TaskEntity> open = taskRepository.findByTokenAndStatusInForUpdate(processInstanceId, tokenId,
+                        OPEN_TASKS).stream()
+                .filter(task -> activityId.equals(task.getTaskDefinitionKey()) && task.getEscalatedAt() == null)
+                .findFirst();
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null || isTerminal(instance)) return false;
+        if (open.isEmpty()) return false;
+        TaskEntity task = open.get();
+        TaskMeta meta = instance.getDefinition().getUserTask(activityId);
+        List<String> added = new ArrayList<>();
+        if (meta != null) {
+            for (String group : meta.getEscalateTo()) {
+                if (!task.getCandidateGroups().contains(group)) {
+                    task.getCandidateGroups().add(group);
+                    added.add(group);
+                }
+            }
+        }
+        task.setEscalatedAt(Instant.now());
+        taskRepository.save(task);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("taskId", task.getId());
+        details.put("dueAt", task.getDueAt() == null ? "" : task.getDueAt().toString());
+        details.put("escalatedTo", added);
+        details.put("assignee", task.getAssignee() == null ? "" : task.getAssignee());
+        historyService.record("TASK_SLA_BREACHED", instance, activityId, details);
+        return true;
+    }
+
+    /**
+     * Work at a task failed for good (attempts exhausted, or a user task was
+     * failed). With an {@code on_error} boundary that catches {@code WORK_FAILED}
+     * the token leaves through it; otherwise a {@code WORK_FAILED} incident opens
+     * and the token keeps waiting for an operator retry or cancel.
+     *
+     * @return the boundary target, or null when an incident was opened
+     */
+    @AtomicRuntimeCommand
+    public String workFailed(String processInstanceId, String activityId, String tokenId, String message) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null || isTerminal(instance)) return null;
+        String token = instance.waitingTokenId(tokenId != null ? tokenId : activityId);
+        BoundaryMeta boundary = instance.getDefinition()
+                .boundaryFor(activityId, BoundaryMeta.Kind.ERROR, BoundaryMeta.WORK_FAILED);
+        if (boundary != null && !instance.isSuspended()) {
+            Map<String, Object> variables = new LinkedHashMap<>();
+            variables.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_ERROR);
+            variables.put(AplParser.errorCodeVariable(activityId), BoundaryMeta.WORK_FAILED);
+            leaveViaBoundary(instance, token, boundary, variables, Map.of("message", truncate(message, 500)));
+            return boundary.target();
+        }
+        incidentService.open(instance, token, activityId, IncidentEntity.Type.WORK_FAILED,
+                "work at '" + activityId + "' failed: " + truncate(message, 900));
+        log.warn("Process instance {}: work at '{}' failed with no on_error route; incident opened",
+                instance.getId(), activityId);
+        return null;
+    }
+
+    private static String truncate(String value, int max) {
+        String text = value == null ? "" : value;
+        return text.length() > max ? text.substring(0, max) : text;
+    }
+
+    private static boolean isTerminal(ProcessInstance instance) {
+        return instance.getStatus() == ProcessStatus.COMPLETED || instance.getStatus() == ProcessStatus.FAILED
+                || instance.getStatus() == ProcessStatus.CANCELLED;
+    }
+
+    static Duration slaDuration(double hours) {
+        return Duration.ofSeconds(Math.round(hours * 3600));
+    }
+
+    /**
+     * Creates the work of the tokens that parked in this command: user tasks,
+     * subscriptions, timer events, external tasks, and the boundary timeout and
+     * SLA timers of the tasks just entered.
+     */
+    private void armWork(ProcessInstance instance, List<UserTaskPayload> userTasks) {
+        for (UserTaskPayload task : userTasks) {
             createAndPersistTask(task, instance);
         }
         eventManager.registerWaitStates(instance);
         scheduleWaitingTimerEvents(instance);
         createExternalTaskJobs(instance);
+        scheduleTaskTimers(instance);
+    }
+
+    private void scheduleTaskTimers(ProcessInstance instance) {
+        ParsedProcessDefinition definition = instance.getDefinition();
+        Instant now = Instant.now();
+        for (ProcessInstance.Parked parked : instance.takeParked()) {
+            for (BoundaryMeta boundary : definition.boundariesOf(parked.activityId())) {
+                if (boundary.kind() == BoundaryMeta.Kind.TIMEOUT) {
+                    jobScheduler.scheduleTaskJob(instance.getId(), parked.activityId(), parked.tokenId(),
+                            JobEntity.Kind.BOUNDARY_TIMEOUT, boundary.id(), now.plus(boundary.after()));
+                }
+            }
+            TaskMeta task = definition.getUserTask(parked.activityId());
+            if (task != null && task.getSlaHours() != null) {
+                jobScheduler.scheduleTaskJob(instance.getId(), parked.activityId(), parked.tokenId(),
+                        JobEntity.Kind.SLA, null, now.plus(slaDuration(task.getSlaHours())));
+            }
+        }
+    }
+
+    private static final List<JobEntity.Status> PENDING_JOBS =
+            List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED);
+    private static final List<ExternalTaskEntity.Status> OPEN_EXTERNAL =
+            List.of(ExternalTaskEntity.Status.OPEN, ExternalTaskEntity.Status.LOCKED);
+    private static final List<com.abada.engine.core.model.TaskStatus> OPEN_TASKS =
+            List.of(com.abada.engine.core.model.TaskStatus.AVAILABLE, com.abada.engine.core.model.TaskStatus.CLAIMED);
+
+    /** Cancels the timeout and SLA timers of a token that leaves its task normally. */
+    private void retireTaskJobs(ProcessInstance instance, String tokenId) {
+        cancelJobs(jobRepository.findPendingForTokensSkipLocked(instance.getId(), Set.of(tokenId)).stream()
+                .filter(job -> job.getKind() != JobEntity.Kind.EVENT).toList());
+    }
+
+    /**
+     * Retires the unfinished work of tokens leaving through a boundary, in the
+     * current command: pending jobs are cancelled, open or locked external
+     * tasks and open user tasks cancelled. A worker or user acting on retired
+     * work afterwards is rejected. A token at a task has no subscription.
+     * Callers lock the token's task rows before the instance; jobs a firing
+     * timer holds are skipped (that timer finds the token gone).
+     */
+    private void retireWork(ProcessInstance instance, Set<String> tokenIds) {
+        cancelJobs(jobRepository.findPendingForTokensSkipLocked(instance.getId(), tokenIds));
+        for (String tokenId : tokenIds) {
+            cancelExternalTasks(externalTaskRepository.findByTokenAndStatusInForUpdate(instance.getId(), tokenId,
+                    OPEN_EXTERNAL));
+            cancelUserTasks(taskRepository.findByTokenAndStatusInForUpdate(instance.getId(), tokenId, OPEN_TASKS),
+                    Instant.now());
+        }
+    }
+
+    /**
+     * Retires all unfinished work of an instance that is being cancelled or
+     * failed. Called before the instance row is locked, so it follows the lock
+     * order of every work command (work row, then instance).
+     */
+    private void retireAllWork(String processInstanceId) {
+        Instant now = Instant.now();
+        List<EventSubscriptionEntity> subscriptions =
+                eventSubscriptionRepository.findOpenByProcessInstanceIdForUpdate(processInstanceId);
+        subscriptions.forEach(subscription -> subscription.setConsumedAt(now));
+        eventSubscriptionRepository.saveAll(subscriptions);
+        cancelJobs(jobRepository.findByProcessInstanceIdAndStatusIn(processInstanceId, PENDING_JOBS));
+        cancelExternalTasks(externalTaskRepository.findByProcessInstanceIdAndStatusInForUpdate(processInstanceId,
+                OPEN_EXTERNAL));
+        cancelUserTasks(taskRepository.findByProcessInstanceIdAndStatusInForUpdate(processInstanceId, OPEN_TASKS),
+                now);
+    }
+
+    private void cancelJobs(List<JobEntity> jobs) {
+        jobs.forEach(job -> {
+            job.setStatus(JobEntity.Status.CANCELLED);
+            job.setLeaseOwner(null);
+            job.setLeaseExpiresAt(null);
+        });
+        jobRepository.saveAll(jobs);
+    }
+
+    private void cancelExternalTasks(List<ExternalTaskEntity> tasks) {
+        tasks.forEach(task -> {
+            task.setStatus(ExternalTaskEntity.Status.CANCELLED);
+            task.setWorkerId(null);
+            task.setLockExpirationTime(null);
+        });
+        externalTaskRepository.saveAll(tasks);
+    }
+
+    private void cancelUserTasks(List<TaskEntity> tasks, Instant now) {
+        tasks.forEach(task -> {
+            task.setStatus(com.abada.engine.core.model.TaskStatus.CANCELLED);
+            task.setEndDate(now);
+        });
+        taskRepository.saveAll(tasks);
     }
 
     /**
@@ -804,6 +1158,10 @@ public class AbadaEngine {
                 task.formKey(),
                 task.assignmentStrategy());
         createdTask.setTokenId(task.tokenId());
+        TaskMeta meta = instance.getDefinition().getUserTask(task.taskDefinitionKey());
+        if (meta != null && meta.getSlaHours() != null) {
+            createdTask.setDueAt(createdTask.getStartDate().plus(slaDuration(meta.getSlaHours())));
+        }
         persistTask(createdTask);
         historyService.record("TASK_CREATED", instance, task.taskDefinitionKey(),
                 Map.of("assignee", task.assignee() == null ? "" : task.assignee(),
@@ -978,6 +1336,8 @@ public class AbadaEngine {
         entity.setStatus(taskInstance.getStatus());
         entity.setStartDate(taskInstance.getStartDate());
         entity.setEndDate(taskInstance.getEndDate());
+        entity.setDueAt(taskInstance.getDueAt());
+        entity.setEscalatedAt(taskInstance.getEscalatedAt());
 
         entity.setCandidateUsers(new ArrayList<>(taskInstance.getCandidateUsers()));
         entity.setCandidateGroups(new ArrayList<>(taskInstance.getCandidateGroups()));

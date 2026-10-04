@@ -5,6 +5,7 @@ import com.abada.engine.bpmn.compatibility.BpmnValidationException;
 import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.core.model.GatewayMeta;
 import com.abada.engine.core.model.EventMeta;
+import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.ParsedProcessDefinition;
 import com.abada.engine.core.model.SequenceFlow;
 import com.abada.engine.core.model.ServiceTaskMeta;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -769,21 +771,25 @@ class AplParserTest {
     }
 
     @Test
-    void compilesOutcomeRoutesIntoASyntheticGateway() {
+    void compilesOutcomeRoutesIntoBoundaries() {
         ParsedProcessDefinition definition = parser.parseDetailed(agentFlow(
                 "      on_low_confidence: review\n      on_invalid_output: review\n"
                         + "      on_error:\n        - code: CANNOT_DECIDE\n          then: review\n"
                         + "        - then: fallback\n")).definition();
-        String gateway = AplParser.outcomeGatewayId("classify");
-        assertThat(definition.getGateways()).containsKey(gateway);
-        assertThat(definition.getOutgoing("classify")).singleElement()
-                .extracting(SequenceFlow::getTargetRef).isEqualTo(gateway);
-        assertThat(definition.getOutgoing(gateway)).extracting(SequenceFlow::getTargetRef)
-                .containsExactly("review", "review", "review", "fallback", "done");
-        assertThat(definition.getOutgoing(gateway)).filteredOn(SequenceFlow::isDefault)
+        // No synthetic gateway: the routes are boundaries of the task itself.
+        assertThat(definition.getGateways()).doesNotContainKey("classify" + AplParser.OUTCOME_GATEWAY_SUFFIX);
+        assertThat(definition.getOutgoing("classify")).filteredOn(flow -> !flow.isBoundary())
                 .singleElement().extracting(SequenceFlow::getTargetRef).isEqualTo("done");
-        assertThat(definition.getOutgoing(gateway).get(2).getConditionExpression())
-                .contains("classify_error_code == 'CANNOT_DECIDE'");
+        assertThat(definition.getOutgoing("classify")).filteredOn(SequenceFlow::isBoundary)
+                .extracting(SequenceFlow::getTargetRef).containsExactly("review", "review", "review", "fallback");
+        assertThat(definition.boundariesOf("classify")).extracting(BoundaryMeta::kind).containsExactly(
+                BoundaryMeta.Kind.INVALID_OUTPUT, BoundaryMeta.Kind.LOW_CONFIDENCE, BoundaryMeta.Kind.ERROR,
+                BoundaryMeta.Kind.ERROR);
+        assertThat(definition.boundaryFor("classify", BoundaryMeta.Kind.ERROR, "CANNOT_DECIDE").target())
+                .isEqualTo("review");
+        // Any other code, including an exhausted attempt budget, reaches the catch-all.
+        assertThat(definition.boundaryFor("classify", BoundaryMeta.Kind.ERROR, BoundaryMeta.WORK_FAILED).target())
+                .isEqualTo("fallback");
     }
 
     @Test
@@ -793,13 +799,107 @@ class AplParserTest {
                 + "    - id: crm\n      type: engine-task\n      service: crm.sync\n      on_error: failed\n      next: done\n"
                 + "    - id: failed\n      type: end\n"
                 + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
-        assertThat(parser.parseDetailed(ok).definition().getGateways()).containsKey(AplParser.outcomeGatewayId("crm"));
+        assertThat(parser.parseDetailed(ok).definition().boundariesOf("crm")).singleElement()
+                .extracting(BoundaryMeta::target).isEqualTo("failed");
 
         byte[] bad = new String(ok, StandardCharsets.UTF_8).replace("on_error: failed", "on_low_confidence: failed")
                 .getBytes(StandardCharsets.UTF_8);
         assertThatThrownBy(() -> parser.parseDetailed(bad))
                 .isInstanceOf(BpmnValidationException.class)
                 .hasMessageContaining("only agent nodes");
+    }
+
+    @Test
+    void compilesOnTimeoutAsAnInterruptingBoundaryWithItsDuration() {
+        ParsedProcessDefinition definition = parser.parseDetailed(agentFlow(
+                "      on_timeout:\n        after: PT2H\n        then: review\n")).definition();
+        assertThat(definition.boundaryFor("classify", BoundaryMeta.Kind.TIMEOUT, null)).satisfies(timeout -> {
+            assertThat(timeout.after()).isEqualTo(java.time.Duration.ofHours(2));
+            assertThat(timeout.target()).isEqualTo("review");
+        });
+        assertThat(definition.getOutgoing("classify")).filteredOn(SequenceFlow::isBoundary)
+                .extracting(SequenceFlow::getTargetRef).containsExactly("review");
+    }
+
+    @Test
+    void rejectsOnTimeoutOutsideItsBoundsOrWithoutTarget() {
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow(
+                "      on_timeout:\n        after: PT0S\n        then: review\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("between PT1S and P365D");
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow(
+                "      on_timeout:\n        after: tomorrow\n        then: review\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("ISO-8601 duration");
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      on_timeout:\n        after: PT1H\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("without a 'then' target");
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow(
+                "      on_timeout:\n        after: PT1H\n        then: nowhere\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("not a declared node");
+    }
+
+    @Test
+    void humanTasksAcceptOnErrorOnTimeoutAndAnEnforcedServiceLevel() {
+        String source = "version: abada.io/v1\nmetadata:\n  name: Review SLA\nflow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: review\n"
+                + "    - id: review\n      type: human-input\n      assignees: [reviewers]\n"
+                + "      @SLA@\n      escalate_to: [managers]\n"
+                + "      on_error: done\n      on_timeout: { after: P3D, then: done }\n      next: done\n"
+                + "    - id: done\n      type: end\n";
+        for (String sla : List.of("sla_hours: 4", "slaHours: 4")) {
+            ParsedProcessDefinition definition = parser.parseDetailed(
+                    source.replace("@SLA@", sla).getBytes(StandardCharsets.UTF_8)).definition();
+            assertThat(definition.getUserTask("review").getSlaHours()).as(sla).isEqualTo(4.0);
+            assertThat(definition.getUserTask("review").getEscalateTo()).containsExactly("managers");
+            assertThat(definition.boundariesOf("review")).extracting(BoundaryMeta::kind)
+                    .containsExactlyInAnyOrder(BoundaryMeta.Kind.ERROR, BoundaryMeta.Kind.TIMEOUT);
+        }
+        assertThatThrownBy(() -> parser.parseDetailed(source.replace("      @SLA@\n", "")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("escalate_to without sla_hours");
+        assertThatThrownBy(() -> parser.parseDetailed(source.replace("@SLA@", "sla_hours: 0")
+                .getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("sla_hours");
+    }
+
+    @Test
+    void conditionsCannotDeclareBoundaries() {
+        byte[] source = ("version: abada.io/v1\nmetadata:\n  name: No Boundary\nflow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: wait\n"
+                + "    - id: wait\n      type: timer\n      duration: PT1M\n"
+                + "      on_timeout: { after: PT1H, then: done }\n      next: done\n"
+                + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
+        assertThatThrownBy(() -> parser.parseDetailed(source))
+                .isInstanceOf(BpmnValidationException.class)
+                .hasMessageContaining("only agent, engine-task and human-input nodes support");
+    }
+
+    @Test
+    void fallbackModelsAreCheckedAgainstTheAllowListAtDeployment() {
+        ParsedProcessDefinition definition = parser.parseDetailed(agentFlow(
+                "      fallback_models: [gemini-3.7-flash, gpt-5-mini]\n")).definition();
+        assertThat(definition.getServiceTasks().get("classify").agentWork().fallbackModels())
+                .containsExactly("gemini-3.7-flash", "gpt-5-mini");
+
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      fallback_models: [not-allowed]\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("not on the allowed model list");
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      fallback_models: [gemini-3.6-flash]\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("more than once");
+        assertThatThrownBy(() -> parser.parseDetailed(agentFlow(
+                "      fallback_models: [gemini-3.7-flash, gemini-3.8-flash, gpt-5-mini, deepseek/deepseek-v4-flash-free]\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("more than 3");
+    }
+
+    @Test
+    void anOutcomeRouteBackToTheAgentIsABoundedLoop() {
+        byte[] source = ("version: abada.io/v1\nmetadata:\n  name: Retry Draft\nflow:\n  entry: start\n  nodes:\n"
+                + "    - id: start\n      type: webhook\n      next: draft\n"
+                + "    - id: draft\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Draft\n"
+                + "      loop: { max_iterations: 2 }\n      on_invalid_output: draft\n      next: done\n"
+                + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
+        ParsedProcessDefinition definition = parser.parseDetailed(source).definition();
+        assertThat(definition.isBackEdge("draft", "draft")).isTrue();
+        assertThatThrownBy(() -> parser.parseDetailed(new String(source, StandardCharsets.UTF_8)
+                .replace("      loop: { max_iterations: 2 }\n", "").getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("max_iterations");
     }
 
     @Test

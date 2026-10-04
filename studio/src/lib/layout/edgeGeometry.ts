@@ -83,6 +83,7 @@ export function cleanEdgeLabel(label: string | undefined): string {
     .replace(/\$\{\s*([^}]*?)\s*\}/g, '$1')
     .replace(/^on_low_confidence$/, 'low confidence')
     .replace(/^on_invalid_output$/, 'invalid output')
+    .replace(/^on_timeout$/, 'timeout')
     .replace(/^on_error(: )?/, (_, code) => (code ? 'error ' : 'error'))
     .replace(/\s+/g, ' ')
     .trim();

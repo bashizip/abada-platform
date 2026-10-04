@@ -114,19 +114,38 @@ is rendered against the declared threshold.
   configuration errors fail on the first attempt. Each retry is logged as
   `agent_startup_retry` with the source, HTTP status and error code only.
 - Model timeouts and task concurrency are bounded. Technical failures consume
-  durable engine retries with a bounded retry delay; zero retries creates the
-  normal incident. Agent-task retries are seeded from the APL `max_attempts`
-  so the durable retry budget matches the descriptor.
+  durable engine retries with a bounded retry delay; at zero retries the
+  node's `on_error` takes the token (code `WORK_FAILED`), otherwise a
+  `WORK_FAILED` incident opens. Agent-task retries are seeded from the APL
+  `max_attempts` so the durable retry budget matches the descriptor.
+- **Rate limits and fallback models.** A model that cannot run the attempt —
+  HTTP 429 or quota, 408, 5xx, a timeout or an unreachable provider — is
+  *unavailable*. The worker then tries the node's `fallback_models` in order,
+  in the same lease, routing each to its provider like any model. It never
+  switches because of the answer: invalid output and low confidence are the
+  engine's output contract and go to their routes. When every model is
+  unavailable the worker reports a deferral: the attempt budget is kept and
+  the engine retries after the longest `Retry-After` the providers sent (at
+  most one hour), with a delay that doubles per deferral up to
+  `abada.agent.max-deferral-delay` (default 15 minutes). After
+  `abada.agent.max-deferrals` (default 12) deferrals, the next one counts as
+  a failed attempt. The attempt metadata names the model that answered and,
+  for a fallback, the declared `requestedModel`. Logs record
+  `agent_model_unavailable` with the model and error type only.
+- An operator who retries a `WORK_FAILED` incident may choose another allowed
+  model for that task (with a recorded reason); the next fetch carries it as
+  `agentWork.model`.
 - The sidecar image forces IPv4 resolution
   (`-Djava.net.preferIPv4Stack=true`). Container runtimes without an IPv6
   route (for example Docker Desktop NAT) otherwise intermittently resolve the
   IPv6 address of LLM endpoints first and fail with a fast
   `ConnectException` instead of falling back to IPv4.
-- Completion and failure use the external task ID, attempt ordinal and
-  operation (complete vs failure) as their idempotency key, so re-sent reports
-  of the same attempt deduplicate, retried attempts use fresh keys, and a
-  stored failure record for an attempt never shadows a later completion of the
-  same attempt ordinal (for example after an operator bumps retries).
+- Completion and failure use the external task ID, the lease (its lock
+  expiry) and the operation (complete, failure or deferral) as their
+  idempotency key, so re-sent reports of the same lease deduplicate, every new
+  lease uses fresh keys (a deferral keeps the attempt ordinal, so the attempt
+  alone would collide), and a stored failure record never shadows a later
+  completion (for example after an operator bumps retries).
 - Model and other external effects are at-least-once. Providers and future
   tool adapters must support their own stable deduplication keys.
 - A failed attempt reports its message and full stack trace with the cause
@@ -186,6 +205,8 @@ above) before a process using it can start. This makes the
 "cost control" claim local: an operator can restrict which model ids any
 workflow may invoke without changing workflow definitions. Models that are
 not on the list fail fast at deployment time instead of at first execution.
+The same check applies to every entry of `fallback_models`, and to a model an
+operator picks when retrying failed agent work.
 
 For secured
 engines, configure either a short-lived

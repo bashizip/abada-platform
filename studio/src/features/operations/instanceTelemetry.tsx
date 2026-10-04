@@ -444,7 +444,9 @@ export const NodeTelemetry: React.FC<{
                 <UserCheck className="h-3.5 w-3.5" /> Human task
               </div>
               <InfoRow label="Assignees">{node.humanConfig.assignees.join(', ')}</InfoRow>
-              <InfoRow label="SLA">{node.humanConfig.slaHours}h</InfoRow>
+              {node.humanConfig.slaHours ? (
+                <InfoRow label="SLA">{node.humanConfig.slaHours}h · escalates when missed</InfoRow>
+              ) : null}
             </div>
           )}
           {nodeEvents.length === 0 && (

@@ -32,6 +32,8 @@ public class ProcessInstance {
     private final List<DecisionTableAudit> decisionAudits = new ArrayList<>();
     private final List<LoopExhaustion> loopExhaustions = new ArrayList<>();
     private final List<RuntimeIncident> incidents = new ArrayList<>();
+    /** Tokens that parked at a task in this command; their boundary and SLA timers start now. */
+    private final List<Parked> parked = new ArrayList<>();
 
     /** A token stopped in the INCIDENT state during advance(); the engine opens the incident. */
     public record RuntimeIncident(String tokenId, String activityId,
@@ -42,6 +44,9 @@ public class ProcessInstance {
      * or stopped in {@link ProcessToken.State#INCIDENT} when it is null.
      */
     public record LoopExhaustion(String tokenId, String headerId, int maxIterations, String routedTo) {}
+
+    /** A token that entered a wait-state task in the current command. */
+    public record Parked(String tokenId, String activityId) {}
 
     public ProcessInstance(ParsedProcessDefinition definition) {
         this.id = UUID.randomUUID().toString();
@@ -408,6 +413,7 @@ public class ProcessInstance {
                     return;
                 }
                 token.moveTo(pointer, ProcessToken.State.WAITING);
+                if (!definition.isCatchEvent(pointer)) parked.add(new Parked(token.id(), pointer));
                 if (definition.isUserTask(pointer)) {
                     TaskMeta ut = definition.getUserTask(pointer);
                     var resolved = new AssignmentEvaluator().evaluate(ut.getAssignment(), variables);
@@ -569,6 +575,41 @@ public class ProcessInstance {
         return run(queue, new ArrayList<>());
     }
 
+    /** Returns and clears the tokens that parked at a task during advance(). */
+    public List<Parked> takeParked() {
+        List<Parked> snapshot = List.copyOf(parked);
+        parked.clear();
+        return snapshot;
+    }
+
+    /**
+     * Leaves a waiting task through one of its boundaries: the token goes to the
+     * boundary's target instead of the task's next step. The caller has already
+     * written the outcome variables and retired the task's work.
+     */
+    public List<UserTaskPayload> leaveViaBoundary(String tokenRef, com.abada.engine.core.model.BoundaryMeta boundary) {
+        ProcessToken token = waitingToken(tokenRef);
+        if (!token.activityId().equals(boundary.attachedTo())) {
+            throw new com.abada.engine.core.exception.ProcessEngineException("Token " + token.id()
+                    + " waits at '" + token.activityId() + "', not at '" + boundary.attachedTo() + "'");
+        }
+        token.moveTo(boundary.attachedTo(), ProcessToken.State.ACTIVE);
+        Deque<Step> queue = new ArrayDeque<>();
+        queue.add(new Step(token, boundary.target(), boundary.attachedTo()));
+        return run(queue, new ArrayList<>());
+    }
+
+    /** True when the token is still waiting at the activity (it has not left it in an earlier command). */
+    public boolean isWaitingAt(String tokenId, String activityId) {
+        ProcessToken token = find(tokenId);
+        return token != null && token.state() == ProcessToken.State.WAITING && activityId.equals(token.activityId());
+    }
+
+    /** The id of the token waiting at {@code tokenRef} (a token id, or an activity for pre-V23 work). */
+    public String waitingTokenId(String tokenRef) {
+        return waitingToken(tokenRef).id();
+    }
+
     /** Returns and clears the loop exhaustions produced by advance(). */
     public List<LoopExhaustion> takeLoopExhaustions() {
         List<LoopExhaustion> snapshot = List.copyOf(loopExhaustions);
@@ -652,9 +693,12 @@ public class ProcessInstance {
         }
     }
 
+    /** The normal next step; boundary flows are taken only when their boundary fires. */
     private String firstTarget(String activity) {
-        List<SequenceFlow> outgoing = definition.getOutgoing(activity);
-        return outgoing.isEmpty() ? null : outgoing.get(0).getTargetRef();
+        for (SequenceFlow flow : definition.getOutgoing(activity)) {
+            if (!flow.isBoundary()) return flow.getTargetRef();
+        }
+        return null;
     }
 
     private ProcessToken waitingToken(String tokenRef) {

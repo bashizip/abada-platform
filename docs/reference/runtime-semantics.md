@@ -53,8 +53,10 @@ should use external tasks and an idempotent worker operation.
 - Claiming locks the task row; one concurrent claimant wins.
 - Completion requires the assignee, or an authorized candidate when the task
   is still available. Completion locks both task and process rows.
-- A completed or failed task cannot transition again.
-- Failure is terminal for the task but does not implicitly fail the process.
+- A completed, failed or cancelled task cannot transition again.
+- Failure is terminal for the task but does not implicitly fail the process:
+  the token leaves through the task's `on_error`, or a `WORK_FAILED` incident
+  opens (see Boundaries).
 - Claim, unclaim, completion and failure reject suspended or terminal process
   instances after locking both task and process state.
 
@@ -80,6 +82,10 @@ should use external tasks and an idempotent worker operation.
   time and cancels every live token. Cancellation is not reversible.
 - Failure changes a non-terminal instance to `FAILED`, records its end time and
   cancels every live token.
+- Cancellation and failure retire the instance's unfinished work in the same
+  transaction: open subscriptions are consumed, pending jobs, open external
+  tasks and open user tasks become `CANCELLED`. A worker or user acting on
+  that work afterwards is rejected, and it is never handed out again.
 - Suspension changes a running instance to `SUSPENDED`. Task completion and
   event advancement are rejected while suspended. Activation restores
   `RUNNING`; terminal instances cannot be activated.
@@ -145,10 +151,61 @@ should use external tasks and an idempotent worker operation.
   `MISSING_CORRELATION_KEY` (a message wait, standalone or in an event race,
   reached without a `correlationKey` variable — it could never be correlated,
   so the engine stops loudly instead of waiting forever).
+- `WORK_FAILED` opens when task work fails its last attempt (or a user task is
+  failed) and no `on_error` catches it. The token stays `WAITING` at the task;
+  the failed external task (or user task) is kept for its error details.
+  Retrying reopens it — the external task returns to `OPEN` with the node's
+  full `max_attempts`, the user task becomes `AVAILABLE` — and resolves the
+  incident. The older `POST .../jobs/{jobId}/retries` resolves it too.
+- Retrying a `WORK_FAILED` incident of agent work accepts an optional
+  `{ "model": "...", "reason": "..." }`: the task runs on that model (it must
+  be on `abada.agent.allowed-models`; `reason` is required). The override
+  applies to that task only — the deployed definition and later instances keep
+  their model — and history records `fromModel`, `toModel`, `reason` and the
+  actor. The output contract (schema, confidence threshold, tools) is
+  unchanged.
 - `POST .../incidents/{incidentId}/retry` restarts the stopped token at its
   activity in one transaction: a loop step begins a fresh pass, a message wait
   re-reads `correlationKey` (set it first with the variables endpoint). The
   incident is resolved as `RETRIED`.
+
+## Boundaries
+
+Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/AplBoundaryRuntimeTest.java)
+(PostgreSQL), [`AplParserTest`](../../engine/src/test/java/com/abada/engine/parser/AplParserTest.java),
+[`SupportedBpmnValidatorTest`](../../engine/src/test/java/com/abada/engine/parser/SupportedBpmnValidatorTest.java).
+
+- A boundary (`on_low_confidence`, `on_invalid_output`, `on_error`,
+  `on_timeout`; BPMN timer and error boundary events) leaves a waiting task
+  for its target instead of its normal next step. It fires inside the command
+  that observes the condition: the token moves, the task's unfinished work is
+  retired (external task or user task `CANCELLED`, timers cancelled),
+  `<id>_outcome` (and `<id>_error_code`) are written, and `BOUNDARY_TAKEN` is
+  recorded with the boundary, kind, code and target. All or nothing.
+- `on_error` catches a worker-reported BPMN error by code (a code-less rule
+  catches all), the last failed attempt of task work (code `WORK_FAILED`),
+  and a failed user task (`WORK_FAILED`). An unrouted BPMN error still fails
+  the instance; an unrouted `WORK_FAILED` opens an incident (see Incidents).
+  A routed failure leaves its external task `CANCELLED`, so it never appears
+  as retryable failed work.
+- `on_timeout` schedules a durable `BOUNDARY_TIMEOUT` job when the token
+  enters the task, due `after` later; it survives restarts and fires once. A
+  token that leaves the task normally cancels the job in the same
+  transaction. A timer that loses that race finds the token gone and does
+  nothing. A late worker completion or user completion of the retired work is
+  rejected.
+- `sla_hours` sets the task's `dueAt` and schedules an `SLA` job. When it
+  fires on a task still open, the task is escalated in place: it keeps its
+  status and assignee, `escalatedAt` is set, the `escalate_to` groups become
+  candidates, and `TASK_SLA_BREACHED` goes to history and the outbox
+  (webhooks). The token does not move; completing the task cancels the job.
+- A due timer of a suspended instance (catch event, timeout or SLA) is
+  postponed by one minute without consuming an attempt; it fires after the
+  instance is resumed.
+- Lock order: commands lock work rows (task, external task, subscription,
+  job) before the instance row. Cancellation and failure retire work before
+  locking the instance; a firing timeout or SLA job locks the token's task
+  first. Retiring a token's timers skips a job another transaction holds.
 
 ## Decision tables
 
@@ -223,7 +280,21 @@ should use external tasks and an idempotent worker operation.
 - Technical failure records error details and retry count. Zero retries marks
   the task `FAILED`; otherwise it becomes immediately open or waits until its
   retry timeout expires.
-- An operator retry clears the old lease and returns the task to `OPEN`.
+- An operator retry clears the old lease and returns the task to `OPEN`; a
+  completed or cancelled task cannot be retried.
+- **Rate limits and outages (agent work).** When a model is unavailable
+  (HTTP 429, quota, 408, 5xx, timeout, unreachable) the worker tries the
+  node's `fallback_models` in order within the same lease; only availability
+  errors switch the model. When every model is unavailable it reports a
+  *deferral* (`deferred: true`): the engine keeps the attempt budget,
+  increments the task's `deferrals`, records `EXTERNAL_TASK_DEFERRED`, and
+  makes the task available again after
+  `max(Retry-After, retry_backoff_ms × 2^(deferrals-1))`, capped by
+  `abada.agent.max-deferral-delay` (default `PT15M`). After
+  `abada.agent.max-deferrals` (default 12) a deferral counts as a failed
+  attempt, so waiting is always bounded; `on_timeout` bounds it earlier.
+  The model that produced a result is recorded in the attempt metadata, with
+  `requestedModel` when a fallback replaced the declared model.
 - Worker death mid-task is served by lease expiry: an expired `LOCKED` task is
   re-acquired with `SKIP LOCKED`, so another worker retries it without the
   engine re-creating work or advancing state twice. Restarting the engine does

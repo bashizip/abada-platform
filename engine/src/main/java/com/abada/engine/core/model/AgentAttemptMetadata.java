@@ -21,7 +21,9 @@ public record AgentAttemptMetadata(
         String errorType,
         Double confidence,
         Integer promptTokens,
-        Integer completionTokens) implements Serializable {
+        Integer completionTokens,
+        // The node's declared model when the worker ran a fallback model instead (null otherwise).
+        String requestedModel) implements Serializable {
 
     public AgentAttemptMetadata {
         tools = tools == null ? List.of() : List.copyOf(tools);
@@ -31,5 +33,13 @@ public record AgentAttemptMetadata(
     public AgentAttemptMetadata(String model, String provider, Integer attempt, Long durationMs, List<String> tools,
             String resultVariable, String promptHash, String errorType, Double confidence) {
         this(model, provider, attempt, durationMs, tools, resultVariable, promptHash, errorType, confidence, null, null);
+    }
+
+    /** Form with token usage and no fallback (kept for callers built before fallback models). */
+    public AgentAttemptMetadata(String model, String provider, Integer attempt, Long durationMs, List<String> tools,
+            String resultVariable, String promptHash, String errorType, Double confidence, Integer promptTokens,
+            Integer completionTokens) {
+        this(model, provider, attempt, durationMs, tools, resultVariable, promptHash, errorType, confidence,
+                promptTokens, completionTokens, null);
     }
 }

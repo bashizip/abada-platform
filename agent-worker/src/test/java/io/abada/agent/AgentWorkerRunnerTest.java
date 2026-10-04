@@ -185,6 +185,108 @@ class AgentWorkerRunnerTest {
                 Map.of(), List.of(), null, 0.2, 256, timeoutMs, 3, 1_000L);
     }
 
+    record Failure(int retries, Duration retryTimeout, AgentAttemptMetadata agent, boolean deferred,
+            String idempotencyKey) {}
+
+    @Test
+    void aRateLimitedModelFallsBackToTheNextDeclaredModel() throws Exception {
+        FakeEngine engine = new FakeEngine(List.of(task("task-0", fallbackDescriptor())));
+        List<String> called = Collections.synchronizedList(new ArrayList<>());
+        var runner = new AgentWorkerMain.Runner(engine, work -> scripted(work.model(), called, Map.of(
+                "model-a", new AgentGateway.AgentQuotaExceededException("rate limited", Duration.ofSeconds(30)))),
+                config(1));
+
+        assertEquals(1, runner.pollOnce());
+        assertTrue(runner.awaitIdle(Duration.ofSeconds(10)));
+        runner.close();
+
+        assertEquals(List.of("model-a", "model-b"), called, "the fallback is tried only after the first is unavailable");
+        assertEquals(1, engine.completed.size());
+        AgentAttemptMetadata metadata = engine.completions.get(0);
+        assertEquals("model-b", metadata.model(), "metadata names the model that produced the result");
+        assertEquals("model-a", metadata.requestedModel(), "and the declared model it replaced");
+    }
+
+    @Test
+    void whenEveryModelIsUnavailableTheAttemptIsDeferredNotSpent() throws Exception {
+        FakeEngine engine = new FakeEngine(List.of(task("task-0", fallbackDescriptor())));
+        List<String> called = Collections.synchronizedList(new ArrayList<>());
+        var runner = new AgentWorkerMain.Runner(engine, work -> scripted(work.model(), called, Map.of(
+                "model-a", new AgentGateway.AgentQuotaExceededException("rate limited", Duration.ofSeconds(30)),
+                "model-b", new AgentGateway.AgentUnavailableException("HTTP 503", Duration.ofSeconds(45)),
+                "model-c", new AgentGateway.AgentUnreachableException("timeout",
+                        new java.net.http.HttpTimeoutException("timed out")))), config(1));
+
+        assertEquals(1, runner.pollOnce());
+        assertTrue(runner.awaitIdle(Duration.ofSeconds(10)));
+        runner.close();
+
+        assertEquals(List.of("model-a", "model-b", "model-c"), called);
+        Failure failure = engine.failures.get(0);
+        assertTrue(failure.deferred(), "reported as a deferral");
+        assertEquals(3, failure.retries(), "the attempt budget is kept");
+        assertEquals(Duration.ofSeconds(45), failure.retryTimeout(), "the longest Retry-After is honoured");
+        assertTrue(failure.idempotencyKey().endsWith("-deferral"), failure.idempotencyKey());
+    }
+
+    @Test
+    void anErrorThatIsNotAvailabilityNeverTriesAFallback() throws Exception {
+        FakeEngine engine = new FakeEngine(List.of(task("task-0", fallbackDescriptor())));
+        List<String> called = Collections.synchronizedList(new ArrayList<>());
+        var runner = new AgentWorkerMain.Runner(engine, work -> scripted(work.model(), called, Map.of(
+                "model-a", new AgentGateway.AgentExecutionException("returned no assistant content"))), config(1));
+
+        assertEquals(1, runner.pollOnce());
+        assertTrue(runner.awaitIdle(Duration.ofSeconds(10)));
+        runner.close();
+
+        assertEquals(List.of("model-a"), called, "a failed call is a failed attempt, not a reason to switch model");
+        Failure failure = engine.failures.get(0);
+        assertTrue(!failure.deferred());
+        assertEquals(2, failure.retries(), "one attempt is spent");
+    }
+
+    @Test
+    void reportsOfTwoLeasesOfTheSameAttemptHaveDistinctIdempotencyKeys() {
+        LockedExternalTask first = new LockedExternalTask("task-9", AgentWorkerMain.AGENT_TOPIC, Map.of(), "pi",
+                "draft", 3, Instant.ofEpochMilli(1_000), null, "1", descriptor(1_000L), "project");
+        LockedExternalTask second = new LockedExternalTask("task-9", AgentWorkerMain.AGENT_TOPIC, Map.of(), "pi",
+                "draft", 3, Instant.ofEpochMilli(2_000), null, "1", descriptor(1_000L), "project");
+        String a = AgentWorkerMain.taskOptions(first, 1, "deferral").idempotencyKey();
+        String b = AgentWorkerMain.taskOptions(second, 1, "deferral").idempotencyKey();
+        assertTrue(!a.equals(b), a + " vs " + b);
+        assertEquals(a, AgentWorkerMain.taskOptions(first, 1, "deferral").idempotencyKey(),
+                "a resent report of the same lease is deduplicated");
+    }
+
+    private static AgentWorkDescriptor fallbackDescriptor() {
+        return new AgentWorkDescriptor("abada.agent/v1", "model-a", "Summarize", Map.of(), "summary",
+                Map.of(), List.of(), null, 0.2, 256, 1_000L, 3, 1_000L, List.of("model-b", "model-c"));
+    }
+
+    private static LockedExternalTask task(String id, AgentWorkDescriptor work) {
+        return new LockedExternalTask(id, AgentWorkerMain.AGENT_TOPIC, Map.of(), "pi-" + id, "summarize", 3,
+                null, null, "1", work, "project");
+    }
+
+    /** A gateway that throws the scripted exception for its model, else answers. */
+    private static AgentGateway scripted(String model, List<String> called, Map<String, RuntimeException> errors) {
+        return new AgentGateway() {
+            @Override
+            public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) {
+                called.add(work.model());
+                RuntimeException error = errors.get(work.model());
+                if (error != null) throw error;
+                return new AgentResult("done from " + work.model(), null);
+            }
+
+            @Override
+            public String provider() {
+                return "fake-" + model;
+            }
+        };
+    }
+
     /** In-memory engine that enforces lock expiry the way the real engine does. */
     private static final class FakeEngine implements AgentWorkerMain.Engine {
         private final Deque<LockedExternalTask> available = new ArrayDeque<>();
@@ -194,6 +296,8 @@ class AgentWorkerRunnerTest {
         final List<String> failed = Collections.synchronizedList(new ArrayList<>());
         final List<String> failureMessages = Collections.synchronizedList(new ArrayList<>());
         final List<String> failureDetails = Collections.synchronizedList(new ArrayList<>());
+        final List<Failure> failures = Collections.synchronizedList(new ArrayList<>());
+        final List<AgentAttemptMetadata> completions = Collections.synchronizedList(new ArrayList<>());
         final List<String> lockViolations = Collections.synchronizedList(new ArrayList<>());
         final List<Integer> requestedBatchSizes = Collections.synchronizedList(new ArrayList<>());
         final AtomicInteger extendCalls = new AtomicInteger();
@@ -202,6 +306,11 @@ class AgentWorkerRunnerTest {
         final AtomicInteger completeConflicts = new AtomicInteger();
         final AtomicInteger completeAttempts = new AtomicInteger();
         volatile long completeLatencyMs;
+
+        FakeEngine(List<LockedExternalTask> tasks) {
+            this.heartbeatFails = false;
+            available.addAll(tasks);
+        }
 
         FakeEngine(int tasks, boolean heartbeatFails) {
             this.heartbeatFails = heartbeatFails;
@@ -233,16 +342,18 @@ class AgentWorkerRunnerTest {
                 throw new WorkerProtocolException(409, "CONCURRENT_MODIFICATION", "Runtime state changed concurrently");
             }
             sleepQuietly(completeLatencyMs);
+            completions.add(agent);
             completed.add(task.id());
         }
 
         @Override
         public void fail(LockedExternalTask task, String message, String details, int retries,
-                Duration retryTimeout, AgentAttemptMetadata agent, RequestOptions options) {
+                Duration retryTimeout, AgentAttemptMetadata agent, boolean deferred, RequestOptions options) {
             reporting.add(task.id());
             requireLock(task);
             failureMessages.add(message);
             failureDetails.add(details);
+            failures.add(new Failure(retries, retryTimeout, agent, deferred, options.idempotencyKey()));
             failed.add(task.id());
         }
 

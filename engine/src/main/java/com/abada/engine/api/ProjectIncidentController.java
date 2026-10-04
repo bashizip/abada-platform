@@ -9,6 +9,7 @@ import org.springframework.data.domain.PageRequest;
 import com.abada.engine.core.AbadaEngine;
 import com.abada.engine.core.IdempotencyService;
 import java.util.Map;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,14 +53,19 @@ public class ProjectIncidentController {
     /** Restarts the token an open incident stopped; project operators and owners only. */
     @PostMapping("/{incidentId}/retry")
     public ResponseEntity<Void> retry(@PathVariable String projectId, @PathVariable String incidentId,
+            @RequestBody(required = false) com.abada.engine.dto.IncidentRetryRequest body,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         access.require(projectId, Role.OPERATOR, Role.OWNER);
         var incident = incidents.findById(incidentId).filter(found -> found.getProjectId().equals(projectId))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                         "Incident not found: " + incidentId));
-        idempotency.execute(idempotencyKey, "project.incident.retry",
-                Map.of("projectId", projectId, "incidentId", incidentId), () -> {
-                    engine.retryIncident(incident.getProcessInstanceId(), incidentId);
+        String model = body == null ? null : body.model();
+        String reason = body == null ? null : body.reason();
+        Map<String, Object> fingerprint = new java.util.LinkedHashMap<>(
+                Map.of("projectId", projectId, "incidentId", incidentId));
+        if (model != null) fingerprint.put("model", model);
+        idempotency.execute(idempotencyKey, "project.incident.retry", fingerprint, () -> {
+                    engine.retryIncident(incident.getProcessInstanceId(), incidentId, model, reason);
                     return Map.of("status", "Retried", "incidentId", incidentId);
                 });
         return ResponseEntity.noContent().build();

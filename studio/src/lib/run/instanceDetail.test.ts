@@ -172,4 +172,24 @@ describe('deriveInstancePath outcome routes', () => {
       [completed('start'), bpmnError('QUOTA')]);
     expect(otherCode.activePathEdgeIds).not.toContain('analyze-review-error');
   });
+
+  it('lights the boundary the engine recorded, matching its kind and code', () => {
+    const withTimeout = workflow(model.nodes, [
+      ...model.edges,
+      { id: 'analyze-review-timeout', source: 'analyze', target: 'review', label: 'on_timeout' },
+    ]);
+    const boundary = (kind: string, code?: string): ActivityHistoryDTO => ({
+      ...completed('analyze'),
+      eventType: 'BOUNDARY_TAKEN',
+      details: { kind, routedTo: 'review', ...(code ? { code } : {}) },
+    });
+    const timedOut = deriveInstancePath(withTimeout, instance('review'), [activity('review')],
+      [completed('start'), boundary('TIMEOUT')]);
+    expect(timedOut.activePathEdgeIds).toContain('analyze-review-timeout');
+    expect(timedOut.activePathEdgeIds).not.toContain('analyze-review-error');
+    const failed = deriveInstancePath(withTimeout, instance('review'), [activity('review')],
+      [completed('start'), boundary('ERROR', 'TIMEOUT')]);
+    expect(failed.activePathEdgeIds).toContain('analyze-review-error');
+    expect(failed.activePathEdgeIds).not.toContain('analyze-review-timeout');
+  });
 });

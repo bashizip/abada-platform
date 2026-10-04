@@ -14,7 +14,7 @@ unknown or missing protocol version rather than guessing payload semantics.
 | Lock extension | `POST /{id}/extend-lock` | Compatibility alias with the same atomic semantics as heartbeat. |
 | Completion | `POST /{id}/complete` | Requires `{workerId, variables}` in secured modes; merges variables and advances once. |
 | BPMN error | `POST /{id}/bpmn-error` | Requires worker ownership and `errorCode`; stores the business error and variables atomically. |
-| Technical failure | `POST /{id}/failure` | Stores error details, retries and retry timeout; zero retries creates an incident. |
+| Technical failure | `POST /{id}/failure` | Stores error details, retries and retry timeout. Zero retries takes the node's `on_error` (code `WORK_FAILED`) or opens a `WORK_FAILED` incident. With `deferred: true` the attempt is not consumed (see below). |
 
 All mutations accept `Idempotency-Key`. Workers should reuse one key for every
 retry of the same logical command. A different body with the same key is
@@ -50,6 +50,22 @@ ordinary service tasks. Protocol-v1 workers that ignore unknown JSON fields
 remain compatible; agent workers must reject a missing or unknown
 `profileVersion`. See [Agent worker](agent-worker.md).
 
+Protocol v1 only ever adds optional fields. Since 1.1.0-rc.1 the Java SDK
+ignores fields it does not know; workers built on older SDK releases reject
+them, so a node using a new field (for example `fallbackModels`, sent only
+when declared) needs a current worker. When an operator retried the task on
+another model, `agentWork.model` carries that model.
+
+`agentWork.fallbackModels` lists the models to try, in order, when the model
+before cannot run the attempt at all (rate limit, quota, outage). A worker
+switches model only on such availability errors, never because of the
+answer. When every model is unavailable, report the failure with
+`"deferred": true`, the unchanged `retries` and the provider's Retry-After as
+`retryTimeout`: the engine keeps the attempt budget and makes the task
+available again after a growing, capped delay. Use an `Idempotency-Key` that
+names the lease (for example its lock expiry): two deferrals of the same
+attempt are different requests.
+
 For `abada:agent` tasks, `variables` contains **only the node's declared
 inputs**, resolved by the engine and keyed by input name (default-deny). Other
 topics keep receiving the instance variables.
@@ -57,7 +73,8 @@ topics keep receiving the instance variables.
 Completion and failure bodies also accept an optional additive `agent` object
 (`AgentAttemptMetadata`): `model`, `provider`, `attempt`, `durationMs`,
 `tools`, `resultVariable`, `promptHash`, `errorType`, `confidence`,
-`promptTokens` and `completionTokens`. The `confidence` value (0–100) is the
+`promptTokens`, `completionTokens` and `requestedModel` (the declared model
+when a fallback model produced the result). The `confidence` value (0–100) is the
 `_confidence` the agent model reported for its structured output. For
 `abada:agent` tasks the engine, not the worker, applies the node's output
 contract to the completed variables (see `apl-specification.md` §3.2); the
@@ -70,14 +87,18 @@ payloads; ordinary workers that omit it remain fully compatible.
 
 ## BPMN error boundary
 
-Native APL `agent` and `engine-task` nodes may declare `on_error`. A BPMN
-error whose code matches a route (or a code-less catch-all) completes the task
-and follows that route in the same transaction, writing
-`<node>_outcome = 'ERROR'` and `<node>_error_code`. Without a matching route,
-the error remains unhandled: Abada records `EXTERNAL_TASK_BPMN_ERROR`,
-persists its code/message, applies its variables, and transitions the process
-instance to `FAILED` atomically. BPMN boundary error events remain outside the
-supported BPMN subset; the request envelope is unchanged.
+Native APL `agent` and `engine-task` nodes may declare `on_error`, and BPMN
+service tasks an error boundary event. A BPMN error whose code matches a route
+(or a code-less catch-all) completes the task and follows that route in the
+same transaction, writing `<node>_outcome = 'ERROR'` and `<node>_error_code`.
+Without a matching route, the error remains unhandled: Abada records
+`EXTERNAL_TASK_BPMN_ERROR`, persists its code/message, applies its variables,
+and transitions the process instance to `FAILED` atomically. The request
+envelope is unchanged.
+
+A task whose `on_timeout` (or BPMN timer boundary) fired is `CANCELLED`: a
+completion, failure or error report for it is rejected because it is no
+longer locked.
 
 ## Delivery guarantee
 

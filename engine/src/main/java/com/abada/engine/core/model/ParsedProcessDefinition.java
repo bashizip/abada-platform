@@ -26,6 +26,7 @@ public class ParsedProcessDefinition implements Serializable {
 
     private final Map<String, List<String>> flowGraph = new HashMap<>();
     private Map<String, LoopMeta> loops = Map.of();
+    private Map<String, List<BoundaryMeta>> boundaries = Map.of();
     /** Back-edges of the depth-first walk from the start event, keyed by {@link #edgeKey}. */
     private final Set<String> backEdges = new LinkedHashSet<>();
 
@@ -104,6 +105,40 @@ public class ParsedProcessDefinition implements Serializable {
     public ParsedProcessDefinition withLoops(Map<String, LoopMeta> declared) {
         this.loops = Map.copyOf(declared);
         return this;
+    }
+
+    /** Declares the boundaries of this definition (set once by the parser); their flows are already in the graph. */
+    public ParsedProcessDefinition withBoundaries(Collection<BoundaryMeta> declared) {
+        Map<String, List<BoundaryMeta>> byActivity = new LinkedHashMap<>();
+        for (BoundaryMeta boundary : declared) {
+            byActivity.computeIfAbsent(boundary.attachedTo(), key -> new ArrayList<>()).add(boundary);
+        }
+        byActivity.replaceAll((key, list) -> List.copyOf(list));
+        this.boundaries = Map.copyOf(byActivity);
+        return this;
+    }
+
+    /** Boundaries attached to an activity, in declaration order (code-specific errors before catch-alls). */
+    public List<BoundaryMeta> boundariesOf(String activityId) {
+        return boundaries.getOrDefault(activityId, List.of());
+    }
+
+    public Collection<BoundaryMeta> getBoundaries() {
+        return boundaries.values().stream().flatMap(List::stream).toList();
+    }
+
+    /** The first boundary of {@code kind} on the activity that catches {@code code} (ERROR) or any (others). */
+    public BoundaryMeta boundaryFor(String activityId, BoundaryMeta.Kind kind, String code) {
+        for (BoundaryMeta boundary : boundariesOf(activityId)) {
+            if (boundary.kind() != kind) continue;
+            if (kind != BoundaryMeta.Kind.ERROR || boundary.catches(code)) return boundary;
+        }
+        return null;
+    }
+
+    public BoundaryMeta getBoundary(String activityId, String boundaryId) {
+        return boundariesOf(activityId).stream().filter(boundary -> boundary.id().equals(boundaryId))
+                .findFirst().orElse(null);
     }
 
     public Map<String, LoopMeta> getLoops() {

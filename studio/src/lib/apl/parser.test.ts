@@ -357,3 +357,65 @@ describe('APL round trip: loops and keys Studio does not edit', () => {
     expect(saved.on_error).toBeUndefined();
   });
 });
+
+describe('APL round trip: boundaries, service level and fallback models', () => {
+  const boundaries: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: { key: 'boundaries', name: 'Boundaries' },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'draft' },
+        {
+          id: 'draft',
+          type: 'agent',
+          model: 'gemini-3.6-flash',
+          prompt: 'Draft a reply',
+          fallback_models: ['gemini-3.7-flash'],
+          on_timeout: { after: 'PT1H', then: 'manual' },
+          on_error: 'manual',
+          next: 'review',
+        },
+        {
+          id: 'review',
+          type: 'human-input',
+          assignees: ['reviewers'],
+          sla_hours: 4,
+          escalate_to: ['managers'],
+          on_timeout: { after: 'P3D', then: 'done' },
+          next: 'done',
+        },
+        { id: 'manual', type: 'human-input', assignees: ['operators'], next: 'done' },
+        { id: 'done', type: 'end' },
+      ],
+    },
+  };
+
+  it('draws on_timeout as a route edge and keeps every boundary field through a save', () => {
+    const workflow = aplToWorkflow(boundaries);
+    expect(workflow.edges.filter((edge) => edge.source === 'draft').map((edge) => edge.label))
+      .toEqual(expect.arrayContaining(['on_error', 'on_timeout']));
+    expect(workflow.edges.find((edge) => edge.source === 'review' && edge.label === 'on_timeout')?.target)
+      .toBe('done');
+
+    const saved = workflowToAPL(workflow).flow.nodes;
+    expect(saved.find((node) => node.id === 'draft')).toMatchObject({
+      fallback_models: ['gemini-3.7-flash'],
+      on_timeout: { after: 'PT1H', then: 'manual' },
+      on_error: 'manual',
+      next: 'review',
+    });
+    expect(saved.find((node) => node.id === 'review')).toMatchObject({
+      sla_hours: 4,
+      escalate_to: ['managers'],
+      on_timeout: { after: 'P3D', then: 'done' },
+      next: 'done',
+    });
+  });
+
+  it('never invents a service level for a task that declares none', () => {
+    const manual = workflowToAPL(aplToWorkflow(boundaries)).flow.nodes.find((node) => node.id === 'manual') as
+      unknown as Record<string, unknown>;
+    expect(manual.sla_hours).toBeUndefined();
+  });
+});

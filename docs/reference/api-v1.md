@@ -90,16 +90,29 @@ newest first (`open=true` by default; `page`, `size` ≤ 100), for project
 viewers, operators and owners. `GET /api/v1/process-instances/{id}/incidents`
 lists one instance's incidents, open and resolved (operations read scope).
 Each `IncidentDTO` has `id`, `projectId`, `processInstanceId`, `tokenId`,
-`activityId`, `type` (`LOOP_EXHAUSTED`), `message`, `createdAt`, `resolvedAt`
-and `resolution` (`RETRIED`, `INSTANCE_CANCELLED`, `INSTANCE_FAILED`). Types are
-`LOOP_EXHAUSTED` and `MISSING_CORRELATION_KEY`. An incident is opened in the
-same transaction as the state change that caused it.
+`activityId`, `type`, `message`, `createdAt`, `resolvedAt` and `resolution`
+(`RETRIED`, `INSTANCE_CANCELLED`, `INSTANCE_FAILED`). Types are
+`LOOP_EXHAUSTED`, `MISSING_CORRELATION_KEY` and `WORK_FAILED` (task work failed
+its last attempt, or a user task was failed, with no `on_error`). An incident
+is opened in the same transaction as the state change that caused it.
 
 `POST /api/v1/process-instances/{id}/incidents/{incidentId}/retry` (operations
 write scope) and `POST /api/v1/projects/{projectId}/incidents/{incidentId}/retry`
-(project operators and owners) restart the stopped token and resolve the
-incident; `204` on success, `404` for an unknown incident or a non-member,
-`400 ENGINE_COMMAND_REJECTED` for an incident already resolved.
+(project operators and owners) restart the stopped token — or, for
+`WORK_FAILED`, reopen the failed work with its full attempt budget — and
+resolve the incident; `204` on success, `404` for an unknown incident or a
+non-member, `400 ENGINE_COMMAND_REJECTED` for an incident already resolved.
+Both accept an optional body `{ "model": "...", "reason": "..." }` for a
+`WORK_FAILED` incident of agent work: the task runs on that model, which must
+be on `abada.agent.allowed-models`; `reason` is required and recorded with
+`fromModel`, `toModel` and the actor in `INCIDENT_RETRIED` history. Any other
+incident, a model outside the allow-list or a missing reason is `400`. The
+override applies to that task only.
+
+`POST /api/v1/jobs/{jobId}/retries` and
+`POST /api/v1/projects/{projectId}/jobs/{jobId}/retries` accept the same
+optional `model` and `reason` next to `retries`, and resolve the job's open
+`WORK_FAILED` incident. A completed or cancelled job cannot be retried (`400`).
 
 ## Project-scoped APL authoring
 

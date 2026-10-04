@@ -140,6 +140,45 @@ class ProjectIncidentApiTest {
     }
 
     @Test
+    void failedWorkOpensAnIncidentThatOnlyAnOperatorCanRetryAndOnlyAgentWorkCanChangeModel() {
+        engine.deploy(projectId, new ByteArrayInputStream("""
+                version: abada.io/v1
+                metadata: { key: sync_once, name: Sync once }
+                flow:
+                  entry: start
+                  nodes:
+                    - { id: start, type: webhook, next: sync }
+                    - { id: sync, type: engine-task, service: crm-sync, next: done }
+                    - { id: done, type: end }
+                """.getBytes(StandardCharsets.UTF_8)));
+        String failing = engine.startProcess(projectId, "sync_once", "alice", Map.of()).getId();
+        var sync = workers.fetchAndLock(new FetchAndLockRequest("w", List.of("crm-sync"), 60_000L)).getFirst();
+        workers.handleFailure(sync.id(), new com.abada.engine.dto.ExternalTaskFailureDto("w", "CRM down", "IOException",
+                0, 0L));
+        IncidentDTO failed = incidents("alice", true).getBody().stream()
+                .filter(incident -> incident.processInstanceId().equals(failing)).findFirst().orElseThrow();
+        assertThat(failed.type()).isEqualTo("WORK_FAILED");
+
+        ResponseEntity<String> stranger = rest.exchange("/v1/projects/{projectId}/incidents/{incidentId}/retry",
+                HttpMethod.POST, new HttpEntity<>(headers("mallory")), String.class, projectId, failed.id());
+        assertThat(stranger.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+        HttpHeaders json = headers("alice");
+        json.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+        ResponseEntity<String> notAgent = rest.exchange("/v1/projects/{projectId}/incidents/{incidentId}/retry",
+                HttpMethod.POST, new HttpEntity<>(Map.of("model", "gpt-5-mini", "reason", "try another"), json),
+                String.class, projectId, failed.id());
+        assertThat(notAgent.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(notAgent.getBody()).contains("agent work");
+
+        ResponseEntity<Void> retried = rest.exchange("/v1/projects/{projectId}/incidents/{incidentId}/retry",
+                HttpMethod.POST, new HttpEntity<>(headers("alice")), Void.class, projectId, failed.id());
+        assertThat(retried.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(workers.fetchAndLock(new FetchAndLockRequest("w", List.of("crm-sync"), 60_000L)))
+                .singleElement().satisfies(task -> assertThat(task.retries()).isEqualTo(3));
+    }
+
+    @Test
     void nonMembersCannotSeeThem() {
         ResponseEntity<String> denied = rest.exchange("/v1/projects/{projectId}/incidents", HttpMethod.GET,
                 new HttpEntity<>(headers("mallory")), String.class, projectId);

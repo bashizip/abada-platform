@@ -175,14 +175,19 @@ public class CockpitController {
     /** Restarts the token an open incident stopped (operator action, recorded in history). */
     @PostMapping("/{id}/incidents/{incidentId}/retry")
     public ResponseEntity<Void> retryIncident(@PathVariable String id, @PathVariable String incidentId,
+            @RequestBody(required = false) com.abada.engine.dto.IncidentRetryRequest body,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         requireInstance(id);
         if (incidents.findById(incidentId).filter(found -> found.getProcessInstanceId().equals(id)).isEmpty()) {
             throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                     "Incident not found: " + incidentId);
         }
-        idempotency.execute(idempotencyKey, "incident.retry", Map.of("id", id, "incidentId", incidentId), () -> {
-            engine.retryIncident(id, incidentId);
+        String model = body == null ? null : body.model();
+        String reason = body == null ? null : body.reason();
+        Map<String, Object> fingerprint = new java.util.LinkedHashMap<>(Map.of("id", id, "incidentId", incidentId));
+        if (model != null) fingerprint.put("model", model);
+        idempotency.execute(idempotencyKey, "incident.retry", fingerprint, () -> {
+            engine.retryIncident(id, incidentId, model, reason);
             return Map.of("status", "Retried", "incidentId", incidentId);
         });
         return ResponseEntity.noContent().build();
