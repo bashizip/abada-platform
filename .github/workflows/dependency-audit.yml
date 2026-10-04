@@ -1,0 +1,33 @@
+name: Dependency audit
+
+# Advisories are published against dependencies already in a lockfile, so a
+# branch that passed CI can fail its next audit without any code change. This
+# job audits dev and main every day, so a new advisory is fixed on dev before
+# a promotion pull request runs into it.
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [dev, main]
+        project: [documentation, studio]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Audit ${{ matrix.project }} on ${{ matrix.ref }}
+        working-directory: ${{ matrix.project }}
+        run: npm audit --audit-level=low
