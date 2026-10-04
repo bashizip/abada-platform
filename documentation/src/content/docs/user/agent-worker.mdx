@@ -63,9 +63,10 @@ ABADA_LLM_GEMINI_API_KEY=...
   An `agent` node naming a model outside it **fails at deployment or authoring
   validation** — not at first execution. Default:
   `gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
-- Requested `tools` on a node must all appear in `ABADA_AGENT_ALLOWED_TOOLS`.
-  The worker does not execute arbitrary tool code; identifiers are model
-  context for adapters operators add deliberately.
+- `ABADA_AGENT_ALLOWED_TOOLS` lists the tool servers the worker may reach. A
+  node's `crm/get_customer` is allowed when `crm` (or the exact reference) is
+  listed; a deployment can never widen this list. Tools themselves are
+  declared per project as tool server resources (see the APL specification).
 
 ## What the engine keeps durable
 

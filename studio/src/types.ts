@@ -1,3 +1,5 @@
+import type { APLAgentNode } from './lib/apl/types.generated';
+
 export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script';
 
 export type EventSubtype = 'start' | 'end' | 'timer' | 'message' | 'signal';
@@ -18,6 +20,12 @@ export interface OnTimeoutRoute {
   then: string;
 }
 
+/** One entry of an agent's `tools:` list, exactly as APL accepts it. */
+export type AgentToolRef = NonNullable<APLAgentNode['tools']>[number];
+
+/** The `<server>/<tool>` reference (or advisory name) of a tools entry. */
+export const toolRefOf = (tool: AgentToolRef): string => (typeof tool === 'string' ? tool : tool.ref);
+
 export interface AgentConfig {
   profileVersion?: 'abada.agent/v1';
   model: string;
@@ -25,7 +33,8 @@ export interface AgentConfig {
   /** 0-100; 0 means no threshold. The engine enforces it against the model's `_confidence`. */
   confidenceThreshold: number;
   temperature: number;
-  tools: string[];
+  /** `<server>/<tool>` refs (or `{ ref, policy }` tightening the server's policy); bare names are advisory. */
+  tools: AgentToolRef[];
   /** Target node when `_confidence` is missing or below the threshold (`on_low_confidence`). */
   onLowConfidence?: string;
   /** Target node when the output violates `output_schema` (`on_invalid_output`). */

@@ -83,7 +83,7 @@ public class ProjectResourceController {
             return ProjectResourceEntity.Kind.valueOf(value.strip().toUpperCase());
         } catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST,
-                    "Resource kind must be FORM or RESOURCE");
+                    "Resource kind must be FORM, RESOURCE or TOOL_SERVER");
         }
     }
 

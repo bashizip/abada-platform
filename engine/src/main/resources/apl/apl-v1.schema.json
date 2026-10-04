@@ -332,8 +332,35 @@
         },
         "tools": {
           "type": "array",
+          "description": "Tools from the project's tool servers, as <server>/<tool> or { ref, policy } to tighten the server's policy. A name without a server is advisory only (deprecated).",
           "items": {
-            "type": "string"
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref",
+                  "policy"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_-]{0,63}/[A-Za-z0-9_.-]{1,128}$"
+                  },
+                  "policy": {
+                    "enum": [
+                      "read",
+                      "write",
+                      "approval_required"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         },
         "confidence_threshold": {

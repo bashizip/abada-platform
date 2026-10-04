@@ -23,7 +23,7 @@ import {
 import { ActivityHistoryDTO, ProjectJob } from '@/api/engine';
 import { ErrorDetailsDialog } from '@/features/operations/ErrorDetailsDialog';
 import { failureOf, type FailureContext } from '@/lib/run/errorReport';
-import { WorkflowFile } from '@/types';
+import { WorkflowFile, toolRefOf } from '@/types';
 import { aggregateNodeTelemetry, boundarySummary, eventMeta } from '@/lib/run/instanceDetail';
 import { formatDuration, humanize, unwrapVariable } from '@/lib/run/instanceFormat';
 
@@ -374,7 +374,7 @@ export const NodeTelemetry: React.FC<{
                   <span className="font-mono">{node.agentConfig.resultVariable ?? '—'}</span>
                 </InfoRow>
                 <InfoRow label="Tools">
-                  {node.agentConfig.tools?.length ? node.agentConfig.tools.join(', ') : '—'}
+                  {node.agentConfig.tools?.length ? node.agentConfig.tools.map(toolRefOf).join(', ') : '—'}
                 </InfoRow>
                 {node.agentConfig.maxTokens !== undefined && <InfoRow label="Max tokens">{node.agentConfig.maxTokens}</InfoRow>}
                 {node.agentConfig.maxAttempts !== undefined && <InfoRow label="Max attempts">{node.agentConfig.maxAttempts}</InfoRow>}

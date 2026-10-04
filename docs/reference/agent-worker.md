@@ -92,9 +92,11 @@ is rendered against the declared threshold.
 
 ## Safety and delivery
 
-- Requested tools must all appear in `ABADA_AGENT_ALLOWED_TOOLS`. The v1
-  sidecar does not execute arbitrary tool code; allowed identifiers are
-  provided as model context for adapters added deliberately by operators.
+- `ABADA_AGENT_ALLOWED_TOOLS` lists the tool servers this worker may reach.
+  A `<server>/<tool>` reference is allowed when its server (or the exact
+  reference) is listed, so a deployment can never widen what the operator
+  allowed; a name without a server must be listed exactly. A task requesting
+  anything else fails before any model call.
 - Concurrency and locks: each locked task runs on its own virtual thread,
   bounded by `ABADA_AGENT_MAX_TASKS` (default 4). The worker fetches only as
   many tasks as it has free slots. While a task runs, the worker extends its

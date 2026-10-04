@@ -196,7 +196,16 @@ export interface APLAgentNode {
    * JSON Schema 2020-12 the agent output must satisfy.
    */
   output_schema?: {};
-  tools?: string[];
+  /**
+   * Tools from the project's tool servers, as <server>/<tool> or { ref, policy } to tighten the server's policy. A name without a server is advisory only (deprecated).
+   */
+  tools?: (
+    | string
+    | {
+        ref: string;
+        policy: 'read' | 'write' | 'approval_required';
+      }
+  )[];
   confidence_threshold?: number;
   temperature?: number;
   /**

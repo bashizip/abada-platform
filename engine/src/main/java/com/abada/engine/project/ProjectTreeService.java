@@ -12,6 +12,8 @@ import com.abada.engine.persistence.entity.ProjectResourceEntity;
 import com.abada.engine.persistence.repository.ProjectFolderRepository;
 import com.abada.engine.persistence.repository.ProjectProcessDocumentRepository;
 import com.abada.engine.persistence.repository.ProjectResourceRepository;
+import com.abada.engine.tools.ToolRegistryService;
+import com.abada.engine.tools.ToolServerDocument;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -50,9 +52,12 @@ public class ProjectTreeService {
     private final ProjectResourceRepository resources;
     private final ProjectProcessDocumentRepository documents;
     private final ProjectAccessService access;
+    private final ToolRegistryService toolRegistry;
 
     public ProjectTreeService(ProjectFolderRepository folders, ProjectResourceRepository resources,
-            ProjectProcessDocumentRepository documents, ProjectAccessService access) {
+            ProjectProcessDocumentRepository documents, ProjectAccessService access,
+            ToolRegistryService toolRegistry) {
+        this.toolRegistry = toolRegistry;
         this.folders = folders;
         this.resources = resources;
         this.documents = documents;
@@ -210,6 +215,7 @@ public class ProjectTreeService {
         if (resources.existsByProjectIdAndFolderIdAndName(projectId, folder, name)) {
             throw duplicateResource(folder);
         }
+        if (kind == ProjectResourceEntity.Kind.TOOL_SERVER) checkToolServer(projectId, null, content);
         Instant now = Instant.now();
         ProjectResourceEntity resource = new ProjectResourceEntity();
         resource.setProjectId(projectId);
@@ -237,6 +243,9 @@ public class ProjectTreeService {
         access.requireActive(projectId, Role.MAINTAINER);
         ProjectResourceEntity resource = requireResource(projectId, resourceId);
         if (resource.getEntityVersion() != expectedRevision) throw conflict();
+        if (resource.getKind() == ProjectResourceEntity.Kind.TOOL_SERVER) {
+            checkToolServer(projectId, resourceId, content);
+        }
         resource.setContentType(contentType == null ? "" : contentType.strip());
         resource.setSizeBytes(content.length);
         resource.setSha256(sha256(content));
@@ -280,6 +289,17 @@ public class ProjectTreeService {
     public void deleteResource(String projectId, String resourceId) {
         access.requireActive(projectId, Role.MAINTAINER);
         resources.delete(requireResource(projectId, resourceId));
+    }
+
+    /** A tool server document is checked on every save, so deployment only ever resolves valid servers. */
+    private void checkToolServer(String projectId, String resourceId, byte[] content) {
+        try {
+            toolRegistry.validateForSave(projectId, resourceId, content);
+        } catch (ToolServerDocument.InvalidToolServerException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST, exception.getMessage(),
+                    Map.of("issues", exception.issues().stream()
+                            .map(issue -> Map.of("path", issue.path(), "message", issue.message())).toList()));
+        }
     }
 
     public ProjectFolderEntity requireFolder(String projectId, String folderId) {

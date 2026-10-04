@@ -284,7 +284,7 @@ public final class AgentWorkerMain {
                 if (work == null || !"abada.agent/v1".equals(work.profileVersion())) {
                     throw new IllegalArgumentException("Missing or unsupported abada.agent/v1 descriptor");
                 }
-                if (!config.allowedTools().containsAll(requestedTools)) {
+                if (!requestedTools.stream().allMatch(tool -> toolAllowed(config.allowedTools(), tool))) {
                     throw new IllegalArgumentException("Agent requests tools outside the configured allow-list");
                 }
                 // The declared model first, then each fallback, but only while the
@@ -426,6 +426,18 @@ public final class AgentWorkerMain {
                 "topic", task.topicName(),
                 "processInstanceId", task.processInstanceId(),
                 "status", "ACKNOWLEDGED"));
+    }
+
+    /**
+     * {@code ABADA_AGENT_ALLOWED_TOOLS} lists the tool servers this worker may
+     * reach: a {@code <server>/<tool>} reference is allowed when its server (or
+     * the exact reference) is listed, so a deployment can never widen what an
+     * operator allowed. A name without a server must be listed exactly.
+     */
+    static boolean toolAllowed(Set<String> allowed, String requested) {
+        if (allowed.contains(requested)) return true;
+        int slash = requested.indexOf('/');
+        return slash > 0 && allowed.contains(requested.substring(0, slash));
     }
 
     private static String safeMessage(Exception exception) {

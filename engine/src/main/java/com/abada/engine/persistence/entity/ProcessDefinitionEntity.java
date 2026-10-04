@@ -61,6 +61,13 @@ public class ProcessDefinitionEntity {
     @Column(name = "compatibility_report", nullable = false, columnDefinition = "TEXT")
     private String compatibilityReport = "{\"detectedProfiles\":[],\"mappings\":[],\"issues\":[]}";
 
+    /** Tool bindings resolved at deployment (JSON by agent node id); null when the definition binds none. */
+    @Column(name = "tool_bindings", columnDefinition = "TEXT")
+    private String toolBindings;
+
+    public String getToolBindings() { return toolBindings; }
+    public void setToolBindings(String value) { this.toolBindings = value; }
+
     public ProcessDefinitionEntity() {
         this.deploymentId = UUID.randomUUID().toString();
         this.createdAt = Instant.now();
