@@ -139,7 +139,8 @@ npm run check
 npm run build
 ```
 
-Starlight validates internal links during the production build. A missing
+The production build checks every internal link and heading anchor in the
+built site (`documentation/scripts/check-links.mjs`) and fails on a broken one. A missing
 deployment `site` URL and Mermaid's client bundle may produce non-blocking
 sitemap and chunk-size warnings; content, type, link or diagram failures are
 blocking.
