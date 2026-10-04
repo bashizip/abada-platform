@@ -14,6 +14,7 @@ unknown or missing protocol version rather than guessing payload semantics.
 | Lock extension | `POST /{id}/extend-lock` | Compatibility alias with the same atomic semantics as heartbeat. |
 | Completion | `POST /{id}/complete` | Requires `{workerId, variables}` in secured modes; merges variables and advances once. |
 | BPMN error | `POST /{id}/bpmn-error` | Requires worker ownership and `errorCode`; stores the business error and variables atomically. |
+| Tool credential | `GET /{id}/tool-credentials/{server}?workerId=` | Returns `{server, credential, secret}` for a tool server the task is bound to, only to the worker holding the task's live lease (`409` otherwise, `403` for a server the task is not bound to). Worker principals only, never human administrators; `Cache-Control: no-store`. |
 | Technical failure | `POST /{id}/failure` | Stores error details, retries and retry timeout. Zero retries takes the node's `on_error` (code `WORK_FAILED`) or opens a `WORK_FAILED` incident. With `deferred: true` the attempt is not consumed (see below). |
 
 All mutations accept `Idempotency-Key`. Workers should reuse one key for every
@@ -65,6 +66,13 @@ answer. When every model is unavailable, report the failure with
 available again after a growing, capped delay. Use an `Idempotency-Key` that
 names the lease (for example its lock expiry): two deferrals of the same
 attempt are different requests.
+
+For `abada:agent` tasks the descriptor (`agentWork`) also carries, when the
+node declares tools, `toolBindings` (the tools frozen with the definition
+version: `server`, `tool`, `policy`, `idempotency`, `approvers`, `url`,
+`transport`, `credential` name, `resourceId`, `resourceRevision`) and
+`toolPolicies` (policies the node tightened, by reference). Both are omitted
+when empty, so older workers keep decoding the descriptor.
 
 For `abada:agent` tasks, `variables` contains **only the node's declared
 inputs**, resolved by the engine and keyed by input name (default-deny). Other

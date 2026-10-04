@@ -83,9 +83,11 @@ locally:
 - `ABADA_AGENT_ALLOWED_MODELS` — the engine rejects an APL document at
   deployment or authoring validation when an agent node names a model outside
   this list (fail fast, not at first execution).
-- `ABADA_AGENT_ALLOWED_TOOLS` — requested node tools must all appear here;
-  the sidecar does not execute arbitrary tool code, and adapters are added
-  deliberately by operators.
+- `ABADA_AGENT_ALLOWED_TOOLS` — the tool servers this worker may reach. A
+  node's `<server>/<tool>` reference must name a listed server (or be listed
+  exactly), so a deployment cannot widen what the operator allowed. Which
+  tools exist and their read / write / approval-required policy come from the
+  project's tool server resources, frozen with each definition version.
 
 ## Observability boundaries
 

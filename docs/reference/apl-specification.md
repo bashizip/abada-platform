@@ -342,7 +342,7 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
     Extract {income, creditScore, requestedAmount} from the payload.
     Return strict JSON only.
   tools:
-    - database.read
+    - crm/get_customer
   inputs:
     payload: ${payload}
   result_variable: extracted
@@ -364,7 +364,7 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `inputs` | map | no | named process-variable bindings |
 | `result_variable` | string | no | completion variable; default `<nodeId>_result` |
 | `output_schema` | map | no | requires a JSON-object response |
-| `tools` | string[] | no | requested identifiers, enforced against the worker allowlist |
+| `tools` | list | no | `<server>/<tool>` or `{ ref, policy }` from the project's tool servers (§3.1.1); resolved and frozen at deployment |
 | `confidence_threshold` | number | no | 0–100 |
 | `temperature` | number | no | 0–2 |
 | `max_tokens` | integer | no | positive provider response bound |
@@ -377,6 +377,59 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error (optionally per code) or the last failed attempt (`WORK_FAILED`) |
 | `on_timeout` | `{after, then}` | no | interrupting timeout of the whole step (§2.6) |
 | `next` | nodeId | yes | linear successor |
+
+#### 3.1.1 Tools and tool servers
+
+An agent may only use tools declared by a **tool server**: a project resource
+of kind `TOOL_SERVER` (YAML, validated against
+`engine/src/main/resources/apl/tool-server-v1.schema.json` on every save).
+
+```yaml
+name: crm                      # used in references: crm/<tool>; unique per project
+transport: streamable-http     # MCP streamable HTTP; stdio is not supported
+url: https://crm-mcp.internal/mcp
+credential: crm-token          # name of a project tool credential, never the secret
+tools:
+  get_customer:  { policy: read }
+  create_ticket: { policy: write, idempotency: key }
+  refund:        { policy: approval_required, idempotency: none, approvers: [finance] }
+```
+
+- `policy` is `read` (no side effects), `write` (side effects, journaled with an
+  idempotency key) or `approval_required` (a person approves the exact call
+  first). A tool the document does not list is denied.
+- `idempotency` is required for `write` and `approval_required`: `key` when the
+  server accepts an idempotency key, `none` when it does not. A `none` write
+  interrupted by a crash is never re-sent; it opens an incident instead.
+- The URL must use `https` (plain `http` only for loopback hosts, or when the
+  engine sets `abada.tools.allow-insecure-http=true` for development) and must
+  not embed credentials.
+
+On an agent node, `tools:` entries are `<server>/<tool>` or
+`{ ref: <server>/<tool>, policy: <policy> }`. A node may **tighten** a policy
+(`write` → `approval_required`), never loosen it. Deployment resolves every
+reference against the project's tool servers; an unknown server or tool, or a
+loosened policy, is an `ABADA-APL-TOOL-002` error at the entry's path. The
+resolved bindings (server URL, tool, effective policy, idempotency, approvers,
+resource id and revision) are stored with the definition version and delivered
+to the worker in the agent descriptor as `toolBindings`. Editing a tool server
+later never changes running instances: redeploying makes a new version with the
+new bindings (an unchanged source with changed bindings is a new version).
+
+A name without a server (`web_search`, the rc.x form) is an
+`ABADA-APL-TOOL-001` warning: it is passed to the worker as an advisory name
+and never executed. It becomes an error at 1.1.0.
+
+Tool credentials are managed with `PUT/GET/DELETE
+/v1/projects/{projectId}/tool-credentials/{name}` (owners and maintainers
+write; responses carry a hint, never the value; every change is recorded in
+history with the actor). They are encrypted with `ABADA_ENCRYPTION_KEY` and
+issued only to the worker holding the lease of a task bound to the server
+(see `external-worker-protocol-v1.md`). The engine itself never connects to a
+tool server.
+
+`POST /v1/apl/validate` resolves tools the same way when the request names a
+`projectId`.
 
 **Data the agent receives (default-deny).** The locked task carries only the
 node's `inputs`, resolved by the engine and keyed by input name. When `inputs`

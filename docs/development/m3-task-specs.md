@@ -81,7 +81,7 @@ not in a PR.
    an approval, and the agent continues with the child's outputs as the tool
    result. No second suspension mechanism.
 
-## E7 — Tool registry
+## E7 — Tool registry ✅ done
 
 **Goal.** A tool an agent may use is declared once per project with its
 server, its contract and its policy. Deployment resolves it and freezes it into
@@ -156,6 +156,37 @@ store.
 **Out of scope.** `stdio` transport; tool discovery from Studio (listing a
 server's tools live); per-tool rate limits; sharing tool servers across
 projects.
+
+**As built.** Tests: `ToolServerDocumentTest`, `AplToolReferenceTest`
+(parser forms and the advisory warning), `PostgresToolRegistryTest`
+(PostgreSQL: save-time validation and unique server names, resolution errors
+at their paths, validate with a `projectId`, frozen bindings across a resource
+edit, write-only credentials and lease-holder issuance),
+`SecurityAuthorizationContractTest` (credential endpoints: missing, forged,
+invalid and expired credentials, human administrators and operators refused,
+non-members get `404`), `PostgresSchemaUpgradeTest` (V1–V26 → V27, fresh),
+`PostgresTokenUpgradeTest`, SDK `AbadaWorkerClientTest`, worker
+`AgentWorkerMainTest`, Studio `parser.test.ts`.
+
+**Deviations from the plan.**
+- `ToolBinding` and `ToolPolicy` live in `ENGINE/core/model` next to the
+  descriptor; the `tools` package holds `ToolServerDocument`,
+  `ToolRegistryService` and `ToolCredentialService`.
+- Credentials are issued per task, not per worker:
+  `GET /v1/external-tasks/{id}/tool-credentials/{server}?workerId=` answers
+  only the worker holding that task's live lease, and only for a server the
+  task is bound to. Managed with `PUT/GET/DELETE
+  /v1/projects/{projectId}/tool-credentials/{name}` (V27 `tool_credentials`).
+- A redeploy of an unchanged source whose resolved bindings changed creates a
+  new version; the checksum alone no longer decides.
+- `ABADA_AGENT_ALLOWED_TOOLS` keeps its name: a `<server>/<tool>` reference is
+  allowed when its server (or the exact reference) is listed.
+- `POST /v1/apl/validate` resolves tools only when the request names a
+  `projectId` (deployment always resolves).
+- Studio: `TOOL_SERVER` is a kind in the new-file dialog of the project
+  explorer, with the engine's validation errors shown on save; a dedicated
+  editor, the tools picker, and replacing the inspector's placeholder tool
+  list move to E12.
 
 ## E8 — Tool loop in the worker
 
