@@ -41,6 +41,7 @@ public class ExternalTaskCommandService {
     private final WorkerCapabilityService workerCapabilities;
     private final ProjectAccessService access;
     private final EntityManager entityManager;
+    private final com.abada.engine.core.agent.AgentStepService agentSteps;
 
     /** Rate-limit waits allowed before one counts as a failed attempt, so waiting stays bounded. */
     private final int maxDeferrals;
@@ -52,7 +53,9 @@ public class ExternalTaskCommandService {
             WorkerCapabilityService workerCapabilities, ProjectAccessService access, EntityManager entityManager,
             @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferrals:12}") int maxDeferrals,
             @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferral-delay:PT15M}")
-            java.time.Duration maxDeferralDelay) {
+            java.time.Duration maxDeferralDelay,
+            com.abada.engine.core.agent.AgentStepService agentSteps) {
+        this.agentSteps = agentSteps;
         this.maxDeferrals = maxDeferrals;
         this.maxDeferralDelay = maxDeferralDelay;
         this.repository = repository;
@@ -86,9 +89,15 @@ public class ExternalTaskCommandService {
 
                 ProcessInstance instance = requireInstance(task);
                 var serviceTask = instance.getDefinition().getServiceTask(task.getActivityId());
+                AgentWorkDescriptor work = serviceTask == null ? null : serviceTask.agentWork();
+                var journal = work == null ? null : agentSteps.prepareLock(task);
+                if (journal != null && journal.blocked()) {
+                    // A write with an unknown outcome stopped this task; a person decides, not a worker.
+                    acquired = true;
+                    continue;
+                }
                 history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(),
                         lockDetails(task, request.workerId(), topic, serviceTask));
-                AgentWorkDescriptor work = serviceTask == null ? null : serviceTask.agentWork();
                 if (work != null && task.getModelOverride() != null) {
                     // An operator retried this task on another model; the definition is unchanged.
                     work = work.withModel(task.getModelOverride());
@@ -103,7 +112,9 @@ public class ExternalTaskCommandService {
                         task.getProcessInstanceId(), task.getActivityId(), task.getRetries(),
                         task.getLockExpirationTime(), task.getTraceParent(), "1",
                         work,
-                        instance.getProjectId()));
+                        instance.getProjectId(), work == null ? null : task.getAttempt(),
+                        journal == null ? null : journal.steps(),
+                        journal == null ? null : journal.priorWrites()));
                 acquired = true;
                 if (locked.size() >= request.effectiveMaxTasks()) break;
             }
@@ -187,6 +198,8 @@ public class ExternalTaskCommandService {
         // A deferral past the cap is an ordinary failed attempt.
         Integer retries = failure.isDeferred() ? Integer.valueOf(Math.max(0, current - 1)) : failure.retries();
         task.setRetries(retries);
+        // A counted failure that will run again starts the next attempt (a fresh conversation).
+        if (retries == null || retries > 0) task.setAttempt(task.getAttempt() + 1);
         if (retries != null && retries == 0) {
             task.setStatus(ExternalTaskEntity.Status.FAILED);
             task.setLockExpirationTime(null);

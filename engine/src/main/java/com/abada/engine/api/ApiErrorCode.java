@@ -13,5 +13,9 @@ public enum ApiErrorCode {
     WORKER_LOCK_NOT_OWNED,
     WORKER_LOCK_EXPIRED,
     EXPRESSION_EVALUATION_FAILED,
+    /** An agent step the engine refused; {@code details.reason} names the rule (E9). */
+    AGENT_STEP_REJECTED,
+    /** The work was retired (completed, cancelled, failed or timed out); its lease no longer acts. */
+    WORK_RETIRED,
     INTERNAL_ERROR
 }
