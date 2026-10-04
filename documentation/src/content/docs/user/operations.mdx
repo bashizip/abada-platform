@@ -13,8 +13,9 @@ state means, and how to unblock an instance.
 
 **Operations** lists every instance of the open project. The counters show
 what is running, what finished in the last day and what **needs
-intervention**; the worker strip shows each agent worker and its last
-heartbeat.
+intervention** (failed instances plus open [incidents](#incidents)); the
+worker strip shows each agent worker and its last heartbeat, and the
+**Incidents** strip lists the open incidents.
 
 ![Operations: instance counters, the agent worker online, and the instance list with status, process, version, duration and starter](../../../assets/screens/tutorial/21-operations.webp)
 
@@ -54,6 +55,7 @@ provider keys.
 | Suspend / Resume | Instance header | A suspended instance accepts no completion; late worker reports are rejected and retried after resume |
 | Cancel | Instance header | Ends the instance and retires all its open work (tasks, jobs, timers) in one transaction |
 | Retry a failed job | Failed step in the inspector | Gives the job one more attempt and resolves its `WORK_FAILED` incident |
+| Retry an incident | **Incidents** strip (Operations or the instance) | Restarts the stopped step; see [Incidents](#incidents) |
 
 The same actions exist under `/api/v1/projects/{projectId}/instances/{instanceId}`
 (`DELETE` to cancel, `PUT …/suspension`) and
@@ -70,6 +72,23 @@ instance — other branches, timers — keeps going.
 | `LOOP_EXHAUSTED` | A loop reached `max_iterations` and has no `on_exhausted` | Retry (the step starts a fresh pass) or cancel |
 | `MISSING_CORRELATION_KEY` | A message wait has no `correlationKey` value | Set the variable, then retry |
 
+### In Studio
+
+The **Incidents** strip in Operations lists the open incidents of the project,
+newest first: kind, step, instance, when it opened and the engine's message.
+An instance's page shows the same strip with only its own incidents, and only
+while it has one.
+
+**Retry** restarts the step: failed work is reopened with a fresh attempt
+budget, an exhausted loop starts a fresh pass, a message wait is armed again.
+The incident leaves the list once the engine has resolved it; if the engine
+refuses the retry, its reason is shown on the incident.
+
+Retry is an Operator or Owner action on the project. Other members see the
+incidents without the actions; the engine enforces the same rule on the API.
+
+### Through the API
+
 List and retry them through the project API:
 
 ```bash
@@ -84,9 +103,16 @@ curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retr
 ### Retry an agent step on another model
 
 When a provider is down or out of quota, an operator can retry a failed agent
-step on another allowed model, for that task only. The reason is required and
-recorded with the old and new model and the operator in the history
-(`INCIDENT_RETRIED`):
+step on another allowed model, for that task only; the deployed definition is
+unchanged. The reason is required and recorded with the old and new model and
+the operator in the history (`INCIDENT_RETRIED`).
+
+In Studio, a `WORK_FAILED` incident on an agent step offers **Retry on another
+model**: pick a model from the engine's allow-list (the step's current model
+is left out), give the reason, and confirm. The option is not offered for
+other incidents or steps, which the engine would reject.
+
+Through the API:
 
 ```bash
 curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retry" \
