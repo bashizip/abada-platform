@@ -8,7 +8,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 Every mutation follows one rule: committed PostgreSQL rows are the input and
 output of the workflow transition. A replica does not continue from a mutable
 process object retained from an earlier request. This is the ACID rail that
-carries every workload identically — legacy BPMN, native APL, decision
+carries every workload identically — native APL, imported BPMN, decision
 tables, agent steps and the Insight loop's terminal facts.
 
 ## Atomic command lifecycle
@@ -67,6 +67,23 @@ A probabilistic output is never trusted as an engine decision: agent results
 merge through the normal external-task completion command, and Insight
 proposals are discarded unless `AplParser` validates them and a human
 approves them.
+
+## Tokens, jobs and incidents
+
+- **Tokens.** Each path of an instance is a row in `process_tokens` (activity,
+  scope, parent, loop counters, state). Joins count arrived token ids, so a
+  parallel branch that ends early never blocks its join, and loop counters
+  survive restarts. Waiting work names the token it belongs to.
+- **Jobs.** Timers, `on_timeout` deadlines and `sla_hours` checks are durable
+  rows acquired with `SKIP LOCKED`, so exactly one replica fires each one.
+- **Retiring work.** When a step leaves early — a timeout, a cancellation, a
+  decision — its open task, external job and timers are retired in the same
+  transaction, before the instance lock, so a late worker report is rejected
+  instead of advancing the process twice.
+- **Incidents.** A path that cannot continue (a failed step without
+  `on_error`, an exhausted loop without `on_exhausted`, a message wait without
+  a correlation value) stops with an incident row. The rest of the instance
+  keeps running; an operator retry restarts that path in a new command.
 
 ## Failure semantics
 

@@ -88,6 +88,8 @@ export interface EngineUserTaskDTO {
   processDefinitionName?: string;
   projectId?: string;
   variables?: Record<string, unknown>;
+  /** Decisions a reviewer chooses from; empty for an ordinary task. */
+  outcomes?: { name: string; commentRequired: boolean }[];
 }
 
 export interface TaskOperationResultDTO {
@@ -122,7 +124,7 @@ export interface ActivityHistoryDTO {
 import { config } from '@/config/runtime';
 import { keycloak } from '@/auth/keycloakClient';
 import { getUserFromToken } from '@/auth/keycloakClient';
-import { authenticatedFetch } from '@/api/authenticatedFetch';
+import { apiError, authenticatedFetch } from '@/api/authenticatedFetch';
 
 export interface ProcessDefinitionDTO {
   projectId?: string;
@@ -155,6 +157,34 @@ export interface EngineInfoResponse {
     liveness: string;
     readiness: string;
   };
+}
+
+/** What stopped a token: failed work, an exhausted loop, or a message with no correlation key. */
+export type IncidentKind = 'WORK_FAILED' | 'LOOP_EXHAUSTED' | 'MISSING_CORRELATION_KEY';
+
+/** An operator-visible runtime incident (`GET /v1/projects/{projectId}/incidents`). */
+export interface IncidentDTO {
+  id: string;
+  projectId: string;
+  processInstanceId: string;
+  tokenId?: string | null;
+  activityId: string;
+  /** The engine names the kind `type`; unknown future kinds pass through as strings. */
+  type: IncidentKind | string;
+  message?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+  resolution?: string | null;
+}
+
+/**
+ * Optional retry body. `model` reruns failed agent work on another allowed
+ * model for this task only and needs a `reason`; the engine rejects it for
+ * any other incident.
+ */
+export interface IncidentRetryRequest {
+  model: string;
+  reason: string;
 }
 
 /** Liveness and incident record for one external worker topic in a project. */
@@ -326,6 +356,37 @@ export class EngineAPI {
       { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ retries }) },
     );
     if (!res.ok) throw new Error(`Failed to retry job: ${res.statusText}`);
+  }
+
+  /** Lists a project's incidents, newest first; open ones only by default. */
+  static async getIncidents(projectId: string, open = true): Promise<IncidentDTO[]> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/incidents?open=${open}&size=100`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  /**
+   * Retries an open incident: the stopped token restarts, or failed work is
+   * reopened with a fresh attempt budget, optionally on another model. Project
+   * operators and owners only. Each call carries its own idempotency key
+   * (when the browser can mint one) so a resent request cannot retry twice.
+   */
+  static async retryIncident(projectId: string, incidentId: string, override?: IncidentRetryRequest): Promise<void> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/incidents/${encodeURIComponent(incidentId)}/retry`,
+      {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(),
+          ...(typeof crypto?.randomUUID === 'function' ? { 'Idempotency-Key': crypto.randomUUID() } : {}),
+        },
+        body: override ? JSON.stringify({ model: override.model, reason: override.reason }) : undefined,
+      },
+    );
+    if (!res.ok) throw await apiError(res);
   }
 
   /**
@@ -500,7 +561,33 @@ export class EngineAPI {
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
     });
-    if (!res.ok) throw new Error(`Failed to complete task: ${res.statusText}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Failed to complete task: ${res.statusText}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Submits a reviewer's decision on a task that declares outcomes. The engine
+   * checks the outcome and any required comment.
+   */
+  static async decideTask(
+    taskId: string,
+    decision: { outcome: string; comment?: string; variables?: Record<string, unknown> },
+    projectId?: string,
+  ): Promise<TaskOperationResultDTO> {
+    const path = projectId ? `/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/decision`
+      : `/tasks/${encodeURIComponent(taskId)}/decision`;
+    const res = await authenticatedFetch(`${this.BASE_URL}${path}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(decision)
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || `Failed to submit the decision: ${res.statusText}`);
+    }
     return res.json();
   }
 

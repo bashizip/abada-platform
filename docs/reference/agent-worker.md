@@ -75,6 +75,8 @@ without logging prompts, tokens, credentials, or complete sensitive payloads:
 - `errorType`: the failure class name, on failure reports only.
 - `promptTokens` / `completionTokens`: provider token usage for the call,
   when the provider reports it.
+- `requestedModel`: the node's declared model, present only when a fallback
+  model produced the attempt (`model` then names the fallback).
 - `confidence`: the achieved `_confidence` score (0–100) the model reported
   for a structured output, when present. It is the same value that was gated
   against `confidence_threshold` before the attempt completed, so operators

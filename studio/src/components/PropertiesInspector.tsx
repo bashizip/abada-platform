@@ -24,6 +24,12 @@ import {
 } from 'lucide-react';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { FormPicker } from '@/components/FormPicker';
+import type { AplValidationIssue } from '@/api/apl';
+import { isOutcomeRouteEdge, setRoute, syncRouteEdges, type Route } from '@/lib/apl/routes';
+import { analyzeLoops } from '@/lib/apl/loopAnalysis';
+import {
+  ErrorRoutesEditor, LoopEditor, NameListEditor, OrderedPickList, OutcomesEditor, RouteSelect, TimeoutEditor,
+} from '@/components/inspector/RouteEditors';
 
 interface PropertiesInspectorProps {
   selectedNode: WorkflowNode | null;
@@ -36,6 +42,8 @@ interface PropertiesInspectorProps {
   onUpdateWorkflow?: (updater: (wf: WorkflowFile) => WorkflowFile) => void;
   /** Owning project — enables the human-node form picker. */
   projectId?: string;
+  /** Engine validation issues about the selected node. */
+  issues?: AplValidationIssue[];
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
@@ -45,6 +53,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   workflow,
   onUpdateWorkflow,
   projectId,
+  issues = [],
 }) => {
   const aplContractValue = useAplContract();
   /** Engine bound for an agent field (served APL contract), or the fallback until it loads. */
@@ -64,7 +73,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           <Info className="w-6 h-6 text-[#A89F91] mx-auto" />
           <p className="text-xs text-[#EAE3D9] font-medium">No Node Selected</p>
           <p className="text-[11px] text-[#A89F91] leading-relaxed">
-            Click any node on the BPMN canvas to inspect and modify AI agent prompts, confidence thresholds, or DMN decision rules.
+            Select a step on the canvas to edit its settings: agent prompts and models, routes, review outcomes, repeat limits or decision rules.
           </p>
         </div>
 
@@ -157,6 +166,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       },
     });
   };
+
+  /**
+   * Route edits go through the workflow so the node config and its canvas
+   * edges change together, in one undo step.
+   */
+  const routeTo = (route: Route, target: string | null) =>
+    onUpdateWorkflow?.((wf) => setRoute(wf, selectedNode.id, route, target));
+  /** Replaces the node and re-derives its route edges (loop, outcomes). */
+  const commitWithRoutes = (updated: WorkflowNode, dropNext = false) =>
+    onUpdateWorkflow?.((wf) => syncRouteEdges({
+      ...wf,
+      nodes: wf.nodes.map((node) => (node.id === updated.id ? updated : node)),
+      // A review with outcomes has no `next`: its exits are the outcomes.
+      edges: dropNext ? wf.edges.filter((edge) => edge.source !== updated.id || isOutcomeRouteEdge(edge)) : wf.edges,
+    }));
+  const nodes = workflow?.nodes ?? [];
+  const nextTarget = workflow?.edges.find((edge) => edge.source === selectedNode.id && !isOutcomeRouteEdge(edge))?.target;
+  const loopProblem = workflow ? analyzeLoops(workflow).targets.get(selectedNode.id) : undefined;
+  const loopable = !(selectedNode.type === 'event' && (selectedNode.subtype === 'start' || selectedNode.subtype === 'end'));
 
   // Model selector options are the engine's allowed models (served APL
   // contract), joined by the current model when it is not among them, so the
@@ -313,6 +341,30 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
         </div>
 
+        {issues.length > 0 && (
+          <div className="space-y-1 rounded-xl border border-[#E76F51]/40 bg-[#E76F51]/10 p-3">
+            <span className="text-[11px] font-semibold text-[#E76F51]">Validation</span>
+            {issues.map((issue, index) => (
+              <p key={index} className="text-[10px] leading-relaxed text-[#EAE3D9]">
+                <span className="font-mono text-[#E76F51]">{issue.severity === 'ERROR' ? 'error' : 'warning'}</span> {issue.message}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {loopable && onUpdateWorkflow && (
+          <div className="space-y-2 pt-4 border-t border-[#3A322E]">
+            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block">Loop</span>
+            <LoopEditor
+              loop={selectedNode.loop}
+              problem={loopProblem}
+              nodes={nodes}
+              excludeId={selectedNode.id}
+              onChange={(loop) => commitWithRoutes({ ...selectedNode, loop })}
+            />
+          </div>
+        )}
+
         {/* AI Agent Configuration Panel */}
         {selectedNode.type === 'agent' && selectedNode.agentConfig && (
           <div className="space-y-4 pt-4 border-t border-[#3A322E]">
@@ -382,51 +434,29 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </p>
             </div>
 
-            {/* Outcome routes: the engine-side output contract (T5, T7) */}
+            {/* Routes: the engine-side output contract (T5, T7) and boundaries (E4) */}
             <div className="space-y-2 p-3 bg-[#1A1614] rounded-xl border border-[#3A322E]">
-              <span className="text-xs text-[#EAE3D9] font-medium block">Outcome routes</span>
+              <span className="text-xs text-[#EAE3D9] font-medium block">Routes</span>
               <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                Where the instance goes when the engine rejects the agent result, or when the last attempt
-                fails (on_error). Without a route, a rejected result counts as a failed attempt and a last
+                Where the instance goes when the engine rejects the agent result, when the step fails for good, or
+                when it takes too long. Without a route, a rejected result counts as a failed attempt and a last
                 failure opens an incident.
               </p>
-              {([
-                ['onLowConfidence', 'Low confidence (on_low_confidence)'],
-                ['onInvalidOutput', 'Invalid output (on_invalid_output)'],
-                ['onError', 'Business error (on_error)'],
-              ] as const).map(([field, label]) => (
-                <div key={field} className="space-y-1">
-                  <label className="text-[10px] text-[#A89F91] block">{label}</label>
-                  {Array.isArray(selectedNode.agentConfig?.[field]) ? (
-                    <p className="text-[10px] text-[#A89F91]">Routed by error code — edit in APL.</p>
-                  ) : (
-                    <select
-                      value={(selectedNode.agentConfig?.[field] as string | undefined) || ''}
-                      onChange={(e) => handleAgentChange(field, e.target.value || undefined)}
-                      className="w-full bg-[#25201D] border border-[#3A322E] rounded-lg px-2 py-1.5 text-xs font-mono text-[#EAE3D9] focus:outline-none"
-                    >
-                      <option value="">— no route —</option>
-                      {workflow?.nodes
-                        .filter((n) => n.id !== selectedNode.id)
-                        .map((n) => (
-                          <option key={n.id} value={n.id}>{n.title || n.id}</option>
-                        ))}
-                    </select>
-                  )}
-                </div>
-              ))}
-              {selectedNode.agentConfig?.onTimeout && (
-                <p className="text-[10px] text-[#A89F91]">
-                  Timeout (on_timeout): after <code>{selectedNode.agentConfig.onTimeout.after}</code> the step is
-                  cancelled and continues at <code>{selectedNode.agentConfig.onTimeout.then}</code> — edit in APL.
-                </p>
-              )}
-              {selectedNode.agentConfig?.fallbackModels?.length ? (
-                <p className="text-[10px] text-[#A89F91]">
-                  Fallback models (used only while the model before is rate-limited or unavailable):{' '}
-                  <code>{selectedNode.agentConfig.fallbackModels.join(' → ')}</code> — edit in APL.
-                </p>
-              ) : null}
+              <RouteSelect label="Low confidence (on_low_confidence)" value={selectedNode.agentConfig.onLowConfidence}
+                nodes={nodes} excludeId={selectedNode.id} onChange={(target) => routeTo({ kind: 'low_confidence' }, target)} />
+              <RouteSelect label="Invalid output (on_invalid_output)" value={selectedNode.agentConfig.onInvalidOutput}
+                nodes={nodes} excludeId={selectedNode.id} onChange={(target) => routeTo({ kind: 'invalid_output' }, target)} />
+              <ErrorRoutesEditor value={selectedNode.agentConfig.onError} nodes={nodes} excludeId={selectedNode.id}
+                onSetRule={(code, target) => routeTo({ kind: 'error', ...(code ? { code } : {}) }, target)} />
+              <TimeoutEditor value={selectedNode.agentConfig.onTimeout} nodes={nodes} excludeId={selectedNode.id}
+                onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
+              <OrderedPickList
+                label="Fallback models (only while the model before is rate-limited or unavailable)"
+                value={selectedNode.agentConfig.fallbackModels ?? []}
+                options={allowedModels.filter((model) => model !== currentModel)}
+                max={3}
+                onChange={(fallbackModels) => handleAgentChange('fallbackModels', fallbackModels.length ? fallbackModels : undefined)}
+              />
             </div>
 
             {/* Temperature Slider */}
@@ -573,7 +603,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-[10px] font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD] resize-y"
                   placeholder='{"approved": true}'
                 />
-                <p className="text-[10px] text-[#A89F91]">Expected JSON shape; the worker validates against it.</p>
+                <p className="text-[10px] text-[#A89F91]">Expected JSON shape; the engine checks every result against it before it is stored.</p>
               </div>
             </div>
 
@@ -660,35 +690,34 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </UITooltip>
             </div>
 
-            {/* Error Flow Routing (on_error) */}
+          </div>
+        )}
+
+
+        {/* Engine task: the external worker topic and its boundaries */}
+        {selectedNode.type === 'engine-task' && (
+          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+            <span className="text-[11px] font-semibold tracking-wider text-[#90A955] uppercase block flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5" />
+              Engine Task
+            </span>
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Error Route (on_error)</label>
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                When the engine task fails, the instance routes here instead of the normal successor. Drawn as an error edge.
-              </p>
-              {Array.isArray(selectedNode.engineTaskConfig?.onError) ? (
-                <p className="text-[10px] text-[#A89F91]">Routed by error code — edit in APL.</p>
-              ) : (
-              <select
-                value={(selectedNode.engineTaskConfig?.onError as string | undefined) || ''}
+              <label className="text-xs text-[#A89F91] block">Service topic</label>
+              <input
+                type="text"
+                value={selectedNode.engineTaskConfig?.service ?? ''}
+                placeholder="crm.sync"
                 onChange={(e) => onUpdateNode({
                   ...selectedNode,
-                  engineTaskConfig: {
-                    service: selectedNode.engineTaskConfig?.service || 'abada:service',
-                    onError: e.target.value || undefined,
-                  },
+                  engineTaskConfig: { ...selectedNode.engineTaskConfig, service: e.target.value },
                 })}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
-              >
-                <option value="">— no error route —</option>
-                {workflow?.nodes
-                  .filter((n) => n.id !== selectedNode.id)
-                  .map((n) => (
-                    <option key={n.id} value={n.id}>{n.title || n.id}</option>
-                  ))}
-              </select>
-              )}
+                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#90A955]"
+              />
             </div>
+            <ErrorRoutesEditor value={selectedNode.engineTaskConfig?.onError} nodes={nodes} excludeId={selectedNode.id}
+              onSetRule={(code, target) => routeTo({ kind: 'error', ...(code ? { code } : {}) }, target)} />
+            <TimeoutEditor value={selectedNode.engineTaskConfig?.onTimeout} nodes={nodes} excludeId={selectedNode.id}
+              onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
           </div>
         )}
 
@@ -998,10 +1027,38 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 min={0}
                 placeholder="No service level"
                 value={humanConfig.slaHours ?? ''}
-                onChange={(e) => handleHumanChange('slaHours', e.target.value === '' ? undefined : Number(e.target.value))}
+                onChange={(e) => {
+                  const slaHours = e.target.value === '' ? undefined : Number(e.target.value);
+                  // escalate_to needs a service level; dropping the SLA drops the escalation too.
+                  onUpdateNode({ ...selectedNode, humanConfig: { ...humanConfig, slaHours,
+                    escalateTo: slaHours ? humanConfig.escalateTo : undefined } });
+                }}
                 className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
               />
             </div>
+
+            <NameListEditor
+              label="Escalate to (groups added when the SLA is missed)"
+              value={humanConfig.escalateTo ?? []}
+              placeholder={humanConfig.slaHours ? 'managers' : 'Set an SLA first'}
+              disabled={!humanConfig.slaHours}
+              onChange={(escalateTo) => handleHumanChange('escalateTo', escalateTo.length ? escalateTo : undefined)}
+            />
+
+            <OutcomesEditor
+              outcomes={humanConfig.outcomes}
+              nextTarget={nextTarget}
+              nodes={nodes}
+              excludeId={selectedNode.id}
+              onChange={(outcomes) => commitWithRoutes(
+                { ...selectedNode, humanConfig: { ...humanConfig, outcomes } }, !!outcomes)}
+            />
+
+            <RouteSelect label="If the task is failed (on_error)"
+              value={typeof humanConfig.onError === 'string' ? humanConfig.onError : undefined}
+              nodes={nodes} excludeId={selectedNode.id} onChange={(target) => routeTo({ kind: 'error' }, target)} />
+            <TimeoutEditor value={humanConfig.onTimeout} nodes={nodes} excludeId={selectedNode.id}
+              onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
 
           </div>
         )}

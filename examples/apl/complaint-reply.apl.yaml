@@ -1,0 +1,91 @@
+version: abada.io/v1
+
+# The end-to-end tutorial process (documentation: "Tutorial: a reviewed AI reply").
+# An agent drafts the reply to a customer complaint, a support lead approves it or
+# rejects it with a comment, and the agent rewrites it with that comment, at most
+# three times.
+metadata:
+  key: complaint_reply
+  name: Complaint reply
+  owner: customer-care
+  variables:
+    - name: complaint
+      type: object
+      required: true
+
+flow:
+  entry: complaint-received
+  nodes:
+    - id: complaint-received
+      type: webhook
+      description: Complaint received
+      next: classify
+
+    # Advice, checked by the engine: the answer must match the schema and be confident enough.
+    - id: classify
+      type: agent
+      description: Classify the complaint
+      model: gemini-3.6-flash
+      prompt: |
+        Classify this customer complaint. Give its category, its severity
+        (low, medium or high) and a one-sentence summary.
+      inputs:
+        complaint: ${complaint}
+      result_variable: classification
+      output_schema:
+        type: object
+        required: [category, severity, summary]
+        properties:
+          category: { type: string }
+          severity: { enum: [low, medium, high] }
+          summary: { type: string }
+      confidence_threshold: 70
+      on_low_confidence: triage
+      next: draft
+
+    # Rewritten after each rejection with the reviewer's comment, three times at most.
+    - id: draft
+      type: agent
+      description: Draft the reply
+      model: gemini-3.6-flash
+      fallback_models: [gpt-5-mini]
+      prompt: |
+        Write a short, polite reply to the customer. Offer a remedy that fits
+        the severity. Reviewer feedback on the previous draft, if any: ${review_comment}
+      inputs:
+        complaint: ${complaint}
+        classification: ${classification}
+        review_comment: ${review_comment}
+      result_variable: reply
+      output_schema:
+        type: object
+        required: [subject, body]
+        properties:
+          subject: { type: string }
+          body: { type: string }
+      loop:
+        max_iterations: 3
+        on_exhausted: triage
+      on_timeout: { after: PT30M, then: triage }
+      next: review
+
+    # A person decides; a rejection must say why.
+    - id: review
+      type: human-input
+      description: Review the reply
+      assignees: [support-leads]
+      sla_hours: 4
+      escalate_to: [managers]
+      outcomes:
+        approve: { next: sent }
+        reject: { next: draft, comment: required }
+
+    - id: triage
+      type: human-input
+      description: Handle the complaint by hand
+      assignees: [managers]
+      next: sent
+
+    - id: sent
+      type: end
+      description: Reply approved

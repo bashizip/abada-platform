@@ -71,9 +71,11 @@ ABADA_LLM_GEMINI_API_KEY=...
 
 - **Attempt metadata.** Each completion and failure carries `model`, provider,
   attempt number, `durationMs`, tools, `resultVariable`, a `promptHash`
-  (never the prompt), and — on structured output — the achieved `confidence`
-  against the node's `confidence_threshold`. It is stored on the external-task
-  row and in activity history, and rendered in the instance view.
+  (never the prompt), token counts when the provider reports them, the
+  achieved `confidence` against the node's `confidence_threshold`, and
+  `requestedModel` when a fallback model answered. It is stored on the
+  external-task row and in activity history, and rendered in the instance
+  view.
 - **Resilience.** Leases expire and re-acquire dead-worker work without
   duplicate transitions; transient failures return tasks to the pool; retries
   are seeded from the APL `max_attempts`; suspension and cancellation reject
@@ -111,7 +113,9 @@ Studio surfaces worker state per project in the operations view:
 The same view shows last heartbeat, last rejection and consecutive failures,
 backed by the worker-health API. On the instance canvas, the live inspector
 renders the agent attempt's model, provider, latency, tools, confidence and
-threshold.
+threshold, token counts, and — after a fallback — the model it replaced:
+
+![Attempt telemetry: executed model gpt-5-mini, fallback for gemini-3.6-flash, output contract OK, tokens](../../../assets/screens/tutorial/23-fallback-telemetry.webp)
 
 When an attempt fails, the inspector shows the error type and message with a
 **Details** button, and every *Job failed* event is clickable. The dialog

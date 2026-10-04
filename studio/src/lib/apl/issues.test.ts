@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { issueLine, issuesToLogs, sortIssues } from './issues';
+import { issueLine, issueNodeId, issuesByNode, issuesToLogs, sortIssues } from './issues';
 
 const SOURCE = [
   'version: abada.io/v1',          // 0
@@ -60,5 +60,19 @@ describe('issuesToLogs', () => {
       ['warning', 'work', 'Sync CRM'],
     ]);
     expect(logs[1].message).toBe('unknown field (ABADA-APL-SCHEMA-001, /flow/nodes/1/retries)');
+  });
+});
+
+describe('issues by node', () => {
+  it('finds the node by element id, else by the node index in the path', () => {
+    const ids = ['start', 'draft', 'review'];
+    expect(issueNodeId({ elementId: 'review', path: '/flow/nodes/2' }, ids)).toBe('review');
+    expect(issueNodeId({ elementId: 'review_e0', path: '/flow/nodes/1/loop' }, ids)).toBe('draft');
+    expect(issueNodeId({ path: '/metadata/name' }, ids)).toBeNull();
+    const grouped = issuesByNode([
+      { code: 'W', severity: 'WARNING', message: 'w', path: '/flow/nodes/1/model' },
+      { code: 'E', severity: 'ERROR', message: 'e', elementId: 'draft' },
+    ], ids);
+    expect(grouped.get('draft')?.map((issue) => issue.code)).toEqual(['E', 'W']);
   });
 });

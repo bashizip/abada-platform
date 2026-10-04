@@ -2,6 +2,7 @@ import type { Node } from '@xyflow/react';
 import type { WorkflowNode } from '@/types';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
 import type { EdgeKind } from '@/lib/layout/edgeGeometry';
+import type { LoopProblem } from '@/lib/apl/loopAnalysis';
 
 export type NodeRunStatus = NonNullable<WorkflowNode['status']>;
 
@@ -14,6 +15,10 @@ export type CanvasNodeData = WorkflowNode & Record<string, unknown> & {
   diffAnnotation?: string;
   /** Kinds of this node's outcome routes, in boundary-marker order. */
   outcomeKinds?: EdgeKind[];
+  /** This step is where a cycle returns: bounded by its loop, or a problem the engine will reject. */
+  loopState?: 'bounded' | LoopProblem;
+  /** Engine validation issues pointing at this node. */
+  issueCount?: number;
 };
 
 export type CanvasNode = Node<CanvasNodeData>;

@@ -362,7 +362,26 @@ public class AbadaEngine {
 
     @AtomicRuntimeCommand
     public void completeTask(String taskId, String user, List<String> groups, Map<String, Object> variables) {
-        log.info("Completing task {} with variables: {}", taskId, variables);
+        finishTask(taskId, user, groups, variables, false, null, null);
+    }
+
+    /**
+     * A reviewer's decision on a human task that declares {@code outcomes}: the
+     * engine checks the outcome is declared and that a required comment is
+     * present, writes {@code <task>_outcome} and {@code <task>_comment}, and
+     * continues at that outcome's {@code next} (APL), or after the task for the
+     * graph to route on the outcome (BPMN). All or nothing.
+     */
+    @AtomicRuntimeCommand
+    public void decideTask(String taskId, String user, List<String> groups, String outcome, String comment,
+            Map<String, Object> variables) {
+        finishTask(taskId, user, groups, variables, true, outcome, comment);
+    }
+
+    private void finishTask(String taskId, String user, List<String> groups, Map<String, Object> variables,
+            boolean decision, String outcome, String comment) {
+        // Variable names only: submitted values (and comments) never reach the logs.
+        log.info("Completing task {} with variables {}", taskId, variables == null ? Set.of() : variables.keySet());
         TaskInstance currentTask = loadTaskForUpdate(taskId);
 
         String processInstanceId = currentTask.getProcessInstanceId();
@@ -380,19 +399,74 @@ public class AbadaEngine {
                 instance.getProjectId(), principalId, groups);
         taskManager.checkCanComplete(currentTask, user, effective);
 
+        String activityId = currentTask.getTaskDefinitionKey();
+        TaskMeta meta = instance.getDefinition().getUserTask(activityId);
+        List<com.abada.engine.core.model.OutcomeMeta> outcomes = meta == null ? List.of() : meta.getOutcomes();
+        List<String> names = outcomes.stream().map(com.abada.engine.core.model.OutcomeMeta::name).toList();
+        com.abada.engine.core.model.OutcomeMeta chosen = null;
+        String kept = null;
+        if (!decision && !outcomes.isEmpty()) {
+            throw new ProcessEngineException("Task '" + activityId + "' needs a decision, one of " + names
+                    + "; submit it with the decision endpoint");
+        }
+        if (decision) {
+            if (outcomes.isEmpty()) {
+                throw new ProcessEngineException("Task '" + activityId + "' declares no outcomes; complete it instead");
+            }
+            chosen = meta.getOutcome(outcome);
+            if (chosen == null) {
+                throw new ProcessEngineException("Unknown outcome '" + outcome + "' for task '" + activityId
+                        + "'; expected one of " + names);
+            }
+            kept = comment == null || comment.isBlank() ? null : comment.strip();
+            if (chosen.commentRequired() && kept == null) {
+                throw new ProcessEngineException("Outcome '" + chosen.name() + "' of task '" + activityId
+                        + "' requires a comment");
+            }
+            if (kept != null && kept.length() > com.abada.engine.core.model.OutcomeMeta.MAX_COMMENT_LENGTH) {
+                throw new ProcessEngineException("The comment is longer than "
+                        + com.abada.engine.core.model.OutcomeMeta.MAX_COMMENT_LENGTH + " characters");
+            }
+            if (variables != null && (variables.containsKey(AplParser.outcomeVariable(activityId))
+                    || variables.containsKey(AplParser.commentVariable(activityId)))) {
+                throw new ProcessEngineException("'" + AplParser.outcomeVariable(activityId) + "' and '"
+                        + AplParser.commentVariable(activityId) + "' are written by the engine from the decision");
+            }
+        }
+
         if (variables != null && !variables.isEmpty()) {
             instance.putAllVariables(variables);
+        }
+        if (chosen != null) {
+            Map<String, Object> decided = new HashMap<>();
+            decided.put(AplParser.outcomeVariable(activityId), chosen.name());
+            // Always written, so the comment of an earlier pass never reaches the next one.
+            decided.put(AplParser.commentVariable(activityId), kept);
+            instance.putAllVariables(decided);
         }
 
         taskManager.completeTask(currentTask);
         persistTask(currentTask);
-        historyService.record("TASK_COMPLETED", instance, currentTask.getTaskDefinitionKey(), Map.of());
+        Map<String, Object> details = new LinkedHashMap<>();
+        if (chosen != null) {
+            // The decision is evidence; the comment text stays in the process variable only.
+            details.put("outcome", chosen.name());
+            details.put("commented", kept != null);
+            details.put("commentLength", kept == null ? 0 : kept.length());
+        }
+        historyService.record("TASK_COMPLETED", instance, activityId, details);
         recordUserTaskFact(instance, currentTask);
         persistRuntimeState(instance);
 
-        String completedTokenRef = currentTask.getTokenId() != null
-                ? currentTask.getTokenId() : currentTask.getTaskDefinitionKey();
-        retireTaskJobs(instance, instance.waitingTokenId(completedTokenRef));
+        String completedTokenRef = currentTask.getTokenId() != null ? currentTask.getTokenId() : activityId;
+        String tokenId = instance.waitingTokenId(completedTokenRef);
+        retireTaskJobs(instance, tokenId);
+        if (chosen != null && chosen.target() != null) {
+            BoundaryMeta route = instance.getDefinition().boundaryFor(activityId, BoundaryMeta.Kind.OUTCOME,
+                    chosen.name());
+            leaveViaBoundary(instance, tokenId, route, Map.of(), Map.of("taskId", currentTask.getId()));
+            return;
+        }
         List<UserTaskPayload> nextTasks = instance.advance(completedTokenRef);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);

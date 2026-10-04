@@ -53,7 +53,7 @@ export const AdminAPI = {
   },
 
   async listUsers(query?: string): Promise<AdminUser[]> {
-    const url = new URL(`${API_BASE}/users`);
+    const url = new URL(`${API_BASE}/users`, window.location.origin);
     if (query) url.searchParams.set('query', query);
     const res = await authenticatedFetch(url.toString());
     if (!res.ok) throw await apiError(res);
@@ -107,7 +107,7 @@ export const AdminAPI = {
   },
 
   async createGroup(name: string): Promise<AdminGroup> {
-    const url = new URL(`${API_BASE}/groups`);
+    const url = new URL(`${API_BASE}/groups`, window.location.origin);
     url.searchParams.set('name', name);
     const res = await authenticatedFetch(url.toString(), { method: 'POST' });
     if (!res.ok) throw await apiError(res);

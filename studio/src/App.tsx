@@ -39,13 +39,16 @@ import { useProjectWorkspace } from '@/hooks/useProjectWorkspace';
 import { useLiveInstanceOverlay } from '@/hooks/useLiveInstanceOverlay';
 import { useDryRunSimulation } from '@/hooks/useDryRunSimulation';
 import { useAplAuthoringState } from '@/hooks/useAplAuthoringState';
+import { useAplValidation } from '@/hooks/useAplValidation';
+import { dropNodeReferences, isOutcomeRouteEdge, removeEdge, setRoute, type Route } from '@/lib/apl/routes';
 import { deriveDefaultPayload } from '@/lib/run/liveRun';
 import { getDefaultAgentModel, initAgentModel } from '@/lib/agentModels';
 import { loadAplContract } from '@/lib/aplContract';
 import { isEditableTarget, undoShortcut } from '@/lib/history/shortcuts';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
-import { workflowFingerprint } from '@/lib/run/workflowFingerprint';
+import { dryRunFingerprint as computeDryRunFingerprint } from '@/lib/run/workflowFingerprint';
+import { canRetryIncidents } from '@/lib/run/incidents';
 import { LEAD_TRIAGE_EXAMPLES, STARTER_PROCESS_KEY } from '@/lib/starter/leadTriage';
 import { runSequentialInsightEvidence } from '@/lib/starter/insightEvidence';
 
@@ -100,6 +103,8 @@ export default function App() {
   const displayedWorkflow = selectedLiveInstance && liveWorkflow ? liveWorkflow : currentWorkflow;
   const isLiveReadOnly = !!selectedLiveInstance;
   const selectedNode = currentWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
+  // Engine validation of the document on the canvas, badged on the nodes it is about.
+  const validation = useAplValidation(currentWorkflow, designerMode === 'diagram' && !!activeProject);
 
   // Undo/redo for the open process. Text fields keep their own native undo,
   // and nothing happens while a modal dialog is open.
@@ -200,12 +205,14 @@ export default function App() {
   };
 
   const handleDeleteNode = (id: string) => {
-    updateActiveWorkflow((wf) => ({
-      ...wf,
-      nodes: wf.nodes.filter((n) => n.id !== id),
-      edges: wf.edges.filter((e) => e.source !== id && e.target !== id),
-    }));
+    // Routes elsewhere that pointed at the node are cleared, so saving never references it.
+    updateActiveWorkflow((wf) => dropNodeReferences(wf, id));
     if (selectedNodeId === id) setSelectedNodeId(null);
+  };
+
+  /** Deletes an edge; a route edge clears the route it stands for. One undo step. */
+  const handleDeleteEdge = (edgeId: string) => {
+    updateActiveWorkflow((wf) => removeEdge(wf, edgeId));
   };
 
   const _handleDuplicateNode = (id: string) => {
@@ -261,19 +268,24 @@ export default function App() {
       return {
         ...wf,
         nodes: [...wf.nodes, newNode],
-        edges: sourceExists ? [...wf.edges, { id: `e-${Date.now()}`, source: selectedNodeId, target: id, label: 'Next' }] : wf.edges,
+        edges: sourceExists ? [...wf.edges, { id: `e-${Date.now()}`, source: selectedNodeId, target: id }] : wf.edges,
       };
     });
     setSelectedNodeId(id);
   };
 
-  const handleConnectNodes = (sourceId: string, targetId: string) => {
+  /**
+   * A new connection. From a task it carries the route chosen in the connect
+   * menu (next replaces the step's successor); from a gateway or an event it
+   * adds a flow, never a duplicate of an existing one.
+   */
+  const handleConnectNodes = (sourceId: string, targetId: string, route: Route = { kind: 'next' }) => {
     if (sourceId === targetId) return;
-    if (currentWorkflow.edges.some((e) => e.source === sourceId && e.target === targetId)) return;
-    updateActiveWorkflow((wf) => ({
-      ...wf,
-      edges: [...wf.edges, { id: `e-${Date.now()}`, source: sourceId, target: targetId }],
-    }));
+    if (route.kind === 'next'
+      && currentWorkflow.edges.some((e) => e.source === sourceId && e.target === targetId && !isOutcomeRouteEdge(e))) {
+      return;
+    }
+    updateActiveWorkflow((wf) => setRoute(wf, sourceId, route, targetId));
   };
 
   const _handleAddDownstreamNode = (sourceId: string, type: NodeType) => {
@@ -440,7 +452,8 @@ export default function App() {
   const handleCreateNewWorkflow = (workflow: WorkflowFile, folderId?: string) => {
     const fileName = (workflow.fileName || workflow.name).endsWith('.apl.yaml') ? (workflow.fileName || workflow.name) : `${workflow.fileName || workflow.name}.apl.yaml`;
     const seeded: WorkflowFile = workflow.nodes.length > 0 ? workflow : { ...workflow, nodes: [{ id: 'start', type: 'event', subtype: 'start', title: 'Start Process', description: 'Webhook trigger that begins the APL process', x: 120, y: 220 }] };
-    const draft: WorkflowFile = { ...seeded, id: `draft-${Date.now()}`, name: fileName, fileName, processKey: seeded.processKey || fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}` };
+    // `name` is the APL metadata.name; the file name is kept apart in `fileName`.
+    const draft: WorkflowFile = { ...seeded, id: `draft-${Date.now()}`, name: seeded.name || fileName, fileName, processKey: seeded.processKey || fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}` };
     if (folderId) draft.folderId = folderId;
     setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
     setAuthoringCandidate(null);
@@ -522,6 +535,7 @@ export default function App() {
           <InstanceDetailView
             instanceId={detailInstance.id}
             projectId={activeProject?.id}
+            canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
             initialInstance={detailInstance}
             onBack={() => {
               setDetailInstance(null);
@@ -655,6 +669,8 @@ export default function App() {
                     onNodeMove={handleNodeMove}
                     onDeleteNode={handleDeleteNode}
                     onConnectNodes={handleConnectNodes}
+                    onDeleteEdge={handleDeleteEdge}
+                    issueCounts={validation.issueCounts}
                     onAutoLayout={handleAutoLayout}
                     onAddNode={handleAddNode}
                     onOpenAplEditor={() => setDesignerMode('apl')}
@@ -679,6 +695,7 @@ export default function App() {
                     workflow={currentWorkflow}
                     nodeCount={currentWorkflow.nodes.length}
                     projectId={activeProject?.id}
+                    issues={selectedNode ? validation.issuesByNode.get(selectedNode.id) : undefined}
                   />
 
                   <NLInputBar
@@ -712,7 +729,7 @@ export default function App() {
               isOpen={showRunPanel}
               onClose={() => setShowRunPanel(false)}
               onCompleted={(payload) => {
-                setDryRunFingerprint(workflowFingerprint(currentWorkflow));
+                setDryRunFingerprint(computeDryRunFingerprint(currentWorkflow));
                 setLastDryRunPayload(payload);
                 setIsSimulating(false);
                 setSimulationLogs((logs) => [...logs, {
@@ -755,6 +772,7 @@ export default function App() {
         {currentView === 'operations' && (
           <ProcessOperations
             projectId={activeProject?.id}
+            canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
             onOpenInstance={(instance) => {
               setCurrentView('designer');
               void openLiveInstance(instance);
@@ -781,7 +799,7 @@ export default function App() {
         workflow={currentWorkflow}
         isOpen={showDeployDialog}
         isDeploying={isDeploying}
-        dryRunPassed={dryRunFingerprint === workflowFingerprint(currentWorkflow)}
+        dryRunPassed={dryRunFingerprint === computeDryRunFingerprint(currentWorkflow)}
         defaultPayload={Object.keys(lastDryRunPayload).length
           ? lastDryRunPayload
           : currentWorkflow.processKey === STARTER_PROCESS_KEY

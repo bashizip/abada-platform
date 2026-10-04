@@ -419,3 +419,35 @@ describe('APL round trip: boundaries, service level and fallback models', () => 
     expect(manual.sla_hours).toBeUndefined();
   });
 });
+
+describe('APL round trip: review outcomes', () => {
+  const review: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: { key: 'review', name: 'Review' },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'draft' },
+        { id: 'draft', type: 'engine-task', service: 'draft', loop: { max_iterations: 3 }, next: 'review' },
+        {
+          id: 'review',
+          type: 'human-input',
+          assignees: ['reviewers'],
+          outcomes: { approve: { next: 'done' }, reject: { next: 'draft', comment: 'required' } },
+        },
+        { id: 'done', type: 'end' },
+      ],
+    },
+  };
+
+  it('draws one edge per outcome and keeps outcomes without inventing a next', () => {
+    const workflow = aplToWorkflow(review);
+    expect(workflow.edges.filter((edge) => edge.source === 'review').map((edge) => [edge.target, edge.label]))
+      .toEqual([['done', 'outcome: approve'], ['draft', 'outcome: reject']]);
+
+    const saved = workflowToAPL(workflow).flow.nodes.find((node) => node.id === 'review') as unknown as
+      Record<string, unknown>;
+    expect(saved.outcomes).toEqual({ approve: { next: 'done' }, reject: { next: 'draft', comment: 'required' } });
+    expect(saved.next).toBeUndefined();
+  });
+});

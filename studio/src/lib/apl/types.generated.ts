@@ -375,8 +375,24 @@ export interface APLApprovalGateNode {
   escalate_to?: string[];
   on_error?: OnError;
   on_timeout?: OnTimeout;
+  outcomes?: Outcomes;
   loop?: Loop;
   ui?: UiPosition;
+}
+/**
+ * Decisions a reviewer chooses from. Each outcome names where the flow continues and whether a comment is required; the engine writes <id>_outcome and <id>_comment. A node with outcomes declares no 'next'.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "outcomes".
+ */
+export interface Outcomes {
+  [k: string]: {
+    next: NodeRef;
+    /**
+     * Whether this decision must carry a non-blank comment.
+     */
+    comment?: 'required' | 'optional';
+  };
 }
 /**
  * This interface was referenced by `APLDocument`'s JSON-Schema
@@ -426,6 +442,7 @@ export interface APLHumanInputNode {
   escalate_to?: string[];
   on_error?: OnError;
   on_timeout?: OnTimeout;
+  outcomes?: Outcomes;
   loop?: Loop;
   ui?: UiPosition;
 }

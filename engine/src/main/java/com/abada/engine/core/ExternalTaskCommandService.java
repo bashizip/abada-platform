@@ -492,6 +492,10 @@ public class ExternalTaskCommandService {
         if (agent.confidence() != null) details.put("confidence", agent.confidence());
         if (agent.promptTokens() != null) details.put("promptTokens", agent.promptTokens());
         if (agent.completionTokens() != null) details.put("completionTokens", agent.completionTokens());
+        // Set only when a fallback model ran instead of the node's declared one.
+        if (agent.requestedModel() != null && !agent.requestedModel().isBlank()) {
+            details.put("requestedModel", agent.requestedModel());
+        }
         return details;
     }
 

@@ -363,9 +363,11 @@ public final class AplParser {
                             }
                             groups.add(group);
                         }
-                        userTasks.put(nodeId, withSla(
+                        TaskMeta gateTask = withSla(
                                 new TaskMeta(nodeId, nodeName, null, List.of(), groups, null, null, null, null, null),
-                                node, nodeId));
+                                node, nodeId);
+                        gateTask.setOutcomes(parseOutcomes(node, nodeId, nodesById));
+                        userTasks.put(nodeId, gateTask);
                     }
                     case "condition" -> {
                         if (node.hasNonNull("next")) {
@@ -615,9 +617,11 @@ public final class AplParser {
                             }
                             groups.add(group);
                         }
-                        userTasks.put(nodeId, withSla(
+                        TaskMeta humanTask = withSla(
                                 new TaskMeta(nodeId, nodeName, null, List.of(), groups, formKey, null, null, null, null),
-                                node, nodeId));
+                                node, nodeId);
+                        humanTask.setOutcomes(parseOutcomes(node, nodeId, nodesById));
+                        userTasks.put(nodeId, humanTask);
                     }
                     default -> throw validation("type", "unsupported node type '" + type + "' for node '" + nodeId
                             + "'; supported: " + String.join(", ", SUPPORTED_TYPES));
@@ -1076,9 +1080,23 @@ public final class AplParser {
             declared.add(boundary(nodesById, nodeId, onTimeout.path("then"), "on_timeout.then",
                     BoundaryMeta.Kind.TIMEOUT, null, timeoutAfter(onTimeout.path("after"), nodeId)));
         }
+        boolean decides = present(node.path("outcomes"));
+        if (decides) {
+            if (!"human-input".equals(type) && !"approval-gate".equals(type)) {
+                throw validation("outcomes", "node '" + nodeId + "' declares 'outcomes', which only human-input nodes support");
+            }
+            if (node.hasNonNull("next")) {
+                throw validation("next", "node '" + nodeId + "' declares both 'next' and 'outcomes'; "
+                        + "with outcomes every exit is an outcome's 'next'");
+            }
+            for (com.abada.engine.core.model.OutcomeMeta outcome : parseOutcomes(node, nodeId, nodesById)) {
+                declared.add(new BoundaryMeta("outcome:" + outcome.name(), nodeId, BoundaryMeta.Kind.OUTCOME,
+                        outcome.name(), null, outcome.target()));
+            }
+        }
         declared.removeIf(Objects::isNull);
         if (declared.isEmpty()) return;
-        if (flows.stream().noneMatch(flow -> flow.getSourceRef().equals(nodeId))) {
+        if (!decides && flows.stream().noneMatch(flow -> flow.getSourceRef().equals(nodeId))) {
             throw validation("node '" + nodeId + "' declares boundary routes but no 'next'");
         }
         for (BoundaryMeta route : declared) {
@@ -1086,6 +1104,58 @@ public final class AplParser {
                     null, false, route.id()));
             boundaries.add(route);
         }
+    }
+
+    /**
+     * {@code outcomes: { <name>: { next, comment: required|optional } }} of a
+     * human task: the decisions a reviewer chooses from, each with its own exit.
+     */
+    static List<com.abada.engine.core.model.OutcomeMeta> parseOutcomes(JsonNode node, String nodeId,
+            Map<String, JsonNode> nodesById) {
+        JsonNode outcomes = node.path("outcomes");
+        if (!present(outcomes)) return List.of();
+        if (!outcomes.isObject()) {
+            throw validation("outcomes", "node '" + nodeId + "' outcomes must be a mapping of outcome name to {next, comment}");
+        }
+        if (outcomes.size() < com.abada.engine.core.model.OutcomeMeta.MIN_OUTCOMES
+                || outcomes.size() > com.abada.engine.core.model.OutcomeMeta.MAX_OUTCOMES) {
+            throw validation("outcomes", "node '" + nodeId + "' must declare between "
+                    + com.abada.engine.core.model.OutcomeMeta.MIN_OUTCOMES + " and "
+                    + com.abada.engine.core.model.OutcomeMeta.MAX_OUTCOMES + " outcomes");
+        }
+        List<com.abada.engine.core.model.OutcomeMeta> parsed = new ArrayList<>();
+        var names = outcomes.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            if (!name.matches(com.abada.engine.core.model.OutcomeMeta.NAME_PATTERN)) {
+                throw validation("outcomes", "node '" + nodeId + "' outcome '" + name
+                        + "' must be lowercase letters, digits and underscores, starting with a letter (max 32)");
+            }
+            JsonNode outcome = outcomes.path(name);
+            if (!outcome.isObject()) {
+                throw validation("outcomes", "node '" + nodeId + "' outcome '" + name + "' must be a mapping with 'next'");
+            }
+            String target = outcome.path("next").asText(null);
+            if (target == null || target.isBlank()) {
+                throw validation("outcomes", "node '" + nodeId + "' outcome '" + name + "' declares no 'next'");
+            }
+            if (!nodesById.containsKey(target)) {
+                throw validation("outcomes", "node '" + nodeId + "' outcome '" + name + "' next '" + target
+                        + "' is not a declared node");
+            }
+            String comment = outcome.path("comment").asText("optional");
+            if (!comment.equals("required") && !comment.equals("optional")) {
+                throw validation("outcomes", "node '" + nodeId + "' outcome '" + name
+                        + "' comment must be 'required' or 'optional'");
+            }
+            parsed.add(new com.abada.engine.core.model.OutcomeMeta(name, comment.equals("required"), target));
+        }
+        return parsed;
+    }
+
+    /** Process variable holding a reviewer's comment on a human task decision. */
+    public static String commentVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_comment";
     }
 
     /** Shortest and longest {@code on_timeout.after}: one second to one year. */

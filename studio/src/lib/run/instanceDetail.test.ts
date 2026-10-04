@@ -5,7 +5,7 @@ import type {
   ProcessInstanceDTO,
 } from '@/api/engine';
 import type { WorkflowFile, WorkflowNode } from '@/types';
-import { deriveInstancePath } from './instanceDetail';
+import { boundarySummary, deriveInstancePath } from './instanceDetail';
 
 const node = (
   id: string,
@@ -173,6 +173,25 @@ describe('deriveInstancePath outcome routes', () => {
     expect(otherCode.activePathEdgeIds).not.toContain('analyze-review-error');
   });
 
+  it('lights the review outcome the reviewer chose', () => {
+    const review = workflow(
+      [node('start', 'event', 'start'), node('review', 'human'), node('done', 'event', 'end'), node('draft', 'agent')],
+      [
+        { id: 'start-review', source: 'start', target: 'review' },
+        { id: 'review-done', source: 'review', target: 'done', label: 'outcome: approve' },
+        { id: 'review-draft', source: 'review', target: 'draft', label: 'outcome: reject' },
+      ],
+    );
+    const decided: ActivityHistoryDTO = {
+      ...completed('review'),
+      eventType: 'BOUNDARY_TAKEN',
+      details: { kind: 'OUTCOME', code: 'reject', routedTo: 'draft' },
+    };
+    const path = deriveInstancePath(review, instance('draft'), [activity('draft')], [completed('start'), decided]);
+    expect(path.activePathEdgeIds).toContain('review-draft');
+    expect(path.activePathEdgeIds).not.toContain('review-done');
+  });
+
   it('lights the boundary the engine recorded, matching its kind and code', () => {
     const withTimeout = workflow(model.nodes, [
       ...model.edges,
@@ -191,5 +210,14 @@ describe('deriveInstancePath outcome routes', () => {
       [completed('start'), boundary('ERROR', 'TIMEOUT')]);
     expect(failed.activePathEdgeIds).toContain('analyze-review-error');
     expect(failed.activePathEdgeIds).not.toContain('analyze-review-timeout');
+  });
+});
+
+describe('boundarySummary', () => {
+  it('names the route a step left by', () => {
+    expect(boundarySummary({ kind: 'OUTCOME', code: 'reject', routedTo: 'draft' })).toBe('outcome reject → draft');
+    expect(boundarySummary({ kind: 'TIMEOUT', routedTo: 'triage' })).toBe('timeout → triage');
+    expect(boundarySummary({ kind: 'LOW_CONFIDENCE', routedTo: 'triage' })).toBe('low confidence → triage');
+    expect(boundarySummary({ routedTo: 'x' })).toBeUndefined();
   });
 });

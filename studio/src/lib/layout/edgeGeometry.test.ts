@@ -47,6 +47,8 @@ describe('edge semantics', () => {
     expect(cleanEdgeLabel("if ${route == 'HIGH'}")).toBe("if route == 'HIGH'");
     expect(cleanEdgeLabel('on_low_confidence')).toBe('low confidence');
     expect(cleanEdgeLabel('on_timeout')).toBe('timeout');
+    expect(cleanEdgeLabel('outcome: reject')).toBe('reject');
+    expect(cleanEdgeLabel('on_exhausted')).toBe('limit reached');
     expect(cleanEdgeLabel('on_error: CANNOT_DECIDE')).toBe('error CANNOT_DECIDE');
     expect(cleanEdgeLabel('on_error')).toBe('error');
     expect(cleanEdgeLabel(undefined)).toBe('');

@@ -85,6 +85,7 @@ const BOUNDARY_KIND: Record<string, string> = {
   on_invalid_output: 'INVALID_OUTPUT',
   on_error: 'ERROR',
   on_timeout: 'TIMEOUT',
+  outcome: 'OUTCOME',
 };
 
 /** Engine outcome recorded for each agent outcome-route label. */
@@ -105,7 +106,8 @@ const ROUTE_OUTCOME: Record<string, string> = {
 function outcomeRouteTaken(edge: WorkflowEdge, history: ActivityHistoryDTO[]): boolean {
   const label = edge.label ?? '';
   const fromSource = history.filter((event) => event.activityId === edge.source);
-  const code = label.startsWith('on_error:') ? label.slice('on_error:'.length).trim() : null;
+  const code = label.startsWith('on_error:') || label.startsWith('outcome:')
+    ? label.slice(label.indexOf(':') + 1).trim() : null;
   const kind = BOUNDARY_KIND[label.split(':')[0]];
   if (kind && fromSource.some((event) => event.eventType === 'BOUNDARY_TAKEN'
     && event.details?.kind === kind
@@ -155,12 +157,22 @@ export const EVENT_META: Record<string, { label: string; tone: AuditTone }> = {
   INCIDENT_RETRIED: { label: 'Incident retried', tone: 'warning' },
 };
 
+/** One line for a BOUNDARY_TAKEN event: which route left the step, e.g. `outcome reject → draft`. */
+export function boundarySummary(details: Record<string, unknown>): string | undefined {
+  if (typeof details.kind !== 'string' || typeof details.routedTo !== 'string') return undefined;
+  const kind = details.kind.toLowerCase().replace(/_/g, ' ');
+  const code = typeof details.code === 'string' ? ` ${details.code}` : '';
+  return `${kind}${code} → ${details.routedTo}`;
+}
+
 export const eventMeta = (eventType: string): { label: string; tone: AuditTone } =>
   EVENT_META[eventType] ?? { label: eventType.replace(/_/g, ' ').toLowerCase(), tone: 'info' };
 
 /** Aggregates the agent attempt telemetry recorded in history details for one activity. */
 export interface AgentTelemetry {
   model?: string;
+  /** The node's declared model when the worker ran a fallback model instead. */
+  requestedModel?: string;
   provider?: string;
   attempt?: number;
   durationMs?: number;
@@ -205,6 +217,7 @@ export function aggregateNodeTelemetry(
       agent = {
         ...(agent ?? {}),
         model: typeof rawAgent.model === 'string' ? rawAgent.model : undefined,
+        requestedModel: typeof rawAgent.requestedModel === 'string' ? rawAgent.requestedModel : undefined,
         provider: typeof rawAgent.provider === 'string' ? rawAgent.provider : undefined,
         attempt: typeof rawAgent.attempt === 'number' ? rawAgent.attempt : undefined,
         durationMs: typeof rawAgent.durationMs === 'number' ? rawAgent.durationMs : undefined,

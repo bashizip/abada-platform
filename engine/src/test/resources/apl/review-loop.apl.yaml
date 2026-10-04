@@ -1,0 +1,35 @@
+version: abada.io/v1
+metadata:
+  key: review_loop
+  name: Review loop
+flow:
+  entry: request
+  nodes:
+    - id: request
+      type: webhook
+      next: draft
+    # The agent revises with the reviewer's last comment (null on the first pass).
+    - id: draft
+      type: agent
+      description: Draft the offer
+      model: gemini-3.6-flash
+      prompt: "Draft the offer. Reviewer feedback on the previous draft, if any: ${review_comment}"
+      loop:
+        max_iterations: 3
+        on_exhausted: escalate
+      next: review
+    # A reviewer approves or rejects; a rejection must say why.
+    - id: review
+      type: human-input
+      description: Review the draft
+      assignees: [reviewers]
+      outcomes:
+        approve: { next: done }
+        reject: { next: draft, comment: required }
+    - id: escalate
+      type: human-input
+      description: Manager decides after three rejected drafts
+      assignees: [managers]
+      next: done
+    - id: done
+      type: end
