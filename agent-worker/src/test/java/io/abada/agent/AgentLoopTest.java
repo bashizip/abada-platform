@@ -11,6 +11,7 @@ import io.abada.agent.AgentGateway.ChatTurn;
 import io.abada.agent.AgentGateway.ToolCall;
 import io.abada.agent.mcp.McpSessionPool;
 import io.abada.agent.mcp.McpToolClient;
+import io.abada.worker.AgentDelegate;
 import io.abada.worker.AgentLimits;
 import io.abada.worker.AgentStep;
 import io.abada.worker.AgentWorkDescriptor;
@@ -162,6 +163,71 @@ class AgentLoopTest {
     }
 
     @Test
+    void aDelegateIsOfferedAsAToolAndStartingItParksTheAttempt() {
+        FakeJournal journal = new FakeJournal();
+        ScriptedGateway model = new ScriptedGateway()
+                .then(calls(call("c1", "delegate__refund_payout", "{\"order\":\"A-7\"}")));
+
+        AgentLoop.AwaitingChild waiting = assertThrows(AgentLoop.AwaitingChild.class,
+                () -> run(delegating(false), List.of(), model, new StubTools(), journal));
+
+        assertEquals("refund_payout", waiting.process);
+        AgentGateway.ToolSpec offered = model.offered.getFirst().getFirst();
+        assertEquals("delegate__refund_payout", offered.name());
+        assertTrue(offered.description().contains("payout_id"));
+        assertEquals(List.of("1 MODEL_CALL STARTED", "1 MODEL_CALL COMPLETED", "2 DELEGATION STARTED"), journal.log);
+    }
+
+    @Test
+    void aDelegationThatNeedsApprovalIsProposedFirst() {
+        FakeJournal journal = new FakeJournal();
+        ScriptedGateway model = new ScriptedGateway()
+                .then(calls(call("c1", "delegate__refund_payout", "{\"order\":\"A-7\"}")));
+        assertThrows(AgentLoop.AwaitingApproval.class,
+                () -> run(delegating(true), List.of(), model, new StubTools(), journal));
+        assertEquals("2 DELEGATION PROPOSED", journal.log.getLast());
+    }
+
+    @Test
+    void theChildsOutputsOrItsFailureReachTheModelOnResume() throws Exception {
+        AgentStep turn = step(1, "MODEL_CALL", "COMPLETED", null, null, Map.of("turn", 1, "model", "model-a"),
+                Map.of("content", "", "toolCalls", List.of(Map.of("id", "c1", "name", "delegate__refund_payout",
+                        "arguments", "{\"order\":\"A-7\"}"))));
+        Map<String, Object> request = Map.of("callId", "c1", "arguments", Map.of("order", "A-7"));
+        ScriptedGateway done = new ScriptedGateway().then(answer("paid"));
+        AgentLoop.Outcome outcome = run(delegating(false), List.of(turn, step(2, "DELEGATION", "COMPLETED",
+                "delegate:refund_payout", null, request, Map.of("status", "COMPLETED", "childInstanceId", "child-1",
+                        "outputs", Map.of("payout_id", "P-1")))), done, new StubTools(), new FakeJournal());
+        assertEquals("paid", outcome.result().value());
+        assertTrue(String.valueOf(done.received.getFirst().getLast().get("content")).contains("P-1"));
+
+        ScriptedGateway failed = new ScriptedGateway().then(answer("escalated"));
+        run(delegating(false), List.of(turn, step(2, "DELEGATION", "FAILED", "delegate:refund_payout", null,
+                request, Map.of("status", "CANCELLED", "childInstanceId", "child-1"))), failed, new StubTools(),
+                new FakeJournal());
+        assertTrue(String.valueOf(failed.received.getFirst().getLast().get("content")).contains("ended CANCELLED"));
+
+        // Approved: started now with the same sequence; still running: parks again without any call.
+        FakeJournal journal = new FakeJournal();
+        assertThrows(AgentLoop.AwaitingChild.class, () -> run(delegating(true), List.of(turn, step(2, "DELEGATION",
+                "APPROVED", "delegate:refund_payout", null, request, null)), new ScriptedGateway(), new StubTools(),
+                journal));
+        assertEquals(List.of("2 DELEGATION STARTED"), journal.log);
+    }
+
+    @Test
+    void anEngineRefusalOfTheInputsIsToldToTheModel() throws Exception {
+        FakeJournal journal = new FakeJournal();
+        journal.refuseDelegation = "DELEGATION_INPUT_INVALID";
+        ScriptedGateway model = new ScriptedGateway()
+                .then(calls(call("c1", "delegate__refund_payout", "{\"order\":7}")))
+                .then(answer("gave up"));
+        AgentLoop.Outcome outcome = run(delegating(false), List.of(), model, new StubTools(), journal);
+        assertEquals("gave up", outcome.result().value());
+        assertTrue(String.valueOf(model.received.get(1).getLast().get("content")).contains("refused to delegate"));
+    }
+
+    @Test
     void largeToolResultsAreTruncatedAndMarked() throws Exception {
         StubTools tools = new StubTools();
         tools.customer = "x".repeat(5_000);
@@ -300,6 +366,15 @@ class AgentLoopTest {
                 1_000L, List.of(), Map.of(), bindings, Map.<String, ModelPrice>of(), limits);
     }
 
+    static AgentWorkDescriptor delegating(boolean approval) {
+        AgentDelegate delegate = new AgentDelegate("refund_payout", "delegate:refund_payout", "Pay a refund out",
+                Map.of("type", "object", "properties", Map.of("order", Map.of("type", "string"))),
+                approval ? "required" : "none", List.of("payout_id"));
+        return new AgentWorkDescriptor("abada.agent/v1", "model-a", "Handle the refund", Map.of(), "triage_result",
+                Map.of("type", "object"), List.of(), null, 0.2, 512, 30_000L, 3, 1_000L, List.of(), Map.of(),
+                List.of(), Map.<String, ModelPrice>of(), null, List.of(delegate));
+    }
+
     static LockedExternalTask task(AgentWorkDescriptor work, List<AgentStep> steps) {
         return new LockedExternalTask("task-1", "abada:agent", Map.of(), "pi-1", "triage", 3, null, null, "1", work,
                 "proj", 1, steps, List.of());
@@ -350,10 +425,13 @@ class AgentLoopTest {
             return "scripted";
         }
 
+        final List<List<AgentGateway.ToolSpec>> offered = new ArrayList<>();
+
         @Override
         public ChatTurn chat(AgentWorkDescriptor work, String model, List<Map<String, Object>> messages,
                 List<ToolSpec> tools) {
             received.add(List.copyOf(messages));
+            offered.add(List.copyOf(tools));
             if (unavailable) throw new AgentUnavailableException("rate limited", Duration.ofSeconds(3));
             if (script.isEmpty()) throw new AgentExecutionException("script exhausted");
             return script.pollFirst();
@@ -399,6 +477,7 @@ class AgentLoopTest {
     static final class FakeJournal implements AgentLoop.Journal {
         final List<String> log = new ArrayList<>();
         String refuseToolStart;
+        String refuseDelegation;
         String refuseModelStart;
         String keyOverride;
 
@@ -407,6 +486,9 @@ class AgentLoopTest {
                 String errorType, String model, Integer promptTokens, Integer completionTokens) {
             if ("TOOL_CALL".equals(kind) && "STARTED".equals(state) && refuseToolStart != null) {
                 throw new WorkerProtocolException(409, "AGENT_STEP_REJECTED", "refused", refuseToolStart);
+            }
+            if ("DELEGATION".equals(kind) && refuseDelegation != null) {
+                throw new WorkerProtocolException(409, "AGENT_STEP_REJECTED", "inputs invalid", refuseDelegation);
             }
             if ("MODEL_CALL".equals(kind) && "STARTED".equals(state) && refuseModelStart != null) {
                 throw new WorkerProtocolException(409, "AGENT_STEP_REJECTED", "limit", refuseModelStart);

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import io.abada.worker.AgentAttemptMetadata;
+import io.abada.worker.AgentDelegate;
 import io.abada.worker.AgentLimits;
 import io.abada.worker.AgentStep;
 import io.abada.worker.AgentWorkDescriptor;
@@ -39,11 +40,11 @@ class AgentToolLoopEndToEndTest {
     private StubMcpServer crm;
     private HttpServer llm;
     private final AtomicInteger llmCalls = new AtomicInteger();
-    private final List<String> script = List.of(
+    private final List<String> script = new ArrayList<>(List.of(
             toolCall("c1", "crm__get_customer", "{\"id\":7}"),
             toolCall("c2", "crm__create_ticket", "{\"subject\":\"refund for Ada\"}"),
             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"verdict\\\":\\\"refund\\\",\\\"ticket\\\":\\\"T-1\\\"}\"}}],"
-                    + "\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":30}}");
+                    + "\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":30}}"));
 
     @BeforeEach
     void start() throws Exception {
@@ -118,6 +119,36 @@ class AgentToolLoopEndToEndTest {
         assertEquals(3, llmCalls.get(), "no model turn paid for twice");
     }
 
+    @Test
+    void aDelegationParksTheWorkAndTheAgentContinuesWithTheChildsOutputs() throws Exception {
+        script.clear();
+        script.add(toolCall("c1", "delegate__refund_payout", "{\"order\":\"A-7\"}"));
+        script.add("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"payout\\\":\\\"P-1\\\"}\"}}],"
+                + "\"usage\":{\"prompt_tokens\":50,\"completion_tokens\":10}}");
+        AgentDelegate delegate = new AgentDelegate("refund_payout", "delegate:refund_payout", "Pay a refund out",
+                Map.of("type", "object"), "none", List.of("payout_id"));
+        JournalingEngine engine = new JournalingEngine(new AgentWorkDescriptor("abada.agent/v1", "model-a",
+                "Handle the refund for ${case}", Map.of(), "triage_result", Map.of("type", "object"), List.of(), null,
+                0.2, 512, 30_000L, 3, 1_000L, List.of(), Map.of(), List.of(), Map.<String, ModelPrice>of(), null,
+                List.of(delegate)));
+
+        try (AgentWorkerMain.Runner first = runner(engine)) {      // starts the delegation, gives the slot back
+            first.pollOnce();
+        }
+        assertEquals("DELEGATION", engine.steps.getLast().kind());
+        assertEquals("STARTED", engine.steps.getLast().state());
+        assertTrue(engine.completed == null && !engine.deferred);
+
+        engine.childEnded(Map.of("status", "COMPLETED", "childInstanceId", "child-1",
+                "outputs", Map.of("payout_id", "P-1")));
+        try (AgentWorkerMain.Runner second = runner(engine)) {
+            second.pollOnce();
+        }
+        assertEquals(Map.of("payout", "P-1"), engine.completed.get("triage_result"));
+        assertEquals(2, llmCalls.get(), "no model turn paid for twice");
+        assertEquals(0, crm.callsTo("create_ticket").size());
+    }
+
     private AgentWorkerMain.Runner runner(JournalingEngine engine) {
         WorkerConfig config = new WorkerConfig(URI.create("http://engine.invalid"), "token", null, "", "",
                 URI.create("http://llm.invalid/v1"), "key", URI.create("http://127.0.0.1:" + llm.getAddress().getPort() + "/v1"),
@@ -187,7 +218,7 @@ class AgentToolLoopEndToEndTest {
             String key = existing != null && existing.idempotencyKey() != null ? existing.idempotencyKey()
                     : "TOOL_CALL".equals(kind) && "STARTED".equals(state) && "crm/create_ticket".equals(toolRef)
                             ? "key-" + sequence : null;
-            String policy = toolRef == null ? null : work.toolBindings().stream()
+            String policy = toolRef == null || "DELEGATION".equals(kind) ? null : work.toolBindings().stream()
                     .filter(binding -> binding.ref().equals(toolRef)).findFirst().orElseThrow().policy();
             AgentStep step = new AgentStep(attempt, sequence, kind, state, toolRef, policy, key, "d", null,
                     JSON.valueToTree(request), result == null ? null : JSON.valueToTree(result), errorType, model,
@@ -195,6 +226,15 @@ class AgentToolLoopEndToEndTest {
             if (existing != null) steps.set(steps.indexOf(existing), step);
             else steps.add(step);
             return step;
+        }
+
+        /** The delegated child ended: the engine finishes the step with its result and reopens the work. */
+        synchronized void childEnded(Map<String, Object> result) {
+            AgentStep started = steps.getLast();
+            steps.set(steps.size() - 1, new AgentStep(started.attempt(), started.sequence(), started.kind(),
+                    "COMPLETED", started.toolRef(), started.policy(), null, started.requestDigest(), "r",
+                    started.request(), JSON.valueToTree(result), null, null, null, null, null));
+            available = true;
         }
 
         /** A person's decision on the proposed step: the work is acquirable again. */
