@@ -154,7 +154,8 @@ class AbadaWorkerClientTest {
                     + "\"toolBindings\":[{\"server\":\"crm\",\"tool\":\"refund\",\"policy\":\"approval_required\","
                     + "\"idempotency\":\"key\",\"approvers\":[\"finance\"],\"url\":\"https://crm/mcp\","
                     + "\"transport\":\"streamable-http\",\"credential\":\"crm-token\",\"resourceId\":\"r1\","
-                    + "\"resourceRevision\":2,\"futureField\":1}]}}]")
+                    + "\"resourceRevision\":2,\"futureField\":1}],"
+                    + "\"prices\":{\"model-a\":{\"inputPerMillion\":1.5,\"outputPerMillion\":6}}}}]")
                     .getBytes(StandardCharsets.UTF_8);
             request.getResponseHeaders().add("X-Abada-Worker-Protocol-Version", "1");
             request.sendResponseHeaders(200, response.length);
@@ -170,6 +171,7 @@ class AbadaWorkerClientTest {
         assertEquals(List.of("finance"), binding.approvers());
         assertEquals("crm-token", binding.credential());
         assertEquals(2L, binding.resourceRevision());
+        assertEquals(0, new java.math.BigDecimal("1.5").compareTo(work.prices().get("model-a").inputPerMillion()));
     }
 
     @Test

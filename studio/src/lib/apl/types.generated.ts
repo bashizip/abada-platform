@@ -121,6 +121,10 @@ export interface VariableDeclaration {
   type?: 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'list' | 'any';
   required?: boolean;
   description?: string;
+  /**
+   * Masked in redacted agent evidence: fields with this name and this variable's values.
+   */
+  sensitive?: boolean;
 }
 export interface APLFlow {
   entry: NodeRef;
@@ -238,6 +242,13 @@ export interface APLAgentNode {
   on_timeout?: OnTimeout;
   loop?: Loop;
   ui?: UiPosition;
+  /**
+   * What the step journal keeps of this agent's payloads; may only be stricter than the project policy.
+   */
+  evidence?: {
+    payloads?: 'none' | 'redacted' | 'full';
+    retention_days?: number;
+  };
 }
 /**
  * Interrupting timeout boundary: if the step is not done within 'after' (ISO-8601 duration, PT1S to P365D), its work is cancelled and the flow continues at 'then'.

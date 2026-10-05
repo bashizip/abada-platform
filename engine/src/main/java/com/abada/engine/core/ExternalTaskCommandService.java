@@ -42,6 +42,9 @@ public class ExternalTaskCommandService {
     private final ProjectAccessService access;
     private final EntityManager entityManager;
     private final com.abada.engine.core.agent.AgentStepService agentSteps;
+    private final com.abada.engine.persistence.repository.AgentStepRepository agentStepRepository;
+    private final com.abada.engine.llm.ModelPriceService prices;
+    private final com.abada.engine.observability.EngineMetrics metrics;
 
     /** Rate-limit waits allowed before one counts as a failed attempt, so waiting stays bounded. */
     private final int maxDeferrals;
@@ -54,8 +57,14 @@ public class ExternalTaskCommandService {
             @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferrals:12}") int maxDeferrals,
             @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferral-delay:PT15M}")
             java.time.Duration maxDeferralDelay,
-            com.abada.engine.core.agent.AgentStepService agentSteps) {
+            com.abada.engine.core.agent.AgentStepService agentSteps,
+            com.abada.engine.persistence.repository.AgentStepRepository agentStepRepository,
+            com.abada.engine.llm.ModelPriceService prices,
+            com.abada.engine.observability.EngineMetrics metrics) {
         this.agentSteps = agentSteps;
+        this.agentStepRepository = agentStepRepository;
+        this.prices = prices;
+        this.metrics = metrics;
         this.maxDeferrals = maxDeferrals;
         this.maxDeferralDelay = maxDeferralDelay;
         this.repository = repository;
@@ -104,6 +113,12 @@ public class ExternalTaskCommandService {
                 }
                 if (work != null && !work.tools().isEmpty()) {
                     work = work.withToolBindings(engine.toolBindings(instance, task.getActivityId()));
+                }
+                if (work != null) {
+                    List<String> models = new ArrayList<>();
+                    if (work.model() != null) models.add(work.model());
+                    models.addAll(work.fallbackModels());
+                    work = work.withPrices(prices.currentPrices(models));
                 }
                 Map<String, Object> payload = work != null
                         ? AgentInputs.resolve(work, instance.getVariables())
@@ -522,6 +537,32 @@ public class ExternalTaskCommandService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Could not serialize agent attempt metadata", exception);
         }
+        priceReportedTokens(task, agent);
+    }
+
+    /**
+     * Prices the tokens an attempt reported, for workers that do not journal
+     * their model calls; summed over the task's attempts. An attempt that
+     * journaled MODEL_CALL steps is priced from those steps instead, so it is
+     * never counted twice.
+     */
+    private void priceReportedTokens(ExternalTaskEntity task, AgentAttemptMetadata agent) {
+        if (agent.promptTokens() == null && agent.completionTokens() == null) return;
+        boolean journaled = agentStepRepository.findByExternalTaskIdAndAttemptOrderBySequenceAsc(task.getId(),
+                        task.getAttempt()).stream()
+                .anyMatch(step -> step.getKind() == com.abada.engine.persistence.entity.AgentStepEntity.Kind.MODEL_CALL);
+        if (journaled) return;
+        task.addAttemptTokens(agent.promptTokens(), agent.completionTokens());
+        com.abada.engine.llm.ModelPriceService.Cost cost = prices.cost(agent.model(), agent.promptTokens(),
+                agent.completionTokens(), Instant.now());
+        if (cost.unpriced()) {
+            task.setAttemptCostUnpriced(true);
+            return;
+        }
+        if (cost.usd() == null) return;
+        task.setAttemptCostUsd(task.getAttemptCostUsd() == null ? cost.usd() : task.getAttemptCostUsd().add(cost.usd()));
+        ProcessInstance instance = engine.getProcessInstanceById(task.getProcessInstanceId());
+        metrics.recordAgentCost(instance == null ? null : instance.getDefinition().getId(), agent.model(), cost.usd());
     }
 
     /** Terminal fact for the analyzed signal; skips legacy rows without a known start. */

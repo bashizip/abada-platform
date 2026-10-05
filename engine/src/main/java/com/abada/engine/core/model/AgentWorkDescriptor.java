@@ -30,7 +30,9 @@ public record AgentWorkDescriptor(
         // Policies a node tightened for some of its tool refs (ref -> policy); omitted when none.
         @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, ToolPolicy> toolPolicies,
         // Resolved at deployment and attached when the work is locked; never parsed from the source.
-        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<ToolBinding> toolBindings) implements Serializable {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<ToolBinding> toolBindings,
+        // Current prices of the node's model and fallbacks, attached when the work is locked (E11); for budgets.
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, ModelPrice> prices) implements Serializable {
 
     public AgentWorkDescriptor {
         inputs = inputs == null ? Map.of() : Map.copyOf(inputs);
@@ -39,6 +41,16 @@ public record AgentWorkDescriptor(
         fallbackModels = fallbackModels == null ? List.of() : List.copyOf(fallbackModels);
         toolPolicies = toolPolicies == null ? Map.of() : Map.copyOf(toolPolicies);
         toolBindings = toolBindings == null ? List.of() : List.copyOf(toolBindings);
+        prices = prices == null ? Map.of() : Map.copyOf(prices);
+    }
+
+    public AgentWorkDescriptor(String profileVersion, String model, String prompt, Map<String, String> inputs,
+            String resultVariable, Map<String, Object> outputSchema, List<String> tools, Double confidenceThreshold,
+            Double temperature, Integer maxTokens, Long timeoutMs, Integer maxAttempts, Long retryBackoffMs,
+            List<String> fallbackModels, Map<String, ToolPolicy> toolPolicies, List<ToolBinding> toolBindings) {
+        this(profileVersion, model, prompt, inputs, resultVariable, outputSchema, tools, confidenceThreshold,
+                temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels, toolPolicies,
+                toolBindings, Map.of());
     }
 
     public AgentWorkDescriptor(String profileVersion, String model, String prompt, Map<String, String> inputs,
@@ -60,13 +72,20 @@ public record AgentWorkDescriptor(
     public AgentWorkDescriptor withModel(String otherModel) {
         return new AgentWorkDescriptor(profileVersion, otherModel, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, toolBindings);
+                fallbackModels, toolPolicies, toolBindings, prices);
+    }
+
+    /** The same work with the current prices of its models. */
+    public AgentWorkDescriptor withPrices(Map<String, ModelPrice> current) {
+        return new AgentWorkDescriptor(profileVersion, model, prompt, inputs, resultVariable, outputSchema,
+                tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
+                fallbackModels, toolPolicies, toolBindings, current);
     }
 
     /** The same work with the tool bindings frozen for its definition version. */
     public AgentWorkDescriptor withToolBindings(List<ToolBinding> bindings) {
         return new AgentWorkDescriptor(profileVersion, model, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, bindings);
+                fallbackModels, toolPolicies, bindings, prices);
     }
 }

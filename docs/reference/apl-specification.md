@@ -97,7 +97,9 @@ flow:                     # required — the executable graph
 `metadata.variables` declares the variables expressions may read: the start
 payload and anything written by an `engine-task`, `script` or `human-input`
 node. Declarations are checked statically (§6.1); the engine does **not** yet
-enforce them on the start payload.
+enforce them on the start payload. A declaration with `sensitive: true` is
+masked in redacted agent evidence (§3.2.2): fields with that name and the
+variable's value wherever it appears.
 
 - `version` is currently `abada.io/v1`. It is the APL language version, not a
   process semantic version.
@@ -364,7 +366,7 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `inputs` | map | no | named process-variable bindings |
 | `result_variable` | string | no | completion variable; default `<nodeId>_result` |
 | `output_schema` | map | no | requires a JSON-object response |
-| `tools` | list | no | `<server>/<tool>` or `{ ref, policy }` from the project's tool servers (§3.1.1); resolved and frozen at deployment |
+| `tools` | list | no | `<server>/<tool>` or `{ ref, policy }` from the project's tool servers (§3.2.1); resolved and frozen at deployment |
 | `confidence_threshold` | number | no | 0–100 |
 | `temperature` | number | no | 0–2 |
 | `max_tokens` | integer | no | positive provider response bound |
@@ -378,7 +380,7 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `on_timeout` | `{after, then}` | no | interrupting timeout of the whole step (§2.6) |
 | `next` | nodeId | yes | linear successor |
 
-#### 3.1.1 Tools and tool servers
+#### 3.2.1 Tools and tool servers
 
 An agent may only use tools declared by a **tool server**: a project resource
 of kind `TOOL_SERVER` (YAML, validated against
@@ -469,6 +471,36 @@ commands).
 
 The reference sidecar, retry/idempotency behavior, OIDC configuration, and
 at-least-once boundary are defined in [Agent worker](agent-worker.md).
+
+#### 3.2.2 Agent evidence and cost
+
+Every model and tool call of an agent is journaled (`agent_steps`). What the
+journal keeps of the **payloads** (prompts and model replies, tool arguments
+and results) follows the project's evidence policy (`PUT
+/v1/projects/{id}/evidence-policy`, owners): `payloads: none | redacted | full`
+and `retention_days` (default `redacted`, 30 days). An agent node may make it
+stricter, never looser:
+
+```yaml
+- id: triage
+  type: agent
+  evidence: { payloads: none, retention_days: 7 }
+```
+
+`redacted` masks credentials (bearer tokens, Authorization headers, key-,
+token-, secret- and password-like fields) and the variables declared
+`sensitive: true`. Payloads are AES-GCM encrypted; digests (computed from the
+full payload), tokens, cost, model, timings and actors are kept with the
+instance even after payloads are purged. Payloads are read with `GET
+.../instances/{id}/agent-steps/{stepId}/payloads` by members holding the
+`abada-evidence-reader` role (not implied by administration); every read is
+recorded as `EVIDENCE_READ`.
+
+Cost is computed by the engine, never reported by a worker: tokens times the
+model price in effect at the time of the call (`/v1/model-prices`, effective-
+dated, USD per million tokens). A call with tokens but no price is
+**unpriced** (cost unknown, never 0). Instances carry `agentCost` (USD, tokens,
+`includesUnpriced`).
 
 ### 3.3 `engine-task` — standard service task
 

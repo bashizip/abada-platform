@@ -69,10 +69,20 @@ export interface ProcessInstanceDTO {
   suspended?: boolean;
   startedBy?: string;
   variables: Record<string, unknown>;
+  /** What this instance's agent calls cost (engine-computed); absent without agent calls. */
+  agentCost?: InstanceCostDTO;
   /** Set when a call-process step of another instance started this one. */
   parentInstanceId?: string;
   parentActivityId?: string;
   rootInstanceId?: string;
+}
+
+/** Agent cost of an instance: `usd` sums priced calls; `includesUnpriced` means the real cost is higher. */
+export interface InstanceCostDTO {
+  usd?: number;
+  promptTokens: number;
+  completionTokens: number;
+  includesUnpriced: boolean;
 }
 
 /** One instance related through call-process. */

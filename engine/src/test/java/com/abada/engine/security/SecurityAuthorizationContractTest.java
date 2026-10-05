@@ -335,6 +335,28 @@ class SecurityAuthorizationContractTest {
         // Allowed to read operations, but not a member of the project: it does not exist for them.
         mvc.perform(get(lineage).header("Authorization", "Bearer operator")).andExpect(status().isNotFound());
 
+        String payloads = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID
+                + "/instances/missing/agent-steps/missing/payloads";
+        mvc.perform(get(payloads)).andExpect(status().isUnauthorized());
+        mvc.perform(get(payloads).header("Authorization", "Bearer invalid")).andExpect(status().isUnauthorized());
+        mvc.perform(get(payloads).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(payloads).header("X-Auth-Request-User", "forged")
+                        .header("X-Auth-Request-Groups", "abada-evidence-reader"))
+                .andExpect(status().isUnauthorized());
+        // Operations access and administration do not include evidence payloads.
+        assertForbidden(get(payloads), "operator");
+        assertForbidden(get(payloads), "admin");
+
+        String prices = "/v1/model-prices";
+        String price = "{\"model\":\"m\",\"inputPerMillion\":1,\"outputPerMillion\":2}";
+        mvc.perform(get(prices)).andExpect(status().isUnauthorized());
+        mvc.perform(get(prices).header("Authorization", "Bearer tasks")).andExpect(status().isOk());
+        assertForbidden(post(prices).contentType(MediaType.APPLICATION_JSON).content(price), "operator");
+        assertForbidden(post(prices).contentType(MediaType.APPLICATION_JSON).content(price), "insight-reviewer");
+        mvc.perform(post(prices).contentType(MediaType.APPLICATION_JSON).content(price)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+
         String manage = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/tool-credentials/crm-token";
         String body = "{\"secret\":\"never-stored\"}";
         mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body))

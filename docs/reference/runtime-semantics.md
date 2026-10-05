@@ -350,6 +350,32 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   can never advance, even after its lease passes to another worker. Evidence:
   [`AgentWorkerResilienceTest`](../../engine/src/test/java/com/abada/engine/core/AgentWorkerResilienceTest.java).
 
+## Agent evidence and cost
+
+- When a step is journaled the engine stores two encrypted copies of its
+  payloads: the worker's **working copy** (complete, so a resumed lease can
+  continue) and the **evidence copy**, shaped by the evidence policy (project
+  policy tightened by the node's `evidence`): none, redacted or full. Digests
+  are always computed from the complete payload. The working copy is cleared
+  once the task is completed or cancelled; the evidence copy and every copy
+  past `purge_after` (recorded at journaling: start + retention days) are
+  cleared by the retention sweep (`abada.evidence.purge-interval-ms`, default
+  15 minutes), which locks rows with `SKIP LOCKED` so replicas purge each row
+  once, and records `EVIDENCE_PURGED` per instance and batch.
+- A finished model call is priced by the engine from its tokens and the price
+  in effect at its start (`model_prices`, a provider-specific price before a
+  provider-less one). No price: `cost_unpriced`, cost null. The tokens an
+  attempt reports in its metadata are priced the same way when that attempt
+  journaled no model call, so nothing is counted twice. Instance cost sums
+  both; `abada_agent_cost_usd_total` is tagged by process key and model.
+- The agent descriptor carries the current `prices` of the node's model and
+  fallbacks, for a worker's budget checks.
+- Development-key ciphertext (step payloads, tool credentials) is re-encrypted
+  with `ABADA_ENCRYPTION_KEY` after startup, like AI provider keys.
+- Evidence:
+  [`PostgresEvidenceAndCostTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresEvidenceAndCostTest.java),
+  [`EvidenceAccessApiTest`](../../engine/src/test/java/com/abada/engine/api/EvidenceAccessApiTest.java).
+
 ## Call-process (child instances)
 
 - A token reaching a `call-process` node parks `WAITING`. In the same command

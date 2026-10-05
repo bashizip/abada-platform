@@ -81,7 +81,9 @@ seed the following resources **before** the engine starts:
    `abada-admin-api` if `OIDC_AUDIENCE` is reserved for user JWTs).
 4. Create at least the following top-level groups: `abada-worker`,
    `abada-admin`, `abada-deployer`, `abada-task-user`, `abada-operator`,
-   `abada-process-controller`, `abada-insight-reviewer`. Map each into the
+   `abada-process-controller`, `abada-insight-reviewer`, `abada-evidence-reader`
+   (for auditors who read agent evidence payloads; not implied by
+   `abada-admin`). Map each into the
    `groups` claim on the `abada-studio` public client.
 5. Set the four `ABADA_KEYCLOAK_*` env vars in the engine container. Do
    **not** bake the secret into the image; source it from the runtime

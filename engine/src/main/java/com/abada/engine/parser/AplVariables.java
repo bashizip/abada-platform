@@ -65,6 +65,9 @@ final class AplVariables {
             } else if (!names.add(name)) {
                 errors.add(error(pointer + "/name", "metadata.variables declares '" + name + "' more than once"));
             }
+            if (variable.has("sensitive") && !variable.path("sensitive").isBoolean()) {
+                errors.add(error(pointer + "/sensitive", "metadata.variables[" + index + "].sensitive must be true or false"));
+            }
             JsonNode type = variable.path("type");
             if (!type.isMissingNode() && !TYPES.contains(type.asText())) {
                 errors.add(error(pointer + "/type", "metadata.variables[" + index + "].type must be one of "
@@ -72,6 +75,17 @@ final class AplVariables {
             }
         }
         return errors;
+    }
+
+    /** Variables declared {@code sensitive: true}: masked in redacted agent evidence. */
+    static Set<String> sensitiveNames(JsonNode root) {
+        Set<String> names = new LinkedHashSet<>();
+        root.path("metadata").path("variables").forEach(variable -> {
+            if (variable.path("name").isTextual() && variable.path("sensitive").asBoolean(false)) {
+                names.add(variable.path("name").asText());
+            }
+        });
+        return names;
     }
 
     static Set<String> declaredNames(JsonNode root) {

@@ -45,8 +45,16 @@ Open an instance to see the path it took on the canvas and three tabs:
 
 ![A completed instance: the taken path, including the way back to Draft, and the audit trail](../../../assets/screens/tutorial/22-instance-history.webp)
 
-The engine stores attempt metadata only — never prompts, model responses or
-provider keys.
+The engine stores attempt metadata in history — never prompts, model responses
+or provider keys. Journaled agent calls keep their prompts and results as the
+project's evidence policy allows (redacted by default, 30 days), encrypted, and
+readable only by `abada-evidence-reader` members.
+
+**Agent cost.** The instance bar shows what its agent calls cost and how many
+tokens they used; the telemetry of an agent step lists each call with its
+cost. The engine computes cost from the model prices in **Settings → Model
+Prices**. A call to a model without a price shows **unpriced**: the real cost
+is higher than the total shown.
 
 ### Called processes
 

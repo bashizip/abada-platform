@@ -306,6 +306,7 @@ public final class AplParser {
         Map<String, Object> endEvents = new LinkedHashMap<>();
         Map<String, LoopMeta> loops = new LinkedHashMap<>();
         Map<String, CallProcessMeta> callProcesses = new LinkedHashMap<>();
+        Map<String, ParsedProcessDefinition.EvidenceOverride> evidenceOverrides = new LinkedHashMap<>();
 
         // Each node is compiled independently so one invalid node never hides another's errors.
         for (Map.Entry<String, JsonNode> compiled : nodesById.entrySet()) {
@@ -322,9 +323,12 @@ public final class AplParser {
                         }
                         endEvents.put(nodeId, nodeId);
                     }
-                    case "agent" -> serviceTasks.put(nodeId,
-                            new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
-                                    parseAgentWork(node, nodeId, pointerById.get(nodeId), warnings)));
+                    case "agent" -> {
+                        serviceTasks.put(nodeId, new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
+                                parseAgentWork(node, nodeId, pointerById.get(nodeId), warnings)));
+                        ParsedProcessDefinition.EvidenceOverride evidence = parseEvidence(node, nodeId);
+                        if (evidence != null) evidenceOverrides.put(nodeId, evidence);
+                    }
                     case "engine-task" -> {
                         String topic = node.path("service").asText(null);
                         if (topic == null || topic.isBlank()) {
@@ -668,7 +672,8 @@ public final class AplParser {
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
-                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses);
+                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses)
+                .withEvidenceOverrides(evidenceOverrides).withSensitiveVariables(AplVariables.sensitiveNames(root));
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
             // execution policy, so reloading stored definitions never changes.
@@ -717,6 +722,33 @@ public final class AplParser {
             located.add(issue.path() != null || pointer == null ? issue : issue.withLocation(elementId, pointer));
         }
         return located;
+    }
+
+    /** {@code evidence: { payloads, retention_days }} of an agent node; null when absent. */
+    private static ParsedProcessDefinition.EvidenceOverride parseEvidence(JsonNode node, String nodeId) {
+        JsonNode evidence = node.path("evidence");
+        if (evidence.isMissingNode() || evidence.isNull()) return null;
+        if (!evidence.isObject()) {
+            throw validation("evidence", "agent node '" + nodeId + "' evidence must be { payloads, retention_days }");
+        }
+        String payloads = null;
+        if (evidence.has("payloads")) {
+            payloads = evidence.path("payloads").asText("").strip();
+            if (!List.of("none", "redacted", "full").contains(payloads)) {
+                throw validation("evidence/payloads", "agent node '" + nodeId
+                        + "' evidence.payloads must be none, redacted or full");
+            }
+        }
+        Integer days = null;
+        if (evidence.has("retention_days")) {
+            JsonNode raw = evidence.path("retention_days");
+            if (!raw.isIntegralNumber() || raw.asInt() < 1 || raw.asInt() > 3650) {
+                throw validation("evidence/retention_days", "agent node '" + nodeId
+                        + "' evidence.retention_days must be an integer between 1 and 3650");
+            }
+            days = raw.asInt();
+        }
+        return new ParsedProcessDefinition.EvidenceOverride(payloads, days);
     }
 
     /** Deepest nesting a call-process node may ask for; the engine's limit may be lower. */

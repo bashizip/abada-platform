@@ -27,6 +27,12 @@ public class ParsedProcessDefinition implements Serializable {
     private final Map<String, List<String>> flowGraph = new HashMap<>();
     private Map<String, LoopMeta> loops = Map.of();
     private Map<String, CallProcessMeta> callProcesses = Map.of();
+    private Set<String> sensitiveVariables = Set.of();
+    /** Agent node id to its {@code evidence} override: payloads mode (wire name) and retention days. */
+    private Map<String, EvidenceOverride> evidenceOverrides = Map.of();
+
+    /** A node's {@code evidence: { payloads, retention_days }}; null fields leave the project's setting. */
+    public record EvidenceOverride(String payloads, Integer retentionDays) implements java.io.Serializable {}
     private Map<String, List<BoundaryMeta>> boundaries = Map.of();
     /** Back-edges of the depth-first walk from the start event, keyed by {@link #edgeKey}. */
     private final Set<String> backEdges = new LinkedHashSet<>();
@@ -103,6 +109,26 @@ public class ParsedProcessDefinition implements Serializable {
     }
 
     /** Declares the loop bounds of this definition (set once by the parser). */
+    /** Variables declared {@code sensitive: true} (set once by the parser). */
+    public ParsedProcessDefinition withSensitiveVariables(Set<String> declared) {
+        this.sensitiveVariables = Set.copyOf(declared);
+        return this;
+    }
+
+    public Set<String> getSensitiveVariables() {
+        return sensitiveVariables;
+    }
+
+    /** Declares the agent nodes' evidence overrides (set once by the parser). */
+    public ParsedProcessDefinition withEvidenceOverrides(Map<String, EvidenceOverride> declared) {
+        this.evidenceOverrides = Map.copyOf(declared);
+        return this;
+    }
+
+    public EvidenceOverride getEvidenceOverride(String activityId) {
+        return evidenceOverrides.get(activityId);
+    }
+
     /** Declares the call-process nodes of this definition (set once by the parser). */
     public ParsedProcessDefinition withCallProcesses(Map<String, CallProcessMeta> declared) {
         this.callProcesses = Map.copyOf(declared);
