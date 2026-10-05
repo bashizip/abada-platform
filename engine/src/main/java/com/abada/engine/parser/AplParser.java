@@ -7,6 +7,7 @@ import com.abada.engine.bpmn.compatibility.CompatibilityMapping;
 import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.bpmn.compatibility.CompatibilityReport;
 import com.abada.engine.bpmn.compatibility.ValidationSeverity;
+import com.abada.engine.core.model.CallProcessMeta;
 import com.abada.engine.core.model.ToolPolicy;
 import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
@@ -105,7 +106,7 @@ public final class AplParser {
     public static final Set<String> SUPPORTED_TYPES = Set.of(
              "webhook", "end", "agent", "engine-task", "decision-table", "script",
              "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
-             "message-catch", "timer", "signal", "human-input");
+             "message-catch", "timer", "signal", "human-input", "call-process");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -304,6 +305,7 @@ public final class AplParser {
         Map<String, GatewayMeta> gateways = new LinkedHashMap<>();
         Map<String, Object> endEvents = new LinkedHashMap<>();
         Map<String, LoopMeta> loops = new LinkedHashMap<>();
+        Map<String, CallProcessMeta> callProcesses = new LinkedHashMap<>();
 
         // Each node is compiled independently so one invalid node never hides another's errors.
         for (Map.Entry<String, JsonNode> compiled : nodesById.entrySet()) {
@@ -602,6 +604,12 @@ public final class AplParser {
                         }
                         events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.SIGNAL, signal));
                     }
+                    case "call-process" -> {
+                        if (!node.hasNonNull("next")) {
+                            throw validation("next", "call-process node '" + nodeId + "' requires 'next'");
+                        }
+                        callProcesses.put(nodeId, parseCallProcess(node, nodeId, nodeName, processId));
+                    }
                     case "human-input" -> {
                         // Canonical APL field is `formKey`; `formId` remains a
                         // deprecated alias so existing documents keep deploying.
@@ -660,7 +668,7 @@ public final class AplParser {
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
-                rawSource, null, null).withLoops(loops).withBoundaries(boundaries);
+                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses);
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
             // execution policy, so reloading stored definitions never changes.
@@ -709,6 +717,75 @@ public final class AplParser {
             located.add(issue.path() != null || pointer == null ? issue : issue.withLocation(elementId, pointer));
         }
         return located;
+    }
+
+    /** Deepest nesting a call-process node may ask for; the engine's limit may be lower. */
+    public static final int MAX_CALL_DEPTH = 10;
+    private static final java.util.regex.Pattern PROCESS_KEY = java.util.regex.Pattern.compile("[a-z][a-z0-9_-]{0,127}");
+    private static final java.util.regex.Pattern VARIABLE = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+
+    /**
+     * {@code call-process}: {@code process} (a key in the same project, pinned at
+     * deployment), {@code inputs} (child variable to expression), {@code outputs}
+     * (parent variable to child variable; at least one) and optional {@code max_depth}.
+     */
+    private static CallProcessMeta parseCallProcess(JsonNode node, String nodeId, String nodeName, String selfKey) {
+        String process = node.path("process").asText("").strip();
+        if (!PROCESS_KEY.matcher(process).matches()) {
+            throw validation("process", "call-process node '" + nodeId
+                    + "' requires 'process': the key of a process in this project");
+        }
+        if (process.equals(selfKey)) {
+            throw validation("process", "call-process node '" + nodeId + "' calls its own process '" + process
+                    + "'; recursion is not supported");
+        }
+        Map<String, String> inputs = new LinkedHashMap<>();
+        JsonNode rawInputs = node.path("inputs");
+        if (rawInputs.isObject()) {
+            for (var entry : rawInputs.properties()) {
+                if (!VARIABLE.matcher(entry.getKey()).matches()) {
+                    throw validation("inputs/" + entry.getKey(), "call-process node '" + nodeId + "' input '"
+                            + entry.getKey() + "' is not a variable name");
+                }
+                String expression = entry.getValue().isTextual() ? entry.getValue().asText()
+                        : entry.getValue().toString();
+                try {
+                    com.abada.engine.expression.WorkflowExpressions.compile(expression);
+                } catch (com.abada.engine.expression.ExpressionCompileException exception) {
+                    throw validation("inputs/" + entry.getKey(), "call-process node '" + nodeId + "' input '"
+                            + entry.getKey() + "' is not a valid expression: " + exception.getMessage());
+                }
+                inputs.put(entry.getKey(), expression);
+            }
+        } else if (!rawInputs.isMissingNode() && !rawInputs.isNull()) {
+            throw validation("inputs", "call-process node '" + nodeId + "' inputs must map child variables to expressions");
+        }
+        Map<String, String> outputs = new LinkedHashMap<>();
+        JsonNode rawOutputs = node.path("outputs");
+        if (rawOutputs.isObject()) {
+            for (var entry : rawOutputs.properties()) {
+                String childVariable = entry.getValue().asText("");
+                if (!VARIABLE.matcher(entry.getKey()).matches() || !VARIABLE.matcher(childVariable).matches()) {
+                    throw validation("outputs/" + entry.getKey(), "call-process node '" + nodeId
+                            + "' outputs map a parent variable to a child variable name");
+                }
+                outputs.put(entry.getKey(), childVariable);
+            }
+        }
+        if (outputs.isEmpty()) {
+            throw validation("outputs", "call-process node '" + nodeId + "' declares no outputs; name what the"
+                    + " child returns (parent_variable: child_variable)");
+        }
+        Integer maxDepth = null;
+        if (node.has("max_depth")) {
+            JsonNode depth = node.path("max_depth");
+            if (!depth.isIntegralNumber() || depth.asInt() < 1 || depth.asInt() > MAX_CALL_DEPTH) {
+                throw validation("max_depth", "call-process node '" + nodeId + "' max_depth must be an integer"
+                        + " between 1 and " + MAX_CALL_DEPTH);
+            }
+            maxDepth = depth.asInt();
+        }
+        return new CallProcessMeta(nodeId, nodeName, process, inputs, outputs, maxDepth);
     }
 
     /** {@code loop: { max_iterations, on_exhausted }} on the node a cycle returns to. */
@@ -1075,7 +1152,8 @@ public final class AplParser {
         }
     }
 
-    private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate");
+    private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate",
+            "call-process");
 
     private static void addBoundary(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
             List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries) {
@@ -1097,7 +1175,7 @@ public final class AplParser {
         for (String field : List.of("on_error", "on_timeout")) {
             if (present(node.path(field)) && !BOUNDARY_TYPES.contains(type)) {
                 throw validation(field, "node '" + nodeId + "' declares '" + field
-                        + "', which only agent, engine-task and human-input nodes support");
+                        + "', which only agent, engine-task, human-input and call-process nodes support");
             }
         }
         JsonNode onError = node.path("on_error");

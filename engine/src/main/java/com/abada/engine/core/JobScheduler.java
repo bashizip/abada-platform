@@ -108,6 +108,50 @@ public class JobScheduler {
     }
 
     /**
+     * Schedules the job that resumes a parent token once its child ended, in
+     * the child's command; at most one per child. Returns its id, or null when
+     * one already exists.
+     */
+    String scheduleChildDone(String parentInstanceId, String activityId, String parentTokenId,
+            String childInstanceId) {
+        if (jobRepository.existsByKindAndRelatedInstanceId(JobEntity.Kind.CHILD_DONE, childInstanceId)) {
+            return null;
+        }
+        JobEntity job = new JobEntity(parentInstanceId, activityId, Instant.now());
+        job.setTokenId(parentTokenId);
+        job.setKind(JobEntity.Kind.CHILD_DONE);
+        job.setRelatedInstanceId(childInstanceId);
+        jobRepository.save(job);
+        log.info("Scheduled CHILD_DONE job {} for parent {} (child {})", job.getId(), parentInstanceId,
+                childInstanceId);
+        return job.getId();
+    }
+
+    /**
+     * Runs one job now, off the caller's thread (after its transaction
+     * committed). The poller remains the fallback: if this run loses the
+     * claim or fails, the job stays durable and is picked up later.
+     */
+    void runSoon(String jobId) {
+        Thread.ofVirtual().name("abada-job-" + jobId).start(() -> {
+            try {
+                if (commands.claim(jobId, leaseOwner, Instant.now())) {
+                    if (commands.execute(jobId, leaseOwner, Instant.now())) {
+                        engineMetrics.recordJobExecuted("CHILD_DONE");
+                    }
+                }
+            } catch (Exception exception) {
+                log.warn("Immediate run of job {} failed; the poller retries it: {}", jobId, exception.getMessage());
+                try {
+                    commands.recordFailure(jobId, exception.getMessage());
+                } catch (Exception ignored) {
+                    // The lease expires and the poller reclaims the job.
+                }
+            }
+        });
+    }
+
+    /**
      * Periodically polls the database for due jobs.
      */
     @Scheduled(

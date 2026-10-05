@@ -21,7 +21,10 @@ public class Mapper {
                     pi.getStartDate(),
                     pi.getEndDate(),
                     pi.getStartedBy(),
-                    pi.getVariables());
+                    pi.getVariables(),
+                    pi.getLineage() == null ? null : pi.getLineage().parentInstanceId(),
+                    pi.getLineage() == null ? null : pi.getLineage().parentActivityId(),
+                    pi.getLineage() == null ? null : pi.getLineage().rootInstanceId());
         }
     }
 

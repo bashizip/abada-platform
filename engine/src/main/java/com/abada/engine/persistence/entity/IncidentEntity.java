@@ -22,7 +22,12 @@ public class IncidentEntity {
          * may not have happened, so it is never re-sent. An operator confirms the
          * outcome when retrying.
          */
-        TOOL_OUTCOME_UNKNOWN
+        TOOL_OUTCOME_UNKNOWN,
+        /**
+         * A call-process child failed or was cancelled, or could not start (inputs
+         * or depth), and the call declares no on_error route. Retrying starts a new child.
+         */
+        CHILD_FAILED
     }
 
     @Id

@@ -190,7 +190,13 @@ final class AplVariables {
                 written.add(AplParser.errorCodeVariable(nodeId));
                 written.add(AplParser.commentVariable(nodeId));
             }
-            case "decision-table" -> node.path("rules").forEach(rule -> {
+            case "call-process" -> {
+                // The mapped outputs on completion, or a boundary (on_error, on_timeout) that fired.
+                node.path("outputs").fieldNames().forEachRemaining(written::add);
+                written.add(AplParser.outcomeVariable(nodeId));
+                written.add(AplParser.errorCodeVariable(nodeId));
+            }
+                        case "decision-table" -> node.path("rules").forEach(rule -> {
                 rule.path("then").fieldNames().forEachRemaining(written::add);
                 rule.path("otherwise").path("then").fieldNames().forEachRemaining(written::add);
             });

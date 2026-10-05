@@ -479,6 +479,83 @@
       ],
       "additionalProperties": false
     },
+    "callProcessNode": {
+      "title": "APLCallProcessNode",
+      "type": "object",
+      "description": "Runs a governed child instance of another process in this project and waits for it; the child version is pinned when this definition is deployed.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "type": {
+          "const": "call-process"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable node label."
+        },
+        "next": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "process": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,127}$",
+          "description": "Key of the process to call, in this project."
+        },
+        "inputs": {
+          "type": "object",
+          "description": "Child variable to an expression evaluated on this instance's variables.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Parent variable to the child variable copied back when the child completes; nothing else returns.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Stricter nesting limit for this call."
+        },
+        "on_error": {
+          "$ref": "#/$defs/onError"
+        },
+        "on_timeout": {
+          "$ref": "#/$defs/onTimeout"
+        },
+        "loop": {
+          "$ref": "#/$defs/loop"
+        },
+        "ui": {
+          "$ref": "#/$defs/uiPosition"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "process",
+        "outputs",
+        "next"
+      ],
+      "additionalProperties": false
+    },
     "decisionTableNode": {
       "title": "APLDecisionTableNode",
       "type": "object",
@@ -1174,6 +1251,9 @@
         },
         {
           "$ref": "#/$defs/signalNode"
+        },
+        {
+          "$ref": "#/$defs/callProcessNode"
         }
       ]
     },
@@ -1193,7 +1273,8 @@
         "event-gateway",
         "message-catch",
         "timer",
-        "signal"
+        "signal",
+        "call-process"
       ]
     }
   }

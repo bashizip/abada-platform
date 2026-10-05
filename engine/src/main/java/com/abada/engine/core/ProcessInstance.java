@@ -94,6 +94,23 @@ public class ProcessInstance {
     public String getStartedBy() { return startedBy; }
     public void setStartedBy(String startedBy) { this.startedBy = startedBy; }
 
+    /** Where a child instance came from (V29); null for a root instance. */
+    public record Lineage(String parentInstanceId, String parentTokenId, String parentActivityId,
+            String rootInstanceId, int depth) {}
+
+    private Lineage lineage;
+
+    /** Set when its parent cancelled this child: the parent already knows, so no CHILD_DONE job. Not persisted. */
+    private transient boolean endedByParent;
+
+    public boolean isEndedByParent() { return endedByParent; }
+    public void setEndedByParent(boolean value) { this.endedByParent = value; }
+
+    public Lineage getLineage() { return lineage; }
+    public void setLineage(Lineage lineage) { this.lineage = lineage; }
+    public int getCallDepth() { return lineage == null ? 0 : lineage.depth(); }
+    public String getRootInstanceId() { return lineage == null ? id : lineage.rootInstanceId(); }
+
     /**
      * Activity ids of the waiting tokens, in creation order: the legacy
      * {@code active_tokens_json} view (event-gateway children appear as their
@@ -401,7 +418,8 @@ public class ProcessInstance {
             boolean isEmbeddedServiceTask = serviceTaskMeta != null && serviceTaskMeta.className() != null;
             ScriptTaskMeta scriptTaskMeta = definition.getScriptTask(pointer);
 
-            if (definition.isUserTask(pointer) || definition.isCatchEvent(pointer) || isExternalServiceTask) {
+            if (definition.isUserTask(pointer) || definition.isCatchEvent(pointer) || isExternalServiceTask
+                    || definition.isCallProcess(pointer)) {
                 if (missingCorrelationKey(pointer)) {
                     // Without a key the message could never be correlated: stop
                     // loudly instead of waiting forever.
@@ -573,6 +591,20 @@ public class ProcessInstance {
         Deque<Step> queue = new ArrayDeque<>();
         queue.add(new Step(token, token.activityId(), null));
         return run(queue, new ArrayList<>());
+    }
+
+    /**
+     * Stops a token waiting at its activity in the {@code INCIDENT} state, e.g.
+     * a call whose child failed with no {@code on_error}. Retrying the incident
+     * restarts it there.
+     */
+    public void stopAtIncident(String tokenRef) {
+        ProcessToken token = waitingToken(tokenRef);
+        if (token == null) {
+            throw new com.abada.engine.core.exception.ProcessEngineException(
+                    "No waiting token '" + tokenRef + "' in process instance " + id);
+        }
+        token.moveTo(token.activityId(), ProcessToken.State.INCIDENT);
     }
 
     /** Returns and clears the tokens that parked at a task during advance(). */

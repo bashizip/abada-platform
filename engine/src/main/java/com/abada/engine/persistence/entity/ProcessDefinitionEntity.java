@@ -65,6 +65,13 @@ public class ProcessDefinitionEntity {
     @Column(name = "tool_bindings", columnDefinition = "TEXT")
     private String toolBindings;
 
+    /** Child versions pinned by call-process nodes at deployment (JSON by node id); null when none (V29). */
+    @Column(name = "call_targets", columnDefinition = "TEXT")
+    private String callTargets;
+
+    public String getCallTargets() { return callTargets; }
+    public void setCallTargets(String value) { this.callTargets = value; }
+
     public String getToolBindings() { return toolBindings; }
     public void setToolBindings(String value) { this.toolBindings = value; }
 

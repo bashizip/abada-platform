@@ -53,6 +53,33 @@ public class ProcessInstanceEntity {
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
 
+    /** Lineage (V29): set when a call-process node started this instance; null for a root. */
+    @Column(name = "parent_instance_id")
+    private String parentInstanceId;
+    @Column(name = "parent_token_id")
+    private String parentTokenId;
+    @Column(name = "parent_activity_id")
+    private String parentActivityId;
+    @Column(name = "root_instance_id")
+    private String rootInstanceId;
+    @Column(name = "call_depth", nullable = false)
+    private int callDepth;
+    @Column(name = "started_by_agent", columnDefinition = "TEXT")
+    private String startedByAgent;
+
+    public String getParentInstanceId() { return parentInstanceId; }
+    public void setParentInstanceId(String value) { parentInstanceId = value; }
+    public String getParentTokenId() { return parentTokenId; }
+    public void setParentTokenId(String value) { parentTokenId = value; }
+    public String getParentActivityId() { return parentActivityId; }
+    public void setParentActivityId(String value) { parentActivityId = value; }
+    public String getRootInstanceId() { return rootInstanceId; }
+    public void setRootInstanceId(String value) { rootInstanceId = value; }
+    public int getCallDepth() { return callDepth; }
+    public void setCallDepth(int value) { callDepth = value; }
+    public String getStartedByAgent() { return startedByAgent; }
+    public void setStartedByAgent(String value) { startedByAgent = value; }
+
     // Constructors
     public ProcessInstanceEntity() {
     }

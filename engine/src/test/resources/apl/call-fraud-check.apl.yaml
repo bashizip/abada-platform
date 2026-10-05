@@ -1,0 +1,22 @@
+version: abada.io/v1
+metadata:
+  key: fraud_check
+  name: Fraud check
+  variables:
+    - { name: case_id, type: string }
+    - { name: amount, type: number }
+    - { name: verdict, type: string }
+    - { name: score, type: number }
+flow:
+  entry: request
+  nodes:
+    - id: request
+      type: webhook
+      next: score
+    # A scoring service sets verdict (and score) when it completes the task.
+    - id: score
+      type: engine-task
+      service: fraud.score
+      next: done
+    - id: done
+      type: end

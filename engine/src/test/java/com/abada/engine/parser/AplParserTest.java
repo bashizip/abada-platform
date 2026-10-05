@@ -869,7 +869,7 @@ class AplParserTest {
                 + "    - id: done\n      type: end\n").getBytes(StandardCharsets.UTF_8);
         assertThatThrownBy(() -> parser.parseDetailed(source))
                 .isInstanceOf(BpmnValidationException.class)
-                .hasMessageContaining("only agent, engine-task and human-input nodes support");
+                .hasMessageContaining("only agent, engine-task, human-input and call-process nodes support");
     }
 
     @Test
