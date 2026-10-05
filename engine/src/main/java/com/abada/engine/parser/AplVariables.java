@@ -140,6 +140,18 @@ final class AplVariables {
                 }
             });
         }
+        definition.getAllAgentRoutes().forEach((nodeId, routes) -> {
+            // A route's when reads the agent's own result besides what earlier steps wrote.
+            String result = nodes.containsKey(nodeId)
+                    ? nodes.get(nodeId).path("result_variable").asText(nodeId + "_result") : nodeId + "_result";
+            for (var route : routes) {
+                if (route.when() == null || route.when().isBlank()) continue;
+                Set<String> reads = new HashSet<>(identifiers(route.when()));
+                reads.remove(result);
+                check(nodeId, reads, "route '" + route.name() + "' when", declared, nodes, predecessors,
+                        pointerById, reported, warnings);
+            }
+        });
         return warnings;
     }
 
@@ -192,6 +204,7 @@ final class AplVariables {
                 written.add(AplParser.outcomeVariable(nodeId));
                 written.add(AplParser.errorCodeVariable(nodeId));
                 written.add(AplParser.rawOutputVariable(nodeId));
+                if (node.path("routes").isObject()) written.add(AplParser.routeVariable(nodeId));
             }
             case "engine-task" -> {
                 // Written when a boundary (on_error, on_timeout) is declared and fires.

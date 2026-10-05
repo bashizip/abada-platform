@@ -26,7 +26,9 @@ public record BoundaryMeta(String id, String attachedTo, Kind kind, String code,
         /** The agent result violates the output contract. */
         INVALID_OUTPUT,
         /** A reviewer decided the human task's outcome named by {@code code}. */
-        OUTCOME
+        OUTCOME,
+        /** The agent chose the route named by {@code code} and the engine allowed it. */
+        ROUTE
     }
 
     /** Error code of an attempt budget exhausted without a worker-reported error. */
@@ -34,7 +36,7 @@ public record BoundaryMeta(String id, String attachedTo, Kind kind, String code,
 
     /** True when this ERROR boundary catches {@code errorCode} (a code-less boundary catches all). */
     public boolean catches(String errorCode) {
-        if (kind == Kind.OUTCOME) return false;
+        if (kind == Kind.OUTCOME || kind == Kind.ROUTE) return false;
         return kind == Kind.ERROR && (code == null || code.equals(errorCode));
     }
 }

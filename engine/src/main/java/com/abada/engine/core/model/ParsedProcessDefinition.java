@@ -30,6 +30,7 @@ public class ParsedProcessDefinition implements Serializable {
     private Set<String> sensitiveVariables = Set.of();
     /** Agent node id to its {@code evidence} override: payloads mode (wire name) and retention days. */
     private Map<String, EvidenceOverride> evidenceOverrides = Map.of();
+    private Map<String, List<AgentRouteMeta>> agentRoutes = Map.of();
 
     /** A node's {@code evidence: { payloads, retention_days }}; null fields leave the project's setting. */
     public record EvidenceOverride(String payloads, Integer retentionDays) implements java.io.Serializable {}
@@ -125,6 +126,23 @@ public class ParsedProcessDefinition implements Serializable {
         return this;
     }
 
+    /** The routes each routing agent node declares, by node id (set once by the parser). */
+    public ParsedProcessDefinition withAgentRoutes(Map<String, List<AgentRouteMeta>> declared) {
+        Map<String, List<AgentRouteMeta>> copy = new LinkedHashMap<>();
+        declared.forEach((node, routes) -> copy.put(node, List.copyOf(routes)));
+        this.agentRoutes = Map.copyOf(copy);
+        return this;
+    }
+
+    /** The routes the agent at {@code activityId} may choose; empty when it continues through {@code next}. */
+    public List<AgentRouteMeta> getAgentRoutes(String activityId) {
+        return agentRoutes.getOrDefault(activityId, List.of());
+    }
+
+    public Map<String, List<AgentRouteMeta>> getAllAgentRoutes() {
+        return agentRoutes;
+    }
+
     public EvidenceOverride getEvidenceOverride(String activityId) {
         return evidenceOverrides.get(activityId);
     }
@@ -176,7 +194,7 @@ public class ParsedProcessDefinition implements Serializable {
     public BoundaryMeta boundaryFor(String activityId, BoundaryMeta.Kind kind, String code) {
         for (BoundaryMeta boundary : boundariesOf(activityId)) {
             if (boundary.kind() != kind) continue;
-            if (kind == BoundaryMeta.Kind.OUTCOME) {
+            if (kind == BoundaryMeta.Kind.OUTCOME || kind == BoundaryMeta.Kind.ROUTE) {
                 if (boundary.code().equals(code)) return boundary;
             } else if (kind != BoundaryMeta.Kind.ERROR || boundary.catches(code)) {
                 return boundary;

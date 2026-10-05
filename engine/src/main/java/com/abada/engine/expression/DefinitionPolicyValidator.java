@@ -56,6 +56,11 @@ public final class DefinitionPolicyValidator {
                 });
             }
         }
+        definition.getAllAgentRoutes().forEach((nodeId, routes) -> routes.forEach(route -> {
+            if (route.when() != null && !route.when().isBlank()) {
+                compile(route.when(), processId, nodeId, errorCode, namespace, issues);
+            }
+        }));
         for (ServiceTaskMeta task : definition.getServiceTasks().values()) {
             if (task.className() != null && !task.className().isBlank()
                     && !ExecutionPolicy.delegateAllowed(task.className())) {
