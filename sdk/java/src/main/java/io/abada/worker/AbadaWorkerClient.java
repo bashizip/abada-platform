@@ -159,6 +159,23 @@ public final class AbadaWorkerClient {
         send("/" + segment(taskId) + "/failure", body, options);
     }
 
+    /**
+     * Reports a final, routable failure ({@code AGENT_BUDGET_EXHAUSTED},
+     * {@code TOOL_CONTRACT_MISMATCH}, …): the engine never retries it and takes
+     * the node's {@code on_error} route catching the code, or opens an incident.
+     */
+    public void failWithCode(String taskId, String workerId, String errorCode, String message, String details,
+            AgentAttemptMetadata agent, RequestOptions options) {
+        java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("workerId", workerId);
+        body.put("errorMessage", message);
+        body.put("errorDetails", details);
+        body.put("retries", 0);
+        body.put("errorCode", errorCode);
+        if (agent != null) body.put("agent", agent);
+        send("/" + segment(taskId) + "/failure", body, options);
+    }
+
     public void bpmnError(String taskId, String workerId, String errorCode, String errorMessage,
             Map<String, Object> variables, RequestOptions options) {
         send("/" + segment(taskId) + "/bpmn-error",

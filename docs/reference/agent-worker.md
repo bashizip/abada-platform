@@ -90,6 +90,40 @@ JSON on its `agent_metadata` column, so model/tool/confidence facts survive
 restarts and are ready for the live instance view, where the achieved score
 is rendered against the declared threshold.
 
+## Tool loop
+
+An agent whose node binds tools (see the APL specification §3.2.1) runs a
+bounded conversation instead of a single call:
+
+- Before the first model call the worker lists each bound server's tools (MCP
+  `tools/list` over streamable HTTP, with the project's tool credential as a
+  bearer token). A bound tool the server no longer offers, or whose input
+  schema no longer matches the document's `input_schema_sha256`, ends the
+  attempt with the routable code `TOOL_CONTRACT_MISMATCH`.
+- Only the bound tools are offered to the model, as functions named
+  `<server>__<tool>`. A call to anything else, including a tool named in a
+  tool result, is answered with an error turn and never runs. Tool results are
+  passed only as tool messages, capped at `ABADA_AGENT_MAX_TOOL_RESULT_BYTES`
+  (default 65536) and marked when truncated; they cannot change the tools,
+  the limits or the result variable.
+- Every model call is journaled `STARTED` before it runs and `COMPLETED` (with
+  tokens) after; a read tool is journaled when it returns; a write is journaled
+  `STARTED` first and sent with the engine's per-step key (`Idempotency-Key`
+  header and `_meta.idempotencyKey`), then finished. An `approval_required`
+  tool is refused by the engine and reported to the model (E10 adds approval).
+- Limits: `max_turns` per attempt, `max_tokens_total` and `budget_usd` for the
+  whole task. The worker stops early; the engine refuses the next model call
+  either way. Both end the attempt with the routable code
+  `AGENT_BUDGET_EXHAUSTED`. A budget with an unpriced model fails closed.
+- A lost lease, a deferral or a crash resumes the same attempt from the
+  journal: finished calls are reused (no model turn is paid for twice), a
+  started model or read call is re-run, a started write is re-sent with its
+  key. A tool server outage during a write defers the attempt rather than
+  failing it, so the write is resumed with its key, never re-decided.
+- Tool calls run in order; `ABADA_AGENT_TOOL_TIMEOUT_MS` (default 30000)
+  bounds each MCP request. The MCP client is the official MCP Java SDK
+  (`io.modelcontextprotocol.sdk`, MIT).
+
 ## Safety and delivery
 
 - `ABADA_AGENT_ALLOWED_TOOLS` lists the tool servers this worker may reach.

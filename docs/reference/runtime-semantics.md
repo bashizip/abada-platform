@@ -320,6 +320,15 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   The model that produced a result is recorded in the attempt metadata and the
   step's `EXTERNAL_TASK_COMPLETED` / `EXTERNAL_TASK_FAILED` history, with
   `requestedModel` when a fallback replaced the declared model.
+- **Coded failures.** A worker failure carrying `errorCode` is final: the task
+  is not retried; the node's `on_error` catching that code (or the catch-all)
+  is taken with `<id>_error_code` set, otherwise a `WORK_FAILED` incident opens
+  whose message names the code.
+- **Agent limits.** `max_turns` (per attempt), `max_tokens_total` and
+  `budget_usd` (per task, across attempts) are checked when a model call is
+  journaled; past a limit the step is refused (`TURN_LIMIT`, `TOKEN_LIMIT`,
+  `BUDGET`, `BUDGET_UNPRICED`) and the worker reports `AGENT_BUDGET_EXHAUSTED`.
+  A failure never starts a new attempt while a write is still `STARTED`.
 - **Attempts and the step journal (agent work).** An agent task is on an
   `attempt` (1 at first). A counted failure that will run again, or an
   operator retry, starts the next attempt (a fresh conversation); a lost lease

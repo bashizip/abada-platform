@@ -249,6 +249,18 @@ export interface APLAgentNode {
     payloads?: 'none' | 'redacted' | 'full';
     retention_days?: number;
   };
+  /**
+   * Model calls one attempt may make while using tools.
+   */
+  max_turns?: number;
+  /**
+   * Tokens the whole task may use across its attempts (default 50000 when the node binds tools).
+   */
+  max_tokens_total?: number;
+  /**
+   * Engine-computed cost the whole task may reach across its attempts; an unpriced model fails closed.
+   */
+  budget_usd?: number;
 }
 /**
  * Interrupting timeout boundary: if the step is not done within 'after' (ISO-8601 duration, PT1S to P365D), its work is cancelled and the flow continues at 'then'.

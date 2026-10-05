@@ -13,6 +13,7 @@ import java.util.Map;
  *        when the node binds none (names in {@code tools} without a server are advisory)
  * @param prices current prices of the node's model and fallbacks (for budgets);
  *        the engine prices calls itself, so a worker never reports cost
+ * @param limits bounds of the tool loop; null when the node declares none
  */
 public record AgentWorkDescriptor(
         String profileVersion,
@@ -31,13 +32,25 @@ public record AgentWorkDescriptor(
         List<String> fallbackModels,
         Map<String, String> toolPolicies,
         List<ToolBinding> toolBindings,
-        Map<String, ModelPrice> prices) {
+        Map<String, ModelPrice> prices,
+        AgentLimits limits) {
 
     public AgentWorkDescriptor {
         fallbackModels = fallbackModels == null ? List.of() : List.copyOf(fallbackModels);
         toolPolicies = toolPolicies == null ? Map.of() : Map.copyOf(toolPolicies);
         toolBindings = toolBindings == null ? List.of() : List.copyOf(toolBindings);
         prices = prices == null ? Map.of() : Map.copyOf(prices);
+    }
+
+    /** Descriptor without loop limits. */
+    public AgentWorkDescriptor(String profileVersion, String model, String prompt, Map<String, String> inputs,
+            String resultVariable, Map<String, Object> outputSchema, List<String> tools, Double confidenceThreshold,
+            Double temperature, Integer maxTokens, Long timeoutMs, Integer maxAttempts, Long retryBackoffMs,
+            List<String> fallbackModels, Map<String, String> toolPolicies, List<ToolBinding> toolBindings,
+            Map<String, ModelPrice> prices) {
+        this(profileVersion, model, prompt, inputs, resultVariable, outputSchema, tools, confidenceThreshold,
+                temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels, toolPolicies,
+                toolBindings, prices, null);
     }
 
     /** Descriptor without prices (protocol v1 before 1.1.0-rc.2). */
@@ -72,6 +85,6 @@ public record AgentWorkDescriptor(
     public AgentWorkDescriptor withModel(String otherModel) {
         return new AgentWorkDescriptor(profileVersion, otherModel, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, toolBindings, prices);
+                fallbackModels, toolPolicies, toolBindings, prices, limits);
     }
 }

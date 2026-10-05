@@ -28,8 +28,21 @@ public final class GoogleGeminiGateway extends AbstractAgentGateway {
 
     @Override
     public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
-        String model = endpoint.upstreamModel(blankToDefault(work.model(),
+        return executeChatCompletion(target(), endpoint.apiKey(), upstream(work.model()), work, variables);
+    }
+
+    @Override
+    public ChatTurn chat(AgentWorkDescriptor work, String model, List<Map<String, Object>> messages,
+            List<ToolSpec> tools) throws Exception {
+        return sendChat(target(), endpoint.apiKey(), upstream(model), work, messages, tools);
+    }
+
+    private String upstream(String model) {
+        return endpoint.upstreamModel(blankToDefault(model,
                 blankToDefault(endpoint.defaultModel(), config.defaultModel())));
+    }
+
+    private URI target() {
         URI base = requireBaseUrl(endpoint);
         String rawPath = base.getPath() == null ? "" : base.getPath().replaceAll("/+$", "");
         String targetPath;
@@ -40,6 +53,6 @@ public final class GoogleGeminiGateway extends AbstractAgentGateway {
         } else {
             targetPath = rawPath + "/openai/chat/completions";
         }
-        return executeChatCompletion(base.resolve(targetPath), endpoint.apiKey(), model, work, variables);
+        return base.resolve(targetPath);
     }
 }

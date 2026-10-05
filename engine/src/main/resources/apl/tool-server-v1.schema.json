@@ -87,6 +87,11 @@
         "description": {
           "type": "string",
           "maxLength": 1000
+        },
+        "input_schema_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 of the canonical (key-sorted) JSON of the tool's inputSchema; the worker refuses the tool when the server's schema differs."
         }
       }
     }

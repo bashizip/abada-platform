@@ -63,6 +63,15 @@ ABADA_LLM_GEMINI_API_KEY=...
   An `agent` node naming a model outside it **fails at deployment or authoring
   validation** — not at first execution. Default:
   `gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
+- **Tools.** An agent that binds tools talks to the model over several turns
+  and calls the tools it asks for through MCP (streamable HTTP), with the
+  project's tool credential. Each call is recorded with the engine first, so a
+  restarted worker continues where it stopped without paying for a model turn
+  twice or sending a write twice. `max_turns`, `max_tokens_total` and
+  `budget_usd` on the node bound the loop; reaching one ends the step through
+  `on_error` with `AGENT_BUDGET_EXHAUSTED`. Tool results are capped at
+  `ABADA_AGENT_MAX_TOOL_RESULT_BYTES` (64 KiB) and each MCP request at
+  `ABADA_AGENT_TOOL_TIMEOUT_MS` (30 s).
 - `ABADA_AGENT_ALLOWED_TOOLS` lists the tool servers the worker may reach. A
   node's `crm/get_customer` is allowed when `crm` (or the exact reference) is
   listed; a deployment can never widen this list. Tools themselves are

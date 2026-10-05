@@ -982,7 +982,43 @@ public final class AplParser {
                 prompt, inputs,
                 node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
                 confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels,
-                toolPolicies, List.of());
+                toolPolicies, List.of(), Map.of(), parseLimits(node, nodeId, tools));
+    }
+
+    /**
+     * {@code max_turns} (1–32, default 8), {@code max_tokens_total} (default
+     * 50 000 only when the node binds tools) and {@code budget_usd} (optional).
+     */
+    private static com.abada.engine.core.model.AgentLimits parseLimits(JsonNode node, String nodeId,
+            List<String> tools) {
+        int turns = com.abada.engine.core.model.AgentLimits.DEFAULT_MAX_TURNS;
+        if (node.has("max_turns")) {
+            JsonNode raw = node.path("max_turns");
+            if (!raw.isIntegralNumber() || raw.asInt() < 1 || raw.asInt() > com.abada.engine.core.model.AgentLimits.MAX_TURNS) {
+                throw validation("max_turns", "agent node '" + nodeId + "' max_turns must be an integer between 1 and "
+                        + com.abada.engine.core.model.AgentLimits.MAX_TURNS);
+            }
+            turns = raw.asInt();
+        }
+        Long tokens = tools.stream().anyMatch(AplParser::isToolRef)
+                ? com.abada.engine.core.model.AgentLimits.DEFAULT_MAX_TOKENS_TOTAL : null;
+        if (node.has("max_tokens_total")) {
+            JsonNode raw = node.path("max_tokens_total");
+            if (!raw.isIntegralNumber() || raw.asLong() < 1 || raw.asLong() > 100_000_000L) {
+                throw validation("max_tokens_total", "agent node '" + nodeId
+                        + "' max_tokens_total must be an integer between 1 and 100000000");
+            }
+            tokens = raw.asLong();
+        }
+        java.math.BigDecimal budget = null;
+        if (node.has("budget_usd")) {
+            JsonNode raw = node.path("budget_usd");
+            if (!raw.isNumber() || raw.decimalValue().signum() <= 0 || raw.decimalValue().compareTo(java.math.BigDecimal.valueOf(100_000)) > 0) {
+                throw validation("budget_usd", "agent node '" + nodeId + "' budget_usd must be a number above 0 (at most 100000)");
+            }
+            budget = raw.decimalValue();
+        }
+        return new com.abada.engine.core.model.AgentLimits(turns, tokens, budget);
     }
 
     /** {@code tools:} names without a server (rc.x): advisory, never executed. */

@@ -52,4 +52,14 @@ public interface AgentStepRepository extends JpaRepository<AgentStepEntity, Stri
     @org.springframework.data.jpa.repository.Query(value = "select * from agent_steps where id in (:ids) "
             + "for update skip locked", nativeQuery = true)
     List<AgentStepEntity> lockByIds(@org.springframework.data.repository.query.Param("ids") java.util.Collection<String> ids);
+
+    /**
+     * Whether an attempt left a write STARTED (its outcome not journaled): a new
+     * attempt must not begin over it, or the write could be sent again.
+     */
+    @org.springframework.data.jpa.repository.Query("select count(s) > 0 from AgentStepEntity s "
+            + "where s.externalTaskId = :taskId and s.attempt = :attempt and s.kind = 'TOOL_CALL' "
+            + "and s.state = 'STARTED' and s.policy <> 'read'")
+    boolean hasOpenWrite(@org.springframework.data.repository.query.Param("taskId") String taskId,
+            @org.springframework.data.repository.query.Param("attempt") int attempt);
 }

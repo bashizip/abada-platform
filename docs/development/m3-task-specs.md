@@ -188,7 +188,7 @@ non-members get `404`), `PostgresSchemaUpgradeTest` (V1–V26 → V27, fresh),
   editor, the tools picker, and replacing the inspector's placeholder tool
   list move to E12.
 
-## E8 — Tool loop in the worker
+## E8 — Tool loop in the worker ✅ done
 
 **Goal.** An agent can call its resolved tools over several turns and stops
 inside declared limits. Its final answer still goes through the engine's
@@ -241,7 +241,41 @@ result is still validated by `AgentOutputValidator`; the worker decides nothing.
 **Out of scope.** Parallel tool calls in one turn (run them in order);
 streaming model output; MCP resources, prompts and sampling.
 
-## E9 — Journaled steps ✱ never cut (engine side ✅ done; worker resume with E8)
+**As built.** Engine: `max_turns`, `max_tokens_total`, `budget_usd` in APL
+and the descriptor (`limits`); `AgentStepService` refuses a model call past
+them (`TURN_LIMIT`, `TOKEN_LIMIT`, `BUDGET`, `BUDGET_UNPRICED`); a failure
+with `errorCode` is final and routed by code; no new attempt over a write
+still `STARTED` (failure or operator retry); optional `input_schema_sha256`
+pin on tool server tools. Worker: `AgentGateway.chat` (OpenAI-style tool
+calling, shared by the OpenAI-compatible and Gemini families),
+`mcp/{McpToolClient,SdkMcpToolClient,McpSessionPool}` on the official MCP
+Java SDK 2.0.1 (`mcp-core` + `mcp-json-jackson2`, MIT; Reactor and slf4j
+routed to JUL), `AgentLoop` (journaled turns and tools, limits, resume from
+the journal, fallback models mid-conversation). Tests: `AgentLoopTest`,
+`SdkMcpToolClientTest`, `AgentToolLoopEndToEndTest` (real runner, HTTP LLM
+gateway and MCP client; the tool server crashes after applying a write; the
+next lease resumes and the write takes effect once, no model turn paid
+twice), `PostgresAgentLimitsTest`, `PostgresAgentStepJournalTest` (open
+write keeps the attempt), `AplToolReferenceTest` (limits).
+
+**Deviations.**
+- `AgentLoop` sits in the worker's main package (it reuses the prompt
+  rendering); only the MCP client has its own package.
+- Agents without bound tools keep the single-call path, journaled as one
+  model call whose result is `{value, confidence}`; a crashed lease reuses it.
+- Routable final failures use `errorCode` on the failure endpoint rather than
+  a BPMN error, which fails the whole process when no route catches it.
+- A tool server outage during a write defers the attempt (the same attempt
+  resumes and re-sends the write with its key); during a read it is an error
+  turn to the model.
+- `approval_required` tools are answered with an error turn until E10.
+- The cross-process exit demo (engine, worker and PostgreSQL together) is the
+  M3 release step; E8 proves the worker side over real HTTP against a
+  journaling engine stub and the engine side under PostgreSQL.
+- Fixed in passing: the worker's timeout clamp dropped tool bindings, tool
+  policies and prices from the descriptor.
+
+## E9 — Journaled steps ✱ never cut ✅ done (worker resume with E8)
 
 **Goal.** Every model and tool call is a durable step. After a crash or a lost
 lease the agent resumes after the last committed step: a completed model turn

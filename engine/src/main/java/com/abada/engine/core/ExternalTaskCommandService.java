@@ -210,11 +210,15 @@ public class ExternalTaskCommandService {
             defer(task, failure, current);
             return;
         }
-        // A deferral past the cap is an ordinary failed attempt.
-        Integer retries = failure.isDeferred() ? Integer.valueOf(Math.max(0, current - 1)) : failure.retries();
+        // A deferral past the cap is an ordinary failed attempt; a coded failure is final.
+        Integer retries = failure.isFinal() ? Integer.valueOf(0)
+                : failure.isDeferred() ? Integer.valueOf(Math.max(0, current - 1)) : failure.retries();
         task.setRetries(retries);
-        // A counted failure that will run again starts the next attempt (a fresh conversation).
-        if (retries == null || retries > 0) task.setAttempt(task.getAttempt() + 1);
+        // A counted failure that will run again starts the next attempt (a fresh conversation),
+        // unless a write is still STARTED: the same attempt resumes so the write is never sent twice.
+        if ((retries == null || retries > 0) && !agentStepRepository.hasOpenWrite(task.getId(), task.getAttempt())) {
+            task.setAttempt(task.getAttempt() + 1);
+        }
         if (retries != null && retries == 0) {
             task.setStatus(ExternalTaskEntity.Status.FAILED);
             task.setLockExpirationTime(null);
@@ -231,7 +235,7 @@ public class ExternalTaskCommandService {
                 failedDetails(task, failure));
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
-            exhausted(task, failure.errorMessage());
+            exhausted(task, failure.errorMessage(), failure.isFinal() ? failure.errorCode().strip() : null);
         }
     }
 
@@ -275,9 +279,9 @@ public class ExternalTaskCommandService {
      * incident opens. A routed task is retired (CANCELLED) so it never shows
      * as retryable failed work.
      */
-    private void exhausted(ExternalTaskEntity task, String message) {
+    private void exhausted(ExternalTaskEntity task, String message, String errorCode) {
         String routedTo = engine.workFailed(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(),
-                message);
+                message, errorCode);
         if (routedTo != null) {
             task.setAgentOutcome(AplParser.OUTCOME_ERROR);
             task.setStatus(ExternalTaskEntity.Status.CANCELLED);
@@ -454,7 +458,7 @@ public class ExternalTaskCommandService {
         history.record("EXTERNAL_TASK_OUTPUT_REJECTED", requireInstance(task), activityId, details);
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
-            exhausted(task, task.getExceptionMessage());
+            exhausted(task, task.getExceptionMessage(), null);
         }
     }
 

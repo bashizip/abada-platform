@@ -262,6 +262,22 @@ class PostgresAgentStepJournalTest {
     }
 
     @Test
+    void aFailureNeverStartsANewAttemptOverAWriteStillStarted() {
+        LockedExternalTask task = startAndLock("open_write", "w1");
+        AgentStepDto started = record(task, step("w1", 1, 1, "TOOL_CALL", "STARTED", "crm/create_ticket",
+                "{\"subject\":\"x\"}", null));
+        context.getBean(ExternalTaskCommandService.class).handleFailure(task.id(),
+                new ExternalTaskFailureDto("w1", "tool server down", "", 2, 0L));
+
+        LockedExternalTask resumed = lock(task.processInstanceId(), "w2");
+        assertThat(resumed.attempt()).isEqualTo(1);
+        assertThat(resumed.steps()).singleElement().satisfies(step -> {
+            assertThat(step.state()).isEqualTo("STARTED");
+            assertThat(step.idempotencyKey()).isEqualTo(started.idempotencyKey());
+        });
+    }
+
+    @Test
     void retiredWorkRefusesSteps() {
         LockedExternalTask task = startAndLock("retired", "w1");
         context.getBean(ExternalTaskCommandService.class).complete(task.id(), "w1", Map.of("triage_result", "ok"));

@@ -16,7 +16,7 @@ unknown or missing protocol version rather than guessing payload semantics.
 | BPMN error | `POST /{id}/bpmn-error` | Requires worker ownership and `errorCode`; stores the business error and variables atomically. |
 | Agent step | `POST /{id}/steps` | Journals one model or tool call of the lease holder (`{workerId, attempt, sequence, kind, state, toolRef?, request, result?, errorType?, model?, promptVersion?, promptTokens?, completionTokens?}`). See *Agent step journal*. |
 | Tool credential | `GET /{id}/tool-credentials/{server}?workerId=` | Returns `{server, credential, secret}` for a tool server the task is bound to, only to the worker holding the task's live lease (`409` otherwise, `403` for a server the task is not bound to). Worker principals only, never human administrators; `Cache-Control: no-store`. |
-| Technical failure | `POST /{id}/failure` | Stores error details, retries and retry timeout. Zero retries takes the node's `on_error` (code `WORK_FAILED`) or opens a `WORK_FAILED` incident. With `deferred: true` the attempt is not consumed (see below). |
+| Technical failure | `POST /{id}/failure` | Stores error details, retries and retry timeout. Zero retries takes the node's `on_error` (code `WORK_FAILED`) or opens a `WORK_FAILED` incident. With `deferred: true` the attempt is not consumed (see below). With `errorCode` the failure is **final and routable**: never retried; the node's `on_error` catching that code (or the catch-all) is taken with `<id>_error_code` set to it, otherwise a `WORK_FAILED` incident opens naming the code (used for `AGENT_BUDGET_EXHAUSTED`, `TOOL_CONTRACT_MISMATCH`). |
 
 All mutations accept `Idempotency-Key`. Workers should reuse one key for every
 retry of the same logical command. A different body with the same key is
@@ -130,6 +130,19 @@ committed step:
   `APPROVAL_REQUIRED`, `WRITE_AHEAD_REQUIRED`, `STEP_LIMIT`, and
   `410 WORK_RETIRED` once the task is completed, cancelled or failed.
 - Payloads are limited to 1 MiB each and 256 steps per task.
+- Payload shapes the first-party worker uses: a `MODEL_CALL` request is
+  `{turn, model, tools, messages}` (only the messages added since the previous
+  call) and its result `{content, toolCalls}` (plus token counts on the step);
+  a single-call agent records `{value, confidence}`. A `TOOL_CALL` request is
+  `{callId, arguments}` and its result `{content, isError, truncated}`.
+- A new `MODEL_CALL` is also refused past the node's limits: `TURN_LIMIT`
+  (`max_turns` of this attempt), `TOKEN_LIMIT` and `BUDGET` (the task's
+  journaled tokens and engine-computed cost), `BUDGET_UNPRICED` (a budget and
+  a model without a price). Journal model calls `STARTED` before calling the
+  model so the refusal comes before the spend.
+- A failed attempt never starts a new attempt while a write of the current
+  one is still `STARTED`: the same attempt resumes and the write is re-sent
+  with its key (or, unkeyed, goes to a person).
 - `Idempotency-Key` is accepted but not needed: the journal is idempotent by
   attempt, sequence and request, and step responses are never copied into the
   idempotency store (they may carry decrypted results).
