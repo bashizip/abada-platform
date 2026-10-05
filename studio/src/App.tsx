@@ -244,7 +244,7 @@ export default function App() {
         : subtype === 'event' ? 'Event Gateway'
         : 'Branching Gateway',
       event: eventTitle, 'engine-task': 'Engine Service Task',
-      script: 'Script Step',
+      script: 'Script Step', 'call-process': 'Call Process',
     };
     const newNode: WorkflowNode = {
       id, type,
@@ -261,6 +261,7 @@ export default function App() {
       dmnConfig: type === 'dmn' ? { decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`, hitPolicy: 'FIRST', inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }], outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }], rules: [{ id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } }, { id: 'r2', otherwise: true, then: { AllowPass: false } }] } : undefined,
       humanConfig: type === 'human' ? { assignees: ['Operations Analyst'], formKey: '', formFields: ['Review Notes', 'Approval Signature'] } : undefined,
       engineTaskConfig: type === 'engine-task' ? { service: 'abada:service' } : undefined,
+      callProcessConfig: type === 'call-process' ? { process: '' } : undefined,
       scriptConfig: type === 'script' ? { script: '', format: 'javascript' } : undefined,
     };
     updateActiveWorkflow((wf) => {
@@ -533,6 +534,7 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden relative">
         {currentView === 'instance' && detailInstance ? (
           <InstanceDetailView
+            key={detailInstance.id}
             instanceId={detailInstance.id}
             projectId={activeProject?.id}
             canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
@@ -544,6 +546,9 @@ export default function App() {
             onOpenCanvas={(instance) => {
               setCurrentView('designer');
               void openLiveInstance(instance);
+            }}
+            onOpenInstance={(id) => {
+              void EngineAPI.getInstance(id, activeProject?.id).then(setDetailInstance).catch(() => undefined);
             }}
           />
         ) : (

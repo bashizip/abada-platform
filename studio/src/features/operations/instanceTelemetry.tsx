@@ -17,6 +17,7 @@ import {
   Search,
   Table,
   UserCheck,
+  Workflow,
   XCircle,
   Zap,
 } from 'lucide-react';
@@ -295,6 +296,7 @@ export const NodeIcon: React.FC<{ type: WorkflowFile['nodes'][number]['type']; s
   switch (type) {
     case 'agent': return <Bot className="h-4 w-4 text-[#9D4EDD]" />;
     case 'engine-task': return <Zap className="h-4 w-4 text-[#90A955]" />;
+    case 'call-process': return <Workflow className="h-4 w-4 text-[#F4A261]" />;
     case 'script': return <Code2 className="h-4 w-4 text-[#2A9D8F]" />;
     case 'human': return <UserCheck className="h-4 w-4 text-[#E76F51]" />;
     case 'dmn': return <Table className="h-4 w-4 text-[#2A9D8F]" />;

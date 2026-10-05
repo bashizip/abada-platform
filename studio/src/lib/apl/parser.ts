@@ -229,6 +229,14 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onTimeout: aplNode.on_timeout,
         };
         break;
+      case 'call-process':
+        wNode.type = 'call-process';
+        wNode.callProcessConfig = {
+          process: aplNode.process,
+          onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
+        };
+        break;
       case 'script':
         wNode.type = 'script';
         wNode.scriptConfig = {
@@ -596,6 +604,15 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         service: node.engineTaskConfig?.service || 'abada:service',
         on_error: node.engineTaskConfig?.onError,
         on_timeout: node.engineTaskConfig?.onTimeout || undefined,
+        next: getNextNode(node.id, node.type),
+      } as APLNode);
+    } else if (node.type === 'call-process') {
+      aplNodes.push({
+        ...baseNode,
+        type: 'call-process',
+        process: node.callProcessConfig?.process ?? '',
+        on_error: node.callProcessConfig?.onError,
+        on_timeout: node.callProcessConfig?.onTimeout || undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'script') {

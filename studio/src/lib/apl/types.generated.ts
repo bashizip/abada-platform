@@ -35,7 +35,8 @@ export type APLNode =
   | APLEventGatewayNode
   | APLMessageCatchNode
   | APLTimerNode
-  | APLSignalNode;
+  | APLSignalNode
+  | APLCallProcessNode;
 /**
  * This interface was referenced by `APLDocument`'s JSON-Schema
  * via the `definition` "nodeId".
@@ -86,7 +87,8 @@ export type NodeType =
   | 'event-gateway'
   | 'message-catch'
   | 'timer'
-  | 'signal';
+  | 'signal'
+  | 'call-process';
 
 /**
  * Abada Process Language (APL) abada.io/v1. Owned by the engine; Studio types are generated from it.
@@ -614,6 +616,45 @@ export interface APLSignalNode {
   description?: string;
   next?: NodeRef;
   signal: string;
+  loop?: Loop;
+  ui?: UiPosition;
+}
+/**
+ * Runs a governed child instance of another process in this project and waits for it; the child version is pinned when this definition is deployed.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "callProcessNode".
+ */
+export interface APLCallProcessNode {
+  id: NodeId;
+  type: 'call-process';
+  /**
+   * Human-readable node label.
+   */
+  description?: string;
+  next: NodeRef;
+  /**
+   * Key of the process to call, in this project.
+   */
+  process: string;
+  /**
+   * Child variable to an expression evaluated on this instance's variables.
+   */
+  inputs?: {
+    [k: string]: string | number | boolean;
+  };
+  /**
+   * Parent variable to the child variable copied back when the child completes; nothing else returns.
+   */
+  outputs: {
+    [k: string]: string;
+  };
+  /**
+   * Stricter nesting limit for this call.
+   */
+  max_depth?: number;
+  on_error?: OnError;
+  on_timeout?: OnTimeout;
   loop?: Loop;
   ui?: UiPosition;
 }

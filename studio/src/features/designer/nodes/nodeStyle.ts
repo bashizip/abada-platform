@@ -6,6 +6,7 @@ export const NODE_ACCENT: Record<NodeType, string> = {
   human: '#E76F51',
   dmn: '#2A9D8F',
   'engine-task': '#90A955',
+  'call-process': '#F4A261',
   script: '#2A9D8F',
   gateway: '#F4A261',
   event: '#F4A261',
@@ -23,6 +24,7 @@ export const NODE_TYPE_LABEL: Record<NodeType, string> = {
   human: 'Human task',
   dmn: 'Decision table',
   'engine-task': 'Engine task',
+  'call-process': 'Call process',
   script: 'Script',
   gateway: 'Gateway',
   event: 'Event',
@@ -47,6 +49,8 @@ export function taskFact(node: WorkflowNode): string {
     }
     case 'engine-task':
       return node.engineTaskConfig?.service ?? '';
+    case 'call-process':
+      return node.callProcessConfig?.process ? `calls ${node.callProcessConfig.process}` : '';
     case 'script':
       return node.scriptConfig?.script?.split('\n').find((line) => line.trim())?.trim() ?? '';
     default:

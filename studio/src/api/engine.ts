@@ -69,6 +69,32 @@ export interface ProcessInstanceDTO {
   suspended?: boolean;
   startedBy?: string;
   variables: Record<string, unknown>;
+  /** Set when a call-process step of another instance started this one. */
+  parentInstanceId?: string;
+  parentActivityId?: string;
+  rootInstanceId?: string;
+}
+
+/** One instance related through call-process. */
+export interface LineageLinkDTO {
+  instanceId: string;
+  processDefinitionId: string;
+  status: string;
+  /** The call step of the instance above that started it; absent for the root. */
+  parentActivityId?: string;
+  depth?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+/** Where an instance sits in a call-process tree. */
+export interface LineageDTO {
+  instanceId: string;
+  rootInstanceId: string;
+  depth: number;
+  /** Root first, down to the direct parent. */
+  ancestors: LineageLinkDTO[];
+  children: LineageLinkDTO[];
 }
 
 export interface EngineUserTaskDTO {
@@ -364,6 +390,15 @@ export class EngineAPI {
   }
 
   /** Lists a project's incidents, newest first; open ones only by default. */
+  static async getLineage(projectId: string, instanceId: string): Promise<LineageDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/lineage`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
   static async getIncidents(projectId: string, open = true): Promise<IncidentDTO[]> {
     const res = await authenticatedFetch(
       `${this.BASE_URL}/projects/${projectId}/incidents?open=${open}&size=100`,
