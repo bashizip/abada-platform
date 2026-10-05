@@ -185,6 +185,9 @@ should use external tasks and an idempotent worker operation.
   is finished with the confirmed fate (and the actor), the task reopens on the
   **same** attempt, and the agent resumes from its journal. A job retry
   (`POST .../jobs/{jobId}/retries`) is refused while such a step is open.
+- `CHILD_FAILED` opens when a call-process child fails or is cancelled, or
+  cannot start, and the call declares no `on_error`; the token stops at the
+  call. Retrying restarts it there, which starts a new child.
 - `POST .../incidents/{incidentId}/retry` restarts the stopped token at its
   activity in one transaction: a loop step begins a fresh pass, a message wait
   re-reads `correlationKey` (set it first with the variables endpoint). The
@@ -346,6 +349,37 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   written. Resuming re-admits the same worker completion; a cancelled instance
   can never advance, even after its lease passes to another worker. Evidence:
   [`AgentWorkerResilienceTest`](../../engine/src/test/java/com/abada/engine/core/AgentWorkerResilienceTest.java).
+
+## Call-process (child instances)
+
+- A token reaching a `call-process` node parks `WAITING`. In the same command
+  the engine evaluates the inputs, checks them against the child's declared
+  variable types and the depth limit, and creates the child instance of the
+  version pinned at the parent's deployment, with lineage (parent instance,
+  token and call activity, root, depth). The child starts with the inputs
+  only and the parent's `startedBy`.
+- When the child ends, its own command records a durable `CHILD_DONE` job for
+  the parent token (one per child) and never locks the parent. The job locks
+  the parent: a completed child's mapped `outputs` are written (and
+  `<id>_outcome = OK`) and the token moves on; a failed child, or one
+  cancelled by someone else, takes `on_error` with code `CHILD_FAILED` or
+  opens a `CHILD_FAILED` incident. Retrying that incident starts a new child.
+  A token that already left (timeout, cancel) ignores the result
+  (`CHILD_RESULT_IGNORED`). The job runs right after the child's commit
+  (`abada.call-process.resume-immediately`, default on) with the job poller as
+  the durable fallback; two replicas running it apply it once.
+- Cancelling or failing an instance cancels its running descendants in the
+  same transaction; a call's `on_timeout` cancels its child. Lock order is
+  always parent, then child.
+- History: `CHILD_STARTED`, `CHILD_COMPLETED`, `CHILD_FAILED` on the parent
+  with both instance ids and the input/output **names**; the child's
+  `PROCESS_STARTED` names its parent. `GET
+  /v1/projects/{p}/instances/{id}/lineage` returns the ancestors and children.
+- Evidence:
+  [`PostgresCallProcessTest`](../../engine/src/test/java/com/abada/engine/core/delegation/PostgresCallProcessTest.java),
+  [`PostgresCallProcessCrashTest`](../../engine/src/test/java/com/abada/engine/core/delegation/PostgresCallProcessCrashTest.java)
+  (engine restarts after the child starts, between its end and the resume,
+  with the job leased by a crashed replica; two replicas at once).
 
 ## History and lifecycle delivery
 
