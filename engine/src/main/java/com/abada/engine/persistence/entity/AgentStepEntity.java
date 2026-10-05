@@ -83,9 +83,41 @@ public class AgentStepEntity {
     private Instant startedAt;
     @Column(name = "finished_at")
     private Instant finishedAt;
+    /** Engine-computed cost (V30); null with {@link #costUnpriced} when no price applied. */
+    @Column(name = "cost_usd", precision = 18, scale = 8)
+    private java.math.BigDecimal costUsd;
+    @Column(name = "cost_unpriced", nullable = false)
+    private boolean costUnpriced;
+    /** Evidence mode applied to the payload columns: none, redacted or full. */
+    @Column(name = "payload_mode", nullable = false)
+    private String payloadMode = "none";
+    /** Policy-shaped evidence copies (V30); the request/result columns are the worker's working copy. */
+    @Column(name = "evidence_request_enc", columnDefinition = "TEXT")
+    private String evidenceRequestEnc;
+    @Column(name = "evidence_result_enc", columnDefinition = "TEXT")
+    private String evidenceResultEnc;
+    @Column(name = "purge_after")
+    private Instant purgeAfter;
+    @Column(name = "purged_at")
+    private Instant purgedAt;
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
+
+    public java.math.BigDecimal getCostUsd() { return costUsd; }
+    public void setCostUsd(java.math.BigDecimal value) { costUsd = value; }
+    public boolean isCostUnpriced() { return costUnpriced; }
+    public void setCostUnpriced(boolean value) { costUnpriced = value; }
+    public String getEvidenceRequestEnc() { return evidenceRequestEnc; }
+    public void setEvidenceRequestEnc(String value) { evidenceRequestEnc = value; }
+    public String getEvidenceResultEnc() { return evidenceResultEnc; }
+    public void setEvidenceResultEnc(String value) { evidenceResultEnc = value; }
+    public String getPayloadMode() { return payloadMode; }
+    public void setPayloadMode(String value) { payloadMode = value; }
+    public Instant getPurgeAfter() { return purgeAfter; }
+    public void setPurgeAfter(Instant value) { purgeAfter = value; }
+    public Instant getPurgedAt() { return purgedAt; }
+    public void setPurgedAt(Instant value) { purgedAt = value; }
 
     public String getId() { return id; }
     public String getExternalTaskId() { return externalTaskId; }

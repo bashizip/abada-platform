@@ -103,7 +103,14 @@ class PostgresTokenUpgradeTest {
         // Back to the rc.8 schema (V22) with the state rc.8 itself would have written.
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword()); var statement = connection.createStatement()) {
-            // Undo V29, V28, V27, V26, V25, V24, then V23.
+            // Undo V30, V29, V28, V27, V26, V25, V24, then V23.
+            statement.execute("drop table model_prices");
+            statement.execute("alter table projects drop column evidence_payloads");
+            statement.execute("alter table projects drop column evidence_retention_days");
+            for (String column : List.of("attempt_cost_usd", "attempt_cost_unpriced", "attempt_prompt_tokens",
+                    "attempt_completion_tokens")) {
+                statement.execute("alter table external_tasks drop column " + column);
+            }
             statement.execute("drop index idx_jobs_related_instance");
             statement.execute("alter table jobs drop column related_instance_id");
             statement.execute("drop index idx_process_instances_parent");
@@ -135,7 +142,7 @@ class PostgresTokenUpgradeTest {
             for (String table : List.of("tasks", "external_tasks", "jobs", "event_subscriptions")) {
                 statement.execute("alter table " + table + " drop column token_id");
             }
-            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29')");
+            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30')");
             legacyState(statement, joinId, "b", "[\"b\"]", "{\"join\":2}", "{\"join\":[\"a\"]}");
             legacyState(statement, raceId, "race_e0", "[\"race_e0\",\"race_e1\"]", "{}", "{}");
             legacyState(statement, reviewId, "review", "[\"review\"]", "{}", "{}");

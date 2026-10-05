@@ -232,6 +232,11 @@
         },
         "description": {
           "type": "string"
+        },
+        "sensitive": {
+          "type": "boolean",
+          "default": false,
+          "description": "Masked in redacted agent evidence: fields with this name and this variable's values."
         }
       }
     },
@@ -429,6 +434,25 @@
         },
         "ui": {
           "$ref": "#/$defs/uiPosition"
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What the step journal keeps of this agent's payloads; may only be stricter than the project policy.",
+          "properties": {
+            "payloads": {
+              "enum": [
+                "none",
+                "redacted",
+                "full"
+              ]
+            },
+            "retention_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650
+            }
+          }
         }
       },
       "required": [

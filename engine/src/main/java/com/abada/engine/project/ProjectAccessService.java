@@ -83,6 +83,32 @@ public class ProjectAccessService {
                 .anyMatch("ABADA_ADMIN"::equals);
     }
 
+    /**
+     * Whether the caller may read agent evidence payloads: the
+     * {@code abada-evidence-reader} group or the {@code agent-evidence:read}
+     * scope. Not implied by global administration (separation of duties).
+     */
+    public boolean isEvidenceReader() {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getAuthorities().stream()
+                .map(authority -> authority.getAuthority())
+                .anyMatch(name -> AbadaRoles.EVIDENCE_READER.equals(name)
+                        || AbadaRoles.EVIDENCE_READ_SCOPE.equals(name))) return true;
+        return IdentityContext.get().map(Identity::groups).orElseGet(java.util.List::of).stream()
+                .map(value -> value.strip().replaceFirst("^/", "").replace('-', '_').toUpperCase(Locale.ROOT))
+                .anyMatch("ABADA_EVIDENCE_READER"::equals);
+    }
+
+    /** An evidence reader who is a member of the project (any role); admins are not exempt. */
+    public void requireEvidenceReader(String projectId) {
+        if (!isEvidenceReader()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
+                    "Reading agent evidence payloads requires the abada-evidence-reader role");
+        }
+        projects.findById(projectId).orElseThrow(this::notFound);
+        if (membership(projectId) == null) throw notFound();
+    }
+
     public String normalizeLane(String value) {
         String lane = value == null ? "" : value.strip().toUpperCase(Locale.ROOT)
                 .replaceAll("[^A-Z0-9_-]", "_");

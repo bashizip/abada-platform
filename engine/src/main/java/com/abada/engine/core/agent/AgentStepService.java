@@ -76,10 +76,18 @@ public class AgentStepService {
     private final ObjectMapper json;
     private final ActivityHistoryService history;
     private final EntityManager entityManager;
+    private final com.abada.engine.llm.ModelPriceService prices;
+    private final com.abada.engine.persistence.repository.ProjectRepository projects;
+    private final com.abada.engine.observability.EngineMetrics metrics;
 
     public AgentStepService(ExternalTaskRepository externalTasks, AgentStepRepository steps, AbadaEngine engine,
             AesEncryption encryption, ObjectMapper json, ActivityHistoryService history,
-            EntityManager entityManager) {
+            EntityManager entityManager, com.abada.engine.llm.ModelPriceService prices,
+            com.abada.engine.persistence.repository.ProjectRepository projects,
+            com.abada.engine.observability.EngineMetrics metrics) {
+        this.prices = prices;
+        this.projects = projects;
+        this.metrics = metrics;
         this.externalTasks = externalTasks;
         this.steps = steps;
         this.engine = engine;
@@ -168,6 +176,11 @@ public class AgentStepService {
         step.setKind(kind);
         step.setRequestDigest(requestDigest);
         step.setRequestEnc(encrypt(requestJson));
+        // The auditor's copy, shaped by the evidence policy; the request column is the worker's working copy.
+        EvidencePolicy evidence = policyFor(instance, task.getActivityId());
+        step.setPayloadMode(evidence.payloads().wireName());
+        step.setEvidenceRequestEnc(evidenceCopy(evidence.payloads(), instance, request.request()));
+        step.setPurgeAfter(Instant.now().plus(java.time.Duration.ofDays(evidence.retentionDays())));
         step.setModel(request.model());
         step.setPromptVersion(request.promptVersion());
         step.setWorkerId(request.workerId());
@@ -199,6 +212,7 @@ public class AgentStepService {
                     // An earlier attempt already performed this exact write: record its result, never resend it.
                     step.setState(State.COMPLETED);
                     step.setResultEnc(done.getResultEnc());
+                    step.setEvidenceResultEnc(done.getEvidenceResultEnc());
                     step.setResultDigest(done.getResultDigest());
                     step.setFinishedAt(Instant.now());
                     reused = true;
@@ -207,7 +221,7 @@ public class AgentStepService {
         }
         if (!reused) {
             step.setState(state);
-            if (state.terminal()) finish(step, state, request, resultJson, resultDigest);
+            if (state.terminal()) finish(step, state, request, resultJson, resultDigest, instance);
         }
         steps.save(step);
         recordToolHistory(instance, step, reused);
@@ -229,22 +243,58 @@ public class AgentStepService {
         if (existing.getState() != State.STARTED || !state.terminal()) {
             throw rejected("STEP_FINISHED", "Step " + existing.getSequence() + " is already " + existing.getState());
         }
-        finish(existing, state, request, resultJson, resultDigest);
+        finish(existing, state, request, resultJson, resultDigest, instance);
         steps.save(existing);
         recordToolHistory(instance, existing, false);
         return view(existing, false, false);
     }
 
     private void finish(AgentStepEntity step, State state, AgentStepRequest request, String resultJson,
-            String resultDigest) {
+            String resultDigest, ProcessInstance instance) {
         step.setState(state);
         step.setResultEnc(encrypt(resultJson));
+        step.setEvidenceResultEnc(evidenceCopy(EvidencePolicy.Mode.fromWire(step.getPayloadMode()), instance,
+                request.result()));
         step.setResultDigest(resultDigest);
         step.setErrorType(state == State.FAILED ? truncate(request.errorType(), 255) : null);
         step.setPromptTokens(request.promptTokens());
         step.setCompletionTokens(request.completionTokens());
         if (request.model() != null) step.setModel(request.model());
         step.setFinishedAt(Instant.now());
+        if (step.getKind() == Kind.MODEL_CALL) {
+            // Priced by the engine from the tokens and the price in effect, never from a worker's figure.
+            com.abada.engine.llm.ModelPriceService.Cost cost = prices.cost(step.getModel(), step.getPromptTokens(),
+                    step.getCompletionTokens(), step.getStartedAt());
+            step.setCostUsd(cost.usd());
+            step.setCostUnpriced(cost.unpriced());
+            metrics.recordAgentCost(instance.getDefinition().getId(), step.getModel(), cost.usd());
+        }
+    }
+
+    /** The project's evidence policy, tightened by the agent node's {@code evidence} override. */
+    private EvidencePolicy policyFor(ProcessInstance instance, String activityId) {
+        EvidencePolicy project = projects.findById(instance.getProjectId())
+                .map(row -> new EvidencePolicy(EvidencePolicy.Mode.fromWire(row.getEvidencePayloads()),
+                        row.getEvidenceRetentionDays()))
+                .orElse(EvidencePolicy.DEFAULT);
+        var override = instance.getDefinition().getEvidenceOverride(activityId);
+        return override == null ? project
+                : project.tightenedBy(EvidencePolicy.Mode.fromWire(override.payloads()), override.retentionDays());
+    }
+
+    /** The encrypted evidence copy of a payload under a mode: nothing, redacted, or as sent. */
+    private String evidenceCopy(EvidencePolicy.Mode mode, ProcessInstance instance, JsonNode payload) {
+        if (payload == null || mode == null || mode == EvidencePolicy.Mode.NONE) return null;
+        JsonNode kept = mode == EvidencePolicy.Mode.FULL ? payload : redactorFor(instance).redact(payload);
+        return encryption.encrypt(canonicalJson(kept));
+    }
+
+    private EvidenceRedactor redactorFor(ProcessInstance instance) {
+        java.util.Map<String, Object> sensitive = new java.util.LinkedHashMap<>();
+        for (String name : instance.getDefinition().getSensitiveVariables()) {
+            sensitive.put(name, instance.getVariables().get(name));
+        }
+        return new EvidenceRedactor(sensitive);
     }
 
     private AgentStepEntity priorIdenticalWrite(ExternalTaskEntity task, String ref, String requestDigest) {
