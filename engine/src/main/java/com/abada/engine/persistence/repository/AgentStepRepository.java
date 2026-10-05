@@ -18,6 +18,9 @@ public interface AgentStepRepository extends JpaRepository<AgentStepEntity, Stri
 
     long countByExternalTaskId(String externalTaskId);
 
+    /** The DELEGATION step that started a child instance (E20b). */
+    Optional<AgentStepEntity> findByChildInstanceId(String childInstanceId);
+
     List<AgentStepEntity> findByProcessInstanceIdOrderByStartedAtAscSequenceAsc(String processInstanceId);
 
     /** Engine-computed cost and tokens of the journaled steps, per instance. */

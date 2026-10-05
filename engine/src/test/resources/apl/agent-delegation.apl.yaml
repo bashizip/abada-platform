@@ -1,0 +1,23 @@
+version: abada.io/v1
+metadata:
+  key: refund_desk
+  name: Refund desk
+flow:
+  entry: request
+  nodes:
+    - id: request
+      type: webhook
+      next: triage
+    # The agent may start the payout process itself; only payout_id comes back to it.
+    - id: triage
+      type: agent
+      model: gemini-3.6-flash
+      prompt: "Handle the refund request for ${order}"
+      delegates:
+        - process: refund_payout
+          description: Pay a refund out to the customer
+          outputs: [payout_id]
+      on_timeout: { after: PT8H, then: late }
+      next: done
+    - { id: late, type: end }
+    - { id: done, type: end }

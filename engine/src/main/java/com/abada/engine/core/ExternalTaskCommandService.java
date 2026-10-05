@@ -114,6 +114,9 @@ public class ExternalTaskCommandService {
                 if (work != null && !work.tools().isEmpty()) {
                     work = work.withToolBindings(engine.toolBindings(instance, task.getActivityId()));
                 }
+                if (work != null && !instance.getDefinition().getDelegations(task.getActivityId()).isEmpty()) {
+                    work = work.withDelegates(engine.delegates(instance, task.getActivityId()));
+                }
                 if (work != null) {
                     List<String> models = new ArrayList<>();
                     if (work.model() != null) models.add(work.model());

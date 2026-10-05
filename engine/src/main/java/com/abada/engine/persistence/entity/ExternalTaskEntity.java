@@ -116,6 +116,8 @@ public class ExternalTaskEntity {
         BPMN_ERROR,
         /** An agent proposed an approval_required tool call: no lease, not acquirable until a person decides. */
         AWAITING_APPROVAL,
+        /** The agent delegated to a child process: no lease, not acquirable until the child ends (E20b). */
+        AWAITING_CHILD,
         /** Retired without a result: an on_timeout boundary fired or the instance ended. */
         CANCELLED
     }

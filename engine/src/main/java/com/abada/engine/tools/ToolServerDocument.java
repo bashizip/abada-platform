@@ -33,6 +33,8 @@ public record ToolServerDocument(String name, String transport, String url, Stri
     public static final String SCHEMA_RESOURCE = "apl/tool-server-v1.schema.json";
     /** Tool server documents are small; anything larger is a mistake. */
     public static final int MAX_BYTES = 256 * 1024;
+    /** Agents delegate through engine-provided tools named {@code delegate:<process>}; no server may take the name. */
+    public static final String RESERVED_NAME = "delegate";
 
     public record Tool(ToolPolicy policy, String idempotency, List<String> approvers, Double approvalSlaHours,
             String inputSchemaSha256) {
@@ -100,6 +102,10 @@ public record ToolServerDocument(String name, String transport, String url, Stri
 
         String url = root.path("url").asText();
         checkUrl(url, allowInsecureHttp, issues);
+        if (RESERVED_NAME.equals(root.path("name").asText())) {
+            issues.add(new Issue("/name", "'" + RESERVED_NAME + "' is reserved for agent delegations"
+                    + " (delegate:<process>); choose another name"));
+        }
         Map<String, Tool> tools = new LinkedHashMap<>();
         root.path("tools").properties().forEach(entry -> {
             JsonNode tool = entry.getValue();

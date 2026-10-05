@@ -18,7 +18,11 @@ import java.util.UUID;
 @Entity
 @Table(name = "agent_steps")
 public class AgentStepEntity {
-    public enum Kind { MODEL_CALL, TOOL_CALL }
+    public enum Kind {
+        MODEL_CALL, TOOL_CALL,
+        /** The agent delegated to a child process through {@code delegate:<process>} (E20b). */
+        DELEGATION
+    }
 
     public enum State {
         STARTED, COMPLETED, FAILED,
@@ -86,6 +90,13 @@ public class AgentStepEntity {
     private String workerId;
     @Column(name = "resolved_by")
     private String resolvedBy;
+
+    /** The child instance a DELEGATION step started (V32). */
+    @Column(name = "child_instance_id")
+    private String childInstanceId;
+
+    public String getChildInstanceId() { return childInstanceId; }
+    public void setChildInstanceId(String value) { childInstanceId = value; }
 
     /** When a person approved or rejected a PROPOSED step (V31). */
     @Column(name = "decided_at")

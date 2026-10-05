@@ -11,6 +11,7 @@ import com.abada.engine.core.model.CallProcessMeta;
 import com.abada.engine.core.model.ToolPolicy;
 import com.abada.engine.core.model.AgentRouteMeta;
 import com.abada.engine.core.model.BoundaryMeta;
+import com.abada.engine.core.model.DelegationMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
 import com.abada.engine.core.model.LoopMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
@@ -308,6 +309,7 @@ public final class AplParser {
         Map<String, LoopMeta> loops = new LinkedHashMap<>();
         Map<String, CallProcessMeta> callProcesses = new LinkedHashMap<>();
         Map<String, ParsedProcessDefinition.EvidenceOverride> evidenceOverrides = new LinkedHashMap<>();
+        Map<String, List<DelegationMeta>> delegations = new LinkedHashMap<>();
 
         // Each node is compiled independently so one invalid node never hides another's errors.
         for (Map.Entry<String, JsonNode> compiled : nodesById.entrySet()) {
@@ -329,6 +331,8 @@ public final class AplParser {
                                 parseAgentWork(node, nodeId, pointerById.get(nodeId), warnings)));
                         ParsedProcessDefinition.EvidenceOverride evidence = parseEvidence(node, nodeId);
                         if (evidence != null) evidenceOverrides.put(nodeId, evidence);
+                        List<DelegationMeta> delegates = parseDelegates(node, nodeId, processId);
+                        if (!delegates.isEmpty()) delegations.put(nodeId, delegates);
                     }
                     case "engine-task" -> {
                         String topic = node.path("service").asText(null);
@@ -676,6 +680,7 @@ public final class AplParser {
                 flows, gateways, events, endEvents,
                 rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses)
                 .withEvidenceOverrides(evidenceOverrides).withAgentRoutes(agentRoutes)
+                .withDelegations(delegations)
                 .withSensitiveVariables(AplVariables.sensitiveNames(root));
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
@@ -821,6 +826,93 @@ public final class AplParser {
             maxDepth = depth.asInt();
         }
         return new CallProcessMeta(nodeId, nodeName, process, inputs, outputs, maxDepth);
+    }
+
+    /**
+     * {@code delegates: [{ process, outputs, approval, approvers, description, max_depth }]}
+     * of an agent node: the processes its agent may start as a child through
+     * the engine-provided tool {@code delegate:<process>}.
+     */
+    static List<DelegationMeta> parseDelegates(JsonNode node, String nodeId, String selfKey) {
+        JsonNode raw = node.path("delegates");
+        if (raw.isMissingNode() || raw.isNull()) return List.of();
+        if (!raw.isArray()) {
+            throw validation("delegates", "agent node '" + nodeId + "' delegates must be a list of"
+                    + " { process, outputs }");
+        }
+        if (raw.size() > DelegationMeta.MAX_DELEGATES) {
+            throw validation("delegates", "agent node '" + nodeId + "' may delegate to at most "
+                    + DelegationMeta.MAX_DELEGATES + " processes");
+        }
+        List<DelegationMeta> parsed = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (int index = 0; index < raw.size(); index++) {
+            JsonNode entry = raw.get(index);
+            String field = "delegates/" + index;
+            if (!entry.isObject()) {
+                throw validation(field, "agent node '" + nodeId + "' delegates entries are { process, outputs }");
+            }
+            String process = entry.path("process").asText("").strip();
+            if (!PROCESS_KEY.matcher(process).matches()) {
+                throw validation(field + "/process", "agent node '" + nodeId
+                        + "' delegate needs 'process': the key of a process in this project");
+            }
+            if (process.equals(selfKey)) {
+                throw validation(field + "/process", "agent node '" + nodeId + "' delegates to its own process '"
+                        + process + "'; recursion is not supported");
+            }
+            if (!seen.add(process)) {
+                throw validation(field + "/process", "agent node '" + nodeId + "' delegates to '" + process
+                        + "' more than once");
+            }
+            List<String> outputs = new ArrayList<>();
+            entry.path("outputs").forEach(output -> outputs.add(output.asText("").strip()));
+            if (!entry.path("outputs").isArray() || outputs.isEmpty()) {
+                throw validation(field + "/outputs", "agent node '" + nodeId + "' delegate '" + process
+                        + "' declares no outputs; name the child variables the agent may read back");
+            }
+            for (String output : outputs) {
+                if (!VARIABLE.matcher(output).matches()) {
+                    throw validation(field + "/outputs", "agent node '" + nodeId + "' delegate '" + process
+                            + "' output '" + output + "' is not a variable name");
+                }
+            }
+            String approval = entry.path("approval").asText("none");
+            if (!approval.equals("none") && !approval.equals("required")) {
+                throw validation(field + "/approval", "agent node '" + nodeId + "' delegate '" + process
+                        + "' approval must be 'required' or 'none'");
+            }
+            List<String> approvers = new ArrayList<>();
+            entry.path("approvers").forEach(group -> approvers.add(group.asText("").strip()));
+            if (approvers.stream().anyMatch(String::isEmpty)) {
+                throw validation(field + "/approvers", "agent node '" + nodeId + "' delegate '" + process
+                        + "' approvers has an empty group");
+            }
+            if (approval.equals("required") && approvers.isEmpty()) {
+                throw new BpmnValidationException(List.of(new BpmnValidationIssue(
+                        com.abada.engine.tools.ToolRegistryService.APPROVERS_CODE, ValidationSeverity.ERROR,
+                        "agent node '" + nodeId + "' delegate '" + process + "' requires approval but nobody may"
+                                + " approve it", null, nodeId, LANGUAGE_VERSION, null,
+                        "Add approvers: [<group>] to the delegate", field + "/approvers")));
+            }
+            if (!approvers.isEmpty() && approval.equals("none")) {
+                throw validation(field + "/approvers", "agent node '" + nodeId + "' delegate '" + process
+                        + "' names approvers but approval is 'none'");
+            }
+            Integer maxDepth = null;
+            if (entry.has("max_depth")) {
+                JsonNode depth = entry.path("max_depth");
+                if (!depth.isIntegralNumber() || depth.asInt() < 1 || depth.asInt() > MAX_CALL_DEPTH) {
+                    throw validation(field + "/max_depth", "agent node '" + nodeId + "' delegate '" + process
+                            + "' max_depth must be an integer between 1 and " + MAX_CALL_DEPTH);
+                }
+                maxDepth = depth.asInt();
+            }
+            String description = entry.hasNonNull("description") ? entry.path("description").asText().strip() : null;
+            parsed.add(new DelegationMeta(nodeId, process, outputs, approval.equals("required"), approvers,
+                    description == null || description.isEmpty() ? null : description, maxDepth));
+        }
+        return parsed;
     }
 
     /** {@code loop: { max_iterations, on_exhausted }} on the node a cycle returns to. */

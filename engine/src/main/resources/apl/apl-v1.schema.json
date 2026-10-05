@@ -391,6 +391,9 @@
         "routes": {
           "$ref": "#/$defs/routes"
         },
+        "delegates": {
+          "$ref": "#/$defs/delegates"
+        },
         "confidence_threshold": {
           "type": "number",
           "minimum": 0,
@@ -1372,6 +1375,61 @@
             "type": "string",
             "minLength": 1,
             "description": "Optional CEL condition over the instance variables and the agent's result; false vetoes the route (invalid output)."
+          }
+        }
+      }
+    },
+    "delegates": {
+      "description": "Processes the agent may start as a governed child through the engine-provided tool delegate:<process>. The engine pins the child at deployment, checks the inputs against its declared variables, the depth and, with approval: required, a person's approval; only the declared outputs come back.",
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "process",
+          "outputs"
+        ],
+        "properties": {
+          "process": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,127}$",
+            "description": "Key of a process deployed in this project."
+          },
+          "outputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "description": "Child variables the agent reads back when the child completes."
+          },
+          "approval": {
+            "enum": [
+              "none",
+              "required"
+            ],
+            "default": "none",
+            "description": "required: a person in approvers approves each delegation first."
+          },
+          "approvers": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "What the delegated process does; offered to the model with the tool."
+          },
+          "max_depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
           }
         }
       }

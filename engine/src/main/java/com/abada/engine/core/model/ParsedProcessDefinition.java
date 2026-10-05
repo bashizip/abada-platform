@@ -31,6 +31,7 @@ public class ParsedProcessDefinition implements Serializable {
     /** Agent node id to its {@code evidence} override: payloads mode (wire name) and retention days. */
     private Map<String, EvidenceOverride> evidenceOverrides = Map.of();
     private Map<String, List<AgentRouteMeta>> agentRoutes = Map.of();
+    private Map<String, List<DelegationMeta>> delegations = Map.of();
 
     /** A node's {@code evidence: { payloads, retention_days }}; null fields leave the project's setting. */
     public record EvidenceOverride(String payloads, Integer retentionDays) implements java.io.Serializable {}
@@ -124,6 +125,23 @@ public class ParsedProcessDefinition implements Serializable {
     public ParsedProcessDefinition withEvidenceOverrides(Map<String, EvidenceOverride> declared) {
         this.evidenceOverrides = Map.copyOf(declared);
         return this;
+    }
+
+    /** The delegates each agent node declares, by node id (set once by the parser). */
+    public ParsedProcessDefinition withDelegations(Map<String, List<DelegationMeta>> declared) {
+        Map<String, List<DelegationMeta>> copy = new LinkedHashMap<>();
+        declared.forEach((node, delegates) -> copy.put(node, List.copyOf(delegates)));
+        this.delegations = Map.copyOf(copy);
+        return this;
+    }
+
+    /** The processes the agent at {@code activityId} may delegate to; empty for none. */
+    public List<DelegationMeta> getDelegations(String activityId) {
+        return delegations.getOrDefault(activityId, List.of());
+    }
+
+    public Map<String, List<DelegationMeta>> getAllDelegations() {
+        return delegations;
     }
 
     /** The routes each routing agent node declares, by node id (set once by the parser). */

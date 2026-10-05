@@ -291,6 +291,29 @@ public class AbadaEngine {
                 .getOrDefault(activityId, List.of());
     }
 
+    /** The child process a delegate of {@code activityId} was pinned to when this version was deployed. */
+    public com.abada.engine.core.delegation.CallTargetService.CallTarget delegationTarget(ProcessInstance instance,
+            com.abada.engine.core.model.DelegationMeta delegate) {
+        String deploymentId = instance.getProcessDefinitionDeploymentId();
+        if (deploymentId == null) return null;
+        ProcessDefinitionEntity deployment = persistenceService.findProcessDefinitionByDeploymentId(deploymentId);
+        if (deployment == null) return null;
+        return callTargets.targetsFor(deploymentId, deployment.getCallTargets()).get(delegate.targetKey());
+    }
+
+    /** The delegations an agent may propose, as its worker sees them. */
+    public List<com.abada.engine.core.model.AgentDelegate> delegates(ProcessInstance instance, String activityId) {
+        List<com.abada.engine.core.model.AgentDelegate> delegates = new ArrayList<>();
+        for (com.abada.engine.core.model.DelegationMeta delegate : instance.getDefinition().getDelegations(activityId)) {
+            var target = delegationTarget(instance, delegate);
+            if (target == null) continue;
+            delegates.add(new com.abada.engine.core.model.AgentDelegate(delegate.process(), delegate.toolRef(),
+                    delegate.description(), com.abada.engine.core.delegation.CallTargetService.inputSchema(target),
+                    delegate.approvalRequired() ? "required" : "none", delegate.outputs()));
+        }
+        return delegates;
+    }
+
     private void registerDefinition(ParsedProcessDefinition definition, ProcessDefinitionEntity entity) {
         definitionsByDeploymentId.putIfAbsent(entity.getDeploymentId(), definition);
     }
@@ -639,16 +662,17 @@ public class AbadaEngine {
             parentId = parent.getParentInstanceId();
         }
         List<com.abada.engine.dto.LineageDto.Link> children = processInstanceRepository
-                .findByParentInstanceIdOrderByStartDateAsc(instanceId).stream().map(AbadaEngine::link).toList();
+                .findByParentInstanceIdOrderByStartDateAsc(instanceId).stream().map(this::link).toList();
         return new com.abada.engine.dto.LineageDto(instanceId,
                 self.getRootInstanceId() == null ? instanceId : self.getRootInstanceId(), self.getCallDepth(),
                 List.copyOf(ancestors), children);
     }
 
-    private static com.abada.engine.dto.LineageDto.Link link(ProcessInstanceEntity row) {
+    private com.abada.engine.dto.LineageDto.Link link(ProcessInstanceEntity row) {
         return new com.abada.engine.dto.LineageDto.Link(row.getId(), row.getProcessDefinitionId(),
                 row.getStatus() == null ? null : row.getStatus().name(), row.getParentActivityId(),
-                row.getCallDepth(), row.getStartDate(), row.getEndDate());
+                row.getCallDepth(), row.getStartDate(), row.getEndDate(),
+                row.getStartedByAgent() == null ? null : readMap(row.getStartedByAgent()));
     }
 
     /**
@@ -728,6 +752,90 @@ public class AbadaEngine {
     }
 
     /**
+     * Starts the child an agent delegated to (E20b), inside the caller's step
+     * command (the agent's external-task row is locked; the parent instance is
+     * locked here, then the child is created: parent before child). The pinned
+     * target, the inputs against the child's declared variables and the depth
+     * are checked first; a refusal changes nothing and names its reason.
+     *
+     * @return the child instance id
+     */
+    public String startDelegatedChild(String parentInstanceId, String tokenId, String activityId,
+            com.abada.engine.core.model.DelegationMeta delegate, Map<String, Object> arguments,
+            String startedByAgentJson) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(parentInstanceId);
+        if (instance == null || isTerminal(instance)) {
+            throw new com.abada.engine.api.ApiException(org.springframework.http.HttpStatus.GONE,
+                    com.abada.engine.api.ApiErrorCode.WORK_RETIRED, "Process instance " + parentInstanceId
+                            + " has ended; its agent work no longer acts");
+        }
+        com.abada.engine.core.delegation.CallTargetService.CallTarget target = checkDelegation(instance, activityId,
+                delegate, arguments);
+        Map<String, Object> inputs = new LinkedHashMap<>(arguments == null ? Map.of() : arguments);
+        ProcessDefinitionEntity childDeployment = persistenceService.findProcessDefinitionByDeploymentId(
+                target.deploymentId());
+        if (childDeployment == null) {
+            throw new ProcessEngineException("Pinned version " + target.version() + " of '" + target.processKey()
+                    + "' no longer exists");
+        }
+        ParsedProcessDefinition childDefinition = cacheDefinition(childDeployment);
+        List<String> unconfigured = unconfiguredAgentModels(childDefinition);
+        if (!unconfigured.isEmpty()) {
+            throw delegationRefused("DELEGATION_REFUSED", "'" + target.processKey() + "' has agent tasks but no AI"
+                    + " provider is configured for model(s) " + String.join(", ", unconfigured));
+        }
+        ProcessInstance child = launch(childDeployment, childDefinition, instance.getProjectId(),
+                instance.getStartedBy(), inputs, new ProcessInstance.Lineage(instance.getId(), tokenId, activityId,
+                        instance.getRootInstanceId(), instance.getCallDepth() + 1, startedByAgentJson));
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("childInstanceId", child.getId());
+        details.put("processKey", target.processKey());
+        details.put("version", target.version());
+        details.put("inputs", List.copyOf(inputs.keySet()));
+        details.put("delegated", true);
+        historyService.record("CHILD_STARTED", instance, activityId, details);
+        return child.getId();
+    }
+
+    /**
+     * Whether an agent may delegate to {@code delegate} with these inputs: the
+     * pinned target exists, the nesting stays within the depth limit, and every
+     * input is declared by the child with a fitting type. Throws the refusal.
+     */
+    public com.abada.engine.core.delegation.CallTargetService.CallTarget checkDelegation(ProcessInstance instance,
+            String activityId, com.abada.engine.core.model.DelegationMeta delegate, Map<String, Object> arguments) {
+        com.abada.engine.core.delegation.CallTargetService.CallTarget target = delegationTarget(instance, delegate);
+        if (target == null) {
+            throw new ProcessEngineException("Delegate '" + delegate.process() + "' of '" + activityId
+                    + "' has no pinned target; redeploy the definition");
+        }
+        int depth = instance.getCallDepth() + 1;
+        int limit = delegate.maxDepth() == null ? maxCallDepth : Math.min(maxCallDepth, delegate.maxDepth());
+        if (depth > limit) {
+            throw delegationRefused("DELEGATION_DEPTH", "delegating to '" + target.processKey() + "' would nest "
+                    + depth + " deep; the limit is " + limit);
+        }
+        Map<String, Object> inputs = arguments == null ? Map.of() : arguments;
+        for (Map.Entry<String, Object> input : inputs.entrySet()) {
+            if (!target.declaredTypes().isEmpty() && !target.declaredTypes().containsKey(input.getKey())) {
+                throw delegationRefused("DELEGATION_INPUT_INVALID", "'" + target.processKey()
+                        + "' does not declare an input '" + input.getKey() + "'");
+            }
+            String type = target.declaredTypes().get(input.getKey());
+            if (!com.abada.engine.core.delegation.CallTargetService.fits(input.getValue(), type)) {
+                throw delegationRefused("DELEGATION_INPUT_INVALID", "input '" + input.getKey() + "' is not a "
+                        + type + " as '" + target.processKey() + "' declares");
+            }
+        }
+        return target;
+    }
+
+    private static com.abada.engine.api.ApiException delegationRefused(String reason, String message) {
+        return new com.abada.engine.api.ApiException(org.springframework.http.HttpStatus.CONFLICT,
+                com.abada.engine.api.ApiErrorCode.AGENT_STEP_REJECTED, message, Map.of("reason", reason));
+    }
+
+    /**
      * A call failed for the parent token: through an on_error boundary that
      * catches {@code code} (or catches all), otherwise the token stops at a
      * CHILD_FAILED incident that, retried, starts a new child.
@@ -778,6 +886,12 @@ public class AbadaEngine {
             return false;
         }
         com.abada.engine.core.model.CallProcessMeta call = parent.getDefinition().getCallProcess(activityId);
+        if (call == null) {
+            // Not a call-process node (a delegation's child is resumed by DelegationResultService).
+            historyService.record("CHILD_RESULT_IGNORED", parent, activityId,
+                    Map.of("childInstanceId", childInstanceId, "reason", "'" + activityId + "' calls no process"));
+            return false;
+        }
         if (child.getStatus() != ProcessStatus.COMPLETED) {
             callFailed(parent, parentTokenId, activityId, "CHILD_FAILED", "child " + childInstanceId + " ended "
                     + child.getStatus(), childInstanceId);
@@ -1017,7 +1131,8 @@ public class AbadaEngine {
         instance.setStartedBy(entity.getStartedBy());
         if (entity.getParentInstanceId() != null) {
             instance.setLineage(new ProcessInstance.Lineage(entity.getParentInstanceId(), entity.getParentTokenId(),
-                    entity.getParentActivityId(), entity.getRootInstanceId(), entity.getCallDepth()));
+                    entity.getParentActivityId(), entity.getRootInstanceId(), entity.getCallDepth(),
+                    entity.getStartedByAgent()));
         }
         instance.putAllVariables(readMap(entity.getVariablesJson()));
         List<ProcessTokenEntity> rows = processTokenRepository
@@ -1523,7 +1638,8 @@ public class AbadaEngine {
     private static final List<JobEntity.Status> PENDING_JOBS =
             List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED);
     private static final List<ExternalTaskEntity.Status> OPEN_EXTERNAL = List.of(ExternalTaskEntity.Status.OPEN,
-            ExternalTaskEntity.Status.LOCKED, ExternalTaskEntity.Status.AWAITING_APPROVAL);
+            ExternalTaskEntity.Status.LOCKED, ExternalTaskEntity.Status.AWAITING_APPROVAL,
+            ExternalTaskEntity.Status.AWAITING_CHILD);
     private static final List<com.abada.engine.core.model.TaskStatus> OPEN_TASKS =
             List.of(com.abada.engine.core.model.TaskStatus.AVAILABLE, com.abada.engine.core.model.TaskStatus.CLAIMED);
 
@@ -1781,6 +1897,7 @@ public class AbadaEngine {
             entity.setParentActivityId(lineage.parentActivityId());
             entity.setRootInstanceId(lineage.rootInstanceId());
             entity.setCallDepth(lineage.depth());
+            entity.setStartedByAgent(lineage.startedByAgent());
         }
         return entity;
     }
