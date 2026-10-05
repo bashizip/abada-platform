@@ -297,6 +297,51 @@ completion:
 - History records `TASK_COMPLETED` with the outcome and the comment length;
   the comment text stays in the process variable only.
 
+### 2.8 Agent routes
+
+An agent may **choose the next step**, but only among routes its node
+declares, and the engine checks the choice:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Route this request: ${request_text}"
+  confidence_threshold: 70
+  routes:
+    refund:   { next: refund, description: The customer asks for money back, when: "amount <= 500.0" }
+    escalate: { next: manual, description: Anything unclear, angry or legal }
+    clarify:  { next: ask_customer, description: The request misses the order number }
+  on_low_confidence: manual
+  on_invalid_output: manual
+```
+
+- `routes` declares 2–8 routes, named like outcomes (§2.7). Each has a `next`,
+  a `description` (1–500 characters; the model chooses by it) and an optional
+  CEL `when`. A node with `routes` declares no `next`; `routes` on any other
+  node type is an error. A route back to an earlier step is a cycle and needs
+  a `loop` bound (§2.3).
+- The engine adds a required `route` property (an enum of the route names,
+  described with each route's description) to the node's output contract:
+  merged into an object `output_schema`, or the whole contract when the node
+  declares none. An `output_schema` that does not describe an object, or that
+  declares `route` itself, is an error. The worker sees the contract as any
+  other output schema.
+- On completion the engine validates the result as usual. A missing or
+  undeclared `route` is invalid output (`on_invalid_output`, otherwise a
+  failed attempt). Low confidence takes `on_low_confidence` as before, whatever
+  route was named.
+- A route's `when` is evaluated by the engine over the instance variables and
+  the agent's result variable. `false` vetoes the route: the result is
+  treated as invalid output. An expression that cannot be evaluated (for
+  example a missing variable) rejects the completion with
+  `EXPRESSION_EVALUATION_FAILED`; nothing changes.
+- An allowed route writes `<id>_route` and `<id>_outcome = OK`, leaves through
+  the route, and records `ROUTE_TAKEN` with the route, its target and the
+  confidence. `<id>_route` is cleared when the agent leaves another way.
+- Routes are APL-only: the Studio's BPMN export does not carry them (as for
+  review outcomes).
+
 ---
 
 ## 3. Node Types & Primitives Reference
@@ -1088,7 +1133,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
-| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, invalid `outcomes` (count, name, target, comment rule, or `outcomes` together with `next`), an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, invalid `outcomes` (count, name, target, comment rule, or `outcomes` together with `next`), invalid agent `routes` (count, name, target, description, a `when` that is not valid CEL, `routes` together with `next`, or an `output_schema` that is not an object or declares `route`), an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while

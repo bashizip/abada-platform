@@ -77,6 +77,32 @@ says where the process goes and whether the reviewer must explain it:
 In BPMN, the same decision is a user task with `abada:outcomes` (see [BPMN
 import and compatibility](/compatibility/bpmn/)).
 
+## Let the agent choose the next step
+
+An agent can pick where the process goes next, among routes you declare:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Route this request: ${request_text}"
+  routes:
+    refund:   { next: refund, description: The customer asks for money back, when: "amount <= 500.0" }
+    escalate: { next: manual, description: Anything unclear, angry or legal }
+  on_invalid_output: manual
+```
+
+- The agent answers with a `route` (the engine adds it to the output contract
+  and tells the model the descriptions). The engine only accepts a declared
+  route; anything else is an invalid output.
+- A route's `when` is the engine's veto: here a refund over 500 is never
+  taken, whatever the agent says, and the result goes to `on_invalid_output`.
+- The route taken is stored in `triage_route` and recorded in the history
+  with the agent's confidence. A step with routes has no `next`; a route back
+  to an earlier step needs a loop limit.
+- In Studio, open the agent's **Routes** box and choose **Let the agent
+  choose the next step**; each route draws its own edge on the canvas.
+
 ## Approving an agent's tool call
 
 Some tool calls should not run until a person agrees. Mark the tool
