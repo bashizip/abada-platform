@@ -110,6 +110,12 @@ bounded conversation instead of a single call:
   tokens) after; a read tool is journaled when it returns; a write is journaled
   `STARTED` first and sent with the engine's per-step key (`Idempotency-Key`
   header and `_meta.idempotencyKey`), then finished.
+- Delegates in the descriptor are offered as functions `delegate__<process>`.
+  Calling one journals a `DELEGATION` step (`PROPOSED` first when it needs
+  approval); the engine starts the child and parks the task, and the worker
+  gives the slot back. The next lease hands the model the child's declared
+  outputs, or the status it ended with. Engine refusals of the inputs or the
+  depth are answered to the model as the tool's error.
 - An `approval_required` call is journaled `PROPOSED`: the engine parks the
   task and opens an approval for the tool's approver groups, and the worker
   gives the slot back without completing or failing. After a person decides,

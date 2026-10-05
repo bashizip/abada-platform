@@ -358,6 +358,18 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   route writes `<id>_route`, leaves through its boundary in the same command
   and records `ROUTE_TAKEN` with the confidence. Evidence:
   [`AplRoutingRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/agent/AplRoutingRuntimeTest.java).
+- **Agent delegation.** Journaling a `STARTED` delegation checks the declared
+  target, the inputs against the pinned child's declared variables and the
+  depth, then in the same step command parks the agent's work
+  (`AWAITING_CHILD`), locks the parent instance and creates the child with
+  the agent's identity in `started_by_agent` (external task, then parent, then
+  child). The child's end runs through the same idempotent `CHILD_DONE` job as
+  `call-process`; for a delegation it locks the agent's external task, then
+  the step, finishes the step with the declared outputs (or the child's
+  status) and reopens the work. The parent token never moves. A boundary,
+  cancel or failure of the parent cancels the child inline and retires the
+  parked work; a child ended by its parent schedules no resume. Evidence:
+  [`PostgresAgentDelegationTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresAgentDelegationTest.java).
 - **Tool approvals.** Journaling a `PROPOSED` call parks the agent's work in
   the same command: the external task becomes `AWAITING_APPROVAL` (no lease,
   never acquired) and a human task of kind `TOOL_APPROVAL` opens for the

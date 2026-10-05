@@ -144,6 +144,21 @@ committed step:
   one is still `STARTED`, or an approved call has not run yet: the same
   attempt resumes and the write is re-sent with its key (or, unkeyed, goes to
   a person).
+- **Delegations.** The agent descriptor carries `delegates`: `{process, tool:
+  "delegate:<process>", description, inputSchema, approval, outputs}`. A call
+  is journaled with `kind: DELEGATION`, `toolRef: delegate:<process>` and the
+  request `{callId, arguments}` (the child's inputs): `PROPOSED` when
+  `approval` is `required` (then as an approval-required tool below), otherwise
+  `STARTED`. Recording `STARTED` starts the child and **parks** the task
+  (`AWAITING_CHILD`, no lease); the worker gives the slot back. Refusals:
+  `403 TOOL_NOT_BOUND` for an undeclared target, `409 AGENT_STEP_REJECTED`
+  with `DELEGATION_INPUT_INVALID` (an input the child does not declare or
+  that does not fit its type), `DELEGATION_DEPTH` or `DELEGATION_REFUSED`
+  (the child cannot run); nothing is recorded. A worker never finishes a
+  delegation: when the child ends the engine journals it `COMPLETED` with
+  `{status, childInstanceId, outputs}` (only the declared outputs) or `FAILED`
+  with `{status, childInstanceId}`, and the task is acquirable again on the
+  same attempt.
 - **Approval-required tools.** A call to an `approval_required` tool is
   journaled with `state: PROPOSED` (its `{callId, arguments}` request, no
   result); any other state is refused with `APPROVAL_REQUIRED`, and only

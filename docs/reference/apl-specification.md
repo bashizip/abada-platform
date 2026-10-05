@@ -568,6 +568,46 @@ dated, USD per million tokens). A call with tokens but no price is
 **unpriced** (cost unknown, never 0). Instances carry `agentCost` (USD, tokens,
 `includesUnpriced`).
 
+#### 3.2.3 Agent delegation
+
+An agent may start another process of the project as a governed child, when
+its node declares it:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Handle the refund request for ${order}"
+  delegates:
+    - process: refund_payout
+      description: Pay a refund out to the customer
+      outputs: [payout_id]
+    - { process: large_payout, outputs: [payout_id], approval: required, approvers: [finance] }
+  next: done
+```
+
+- Each delegate becomes an engine-provided tool `delegate:<process>` in the
+  agent's loop (the worker offers it as `delegate__<process>`), with the
+  child's declared `metadata.variables` as its input schema.
+- The child version is pinned when this process is deployed (as for
+  `call-process`, §3.15): a delegate to an undeployed process, or an output
+  the child does not declare, is an `ABADA-APL-CALL-001` error. `outputs`
+  names the child variables the agent reads back; nothing else returns.
+- `approval: required` needs `approvers` (else `ABADA-APL-TOOL-003`): a person
+  in those groups approves each delegation, with its exact inputs, before the
+  child starts (§3.2.1 approvals). `max_depth` tightens the global nesting
+  limit (`abada.call-process.max-depth`, default 4). At most 8 delegates; a
+  process may not delegate to itself.
+- At runtime the engine checks the target is declared, the inputs fit the
+  child's declared variables and the nesting stays within the limit, then
+  starts the child with the agent's identity (node, model, prompt version,
+  step) as its `startedByAgent` lineage. The agent's work waits without a
+  lease and its token stays on the agent node. When the child ends, its
+  declared outputs (or its final status when it did not complete) become the
+  tool's result and the agent continues. Cancelling the parent, or the agent's
+  `on_timeout`, cancels the child.
+- No tool server may be named `delegate`.
+
 ### 3.3 `engine-task` — standard service task
 
 Compiles to the runtime external service-task primitive on `service`. This is the
