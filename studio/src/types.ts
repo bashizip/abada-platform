@@ -14,6 +14,15 @@ export interface ReviewOutcome {
   comment?: 'required' | 'optional';
 }
 
+/** One next step a routing agent may choose (`routes`): the engine checks the choice and its `when`. */
+export interface AgentRoute {
+  next: string;
+  /** What the route means; the agent chooses by it. */
+  description: string;
+  /** Optional CEL condition over the instance variables and the agent's result; false vetoes the route. */
+  when?: string;
+}
+
 /** An interrupting timeout boundary (`on_timeout`): after the ISO-8601 duration the step's work is cancelled. */
 export interface OnTimeoutRoute {
   after: string;
@@ -45,6 +54,8 @@ export interface AgentConfig {
   onTimeout?: OnTimeoutRoute;
   /** Models tried in order when the model before is unavailable (`fallback_models`). */
   fallbackModels?: string[];
+  /** Next steps the agent chooses from (`routes`); a node with routes has no `next`. */
+  routes?: Record<string, AgentRoute>;
   inputs?: Record<string, string>;
   resultVariable?: string;
   outputSchema?: Record<string, unknown>;

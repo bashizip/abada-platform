@@ -28,7 +28,8 @@ import type { AplValidationIssue } from '@/api/apl';
 import { isOutcomeRouteEdge, setRoute, syncRouteEdges, type Route } from '@/lib/apl/routes';
 import { analyzeLoops } from '@/lib/apl/loopAnalysis';
 import {
-  ErrorRoutesEditor, LoopEditor, NameListEditor, OrderedPickList, OutcomesEditor, RouteSelect, TimeoutEditor,
+  AgentRoutesEditor, ErrorRoutesEditor, LoopEditor, NameListEditor, OrderedPickList, OutcomesEditor, RouteSelect,
+  TimeoutEditor,
 } from '@/components/inspector/RouteEditors';
 
 interface PropertiesInspectorProps {
@@ -178,7 +179,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     onUpdateWorkflow?.((wf) => syncRouteEdges({
       ...wf,
       nodes: wf.nodes.map((node) => (node.id === updated.id ? updated : node)),
-      // A review with outcomes has no `next`: its exits are the outcomes.
+      // A review with outcomes, or an agent with routes, has no `next`: its exits are the outcomes or routes.
       edges: dropNext ? wf.edges.filter((edge) => edge.source !== updated.id || isOutcomeRouteEdge(edge)) : wf.edges,
     }));
   const nodes = workflow?.nodes ?? [];
@@ -442,6 +443,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 when it takes too long. Without a route, a rejected result counts as a failed attempt and a last
                 failure opens an incident.
               </p>
+              <AgentRoutesEditor routes={selectedNode.agentConfig.routes} nextTarget={nextTarget} nodes={nodes}
+                excludeId={selectedNode.id}
+                onChange={(routes) => commitWithRoutes(
+                  { ...selectedNode, agentConfig: { ...selectedNode.agentConfig!, routes } }, !!routes)} />
               <RouteSelect label="Low confidence (on_low_confidence)" value={selectedNode.agentConfig.onLowConfidence}
                 nodes={nodes} excludeId={selectedNode.id} onChange={(target) => routeTo({ kind: 'low_confidence' }, target)} />
               <RouteSelect label="Invalid output (on_invalid_output)" value={selectedNode.agentConfig.onInvalidOutput}

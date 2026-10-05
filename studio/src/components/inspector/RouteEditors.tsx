@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { LoopConfig, OnErrorRoute, OnTimeoutRoute, ReviewOutcome, WorkflowNode } from '@/types';
-import { OUTCOME_NAME, outcomesProblem, timeoutError } from '@/lib/apl/routes';
+import type { AgentRoute, LoopConfig, OnErrorRoute, OnTimeoutRoute, ReviewOutcome, WorkflowNode } from '@/types';
+import { agentRoutesProblem, OUTCOME_NAME, outcomesProblem, timeoutError } from '@/lib/apl/routes';
 import { loopProblemMessage, type LoopProblem } from '@/lib/apl/loopAnalysis';
 
 const FIELD = 'w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2 py-1.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]';
@@ -198,6 +198,99 @@ export const OutcomesEditor: React.FC<{
           <button
             disabled={!OUTCOME_NAME.test(draftName) || !!outcomes[draftName]}
             onClick={() => { onChange({ ...outcomes, [draftName]: { next: '' } }); setDraftName(''); }}
+            className="shrink-0 rounded-lg border border-[#3A322E] px-2 text-[11px] text-[#EAE3D9] disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+      )}
+      {problem && <p className={ERROR}>{problem}</p>}
+    </div>
+  );
+};
+
+/**
+ * An agent's `routes`: next steps the agent chooses from, each with its
+ * target, the description the agent chooses by, and an optional CEL `when`
+ * the engine checks. Turning routes on replaces the step's `next`.
+ */
+export const AgentRoutesEditor: React.FC<{
+  routes?: Record<string, AgentRoute>;
+  nextTarget?: string;
+  nodes: WorkflowNode[];
+  excludeId: string;
+  onChange: (routes: Record<string, AgentRoute> | undefined) => void;
+}> = ({ routes, nextTarget, nodes, excludeId, onChange }) => {
+  const [draftName, setDraftName] = useState('');
+  if (!routes || Object.keys(routes).length === 0) {
+    return (
+      <button
+        onClick={() => onChange({
+          continue: { next: nextTarget ?? '', description: 'The request can be handled as planned' },
+          escalate: { next: '', description: 'Anything unclear or outside policy' },
+        })}
+        className="flex items-center gap-1 text-[11px] text-[#F4A261] hover:underline"
+      >
+        <Plus className="h-3 w-3" /> Let the agent choose the next step
+      </button>
+    );
+  }
+  const entries = Object.entries(routes);
+  const problem = agentRoutesProblem(routes);
+  const update = (name: string, patch: Partial<AgentRoute>) =>
+    onChange({ ...routes, [name]: { ...routes[name], ...patch } });
+  const rename = (from: string, to: string) => {
+    if (!to || to === from || routes[to]) return;
+    onChange(Object.fromEntries(entries.map(([name, route]) => [name === from ? to : name, route])));
+  };
+  const remove = (name: string) => {
+    const rest = Object.fromEntries(entries.filter(([candidate]) => candidate !== name));
+    onChange(Object.keys(rest).length ? rest : undefined);
+  };
+  return (
+    <div className="space-y-1.5">
+      <label className={LABEL}>Routes — the agent picks one by its description; the engine checks it</label>
+      {entries.map(([name, route]) => (
+        <div key={name} className="space-y-1 rounded-lg border border-[#3A322E] p-2">
+          <div className="flex items-center gap-2">
+            <input
+              aria-label={`Route ${name} name`}
+              defaultValue={name}
+              onBlur={(event) => rename(name, event.target.value.trim())}
+              className={`${FIELD} w-28 font-mono`}
+            />
+            <select aria-label={`Route ${name} target`} value={route.next} onChange={(event) => update(name, { next: event.target.value })} className={SELECT}>
+              <option value="">— choose —</option>
+              <TargetOptions nodes={nodes} excludeId={excludeId} />
+            </select>
+            <button onClick={() => remove(name)} aria-label={`Remove route ${name}`} className="text-[#A89F91] hover:text-[#E76F51]">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <input
+            aria-label={`Route ${name} description`}
+            placeholder="When the agent should choose this route"
+            value={route.description ?? ''}
+            maxLength={500}
+            onChange={(event) => update(name, { description: event.target.value })}
+            className={FIELD}
+          />
+          <input
+            aria-label={`Route ${name} when`}
+            placeholder="Optional CEL check, e.g. amount <= 500.0"
+            value={route.when ?? ''}
+            onChange={(event) => update(name, { when: event.target.value.trim() ? event.target.value : undefined })}
+            className={`${FIELD} font-mono`}
+          />
+        </div>
+      ))}
+      {entries.length < 8 && (
+        <div className="flex gap-2">
+          <input aria-label="New route name" placeholder="refund" value={draftName}
+            onChange={(event) => setDraftName(event.target.value.trim())} className={`${FIELD} font-mono`} />
+          <button
+            disabled={!OUTCOME_NAME.test(draftName) || !!routes[draftName]}
+            onClick={() => { onChange({ ...routes, [draftName]: { next: '', description: '' } }); setDraftName(''); }}
             className="shrink-0 rounded-lg border border-[#3A322E] px-2 text-[11px] text-[#EAE3D9] disabled:opacity-40"
           >
             Add

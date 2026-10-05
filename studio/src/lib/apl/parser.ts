@@ -219,6 +219,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onError: aplNode.on_error,
           onTimeout: aplNode.on_timeout,
           fallbackModels: aplNode.fallback_models,
+          routes: aplNode.routes,
         };
         break;
       case 'engine-task':
@@ -496,7 +497,9 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         on_error: node.agentConfig?.onError || undefined,
         on_timeout: node.agentConfig?.onTimeout || undefined,
         fallback_models: node.agentConfig?.fallbackModels?.length ? node.agentConfig.fallbackModels : undefined,
-        next: getNextNode(node.id, node.type),
+        // With routes the agent chooses its exit: every exit is a route's next.
+        routes: hasAgentRoutes(node) ? node.agentConfig?.routes : undefined,
+        next: hasAgentRoutes(node) ? undefined : getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
       aplNodes.push({
@@ -690,3 +693,6 @@ function metadataExtras(metadata: APLDocument['metadata']): Record<string, unkno
 /** Route edges are labelled `on_*` or `outcome: <name>`; see `routes.ts`. */
 export { isOutcomeRouteEdge };
 
+function hasAgentRoutes(node: WorkflowNode): boolean {
+  return Object.keys(node.agentConfig?.routes ?? {}).length > 0;
+}
