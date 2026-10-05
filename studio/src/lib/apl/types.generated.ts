@@ -203,14 +203,22 @@ export interface APLAgentNode {
    */
   output_schema?: {};
   /**
-   * Tools from the project's tool servers, as <server>/<tool> or { ref, policy } to tighten the server's policy. A name without a server is advisory only (deprecated).
+   * Tools from the project's tool servers, as <server>/<tool> or { ref, policy, approvers } to tighten the server's policy or name who approves an approval_required tool. A name without a server is advisory only (deprecated).
    */
   tools?: (
     | string
-    | {
+    | ({
+        [k: string]: unknown;
+      } & {
         ref: string;
-        policy: 'read' | 'write' | 'approval_required';
-      }
+        policy?: 'read' | 'write' | 'approval_required';
+        /**
+         * Groups who may approve this tool's calls; overrides the tool server's approvers. approval_required tools only.
+         *
+         * @minItems 1
+         */
+        approvers?: string[];
+      })
   )[];
   confidence_threshold?: number;
   temperature?: number;

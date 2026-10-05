@@ -466,7 +466,7 @@ describe('APL round trip: tool references', () => {
             type: 'agent',
             model: 'gemini-3.6-flash',
             prompt: 'Triage the request',
-            tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required' }],
+            tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required', approvers: ['finance'] }],
             next: 'done',
           },
           { id: 'done', type: 'end' },
@@ -475,7 +475,7 @@ describe('APL round trip: tool references', () => {
     };
     const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'triage');
     expect(saved).toMatchObject({
-      tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required' }],
+      tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required', approvers: ['finance'] }],
     });
   });
 });

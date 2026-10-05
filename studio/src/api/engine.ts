@@ -126,6 +126,27 @@ export interface EngineUserTaskDTO {
   variables?: Record<string, unknown>;
   /** Decisions a reviewer chooses from; empty for an ordinary task. */
   outcomes?: { name: string; commentRequired: boolean }[];
+  /** USER for a process node's task; TOOL_APPROVAL for an agent's proposed tool call. */
+  kind?: 'USER' | 'TOOL_APPROVAL';
+  /** The proposed call a TOOL_APPROVAL task decides. */
+  toolApproval?: ToolApprovalDTO;
+}
+
+/** A tool call an agent proposed; the decision binds to argumentsDigest. */
+export interface ToolApprovalDTO {
+  toolRef: string;
+  server?: string;
+  tool: string;
+  agentActivityId: string;
+  model?: string;
+  attempt: number;
+  sequence: number;
+  argumentsDigest: string;
+  /** As the evidence policy keeps it (redacted by default); null under `none` or after retention. */
+  arguments?: unknown;
+  payloadMode?: 'none' | 'redacted' | 'full';
+  proposedAt?: string;
+  state: string;
 }
 
 export interface TaskOperationResultDTO {
