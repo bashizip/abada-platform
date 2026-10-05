@@ -363,6 +363,14 @@ class SecurityAuthorizationContractTest {
                 .andExpect(status().isUnauthorized());
         assertForbidden(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve), "worker");
 
+        // The project event stream: authenticated members only.
+        String stream = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/events/stream";
+        mvc.perform(get(stream)).andExpect(status().isUnauthorized());
+        mvc.perform(get(stream).header("Authorization", "Bearer invalid")).andExpect(status().isUnauthorized());
+        mvc.perform(get(stream).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(stream).header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "abada-admin"))
+                .andExpect(status().isUnauthorized());
+
         String prices = "/v1/model-prices";
         String price = "{\"model\":\"m\",\"inputPerMillion\":1,\"outputPerMillion\":2}";
         mvc.perform(get(prices)).andExpect(status().isUnauthorized());

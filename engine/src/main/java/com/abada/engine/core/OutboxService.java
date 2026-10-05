@@ -22,7 +22,14 @@ public class OutboxService {
     }
 
     public void enqueue(String eventType, String aggregateType, String aggregateId, Map<String, ?> payload) {
+        enqueue(eventType, aggregateType, aggregateId, null, payload);
+    }
+
+    /** As {@link #enqueue(String, String, String, Map)}, tagged with its project for the event stream. */
+    public void enqueue(String eventType, String aggregateType, String aggregateId, String projectId,
+            Map<String, ?> payload) {
         OutboxEventEntity event = new OutboxEventEntity();
+        event.setProjectId(projectId);
         event.setEventType(eventType);
         event.setAggregateType(aggregateType);
         event.setAggregateId(aggregateId == null ? "global" : aggregateId);
