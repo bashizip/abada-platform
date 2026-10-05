@@ -1,4 +1,4 @@
-import type { OnErrorRoute, ReviewOutcome, WorkflowEdge, WorkflowFile, WorkflowNode } from '@/types';
+import type { AgentRoute, OnErrorRoute, ReviewOutcome, WorkflowEdge, WorkflowFile, WorkflowNode } from '@/types';
 
 /**
  * Routes of a step: where it goes besides its normal `next`. The node config
@@ -14,11 +14,16 @@ export type Route =
   | { kind: 'low_confidence' }
   | { kind: 'invalid_output' }
   | { kind: 'outcome'; name: string }
+  | { kind: 'route'; name: string }
   | { kind: 'exhausted' };
 
-/** Route edges are labelled `on_*` (boundaries, loop exhaustion) or `outcome: <name>` (review decisions). */
+/**
+ * Route edges are labelled `on_*` (boundaries, loop exhaustion), `outcome: <name>`
+ * (review decisions) or `route: <name>` (an agent's chosen next step).
+ */
 export const isOutcomeRouteEdge = (edge: { label?: string }): boolean =>
-  typeof edge.label === 'string' && (edge.label.startsWith('on_') || edge.label.startsWith('outcome:'));
+  typeof edge.label === 'string' && (edge.label.startsWith('on_') || edge.label.startsWith('outcome:')
+    || edge.label.startsWith('route:'));
 
 /** ISO-8601 durations the engine accepts for `on_timeout.after` (PT1S–P365D, no months or years). */
 const DURATION = /^P(?!$)(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/;
@@ -62,6 +67,9 @@ export function routeEdges(node: WorkflowNode): WorkflowEdge[] {
   const routes: { target: string; label: string }[] = [];
   Object.entries(node.type === 'human' ? node.humanConfig?.outcomes ?? {} : {}).forEach(([name, outcome]) => {
     if (outcome?.next) routes.push({ target: outcome.next, label: `outcome: ${name}` });
+  });
+  Object.entries(node.type === 'agent' ? node.agentConfig?.routes ?? {} : {}).forEach(([name, route]) => {
+    if (route?.next) routes.push({ target: route.next, label: `route: ${name}` });
   });
   if (node.type === 'agent') {
     if (node.agentConfig?.onLowConfidence) routes.push({ target: node.agentConfig.onLowConfidence, label: 'on_low_confidence' });
@@ -110,7 +118,9 @@ export function routesFor(node: WorkflowNode): Route[] {
   if (!isTask(node)) return [{ kind: 'next' }];
   const routes: Route[] = [];
   const outcomes = node.type === 'human' ? Object.keys(node.humanConfig?.outcomes ?? {}) : [];
+  const agentRoutes = node.type === 'agent' ? Object.keys(node.agentConfig?.routes ?? {}) : [];
   if (outcomes.length > 0) outcomes.forEach((name) => routes.push({ kind: 'outcome', name }));
+  else if (agentRoutes.length > 0) agentRoutes.forEach((name) => routes.push({ kind: 'route', name }));
   else routes.push({ kind: 'next' });
   routes.push({ kind: 'error' }, { kind: 'timeout', after: 'PT1H' });
   if (node.type === 'agent') routes.push({ kind: 'low_confidence' }, { kind: 'invalid_output' });
@@ -126,6 +136,7 @@ export function routeLabel(route: Route): string {
     case 'low_confidence': return 'Low confidence';
     case 'invalid_output': return 'Invalid output';
     case 'outcome': return `Outcome: ${route.name.replace(/_/g, ' ')}`;
+    case 'route': return `Route: ${route.name.replace(/_/g, ' ')}`;
     case 'exhausted': return 'Loop limit reached';
   }
 }
@@ -142,6 +153,7 @@ export function routeOfEdge(edge: WorkflowEdge): Route {
     return { kind: 'error', ...(code ? { code } : {}) };
   }
   if (label.startsWith('outcome:')) return { kind: 'outcome', name: label.slice('outcome:'.length).trim() };
+  if (label.startsWith('route:')) return { kind: 'route', name: label.slice('route:'.length).trim() };
   return { kind: 'next' };
 }
 
@@ -186,6 +198,13 @@ function withRoute(node: WorkflowNode, route: Route, target: string | null): Wor
       if (target) outcomes[route.name] = { ...(outcomes[route.name] ?? {}), next: target };
       else delete outcomes[route.name];
       return { ...node, humanConfig: { ...node.humanConfig, outcomes } };
+    }
+    case 'route': {
+      if (node.type !== 'agent' || !node.agentConfig) return node;
+      const routes = { ...(node.agentConfig.routes ?? {}) };
+      if (target) routes[route.name] = { ...(routes[route.name] ?? { description: '' }), next: target };
+      else delete routes[route.name];
+      return { ...node, agentConfig: { ...node.agentConfig, routes: Object.keys(routes).length ? routes : undefined } };
     }
     default:
       return node;
@@ -259,3 +278,17 @@ export function outcomesProblem(outcomes: Record<string, ReviewOutcome>): string
   return null;
 }
 
+/** Problems the engine would reject in an agent's routes, or null. */
+export function agentRoutesProblem(routes: Record<string, AgentRoute>): string | null {
+  const names = Object.keys(routes);
+  if (names.length < 2 || names.length > 8) return 'An agent chooses between 2 and 8 routes.';
+  const bad = names.find((name) => !OUTCOME_NAME.test(name));
+  if (bad) return `"${bad}" must be lowercase letters, digits and underscores, starting with a letter.`;
+  const missing = names.find((name) => !routes[name]?.next);
+  if (missing) return `Choose where "${missing}" leads.`;
+  const undescribed = names.find((name) => !routes[name]?.description?.trim());
+  if (undescribed) return `Describe "${undescribed}": the agent chooses by its description.`;
+  const long = names.find((name) => (routes[name]?.description ?? '').trim().length > 500);
+  if (long) return `The description of "${long}" is limited to 500 characters.`;
+  return null;
+}

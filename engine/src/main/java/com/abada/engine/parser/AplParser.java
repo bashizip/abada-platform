@@ -9,6 +9,7 @@ import com.abada.engine.bpmn.compatibility.CompatibilityReport;
 import com.abada.engine.bpmn.compatibility.ValidationSeverity;
 import com.abada.engine.core.model.CallProcessMeta;
 import com.abada.engine.core.model.ToolPolicy;
+import com.abada.engine.core.model.AgentRouteMeta;
 import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
 import com.abada.engine.core.model.LoopMeta;
@@ -663,8 +664,9 @@ public final class AplParser {
         }
 
         List<BoundaryMeta> boundaries = new ArrayList<>();
+        Map<String, List<AgentRouteMeta>> agentRoutes = new LinkedHashMap<>();
         if (errors.isEmpty()) {
-            addBoundaries(nodesById, pointerById, flows, flowIds, boundaries, errors);
+            addBoundaries(nodesById, pointerById, flows, flowIds, boundaries, agentRoutes, errors);
         }
         if (!errors.isEmpty()) throw new BpmnValidationException(errors);
 
@@ -673,7 +675,8 @@ public final class AplParser {
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
                 rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses)
-                .withEvidenceOverrides(evidenceOverrides).withSensitiveVariables(AplVariables.sensitiveNames(root));
+                .withEvidenceOverrides(evidenceOverrides).withAgentRoutes(agentRoutes)
+                .withSensitiveVariables(AplVariables.sensitiveNames(root));
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
             // execution policy, so reloading stored definitions never changes.
@@ -891,6 +894,7 @@ public final class AplParser {
         if (node.path("output_schema").isObject()) {
             outputSchema = yamlMapper.convertValue(node.path("output_schema"), Map.class);
         }
+        outputSchema = withRouteContract(outputSchema, node.path("routes"), nodeId);
         if (!outputSchema.isEmpty()) {
             String problem = com.abada.engine.core.agent.AgentOutputValidator.schemaProblem(outputSchema);
             if (problem != null) {
@@ -1228,10 +1232,10 @@ public final class AplParser {
      */
     private static void addBoundaries(Map<String, JsonNode> nodesById, Map<String, String> pointerById,
             List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries,
-            List<BpmnValidationIssue> errors) {
+            Map<String, List<AgentRouteMeta>> agentRoutes, List<BpmnValidationIssue> errors) {
         for (Map.Entry<String, JsonNode> entry : nodesById.entrySet()) {
             try {
-                addBoundary(entry.getKey(), entry.getValue(), nodesById, flows, flowIds, boundaries);
+                addBoundary(entry.getKey(), entry.getValue(), nodesById, flows, flowIds, boundaries, agentRoutes);
             } catch (BpmnValidationException exception) {
                 errors.addAll(locate(exception, entry.getKey(), pointerById.get(entry.getKey())));
             }
@@ -1242,7 +1246,8 @@ public final class AplParser {
             "call-process");
 
     private static void addBoundary(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
-            List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries) {
+            List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries,
+            Map<String, List<AgentRouteMeta>> agentRoutes) {
         String type = node.path("type").asText();
         boolean agent = "agent".equals(type);
         List<BoundaryMeta> declared = new ArrayList<>();
@@ -1314,6 +1319,23 @@ public final class AplParser {
                         outcome.name(), null, outcome.target()));
             }
         }
+        boolean routes = present(node.path("routes"));
+        if (routes) {
+            if (!agent) {
+                throw validation("routes", "node '" + nodeId + "' declares 'routes', which only agent nodes support");
+            }
+            if (node.hasNonNull("next")) {
+                throw validation("next", "agent node '" + nodeId + "' declares both 'next' and 'routes'; "
+                        + "with routes every exit is a route's 'next'");
+            }
+            List<AgentRouteMeta> parsed = parseRoutes(node, nodeId, nodesById);
+            for (AgentRouteMeta route : parsed) {
+                declared.add(new BoundaryMeta("route:" + route.name(), nodeId, BoundaryMeta.Kind.ROUTE,
+                        route.name(), null, route.target()));
+            }
+            agentRoutes.put(nodeId, parsed);
+            decides = true;
+        }
         declared.removeIf(Objects::isNull);
         if (declared.isEmpty()) return;
         if (!decides && flows.stream().noneMatch(flow -> flow.getSourceRef().equals(nodeId))) {
@@ -1371,6 +1393,106 @@ public final class AplParser {
             parsed.add(new com.abada.engine.core.model.OutcomeMeta(name, comment.equals("required"), target));
         }
         return parsed;
+    }
+
+    /**
+     * The output contract of a routing agent: its result must name one of the
+     * declared routes in a required {@code route} property, described for the
+     * model. Merged into an object {@code output_schema}, or the whole contract
+     * when the node declares none. Route shapes are checked by
+     * {@link #parseRoutes}; here only well-formed entries are read.
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> withRouteContract(Map<String, Object> outputSchema, JsonNode routes, String nodeId) {
+        if (!routes.isObject() || routes.isEmpty()) return outputSchema;
+        List<String> names = new ArrayList<>();
+        StringBuilder description = new StringBuilder("The next step to take. Choose exactly one: ");
+        routes.properties().forEach(entry -> {
+            names.add(entry.getKey());
+            if (names.size() > 1) description.append("; ");
+            description.append(entry.getKey()).append(": ").append(entry.getValue().path("description").asText(""));
+        });
+        Map<String, Object> property = new LinkedHashMap<>();
+        property.put("type", "string");
+        property.put("enum", List.copyOf(names));
+        property.put("description", description.toString());
+        Map<String, Object> contract = new LinkedHashMap<>(outputSchema);
+        Object type = contract.get("type");
+        if (type != null && !"object".equals(type)) {
+            throw validation("output_schema", "agent node '" + nodeId + "' declares routes, so its output_schema must"
+                    + " describe an object (the engine adds the required 'route' property)");
+        }
+        contract.put("type", "object");
+        Map<String, Object> properties = contract.get("properties") instanceof Map<?, ?> declared
+                ? new LinkedHashMap<>((Map<String, Object>) declared) : new LinkedHashMap<>();
+        if (properties.containsKey(AgentRouteMeta.RESULT_PROPERTY)) {
+            throw validation("output_schema", "agent node '" + nodeId + "' declares routes, so the engine owns the"
+                    + " 'route' property; remove it from output_schema");
+        }
+        properties.put(AgentRouteMeta.RESULT_PROPERTY, property);
+        contract.put("properties", properties);
+        List<Object> required = contract.get("required") instanceof List<?> declared
+                ? new ArrayList<>(declared) : new ArrayList<>();
+        required.add(AgentRouteMeta.RESULT_PROPERTY);
+        contract.put("required", required);
+        return contract;
+    }
+
+    /**
+     * {@code routes: { <name>: { next, description, when? } }} of an agent node:
+     * the next steps its agent may choose from, each with its own exit.
+     */
+    static List<AgentRouteMeta> parseRoutes(JsonNode node, String nodeId, Map<String, JsonNode> nodesById) {
+        JsonNode routes = node.path("routes");
+        if (!present(routes)) return List.of();
+        if (!routes.isObject()) {
+            throw validation("routes", "agent node '" + nodeId + "' routes must be a mapping of route name to"
+                    + " {next, description, when}");
+        }
+        if (routes.size() < AgentRouteMeta.MIN_ROUTES || routes.size() > AgentRouteMeta.MAX_ROUTES) {
+            throw validation("routes", "agent node '" + nodeId + "' must declare between " + AgentRouteMeta.MIN_ROUTES
+                    + " and " + AgentRouteMeta.MAX_ROUTES + " routes");
+        }
+        List<AgentRouteMeta> parsed = new ArrayList<>();
+        var names = routes.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String field = "routes/" + name;
+            if (!name.matches(com.abada.engine.core.model.OutcomeMeta.NAME_PATTERN)) {
+                throw validation("routes", "agent node '" + nodeId + "' route '" + name
+                        + "' must be lowercase letters, digits and underscores, starting with a letter (max 32)");
+            }
+            JsonNode route = routes.path(name);
+            if (!route.isObject()) {
+                throw validation(field, "agent node '" + nodeId + "' route '" + name
+                        + "' must be a mapping with 'next' and 'description'");
+            }
+            String target = route.path("next").asText(null);
+            if (target == null || target.isBlank()) {
+                throw validation(field + "/next", "agent node '" + nodeId + "' route '" + name + "' declares no 'next'");
+            }
+            if (!nodesById.containsKey(target)) {
+                throw validation(field + "/next", "agent node '" + nodeId + "' route '" + name + "' next '" + target
+                        + "' is not a declared node");
+            }
+            String description = route.path("description").asText("").strip();
+            if (description.isEmpty() || description.length() > AgentRouteMeta.MAX_DESCRIPTION_LENGTH) {
+                throw validation(field + "/description", "agent node '" + nodeId + "' route '" + name
+                        + "' needs a description of 1 to " + AgentRouteMeta.MAX_DESCRIPTION_LENGTH
+                        + " characters: the agent chooses by it");
+            }
+            String when = route.hasNonNull("when") ? route.path("when").asText().strip() : null;
+            if (when != null && when.isEmpty()) {
+                throw validation(field + "/when", "agent node '" + nodeId + "' route '" + name + "' has an empty 'when'");
+            }
+            parsed.add(new AgentRouteMeta(name, description, when, target));
+        }
+        return parsed;
+    }
+
+    /** Process variable holding the route a routing agent took. */
+    public static String routeVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_route";
     }
 
     /** Process variable holding a reviewer's comment on a human task decision. */

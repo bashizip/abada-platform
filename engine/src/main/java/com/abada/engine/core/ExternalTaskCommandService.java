@@ -395,9 +395,28 @@ public class ExternalTaskCommandService {
         String resultVariable = work.resultVariable() == null || work.resultVariable().isBlank()
                 ? activityId + "_result" : work.resultVariable();
         AgentOutputValidator.Verdict verdict = AgentOutputValidator.validate(work, resultVariable, variables);
+        List<com.abada.engine.core.model.AgentRouteMeta> routes = instance.getDefinition().getAgentRoutes(activityId);
+        com.abada.engine.core.model.AgentRouteMeta chosen = null;
+        if (verdict.ok() && !routes.isEmpty()) {
+            // The contract already limits route to the declared names; the engine still checks, then asks when.
+            Object name = verdict.value() instanceof Map<?, ?> value
+                    ? value.get(com.abada.engine.core.model.AgentRouteMeta.RESULT_PROPERTY) : null;
+            chosen = routes.stream().filter(route -> route.name().equals(name)).findFirst().orElse(null);
+            if (chosen == null) {
+                verdict = new AgentOutputValidator.Verdict(AplParser.OUTCOME_INVALID_OUTPUT, verdict.value(),
+                        verdict.confidence(), "route '" + name + "' is not one this step declares");
+            } else if (chosen.when() != null && !routeAllowed(chosen, instance, resultVariable, verdict.value(),
+                    activityId)) {
+                verdict = new AgentOutputValidator.Verdict(AplParser.OUTCOME_INVALID_OUTPUT, verdict.value(),
+                        verdict.confidence(), "route '" + chosen.name() + "' was vetoed by its when");
+                chosen = null;
+            }
+        }
         boolean routed = !instance.getDefinition().boundariesOf(activityId).isEmpty();
-        BoundaryMeta outcomeBoundary = verdict.ok() ? null : instance.getDefinition()
-                .boundaryFor(activityId, BoundaryMeta.Kind.valueOf(verdict.outcome()), null);
+        BoundaryMeta outcomeBoundary = chosen != null
+                ? instance.getDefinition().boundaryFor(activityId, BoundaryMeta.Kind.ROUTE, chosen.name())
+                : verdict.ok() ? null : instance.getDefinition()
+                        .boundaryFor(activityId, BoundaryMeta.Kind.valueOf(verdict.outcome()), null);
         boolean hasRoute = verdict.ok() || outcomeBoundary != null;
         task.setAgentOutcome(verdict.outcome());
         persistAgentMetadata(task, agent);
@@ -417,6 +436,12 @@ public class ExternalTaskCommandService {
                         ? null : variables.get(resultVariable)));
             }
             if (routed) merged.put(AplParser.outcomeVariable(activityId), verdict.outcome());
+            if (!routes.isEmpty()) {
+                // The route taken; cleared when the agent left another way, so an earlier pass never lingers.
+                String routeVariable = AplParser.routeVariable(activityId);
+                if (chosen != null) merged.put(routeVariable, chosen.name());
+                else if (instance.getVariables().containsKey(routeVariable)) merged.put(routeVariable, null);
+            }
             task.setStatus(ExternalTaskEntity.Status.COMPLETED);
             task.setLockExpirationTime(null);
             repository.save(task);
@@ -425,6 +450,14 @@ public class ExternalTaskCommandService {
             } else {
                 engine.takeBoundary(task.getProcessInstanceId(), activityId, task.getTokenId(), outcomeBoundary,
                         merged, Map.of("externalTaskId", task.getId()));
+            }
+            if (chosen != null) {
+                Map<String, Object> taken = new LinkedHashMap<>();
+                taken.put("externalTaskId", task.getId());
+                taken.put("route", chosen.name());
+                taken.put("routedTo", chosen.target());
+                if (verdict.confidence() != null) taken.put("confidence", verdict.confidence());
+                history.record("ROUTE_TAKEN", requireInstance(task), activityId, taken);
             }
             Map<String, Object> details = new LinkedHashMap<>(completedDetails(task, agent));
             details.put("agentOutcome", verdict.outcome());
@@ -459,6 +492,22 @@ public class ExternalTaskCommandService {
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
             exhausted(task, task.getExceptionMessage(), null);
+        }
+    }
+
+    /**
+     * A route's CEL {@code when}, over the instance variables and the agent's
+     * result. An expression that cannot be evaluated fails the completion
+     * loudly instead of guessing.
+     */
+    private static boolean routeAllowed(com.abada.engine.core.model.AgentRouteMeta route, ProcessInstance instance,
+            String resultVariable, Object result, String activityId) {
+        Map<String, Object> scope = new java.util.HashMap<>(instance.getVariables());
+        scope.put(resultVariable, result);
+        try {
+            return com.abada.engine.expression.WorkflowExpressions.compile(route.when()).test(scope);
+        } catch (com.abada.engine.expression.ExpressionEvaluationException exception) {
+            throw exception.atNode(activityId);
         }
     }
 

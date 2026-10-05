@@ -86,6 +86,7 @@ export function cleanEdgeLabel(label: string | undefined): string {
     .replace(/^on_timeout$/, 'timeout')
     .replace(/^on_exhausted$/, 'limit reached')
     .replace(/^outcome: /, '')
+    .replace(/^route: /, '')
     .replace(/^on_error(: )?/, (_, code) => (code ? 'error ' : 'error'))
     .replace(/\s+/g, ' ')
     .trim();

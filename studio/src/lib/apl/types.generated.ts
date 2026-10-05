@@ -220,6 +220,7 @@ export interface APLAgentNode {
         approvers?: string[];
       })
   )[];
+  routes?: Routes;
   confidence_threshold?: number;
   temperature?: number;
   /**
@@ -269,6 +270,25 @@ export interface APLAgentNode {
    * Engine-computed cost the whole task may reach across its attempts; an unpriced model fails closed.
    */
   budget_usd?: number;
+}
+/**
+ * Next steps an agent may choose from. The engine adds a required 'route' enum to the output contract, checks the choice (and its optional CEL 'when'), writes <id>_route and continues at the route's 'next'. A node with routes declares no 'next'.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "routes".
+ */
+export interface Routes {
+  [k: string]: {
+    next: NodeRef;
+    /**
+     * What this route means; the agent chooses by it.
+     */
+    description: string;
+    /**
+     * Optional CEL condition over the instance variables and the agent's result; false vetoes the route (invalid output).
+     */
+    when?: string;
+  };
 }
 /**
  * Interrupting timeout boundary: if the step is not done within 'after' (ISO-8601 duration, PT1S to P365D), its work is cancelled and the flow continues at 'then'.

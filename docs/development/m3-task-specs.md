@@ -592,7 +592,7 @@ every new APL field; browser check of the exit demo in Studio.
 
 **Out of scope.** SSE for tasks and inbox; replaying an agent run in the UI.
 
-## E13 — Routing agents
+## E13 — Routing agents ✅ done
 
 **Goal.** An agent may choose the next step, but only among routes the process
 declares, and the engine checks the choice.
@@ -617,6 +617,33 @@ declares, and the engine checks the choice.
 route, low confidence, back-edge with a loop bound), Studio `routes.test.ts`.
 
 **Out of scope.** Multiple routes at once (fork by agent).
+
+**As built.** `AplParser.parseRoutes` and `withRouteContract` compile
+`routes` into `ROUTE` boundaries, `AgentRouteMeta` entries on the definition
+and a required `route` enum in the output contract (merged into an object
+`output_schema` or synthesized), so the worker needs no change.
+`ExternalTaskCommandService.completeAgent` checks the named route and its
+`when`, writes `<id>_route`, leaves through the route boundary and records
+`ROUTE_TAKEN`. `DefinitionPolicyValidator` compiles every `when`;
+`AplVariables` knows `<id>_route` and checks `when` identifiers. Studio:
+`route: <name>` edges in `routes.ts`, `AgentRoutesEditor`, the connect menu.
+Tests: `AplRoutingParserTest` (contract merge and synthesis, bounds, names,
+description, target, `next` conflict, non-agent node, non-object schema, CEL
+compile), `AplRoutingRuntimeTest` (PostgreSQL: each route, undeclared route,
+vetoed route, unevaluable `when` rolls back, low confidence, a back-edge route
+bounded by the loop across an engine restart), the
+`routing-agent.apl.yaml` fixture under `AplSchemaConformanceTest`, Studio
+`routes.test.ts` and `RouteEditors.test.tsx`.
+
+**Deviations from the plan.**
+- `description` is required (the model chooses by it), and the route
+  descriptions are written into the `route` property's description in the
+  output contract.
+- A `when` that cannot be evaluated rejects the completion
+  (`EXPRESSION_EVALUATION_FAILED`, nothing changes) rather than counting as a
+  veto: the engine fails loudly instead of guessing.
+- Routes are APL-only; the Studio BPMN export does not carry them, as for
+  review outcomes.
 
 ## E20 — Governed delegation
 

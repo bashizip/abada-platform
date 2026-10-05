@@ -1,0 +1,46 @@
+version: abada.io/v1
+metadata:
+  key: routing_agent
+  name: Routing agent
+flow:
+  entry: request
+  nodes:
+    - id: request
+      type: webhook
+      next: triage
+    # The agent chooses the next step among the declared routes; the engine checks the choice.
+    - id: triage
+      type: agent
+      description: Route the support request
+      model: gemini-3.6-flash
+      prompt: "Route this request: ${request_text}"
+      confidence_threshold: 70
+      loop:
+        max_iterations: 2
+        on_exhausted: manual
+      output_schema:
+        type: object
+        properties:
+          summary: { type: string }
+      routes:
+        refund:
+          next: refund
+          description: The customer asks for money back
+          when: "amount <= 500.0"
+        escalate:
+          next: manual
+          description: Anything unclear, angry or legal
+        clarify:
+          next: ask_customer
+          description: The request misses the order number
+      on_low_confidence: manual
+      on_invalid_output: manual
+    - id: ask_customer
+      type: human-input
+      description: Ask the customer for the order number
+      assignees: [support]
+      next: triage
+    - id: refund
+      type: end
+    - id: manual
+      type: end

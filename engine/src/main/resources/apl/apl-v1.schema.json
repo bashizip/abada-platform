@@ -388,6 +388,9 @@
             ]
           }
         },
+        "routes": {
+          "$ref": "#/$defs/routes"
+        },
         "confidence_threshold": {
           "type": "number",
           "minimum": 0,
@@ -1339,6 +1342,39 @@
         "signal",
         "call-process"
       ]
+    },
+    "routes": {
+      "description": "Next steps an agent may choose from. The engine adds a required 'route' enum to the output contract, checks the choice (and its optional CEL 'when'), writes <id>_route and continues at the route's 'next'. A node with routes declares no 'next'.",
+      "type": "object",
+      "minProperties": 2,
+      "maxProperties": 8,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,31}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "next",
+          "description"
+        ],
+        "properties": {
+          "next": {
+            "$ref": "#/$defs/nodeRef"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What this route means; the agent chooses by it."
+          },
+          "when": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional CEL condition over the instance variables and the agent's result; false vetoes the route (invalid output)."
+          }
+        }
+      }
     }
   }
 }

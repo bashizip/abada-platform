@@ -349,6 +349,15 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   again. Retired work answers `410`. Digests are computed by the engine from
   canonical JSON; payloads are AES-GCM encrypted at rest. Evidence:
   [`PostgresAgentStepJournalTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresAgentStepJournalTest.java).
+- **Agent routes.** An agent node with `routes` leaves only through the route
+  its agent names in the result's `route`, after the output contract (which
+  requires a declared route) and the confidence threshold are checked. A
+  route's CEL `when` is evaluated in the completion command over the instance
+  variables and the result; `false` turns the result into invalid output, an
+  evaluation error rejects the completion with nothing changed. The chosen
+  route writes `<id>_route`, leaves through its boundary in the same command
+  and records `ROUTE_TAKEN` with the confidence. Evidence:
+  [`AplRoutingRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/agent/AplRoutingRuntimeTest.java).
 - **Tool approvals.** Journaling a `PROPOSED` call parks the agent's work in
   the same command: the external task becomes `AWAITING_APPROVAL` (no lease,
   never acquired) and a human task of kind `TOOL_APPROVAL` opens for the
