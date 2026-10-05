@@ -372,6 +372,9 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `max_tokens` | integer | no | positive provider response bound |
 | `timeout_ms` | integer | no | 1–3,600,000 |
 | `max_attempts` | integer | no | 1–20 durable attempts |
+| `max_turns` | integer | no | 1–32, default 8: model calls per attempt while using tools |
+| `max_tokens_total` | integer | no | tokens for the whole task; default 50 000 when tools are bound |
+| `budget_usd` | number | no | engine-computed cost for the whole task; fails closed for an unpriced model |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |
 | `fallback_models` | string[] | no | up to 3 allowed models tried while the model before is unavailable (§2.6) |
 | `on_low_confidence` | nodeId | no | route when `_confidence` is missing or below `confidence_threshold` |
@@ -401,7 +404,12 @@ tools:
   idempotency key) or `approval_required` (a person approves the exact call
   first). A tool the document does not list is denied.
 - `idempotency` is required for `write` and `approval_required`: `key` when the
-  server accepts an idempotency key, `none` when it does not. A `none` write
+  server accepts an idempotency key (the worker sends it as the
+  `Idempotency-Key` HTTP header and in the call's `_meta.idempotencyKey`),
+  `none` when it does not.
+- `input_schema_sha256` (optional) pins a tool's input schema: the SHA-256 of
+  its canonical (key-sorted) JSON. The worker refuses the tool when the
+  server's schema differs. A `none` write
   interrupted by a crash is never re-sent; it opens an incident instead.
 - The URL must use `https` (plain `http` only for loopback hosts, or when the
   engine sets `abada.tools.allow-insecure-http=true` for development) and must
@@ -471,6 +479,13 @@ commands).
 
 The reference sidecar, retry/idempotency behavior, OIDC configuration, and
 at-least-once boundary are defined in [Agent worker](agent-worker.md).
+
+At runtime the agent worker offers exactly the bound tools to the model, runs
+the calls it asks for in order (journaled, writes with a per-step idempotency
+key) and stops at the node's limits; a missing tool or a changed pinned schema
+(`input_schema_sha256` in the tool server document) ends the attempt with
+`TOOL_CONTRACT_MISMATCH`, a limit with `AGENT_BUDGET_EXHAUSTED`. Both are final
+and routable through `on_error` by code. See `agent-worker.md` (Tool loop).
 
 #### 3.2.2 Agent evidence and cost
 

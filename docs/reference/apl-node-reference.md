@@ -198,6 +198,9 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `result_variable` | string | no | The variable the agent's output is written to. Defaults to `<nodeId>_result`. |
 | `output_schema` | map | no | Expected JSON shape of the response. The engine validates the result against it before any state changes; see `on_invalid_output`. |
 | `tools` | list | no | Tools from the project's tool servers: `crm/get_customer`, or `{ ref: crm/refund, policy: approval_required }` to tighten the server's policy (never loosen it). Resolved and frozen at deployment; see the APL specification §3.2.1. A name without a server is advisory only and warns. |
+| `max_turns` | integer | no | 1–32, default 8. Model calls one attempt may make while using tools. |
+| `max_tokens_total` | integer | no | Tokens the whole task may use across its attempts. Default 50 000 when the node binds tools, otherwise no limit. |
+| `budget_usd` | number | no | Engine-computed cost the whole task may reach across its attempts. A model without a price (Settings → Model Prices) cannot run under a budget. Hitting any limit takes `on_error` with code `AGENT_BUDGET_EXHAUSTED`. |
 | `evidence` | `{ payloads, retention_days }` | no | What the step journal keeps of this agent's prompts, tool arguments and results: `none`, `redacted` or `full`, for `retention_days`. Can only be stricter than the project's evidence policy. |
 | `confidence_threshold` | number | no | 0–100. Below this confidence the output is treated as a low-confidence result. |
 | `temperature` | number | no | 0–2. Higher = more creative, lower = more deterministic. Default 0.2. |
