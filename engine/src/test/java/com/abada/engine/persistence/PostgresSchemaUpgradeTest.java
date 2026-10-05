@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("32");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("33");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,15 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V33: the outbox stream's order and project.
+            for (String column : new String[] {"seq", "project_id"}) {
+                try (var columns = metadata.getColumns(null, schema, "outbox_events", column)) {
+                    assertThat(columns.next()).as("outbox_events." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "outbox_events", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_outbox_project_seq", "idx_outbox_seq");
             }
             // V32: the child instance an agent's delegation started.
             try (var columns = metadata.getColumns(null, schema, "agent_steps", "child_instance_id")) {

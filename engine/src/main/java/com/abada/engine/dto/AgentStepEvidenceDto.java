@@ -33,5 +33,9 @@ public record AgentStepEvidenceDto(
         String resolvedBy,
         Instant startedAt,
         Instant finishedAt,
-        Instant purgedAt) {
+        Instant purgedAt,
+        // When a person approved or rejected a PROPOSED step (E10); the decider is resolvedBy.
+        Instant decidedAt,
+        // The child process a DELEGATION step started (E20b).
+        String childInstanceId) {
 }

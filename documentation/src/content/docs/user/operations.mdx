@@ -50,6 +50,19 @@ or provider keys. Journaled agent calls keep their prompts and results as the
 project's evidence policy allows (redacted by default, 30 days), encrypted, and
 readable only by `abada-evidence-reader` members.
 
+**Live updates.** While an instance runs, its page follows the project's event
+stream and refreshes as soon as something happens; the header shows **Live**.
+When the stream is not available (a proxy that cuts long requests, for
+example) it shows **Polling** and refreshes every two seconds instead.
+
+**Agent steps.** For an agent step, the telemetry tab lists every model call,
+tool call and delegation in order, attempt by attempt: the tool's policy
+(read, write, approval required), the state (a write whose outcome is unknown
+is highlighted; a proposed call shows who approved or rejected it, and when; a
+delegation links to the process it started), tokens and cost, with totals.
+Click a step to read its payloads as the evidence policy kept them; that needs
+the `abada-evidence-reader` role and every read is recorded in the history.
+
 **Agent cost.** The instance bar shows what its agent calls cost and how many
 tokens they used; the telemetry of an agent step lists each call with its
 cost. The engine computes cost from the model prices in **Settings → Model

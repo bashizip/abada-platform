@@ -17,21 +17,30 @@ public class ActivityHistoryService {
     private final ActivityHistoryRepository repository;
     private final ObjectMapper objectMapper;
     private final OutboxService outboxService;
+    private final com.abada.engine.persistence.repository.ProcessInstanceRepository instances;
 
     public ActivityHistoryService(ActivityHistoryRepository repository, ObjectMapper objectMapper,
-            OutboxService outboxService) {
+            OutboxService outboxService, com.abada.engine.persistence.repository.ProcessInstanceRepository instances) {
         this.repository = repository;
         this.objectMapper = objectMapper;
         this.outboxService = outboxService;
+        this.instances = instances;
     }
 
     public void record(String eventType, ProcessInstance instance, String activityId, Map<String, ?> details) {
         record(eventType, instance == null ? null : instance.getId(),
-                instance == null ? null : instance.getDefinition().getId(), activityId, details);
+                instance == null ? null : instance.getDefinition().getId(), activityId, details,
+                instance == null ? null : instance.getProjectId());
     }
 
     public void record(String eventType, String processInstanceId, String processDefinitionId,
             String activityId, Map<String, ?> details) {
+        record(eventType, processInstanceId, processDefinitionId, activityId, details, processInstanceId == null
+                ? null : instances.findById(processInstanceId).map(row -> row.getProjectId()).orElse(null));
+    }
+
+    private void record(String eventType, String processInstanceId, String processDefinitionId,
+            String activityId, Map<String, ?> details, String projectId) {
         ActivityHistoryEntity history = new ActivityHistoryEntity();
         history.setEventType(eventType);
         history.setProcessInstanceId(processInstanceId);
@@ -57,6 +66,6 @@ public class ActivityHistoryService {
         outboxService.enqueue(eventType,
                 processInstanceId == null ? "PROCESS_DEFINITION" : "PROCESS_INSTANCE",
                 processInstanceId == null ? processDefinitionId : processInstanceId,
-                payload);
+                projectId, payload);
     }
 }

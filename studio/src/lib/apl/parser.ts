@@ -220,6 +220,10 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onTimeout: aplNode.on_timeout,
           fallbackModels: aplNode.fallback_models,
           routes: aplNode.routes,
+          maxTurns: aplNode.max_turns,
+          maxTokensTotal: aplNode.max_tokens_total,
+          budgetUsd: aplNode.budget_usd,
+          delegates: aplNode.delegates,
         };
         break;
       case 'engine-task':
@@ -234,6 +238,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
         wNode.type = 'call-process';
         wNode.callProcessConfig = {
           process: aplNode.process,
+          inputs: aplNode.inputs,
+          outputs: aplNode.outputs,
+          maxDepth: aplNode.max_depth,
           onError: aplNode.on_error,
           onTimeout: aplNode.on_timeout,
         };
@@ -499,6 +506,10 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         fallback_models: node.agentConfig?.fallbackModels?.length ? node.agentConfig.fallbackModels : undefined,
         // With routes the agent chooses its exit: every exit is a route's next.
         routes: hasAgentRoutes(node) ? node.agentConfig?.routes : undefined,
+        max_turns: node.agentConfig?.maxTurns,
+        max_tokens_total: node.agentConfig?.maxTokensTotal,
+        budget_usd: node.agentConfig?.budgetUsd,
+        delegates: node.agentConfig?.delegates?.length ? node.agentConfig.delegates : undefined,
         next: hasAgentRoutes(node) ? undefined : getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
@@ -614,6 +625,10 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         ...baseNode,
         type: 'call-process',
         process: node.callProcessConfig?.process ?? '',
+        inputs: node.callProcessConfig?.inputs && Object.keys(node.callProcessConfig.inputs).length
+          ? node.callProcessConfig.inputs : undefined,
+        outputs: node.callProcessConfig?.outputs ?? {},
+        max_depth: node.callProcessConfig?.maxDepth,
         on_error: node.callProcessConfig?.onError,
         on_timeout: node.callProcessConfig?.onTimeout || undefined,
         next: getNextNode(node.id, node.type),

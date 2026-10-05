@@ -1,5 +1,5 @@
 import React from 'react';
-import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig, toolRefOf } from '@/types';
+import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig } from '@/types';
 import { agentModelOptions, getDefaultAgentModel } from '@/lib/agentModels';
 import { useAplContract } from '@/lib/aplContract';
 import { 
@@ -31,6 +31,8 @@ import {
   AgentRoutesEditor, ErrorRoutesEditor, LoopEditor, NameListEditor, OrderedPickList, OutcomesEditor, RouteSelect,
   TimeoutEditor,
 } from '@/components/inspector/RouteEditors';
+import { AgentToolsEditor } from '@/components/inspector/AgentToolsEditor';
+import { AgentLimitsEditor, CallProcessEditor, DelegatesEditor } from '@/components/inspector/AgentEditors';
 
 interface PropertiesInspectorProps {
   selectedNode: WorkflowNode | null;
@@ -644,35 +646,15 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             </div>
 
-            {/* Tools Checklist */}
-            <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Bound Tool APIs</label>
-              <div className="rounded-lg border border-[#3A322E] divide-y divide-[#3A322E] bg-[#1A1614] overflow-hidden">
-                {['Database Query', 'Vision OCR Engine', 'ERP Connector', 'Stripe Charge Logs', 'Sanctions Database'].map((tool) => {
-                  const isBound = selectedNode.agentConfig?.tools.some((entry) => toolRefOf(entry) === tool);
-                  return (
-                    <label key={tool} className="group flex items-center gap-2 text-xs text-[#EAE3D9] cursor-pointer px-2 py-1.5 hover:bg-[#25201D] transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={isBound}
-                        onChange={(e) => {
-                          const currentTools = selectedNode.agentConfig?.tools || [];
-                          const updated = e.target.checked
-                            ? [...currentTools, tool]
-                            : currentTools.filter((t) => toolRefOf(t) !== tool);
-                          handleAgentChange('tools', updated);
-                        }}
-                        className="accent-[#9D4EDD] rounded"
-                      />
-                      <span>{tool}</span>
-                      <span className="ml-auto text-[10px] font-mono text-[#A89F91] opacity-0 group-hover:opacity-100 transition-opacity">
-                        {isBound ? 'bound' : 'available'}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Tools from the project's tool servers (E7), loop limits (E8), delegates (E20b) */}
+            <AgentToolsEditor projectId={projectId} tools={selectedNode.agentConfig.tools ?? []}
+              onChange={(tools) => handleAgentChange('tools', tools)} />
+            <AgentLimitsEditor
+              limits={{ maxTurns: selectedNode.agentConfig.maxTurns, maxTokensTotal: selectedNode.agentConfig.maxTokensTotal,
+                budgetUsd: selectedNode.agentConfig.budgetUsd }}
+              onChange={(patch) => onUpdateNode({ ...selectedNode, agentConfig: { ...selectedNode.agentConfig!, ...patch } })} />
+            <DelegatesEditor delegates={selectedNode.agentConfig.delegates ?? []}
+              onChange={(delegates) => handleAgentChange('delegates', delegates)} />
 
             {/* Live Test Drawer */}
             <div className="pt-3 border-t border-[#3A322E] space-y-2">
@@ -722,6 +704,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <ErrorRoutesEditor value={selectedNode.engineTaskConfig?.onError} nodes={nodes} excludeId={selectedNode.id}
               onSetRule={(code, target) => routeTo({ kind: 'error', ...(code ? { code } : {}) }, target)} />
             <TimeoutEditor value={selectedNode.engineTaskConfig?.onTimeout} nodes={nodes} excludeId={selectedNode.id}
+              onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
+          </div>
+        )}
+
+        {selectedNode.type === 'call-process' && (
+          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block">Call process</span>
+            <CallProcessEditor config={selectedNode.callProcessConfig ?? { process: '' }}
+              onChange={(callProcessConfig) => onUpdateNode({ ...selectedNode, callProcessConfig })} />
+            <ErrorRoutesEditor value={selectedNode.callProcessConfig?.onError} nodes={nodes} excludeId={selectedNode.id}
+              onSetRule={(code, target) => routeTo({ kind: 'error', ...(code ? { code } : {}) }, target)} />
+            <TimeoutEditor value={selectedNode.callProcessConfig?.onTimeout} nodes={nodes} excludeId={selectedNode.id}
               onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
           </div>
         )}

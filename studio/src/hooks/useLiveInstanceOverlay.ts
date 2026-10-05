@@ -6,6 +6,7 @@ import { deriveLiveExecutionOverlay, NodeRunStatus } from '@/lib/run/liveRun';
 import { deriveInstancePath } from '@/lib/run/instanceDetail';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
+import { useInstanceEvents } from '@/hooks/useInstanceEvents';
 import { readInspectorPanelPinned, readInspectorPanelWidth, useInspectorPanelPrefs } from '@/lib/run/panelPrefs';
 
 /**
@@ -132,6 +133,13 @@ export function useLiveInstanceOverlay(
 
   const selectedLiveInstanceId = selectedLiveInstance?.id;
   const selectedLiveInstanceStatus = selectedLiveInstance?.status;
+  // Each stream event of the instance refreshes the overlay; polling is the fallback.
+  const [eventTick, setEventTick] = useState(0);
+  const onInstanceEvent = useCallback(() => setEventTick((tick) => tick + 1), []);
+  const liveTerminal = TERMINAL_STATUSES.includes(selectedLiveInstanceStatus?.toUpperCase() || '');
+  const streamState = useInstanceEvents(liveTerminal ? undefined : activeProject?.id, selectedLiveInstanceId,
+    onInstanceEvent);
+  const streamLive = streamState === 'live';
 
   useEffect(() => {
     if (!activeProject || !selectedLiveInstanceId || !liveWorkflow) return;
@@ -157,9 +165,10 @@ export function useLiveInstanceOverlay(
     const timer = window.setInterval(() => {
       const terminal = selectedLiveInstanceStatus?.toUpperCase() || '';
       if (!TERMINAL_STATUSES.includes(terminal)) void refresh();
-    }, 1500);
+    }, streamLive ? 15_000 : 1500);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [activeProject, liveWorkflow, selectedLiveInstanceId, selectedLiveInstanceStatus, applyPathOverlay]);
+  }, [activeProject, liveWorkflow, selectedLiveInstanceId, selectedLiveInstanceStatus, applyPathOverlay,
+    streamLive, eventTick]);
 
   const clearLiveInstanceState = useCallback(() => {
     setSelectedLiveInstance(null);

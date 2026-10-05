@@ -137,7 +137,8 @@ public class AgentEvidenceService {
                 step.getState().name(), step.getRequestDigest(), step.getResultDigest(), step.getErrorType(),
                 step.getModel(), step.getPromptVersion(), step.getPromptTokens(), step.getCompletionTokens(),
                 step.getCostUsd(), step.isCostUnpriced(), step.getPayloadMode(), step.getResolvedBy(),
-                step.getStartedAt(), step.getFinishedAt(), step.getPurgedAt());
+                step.getStartedAt(), step.getFinishedAt(), step.getPurgedAt(), step.getDecidedAt(),
+                step.getChildInstanceId());
     }
 
     private static ApiException invalid(String message) {
