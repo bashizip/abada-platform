@@ -164,7 +164,7 @@ public class ToolRegistryService {
                 }
                 nodeBindings.add(new ToolBinding(serverName, toolName, policy, idempotency, tool.approvers(),
                         server.document().url(), server.document().transport(), server.document().credential(),
-                        server.resource().getId(), server.resource().getEntityVersion()));
+                        server.resource().getId(), server.resource().getEntityVersion(), tool.inputSchemaSha256()));
             }
             if (!nodeBindings.isEmpty()) bindings.put(nodeId, List.copyOf(nodeBindings));
         }

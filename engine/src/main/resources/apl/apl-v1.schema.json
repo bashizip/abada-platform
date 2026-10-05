@@ -453,6 +453,25 @@
               "maximum": 3650
             }
           }
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 8,
+          "description": "Model calls one attempt may make while using tools."
+        },
+        "max_tokens_total": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000000,
+          "description": "Tokens the whole task may use across its attempts (default 50000 when the node binds tools)."
+        },
+        "budget_usd": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "description": "Engine-computed cost the whole task may reach across its attempts; an unpriced model fails closed."
         }
       },
       "required": [

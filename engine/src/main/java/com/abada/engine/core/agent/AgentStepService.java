@@ -165,6 +165,7 @@ public class AgentStepService {
         if (steps.countByExternalTaskId(task.getId()) >= MAX_STEPS_PER_TASK) {
             throw rejected("STEP_LIMIT", "An agent task may journal at most " + MAX_STEPS_PER_TASK + " steps");
         }
+        if (kind == Kind.MODEL_CALL) requireWithinLimits(task, meta.agentWork().limits(), request.model());
 
         AgentStepEntity step = new AgentStepEntity();
         step.setExternalTaskId(task.getId());
@@ -295,6 +296,46 @@ public class AgentStepService {
             sensitive.put(name, instance.getVariables().get(name));
         }
         return new EvidenceRedactor(sensitive);
+    }
+
+    /**
+     * The node's loop limits, checked before a model call may happen: turns of
+     * this attempt, and tokens and engine-computed cost of the whole task (its
+     * journaled steps plus tokens attempts reported without journaling).
+     */
+    private void requireWithinLimits(ExternalTaskEntity task, com.abada.engine.core.model.AgentLimits limits,
+            String model) {
+        if (limits == null) return;
+        List<AgentStepEntity> all = steps.findByExternalTaskIdOrderByAttemptAscSequenceAsc(task.getId());
+        if (limits.maxTurns() != null && all.stream().filter(step -> step.getAttempt() == task.getAttempt()
+                && step.getKind() == Kind.MODEL_CALL).count() >= limits.maxTurns()) {
+            throw rejected("TURN_LIMIT", "This attempt reached max_turns (" + limits.maxTurns() + ")");
+        }
+        if (limits.maxTokensTotal() != null) {
+            long used = task.getAttemptPromptTokens() + task.getAttemptCompletionTokens();
+            for (AgentStepEntity step : all) {
+                used += (step.getPromptTokens() == null ? 0 : step.getPromptTokens())
+                        + (step.getCompletionTokens() == null ? 0 : step.getCompletionTokens());
+            }
+            if (used >= limits.maxTokensTotal()) {
+                throw rejected("TOKEN_LIMIT", "This task used " + used + " of max_tokens_total ("
+                        + limits.maxTokensTotal() + ")");
+            }
+        }
+        if (limits.budgetUsd() != null) {
+            if (model == null || prices.priceAt(model, Instant.now()).isEmpty()) {
+                throw rejected("BUDGET_UNPRICED", "Model '" + model + "' has no price, so budget_usd cannot be kept");
+            }
+            java.math.BigDecimal spent = task.getAttemptCostUsd() == null ? java.math.BigDecimal.ZERO
+                    : task.getAttemptCostUsd();
+            for (AgentStepEntity step : all) {
+                if (step.getCostUsd() != null) spent = spent.add(step.getCostUsd());
+            }
+            if (spent.compareTo(limits.budgetUsd()) >= 0) {
+                throw rejected("BUDGET", "This task spent $" + spent.stripTrailingZeros().toPlainString()
+                        + " of budget_usd ($" + limits.budgetUsd().toPlainString() + ")");
+            }
+        }
     }
 
     private AgentStepEntity priorIdenticalWrite(ExternalTaskEntity task, String ref, String requestDigest) {

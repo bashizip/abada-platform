@@ -23,7 +23,9 @@ public record ToolBinding(
         String transport,
         String credential,
         String resourceId,
-        Long resourceRevision) implements Serializable {
+        Long resourceRevision,
+        // SHA-256 of the canonical inputSchema the tool server document pins; null when not pinned.
+        String inputSchemaSha256) implements Serializable {
 
     public ToolBinding {
         approvers = approvers == null ? List.of() : List.copyOf(approvers);

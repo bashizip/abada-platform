@@ -34,7 +34,8 @@ public record ToolServerDocument(String name, String transport, String url, Stri
     /** Tool server documents are small; anything larger is a mistake. */
     public static final int MAX_BYTES = 256 * 1024;
 
-    public record Tool(ToolPolicy policy, String idempotency, List<String> approvers, Double approvalSlaHours) {
+    public record Tool(ToolPolicy policy, String idempotency, List<String> approvers, Double approvalSlaHours,
+            String inputSchemaSha256) {
         public Tool {
             approvers = approvers == null ? List.of() : List.copyOf(approvers);
         }
@@ -123,7 +124,7 @@ public record ToolServerDocument(String name, String transport, String url, Stri
                         "approval_sla_hours applies to approval_required tools only"));
             }
             tools.put(entry.getKey(), new Tool(policy, policy == ToolPolicy.READ ? null : idempotency,
-                    approvers, sla));
+                    approvers, sla, tool.path("input_schema_sha256").asText(null)));
         });
         if (!issues.isEmpty()) throw new InvalidToolServerException(issues);
         return new ToolServerDocument(root.path("name").asText(), root.path("transport").asText(), url,

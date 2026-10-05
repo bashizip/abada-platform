@@ -1,6 +1,7 @@
 package com.abada.engine.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.abada.engine.bpmn.compatibility.BpmnValidationException;
 import com.abada.engine.bpmn.compatibility.BpmnValidationIssue;
@@ -58,6 +59,31 @@ class AplToolReferenceTest {
         assertThat(errors("""
                         - Crm/get_customer
                 """)).extracting(BpmnValidationIssue::path).containsExactly("/flow/nodes/1/tools/0");
+    }
+
+    @Test
+    void loopLimitsDefaultOnlyWhereToolsAreBoundAndAreBounded() {
+        var bound = parser.parse(agentWithTools("        - crm/get_customer\n"))
+                .getServiceTask("triage").agentWork().limits();
+        assertThat(bound.maxTurns()).isEqualTo(8);
+        assertThat(bound.maxTokensTotal()).isEqualTo(50_000L);
+        assertThat(bound.budgetUsd()).isNull();
+        var advisory = parser.parse(agentWithTools("        - web_search\n"))
+                .getServiceTask("triage").agentWork().limits();
+        assertThat(advisory.maxTokensTotal()).isNull();
+
+        byte[] tooMany = withField("max_turns: 33");
+        assertThatThrownBy(() -> parser.parseDetailed(tooMany)).isInstanceOfSatisfying(BpmnValidationException.class,
+                error -> assertThat(error.getIssues()).anyMatch(issue -> "/flow/nodes/1/max_turns".equals(issue.path())));
+        assertThat(parser.parse(withField("budget_usd: 0.5")).getServiceTask("triage").agentWork().limits().budgetUsd())
+                .isEqualByComparingTo("0.5");
+        assertThat(parser.parse(withField("max_tokens_total: 900")).getServiceTask("triage").agentWork().limits()
+                .maxTokensTotal()).isEqualTo(900L);
+    }
+
+    private static byte[] withField(String field) {
+        return new String(agentWithTools("        - crm/get_customer\n"), StandardCharsets.UTF_8)
+                .replace("      next: done", "      " + field + "\n      next: done").getBytes(StandardCharsets.UTF_8);
     }
 
     private java.util.List<BpmnValidationIssue> errors(String tools) {

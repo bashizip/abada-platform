@@ -1235,8 +1235,9 @@ public class AbadaEngine {
                 ? meta.agentWork().maxAttempts() : 3;
         task.setRetries(attempts);
         task.setDeferrals(0);
-        // A retry is a new attempt: a fresh conversation, with earlier completed writes passed on as done.
-        task.setAttempt(task.getAttempt() + 1);
+        // A retry is a new attempt: a fresh conversation, with earlier completed writes passed on as done;
+        // unless a write is still STARTED, which the same attempt must resume with its key.
+        if (!agentSteps.hasOpenWrite(task.getId(), task.getAttempt())) task.setAttempt(task.getAttempt() + 1);
         task.setStatus(ExternalTaskEntity.Status.OPEN);
         task.setWorkerId(null);
         task.setLockExpirationTime(null);
@@ -1435,20 +1436,33 @@ public class AbadaEngine {
      */
     @AtomicRuntimeCommand
     public String workFailed(String processInstanceId, String activityId, String tokenId, String message) {
+        return workFailed(processInstanceId, activityId, tokenId, message, null);
+    }
+
+    /**
+     * Work at an activity failed for good. With an {@code errorCode} (a coded,
+     * final failure such as {@code AGENT_BUDGET_EXHAUSTED}) the {@code on_error}
+     * route catching that code is taken; otherwise the one catching
+     * {@code WORK_FAILED}. Without a route a WORK_FAILED incident opens.
+     */
+    public String workFailed(String processInstanceId, String activityId, String tokenId, String message,
+            String errorCode) {
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null || isTerminal(instance)) return null;
         String token = instance.waitingTokenId(tokenId != null ? tokenId : activityId);
+        String code = errorCode == null ? BoundaryMeta.WORK_FAILED : errorCode;
         BoundaryMeta boundary = instance.getDefinition()
-                .boundaryFor(activityId, BoundaryMeta.Kind.ERROR, BoundaryMeta.WORK_FAILED);
+                .boundaryFor(activityId, BoundaryMeta.Kind.ERROR, code);
         if (boundary != null && !instance.isSuspended()) {
             Map<String, Object> variables = new LinkedHashMap<>();
             variables.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_ERROR);
-            variables.put(AplParser.errorCodeVariable(activityId), BoundaryMeta.WORK_FAILED);
+            variables.put(AplParser.errorCodeVariable(activityId), code);
             leaveViaBoundary(instance, token, boundary, variables, Map.of("message", truncate(message, 500)));
             return boundary.target();
         }
         incidentService.open(instance, token, activityId, IncidentEntity.Type.WORK_FAILED,
-                "work at '" + activityId + "' failed: " + truncate(message, 900));
+                "work at '" + activityId + "' failed" + (errorCode == null ? "" : " (" + errorCode + ")") + ": "
+                        + truncate(message, 880));
         log.warn("Process instance {}: work at '{}' failed with no on_error route; incident opened",
                 instance.getId(), activityId);
         return null;
