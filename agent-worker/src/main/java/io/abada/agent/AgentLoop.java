@@ -121,6 +121,22 @@ final class AgentLoop {
         }
     }
 
+    /**
+     * The agent proposed an approval_required call: the engine parked the work
+     * and released the lease. Nothing is reported; a person's decision makes
+     * the work acquirable again and the next lease resumes from the journal.
+     */
+    static final class AwaitingApproval extends Exception {
+        final String toolRef;
+        final int sequence;
+
+        AwaitingApproval(String toolRef, int sequence) {
+            super("Tool call " + toolRef + " (step " + sequence + ") is waiting for a person's approval");
+            this.toolRef = toolRef;
+            this.sequence = sequence;
+        }
+    }
+
     /** A final, routable failure reported with its code. */
     static final class CodedFailure extends Exception {
         final String code;
@@ -296,10 +312,17 @@ final class AgentLoop {
                     String model = step.request() == null ? null : step.request().path("model").asText(null);
                     if (model != null && models.contains(model)) modelIndex = models.indexOf(model);
                 } else if ("TOOL_CALL".equals(step.kind()) && step.request() != null) {
-                    journaledTools.put(step.request().path("callId").asText(), step);
-                    if (!"STARTED".equals(step.state()) && step.result() != null) {
-                        pending.removeIf(call -> call.id().equals(step.request().path("callId").asText()));
-                        addToolMessage(step.request().path("callId").asText(), step.result().path("content").asText(""));
+                    String callId = step.request().path("callId").asText();
+                    journaledTools.put(callId, step);
+                    if ("REJECTED".equals(step.state())) {
+                        // A person said no: the agent reads why and continues without the call.
+                        pending.removeIf(call -> call.id().equals(callId));
+                        addToolMessage(callId, "Rejected: a person did not approve this call. Reason: "
+                                + (step.result() == null ? "" : step.result().path("comment").asText("")));
+                    } else if (!"STARTED".equals(step.state()) && !"PROPOSED".equals(step.state())
+                            && !"APPROVED".equals(step.state()) && step.result() != null) {
+                        pending.removeIf(call -> call.id().equals(callId));
+                        addToolMessage(callId, step.result().path("content").asText(""));
                     }
                 }
             }
@@ -424,22 +447,43 @@ final class AgentLoop {
                     journal.record(sequence, "TOOL_CALL", outcome.isError() ? "FAILED" : "COMPLETED", binding.ref(),
                             request, result, outcome.isError() ? "TOOL_ERROR" : null, null, null, null);
                 } catch (WorkerProtocolException refused) {
-                    if (!"APPROVAL_REQUIRED".equals(refused.reason())) throw limitOrRethrow(refused);
+                    throw limitOrRethrow(refused);
                 }
                 addToolMessage(call.id(), (String) result.get("content"));
                 return;
             }
+            if ("approval_required".equals(binding.policy())
+                    && (earlier == null || "PROPOSED".equals(earlier.state()))) {
+                if (earlier != null) throw new AwaitingApproval(binding.ref(), earlier.sequence());
+                int sequence = nextSequence++;
+                AgentStep proposed;
+                try {
+                    proposed = journal.record(sequence, "TOOL_CALL", "PROPOSED", binding.ref(), request, null, null,
+                            null, null, null);
+                } catch (WorkerProtocolException refused) {
+                    throw limitOrRethrow(refused);
+                }
+                if (proposed == null) {
+                    // An engine without the journal cannot hold a call for approval.
+                    addToolMessage(call.id(), "Error: '" + binding.ref() + "' needs a person's approval, which this"
+                            + " engine cannot request. Continue without it.");
+                    return;
+                }
+                if (Boolean.TRUE.equals(proposed.reused()) && proposed.result() != null) {
+                    // An earlier attempt already ran exactly this approved call.
+                    addToolMessage(call.id(), proposed.result().path("content").asText(""));
+                    return;
+                }
+                throw new AwaitingApproval(binding.ref(), sequence);
+            }
+            // A write, or an approved call: journaled STARTED (the engine checks the arguments are the
+            // approved ones), then run with the engine's key.
             int sequence = earlier != null ? earlier.sequence() : nextSequence++;
             AgentStep started;
             try {
                 started = journal.record(sequence, "TOOL_CALL", "STARTED", binding.ref(), request, null, null, null,
                         null, null);
             } catch (WorkerProtocolException refused) {
-                if ("APPROVAL_REQUIRED".equals(refused.reason())) {
-                    addToolMessage(call.id(), "Error: '" + binding.ref() + "' needs a person's approval before it "
-                            + "can run, which this step cannot request. Continue without it.");
-                    return;
-                }
                 throw limitOrRethrow(refused);
             }
             if (started != null && Boolean.TRUE.equals(started.reused()) && started.result() != null) {

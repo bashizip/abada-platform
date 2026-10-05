@@ -333,7 +333,9 @@ public final class AgentWorkerMain {
             String requestedModel = work == null ? config.defaultModel() : resolveModel(config, work);
             String model = requestedModel;
             String provider = "unknown";
-            Set<String> requestedTools = work == null || work.tools() == null ? Set.of() : Set.copyOf(work.tools());
+            // In declared order: the attempt metadata lists tools as the node declares them.
+            Set<String> requestedTools = work == null || work.tools() == null ? Set.of()
+                    : java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(work.tools()));
             try {
                 if (work == null || !"abada.agent/v1".equals(work.profileVersion())) {
                     throw new IllegalArgumentException("Missing or unsupported abada.agent/v1 descriptor");
@@ -354,6 +356,13 @@ public final class AgentWorkerMain {
                     outcome = loop.run(task, work, modelChain(work, requestedModel),
                             candidate -> gateways.apply(candidate.equals(requestedModel) ? work : work.withModel(candidate)),
                             journal, sessions);
+                } catch (AgentLoop.AwaitingApproval waiting) {
+                    // The engine parked the work and released the lease with the proposal: report nothing.
+                    heartbeat.stop();
+                    LOG.log(System.Logger.Level.INFO,
+                            "agent_task_awaiting_approval task_id={0} activity_id={1} tool={2} step={3}",
+                            task.id(), task.activityId(), waiting.toolRef, waiting.sequence);
+                    return;
                 } catch (AgentLoop.AllModelsUnavailable unavailable) {
                     if (unavailable.lastModel != null) model = unavailable.lastModel;
                     throw new Deferral(unavailable.last == null
