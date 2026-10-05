@@ -403,7 +403,7 @@ separate commands; the write happens in the worker, outside any transaction.
 **Out of scope.** Editing arguments before approving; multi-approver
 sign-off; approving a whole class of calls in advance.
 
-## E11 — Evidence and cost
+## E11 — Evidence and cost ✅ done
 
 **Goal.** An auditor can read what every agent did and what it cost, and a
 security officer can be sure the evidence store neither leaks secrets nor
@@ -454,6 +454,38 @@ outbox payloads. Key rotation re-encrypts step payloads like provider keys.
 
 **Out of scope.** Cost alerts and quotas per project (M4 E14 signals);
 non-USD currencies; exporting evidence bundles.
+
+**As built.** V30 adds `model_prices`, cost, evidence copies and retention
+columns on `agent_steps`, attempt cost and tokens on `external_tasks`, and the
+evidence policy on `projects`. `EvidencePolicy`, `EvidenceRedactor`,
+`AgentEvidenceService`, `AgentCostService`, `EvidenceRetentionSweep`,
+`ModelPriceService` and `LegacyCiphertextReencryption`. Tests:
+`EvidencePolicyTest`, `ModelPriceServiceTest`, `AplEvidenceParserTest`,
+`PostgresEvidenceAndCostTest` (redaction in the raw column with an unchanged
+digest, stricter-only overrides, engine-computed and unpriced cost, no double
+counting of reported tokens, instance totals and the metric, concurrent and
+restarted sweeps purging once, working copy cleared after completion),
+`EvidenceAccessApiTest` (members see summaries; payloads need the evidence
+role and membership, admin refused, reads recorded; owners set the policy),
+`SecurityAuthorizationContractTest` (payload and price endpoints), schema and
+token upgrade tests (→ V30); Studio `ModelPricesSettings.test.tsx`,
+`EvidencePolicyCard.test.tsx`.
+
+**Deviations.**
+- Retention is a sweep over `purge_after` (set when a step is journaled), not
+  one `EVIDENCE_PURGE` job per instance: steps of long-running instances are
+  purged on time and the state lives in the rows.
+- Each step keeps two encrypted copies: the worker's working copy (complete,
+  for resumed leases; cleared once the task is completed or cancelled) and the
+  policy-shaped evidence copy auditors read. Digests always cover the complete
+  payload.
+- Payload reads need the new `abada-evidence-reader` group or the
+  `agent-evidence:read` scope plus project membership; `abada-admin` does not
+  imply it.
+- Tokens a worker reports in attempt metadata are priced too (summed on the
+  external task) when the attempt journaled no model call, so cost is visible
+  for the current worker before E8.
+- Development-key re-encryption also covers tool credentials (missed in E7).
 
 ## E12 — Studio: live events and agent-step inspector
 

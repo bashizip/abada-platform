@@ -72,8 +72,11 @@ For `abada:agent` tasks the descriptor (`agentWork`) also carries, when the
 node declares tools, `toolBindings` (the tools frozen with the definition
 version: `server`, `tool`, `policy`, `idempotency`, `approvers`, `url`,
 `transport`, `credential` name, `resourceId`, `resourceRevision`) and
-`toolPolicies` (policies the node tightened, by reference). Both are omitted
-when empty, so older workers keep decoding the descriptor.
+`toolPolicies` (policies the node tightened, by reference), and `prices`
+(model → `{inputPerMillion, outputPerMillion}` USD for the node's model and
+fallbacks, for budgets). All are omitted when empty, so older workers keep
+decoding the descriptor. Workers never report cost: the engine prices tokens
+itself.
 
 For `abada:agent` tasks, `variables` contains **only the node's declared
 inputs**, resolved by the engine and keyed by input name (default-deny). Other
