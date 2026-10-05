@@ -356,6 +356,13 @@ public final class AgentWorkerMain {
                     outcome = loop.run(task, work, modelChain(work, requestedModel),
                             candidate -> gateways.apply(candidate.equals(requestedModel) ? work : work.withModel(candidate)),
                             journal, sessions);
+                } catch (AgentLoop.AwaitingChild waiting) {
+                    // The engine started the child and parked the work with the delegation: report nothing.
+                    heartbeat.stop();
+                    LOG.log(System.Logger.Level.INFO,
+                            "agent_task_awaiting_child task_id={0} activity_id={1} process={2} step={3}",
+                            task.id(), task.activityId(), waiting.process, waiting.sequence);
+                    return;
                 } catch (AgentLoop.AwaitingApproval waiting) {
                     // The engine parked the work and released the lease with the proposal: report nothing.
                     heartbeat.stop();
@@ -537,7 +544,8 @@ public final class AgentWorkerMain {
         return new AgentWorkDescriptor(work.profileVersion(), work.model(), work.prompt(), work.inputs(),
                 work.resultVariable(), work.outputSchema(), work.tools(), work.confidenceThreshold(),
                 work.temperature(), work.maxTokens(), bounded, work.maxAttempts(), work.retryBackoffMs(),
-                work.fallbackModels(), work.toolPolicies(), work.toolBindings(), work.prices(), work.limits());
+                work.fallbackModels(), work.toolPolicies(), work.toolBindings(), work.prices(), work.limits(),
+                work.delegates());
     }
 
     static Map<String, Object> localAcknowledgement(LockedExternalTask task) {

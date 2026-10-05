@@ -14,11 +14,14 @@ public class TimerJobCommandService {
     private final JobRepository repository;
     private final AbadaEngine engine;
     private final ActivityHistoryService history;
+    private final com.abada.engine.core.agent.DelegationResultService delegations;
 
-    public TimerJobCommandService(JobRepository repository, @Lazy AbadaEngine engine, ActivityHistoryService history) {
+    public TimerJobCommandService(JobRepository repository, @Lazy AbadaEngine engine, ActivityHistoryService history,
+            @Lazy com.abada.engine.core.agent.DelegationResultService delegations) {
         this.repository = repository;
         this.engine = engine;
         this.history = history;
+        this.delegations = delegations;
     }
 
     /** How long a due job of a suspended instance waits before it is checked again. */
@@ -89,8 +92,10 @@ public class TimerJobCommandService {
             case BOUNDARY_TIMEOUT -> engine.fireTimeout(job.getProcessInstanceId(), job.getEventId(),
                     job.getTokenId(), job.getBoundaryId());
             case SLA -> engine.escalateTask(job.getProcessInstanceId(), job.getEventId(), job.getTokenId());
-            case CHILD_DONE -> engine.childEnded(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(),
-                    job.getRelatedInstanceId());
+            // A child an agent delegated to resumes the agent's work; a call-process child moves the token.
+            case CHILD_DONE -> delegations.childEnded(job.getRelatedInstanceId())
+                    || engine.childEnded(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(),
+                            job.getRelatedInstanceId());
         };
 
         ProcessInstance instance = engine.getProcessInstanceById(job.getProcessInstanceId());

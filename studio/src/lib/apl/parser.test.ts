@@ -480,6 +480,35 @@ describe('APL round trip: tool references', () => {
   });
 });
 
+describe('APL round trip: agent delegates', () => {
+  it('keeps an agent\'s delegates verbatim through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'desk', name: 'Desk' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'triage' },
+          {
+            id: 'triage',
+            type: 'agent',
+            model: 'gemini-3.6-flash',
+            prompt: 'Handle it',
+            delegates: [{ process: 'refund_payout', outputs: ['payout_id'], approval: 'required', approvers: ['finance'] }],
+            next: 'done',
+          },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'triage');
+    expect(saved).toMatchObject({
+      delegates: [{ process: 'refund_payout', outputs: ['payout_id'], approval: 'required', approvers: ['finance'] }],
+      next: 'done',
+    });
+  });
+});
+
 describe('APL round trip: call-process', () => {
   it('keeps the called process, inputs, outputs, depth and routes through a save', () => {
     const document: APLDocument = {

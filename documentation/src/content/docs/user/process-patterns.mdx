@@ -103,6 +103,36 @@ An agent can pick where the process goes next, among routes you declare:
 - In Studio, open the agent's **Routes** box and choose **Let the agent
   choose the next step**; each route draws its own edge on the canvas.
 
+## Let an agent delegate to another process
+
+An agent can start another process of the project and continue with its
+result, when its step declares it:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Handle the refund request for ${order}"
+  delegates:
+    - process: refund_payout
+      description: Pay a refund out to the customer
+      outputs: [payout_id]
+  next: done
+```
+
+- The agent sees a `delegate__refund_payout` tool whose inputs are the
+  variables `refund_payout` declares. The engine checks them, then starts the
+  payout as its own process; the instance page shows it under **Called
+  processes**, delegated by the agent.
+- While the payout runs, the agent waits without holding a worker. When it
+  ends, the agent reads `payout_id` (and nothing else of the payout) and
+  continues; if the payout fails or is cancelled, the agent is told and
+  decides what to do.
+- Add `approval: required` and `approvers: [finance]` to have a person approve
+  each delegation, with its inputs, before the child starts.
+- Deploy `refund_payout` first: the version is fixed when this process is
+  deployed, as for a call-process step.
+
 ## Approving an agent's tool call
 
 Some tool calls should not run until a person agrees. Mark the tool

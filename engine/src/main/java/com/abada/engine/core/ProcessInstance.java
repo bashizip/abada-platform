@@ -96,7 +96,12 @@ public class ProcessInstance {
 
     /** Where a child instance came from (V29); null for a root instance. */
     public record Lineage(String parentInstanceId, String parentTokenId, String parentActivityId,
-            String rootInstanceId, int depth) {}
+            String rootInstanceId, int depth, String startedByAgent) {
+        public Lineage(String parentInstanceId, String parentTokenId, String parentActivityId, String rootInstanceId,
+                int depth) {
+            this(parentInstanceId, parentTokenId, parentActivityId, rootInstanceId, depth, null);
+        }
+    }
 
     private Lineage lineage;
 

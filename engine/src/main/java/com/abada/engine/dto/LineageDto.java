@@ -17,5 +17,7 @@ public record LineageDto(String instanceId, String rootInstanceId, int depth, Li
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Link(String instanceId, String processDefinitionId, String status, String parentActivityId,
-            Integer depth, Instant startDate, Instant endDate) {}
+            Integer depth, Instant startDate, Instant endDate,
+            // The agent that delegated to this instance (E20b): node, definition version, prompt version, model.
+            java.util.Map<String, Object> startedByAgent) {}
 }

@@ -34,6 +34,18 @@ describe('lineage panel', () => {
     expect(open).toHaveBeenCalledWith('kid');
   });
 
+  it('names the agent that delegated to a child', async () => {
+    api.getLineage.mockResolvedValue({
+      instanceId: 'desk', rootInstanceId: 'desk', depth: 0, ancestors: [],
+      children: [{ instanceId: 'pay', processDefinitionId: 'refund_payout', status: 'RUNNING', parentActivityId: 'triage',
+        startedByAgent: { nodeId: 'triage', model: 'gemini-3.6-flash', step: 2 } }],
+    });
+    const container = render(<LineagePanel projectId="proj" instanceId="desk" />);
+    await settle();
+    expect(container.textContent).toContain('delegated by agent Triage');
+    expect(container.textContent).toContain('gemini-3.6-flash');
+  });
+
   it('stays hidden for an instance outside any call tree', async () => {
     api.getLineage.mockResolvedValue({ instanceId: 'solo', rootInstanceId: 'solo', depth: 0, ancestors: [], children: [] });
     const container = render(<LineagePanel projectId="proj" instanceId="solo" />);

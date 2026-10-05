@@ -116,8 +116,9 @@ public class AgentStepService {
                     "External task " + externalTaskId + " is " + task.getStatus() + "; its lease no longer acts");
         }
         if (request.workerId() == null || request.workerId().isBlank()) throw invalid("workerId is required");
-        if (task.getStatus() == ExternalTaskEntity.Status.AWAITING_APPROVAL) {
-            return replayProposal(task, request);
+        if (task.getStatus() == ExternalTaskEntity.Status.AWAITING_APPROVAL
+                || task.getStatus() == ExternalTaskEntity.Status.AWAITING_CHILD) {
+            return replayParked(task, request);
         }
         if (task.getStatus() != ExternalTaskEntity.Status.LOCKED || task.getLockExpirationTime() == null
                 || task.getLockExpirationTime().isBefore(Instant.now())) {
@@ -138,11 +139,14 @@ public class AgentStepService {
         if (state == State.APPROVED || state == State.REJECTED) {
             throw invalid(state + " is set by a person's decision, not by a worker");
         }
-        if (state == State.PROPOSED && kind != Kind.TOOL_CALL) throw invalid("only a tool call is proposed");
+        if (state == State.PROPOSED && kind == Kind.MODEL_CALL) throw invalid("only a tool call or delegation is proposed");
         if (state == State.PROPOSED && request.result() != null) throw invalid("a PROPOSED step carries no result");
         if (kind == Kind.MODEL_CALL && request.toolRef() != null) throw invalid("a model call names no toolRef");
-        if (kind == Kind.TOOL_CALL && (request.toolRef() == null || request.toolRef().isBlank())) {
-            throw invalid("a tool call needs toolRef");
+        if (kind != Kind.MODEL_CALL && (request.toolRef() == null || request.toolRef().isBlank())) {
+            throw invalid("a tool call or delegation needs toolRef");
+        }
+        if (kind == Kind.DELEGATION && state.terminal()) {
+            throw invalid("a delegation is finished by the engine when its child process ends");
         }
         if (!state.terminal() && request.result() != null) throw invalid("a STARTED step carries no result");
 
@@ -158,7 +162,8 @@ public class AgentStepService {
         AgentStepEntity existing = steps.findByExternalTaskIdAndAttemptAndSequence(task.getId(), task.getAttempt(),
                 request.sequence()).orElse(null);
         if (existing != null) {
-            return continueStep(existing, instance, kind, state, request, requestDigest, resultJson, resultDigest);
+            return continueStep(task, existing, instance, kind, state, request, requestDigest, resultJson,
+                    resultDigest);
         }
 
         AgentStepEntity last = steps.findFirstByExternalTaskIdAndAttemptOrderBySequenceDesc(task.getId(),
@@ -198,6 +203,26 @@ public class AgentStepService {
 
         boolean reused = false;
         ToolBinding proposed = null;
+        com.abada.engine.core.model.DelegationMeta delegate = null;
+        if (kind == Kind.DELEGATION) {
+            String ref = request.toolRef().strip();
+            delegate = instance.getDefinition().getDelegations(task.getActivityId()).stream()
+                    .filter(candidate -> candidate.toolRef().equals(ref)).findFirst()
+                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
+                            "'" + ref + "' is not a delegation this agent task declares",
+                            Map.of("reason", "TOOL_NOT_BOUND")));
+            if (delegate.approvalRequired() && state != State.PROPOSED) {
+                throw rejected("APPROVAL_REQUIRED", "Delegating to '" + delegate.process() + "' needs a person's"
+                        + " approval first; journal the call as PROPOSED");
+            }
+            if (!delegate.approvalRequired() && state == State.PROPOSED) {
+                throw invalid("Delegating to '" + delegate.process() + "' needs no approval; journal it STARTED");
+            }
+            // Refused before anything is recorded: inputs the child does not accept, or too deep a nesting.
+            engine.checkDelegation(instance, task.getActivityId(), delegate, arguments(request));
+            step.setToolRef(ref);
+            step.setPolicy(delegate.approvalRequired() ? ToolPolicy.APPROVAL_REQUIRED.wireName() : "delegate");
+        }
         if (kind == Kind.TOOL_CALL) {
             String ref = request.toolRef().strip();
             ToolBinding binding = engine.toolBindings(instance, task.getActivityId()).stream()
@@ -254,8 +279,78 @@ public class AgentStepService {
         }
         steps.save(step);
         recordToolHistory(instance, step, reused);
-        if (proposed != null) park(task, step, proposed);
+        if (proposed != null) park(task, step, proposed.approvers(), proposed.approvalSlaHours());
+        if (delegate != null) {
+            if (state == State.PROPOSED) park(task, step, delegate.approvers(), null);
+            else startDelegation(task, step, delegate, instance, request);
+        }
         return view(step, reused, reused);
+    }
+
+    /**
+     * Starts the child of a {@code STARTED} delegation and parks the agent's
+     * work until it ends: the lease is released and the task is not acquirable.
+     * The child's end finishes the step and reopens the work (E20b).
+     */
+    private void startDelegation(ExternalTaskEntity task, AgentStepEntity step,
+            com.abada.engine.core.model.DelegationMeta delegate, ProcessInstance instance, AgentStepRequest request) {
+        task.setStatus(ExternalTaskEntity.Status.AWAITING_CHILD);
+        task.setWorkerId(null);
+        task.setLockExpirationTime(null);
+        externalTasks.save(task);
+        Map<String, Object> agent = new LinkedHashMap<>();
+        agent.put("nodeId", task.getActivityId());
+        agent.put("processDefinitionId", instance.getDefinition().getId());
+        agent.put("deploymentId", instance.getProcessDefinitionDeploymentId());
+        if (request.promptVersion() != null) agent.put("promptVersion", request.promptVersion());
+        ServiceTaskMeta meta = instance.getDefinition().getServiceTask(task.getActivityId());
+        if (meta != null && meta.agentWork() != null && meta.agentWork().model() != null) {
+            agent.put("model", meta.agentWork().model());
+        }
+        agent.put("externalTaskId", task.getId());
+        agent.put("step", step.getSequence());
+        String childId = engine.startDelegatedChild(task.getProcessInstanceId(), task.getTokenId(),
+                task.getActivityId(), delegate, arguments(request), canonicalJson(json.valueToTree(agent)));
+        step.setChildInstanceId(childId);
+        steps.save(step);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("sequence", step.getSequence());
+        details.put("process", delegate.process());
+        details.put("childInstanceId", childId);
+        details.put("requestDigest", step.getRequestDigest());
+        history.record("DELEGATION_STARTED", instance, task.getActivityId(), details);
+    }
+
+    /** The arguments of a delegation's {@code {callId, arguments}} request, as the child's inputs. */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> arguments(AgentStepRequest request) {
+        JsonNode arguments = request.request() == null ? null : request.request().get("arguments");
+        if (arguments == null || arguments.isNull()) return Map.of();
+        if (!arguments.isObject()) {
+            throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.AGENT_STEP_REJECTED,
+                    "A delegation's arguments must be an object", Map.of("reason", "DELEGATION_INPUT_INVALID"));
+        }
+        return json.convertValue(arguments, Map.class);
+    }
+
+    /**
+     * Finishes a delegation when its child ends, under the caller's lock of the
+     * agent's external task: {@code COMPLETED} with the declared outputs, or
+     * {@code FAILED} with the child's status. The agent reads it on resume.
+     */
+    public void finishDelegation(AgentStepEntity step, ProcessInstance instance, boolean completed,
+            Map<String, Object> result) {
+        String resultJson = canonicalJson(json.valueToTree(result));
+        step.setState(completed ? State.COMPLETED : State.FAILED);
+        step.setResultEnc(encrypt(resultJson));
+        step.setEvidenceResultEnc(evidenceCopy(EvidencePolicy.Mode.fromWire(step.getPayloadMode()), instance,
+                json.valueToTree(result)));
+        step.setResultDigest(sha256(resultJson));
+        step.setErrorType(completed ? null : "CHILD_" + result.get("status"));
+        step.setFinishedAt(Instant.now());
+        steps.save(step);
+        recordToolHistory(instance, step, false);
     }
 
     /**
@@ -263,33 +358,37 @@ public class AgentStepService {
      * task is not acquirable, and a person in the binding's approver groups
      * gets the approval task. All in the step command.
      */
-    private void park(ExternalTaskEntity task, AgentStepEntity step, ToolBinding binding) {
+    private void park(ExternalTaskEntity task, AgentStepEntity step, List<String> approvers, Double slaHours) {
         task.setStatus(ExternalTaskEntity.Status.AWAITING_APPROVAL);
         task.setWorkerId(null);
         task.setLockExpirationTime(null);
         externalTasks.save(task);
         engine.openToolApproval(task.getProcessInstanceId(), task.getTokenId(), task.getActivityId(), step.getId(),
-                step.getToolRef(), step.getSequence(), step.getRequestDigest(), binding.approvers(),
-                binding.approvalSlaHours());
+                step.getToolRef(), step.getSequence(), step.getRequestDigest(), approvers, slaHours);
     }
 
     /**
      * A worker re-sending the proposal it made (its response was lost) gets the
      * step back; anything else on parked work is refused, as it holds no lease.
      */
-    private AgentStepDto replayProposal(ExternalTaskEntity task, AgentStepRequest request) {
+    private AgentStepDto replayParked(ExternalTaskEntity task, AgentStepRequest request) {
         AgentStepEntity step = request.sequence() == null || request.attempt() == null
                 || request.attempt() != task.getAttempt() ? null
                 : steps.findByExternalTaskIdAndAttemptAndSequence(task.getId(), task.getAttempt(), request.sequence())
                         .orElse(null);
-        if (step != null && step.getState() == State.PROPOSED && "PROPOSED".equalsIgnoreCase(trim(request.state()))
+        // The proposal that parked it for approval, or the delegation whose child it waits for.
+        State parked = task.getStatus() == ExternalTaskEntity.Status.AWAITING_CHILD ? State.STARTED : State.PROPOSED;
+        if (step != null && step.getState() == parked && parked.name().equalsIgnoreCase(trim(request.state()))
+                && (parked == State.PROPOSED || step.getKind() == Kind.DELEGATION)
                 && request.workerId().equals(step.getWorkerId())
                 && Objects.equals(step.getToolRef(), trim(request.toolRef()))
                 && step.getRequestDigest().equals(sha256(canonical(request.request(), "request")))) {
             return view(step, false, false);
         }
         throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.WORKER_LOCK_EXPIRED, "External task "
-                + task.getId() + " is waiting for a person to approve a tool call; it holds no lease");
+                + task.getId() + (task.getStatus() == ExternalTaskEntity.Status.AWAITING_CHILD
+                        ? " is waiting for the process it delegated to" : " is waiting for a person to approve a tool call")
+                + "; it holds no lease");
     }
 
     /**
@@ -331,8 +430,9 @@ public class AgentStepService {
         return request == null ? null : request.path("arguments").isMissingNode() ? request : request.get("arguments");
     }
 
-    private AgentStepDto continueStep(AgentStepEntity existing, ProcessInstance instance, Kind kind, State state,
-            AgentStepRequest request, String requestDigest, String resultJson, String resultDigest) {
+    private AgentStepDto continueStep(ExternalTaskEntity task, AgentStepEntity existing, ProcessInstance instance,
+            Kind kind, State state, AgentStepRequest request, String requestDigest, String resultJson,
+            String resultDigest) {
         if (existing.getKind() != kind || !Objects.equals(existing.getToolRef(), trim(request.toolRef()))
                 || !existing.getRequestDigest().equals(requestDigest)) {
             throw rejected("DIVERGENT_STEP", "Step " + existing.getSequence() + " was journaled with another request");
@@ -340,6 +440,19 @@ public class AgentStepService {
         if (existing.getState() == State.APPROVED) {
             if (state != State.STARTED) {
                 throw rejected("WRITE_AHEAD_REQUIRED", "An approved call is journaled as STARTED before it runs");
+            }
+            if (existing.getKind() == Kind.DELEGATION) {
+                com.abada.engine.core.model.DelegationMeta delegate = instance.getDefinition()
+                        .getDelegations(existing.getActivityId()).stream()
+                        .filter(candidate -> candidate.toolRef().equals(existing.getToolRef())).findFirst()
+                        .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
+                                "'" + existing.getToolRef() + "' is not a delegation this agent task declares",
+                                Map.of("reason", "TOOL_NOT_BOUND")));
+                existing.setState(State.STARTED);
+                steps.save(existing);
+                recordToolHistory(instance, existing, false);
+                startDelegation(task, existing, delegate, instance, request);
+                return view(existing, false, false);
             }
             // The approved arguments, unchanged (the digest check above): the call may run now.
             ToolBinding binding = engine.toolBindings(instance, existing.getActivityId()).stream()
@@ -502,7 +615,7 @@ public class AgentStepService {
     }
 
     private void recordToolHistory(ProcessInstance instance, AgentStepEntity step, boolean reused) {
-        if (step.getKind() != Kind.TOOL_CALL) return;
+        if (step.getKind() == Kind.MODEL_CALL) return;
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("externalTaskId", step.getExternalTaskId());
         details.put("attempt", step.getAttempt());

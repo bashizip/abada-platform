@@ -155,7 +155,10 @@ class AbadaWorkerClientTest {
                     + "\"idempotency\":\"key\",\"approvers\":[\"finance\"],\"url\":\"https://crm/mcp\","
                     + "\"transport\":\"streamable-http\",\"credential\":\"crm-token\",\"resourceId\":\"r1\","
                     + "\"resourceRevision\":2,\"futureField\":1}],"
-                    + "\"prices\":{\"model-a\":{\"inputPerMillion\":1.5,\"outputPerMillion\":6}}}}]")
+                    + "\"prices\":{\"model-a\":{\"inputPerMillion\":1.5,\"outputPerMillion\":6}},"
+                    + "\"delegates\":[{\"process\":\"refund_payout\",\"tool\":\"delegate:refund_payout\","
+                    + "\"inputSchema\":{\"type\":\"object\"},\"approval\":\"required\","
+                    + "\"outputs\":[\"payout_id\"]}]}}]")
                     .getBytes(StandardCharsets.UTF_8);
             request.getResponseHeaders().add("X-Abada-Worker-Protocol-Version", "1");
             request.sendResponseHeaders(200, response.length);
@@ -172,6 +175,10 @@ class AbadaWorkerClientTest {
         assertEquals("crm-token", binding.credential());
         assertEquals(2L, binding.resourceRevision());
         assertEquals(0, new java.math.BigDecimal("1.5").compareTo(work.prices().get("model-a").inputPerMillion()));
+        AgentDelegate delegate = work.delegates().getFirst();
+        assertEquals("delegate:refund_payout", delegate.tool());
+        assertTrue(delegate.approvalRequired());
+        assertEquals(List.of("payout_id"), delegate.outputs());
     }
 
     @Test

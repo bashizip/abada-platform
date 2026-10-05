@@ -73,7 +73,12 @@ export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceI
             {lineage.children.map((child) => (
               <li key={child.instanceId} className="flex flex-wrap items-center gap-2">
                 {link(child)}
-                {child.parentActivityId && <span>from {humanize(child.parentActivityId)}</span>}
+                {child.startedByAgent ? (
+                  <span>
+                    delegated by agent {humanize(child.startedByAgent.nodeId ?? child.parentActivityId ?? '')}
+                    {child.startedByAgent.model && <span className="font-mono"> ({child.startedByAgent.model})</span>}
+                  </span>
+                ) : child.parentActivityId && <span>from {humanize(child.parentActivityId)}</span>}
                 <span className={`font-mono text-[10px] ${STATUS_TONE[child.status] ?? ''}`}>{child.status}</span>
               </li>
             ))}

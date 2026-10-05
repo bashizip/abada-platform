@@ -10,6 +10,7 @@ import io.abada.agent.AgentGateway.ToolCall;
 import io.abada.agent.AgentGateway.ToolSpec;
 import io.abada.agent.mcp.McpSessionPool;
 import io.abada.agent.mcp.McpToolClient;
+import io.abada.worker.AgentDelegate;
 import io.abada.worker.AgentLimits;
 import io.abada.worker.AgentStep;
 import io.abada.worker.AgentWorkDescriptor;
@@ -137,6 +138,26 @@ final class AgentLoop {
         }
     }
 
+    /**
+     * The agent delegated to a child process: the engine started the child,
+     * parked the work and released the lease. Nothing is reported; the child's
+     * end makes the work acquirable again with its outputs journaled.
+     */
+    static final class AwaitingChild extends Exception {
+        final String process;
+        final int sequence;
+
+        AwaitingChild(String process, int sequence) {
+            super("Delegation to " + process + " (step " + sequence + ") is waiting for its child process");
+            this.process = process;
+            this.sequence = sequence;
+        }
+    }
+
+    /** Engine refusals of a delegation the model can act on: told as the tool's answer. */
+    private static final Set<String> DELEGATION_REFUSALS = Set.of("DELEGATION_INPUT_INVALID", "DELEGATION_DEPTH",
+            "DELEGATION_REFUSED");
+
     /** A final, routable failure reported with its code. */
     static final class CodedFailure extends Exception {
         final String code;
@@ -167,6 +188,7 @@ final class AgentLoop {
         private final Journal journal;
         private final McpSessionPool sessions;
         private final Map<String, ToolBinding> byFunction = new LinkedHashMap<>();
+        private final Map<String, AgentDelegate> delegateByFunction = new LinkedHashMap<>();
         private final List<ToolSpec> specs = new ArrayList<>();
         private final List<Map<String, Object>> messages = new ArrayList<>();
         private final List<Map<String, Object>> delta = new ArrayList<>();
@@ -195,7 +217,7 @@ final class AgentLoop {
         }
 
         Outcome execute() throws Exception {
-            if (work.toolBindings().isEmpty()) return singleCall();
+            if (work.toolBindings().isEmpty() && work.delegates().isEmpty()) return singleCall();
             offerTools();
             Map<String, Object> variables = task.variables() == null ? Map.of() : task.variables();
             messages.add(Map.of("role", "system", "content", AbstractAgentGateway.renderPrompt(work, variables)));
@@ -293,6 +315,15 @@ final class AgentLoop {
                 byFunction.put(name, binding);
                 specs.add(new ToolSpec(name, description.description(), description.inputSchema()));
             }
+            for (AgentDelegate delegate : work.delegates()) {
+                // Engine-provided: the engine starts the child process, so no tool server is involved.
+                String name = delegateFunctionName(delegate);
+                delegateByFunction.put(name, delegate);
+                String description = (delegate.description() == null ? "Start the process '" + delegate.process()
+                        + "'" : delegate.description()) + ". It runs as its own process; you continue with its"
+                        + " outputs (" + String.join(", ", delegate.outputs()) + ") when it ends.";
+                specs.add(new ToolSpec(name, description, delegate.inputSchema()));
+            }
         }
 
         /** Rebuilds the conversation from the steps this attempt already journaled. */
@@ -311,6 +342,14 @@ final class AgentLoop {
                     }
                     String model = step.request() == null ? null : step.request().path("model").asText(null);
                     if (model != null && models.contains(model)) modelIndex = models.indexOf(model);
+                } else if ("DELEGATION".equals(step.kind()) && step.request() != null) {
+                    String callId = step.request().path("callId").asText();
+                    journaledTools.put(callId, step);
+                    String answer = delegationAnswer(step);
+                    if (answer != null) {
+                        pending.removeIf(call -> call.id().equals(callId));
+                        addToolMessage(callId, answer);
+                    }
                 } else if ("TOOL_CALL".equals(step.kind()) && step.request() != null) {
                     String callId = step.request().path("callId").asText();
                     journaledTools.put(callId, step);
@@ -349,7 +388,9 @@ final class AgentLoop {
                     request = new LinkedHashMap<>();
                     request.put("turn", turns + 1);
                     request.put("model", model);
-                    request.put("tools", byFunction.values().stream().map(ToolBinding::ref).toList());
+                    List<String> offered = new ArrayList<>(byFunction.values().stream().map(ToolBinding::ref).toList());
+                    work.delegates().forEach(delegate -> offered.add(delegate.tool()));
+                    request.put("tools", offered);
                     request.put("messages", List.copyOf(delta));
                     sequence = nextSequence++;
                 }
@@ -414,6 +455,11 @@ final class AgentLoop {
         }
 
         private void runTool(ToolCall call) throws Exception {
+            AgentDelegate delegate = delegateByFunction.get(call.name());
+            if (delegate != null) {
+                runDelegation(call, delegate);
+                return;
+            }
             ToolBinding binding = byFunction.get(call.name());
             if (binding == null) {
                 // Only bound tools may run, whatever the model (or a tool result) asks for.
@@ -508,6 +554,69 @@ final class AgentLoop {
             addToolMessage(call.id(), (String) result.get("content"));
         }
 
+        /**
+         * Proposes or starts a delegation, then gives the slot back: the engine
+         * starts the child (after a person's approval when required) and the
+         * next lease continues with its outputs.
+         */
+        @SuppressWarnings("unchecked")
+        private void runDelegation(ToolCall call, AgentDelegate delegate) throws Exception {
+            Map<String, Object> arguments;
+            try {
+                JsonNode parsed = JSON.readTree(call.arguments() == null || call.arguments().isBlank()
+                        ? "{}" : call.arguments());
+                if (!parsed.isObject()) throw new IllegalArgumentException("not an object");
+                arguments = JSON.convertValue(parsed, Map.class);
+            } catch (Exception invalid) {
+                addToolMessage(call.id(), "Error: the arguments are not a JSON object.");
+                return;
+            }
+            toolsUsed.add(delegate.tool());
+            Map<String, Object> request = Map.of("callId", call.id(), "arguments", arguments);
+            AgentStep earlier = journaledTools.get(call.id());
+            if (earlier != null && "PROPOSED".equals(earlier.state())) {
+                throw new AwaitingApproval(delegate.tool(), earlier.sequence());
+            }
+            if (earlier != null && "STARTED".equals(earlier.state())) {
+                throw new AwaitingChild(delegate.process(), earlier.sequence());
+            }
+            // New: proposed (approval) or started; approved: started now, with the same sequence and request.
+            boolean propose = earlier == null && delegate.approvalRequired();
+            int sequence = earlier != null ? earlier.sequence() : nextSequence++;
+            AgentStep recorded;
+            try {
+                recorded = journal.record(sequence, "DELEGATION", propose ? "PROPOSED" : "STARTED", delegate.tool(),
+                        request, null, null, null, null, null);
+            } catch (WorkerProtocolException refused) {
+                if (DELEGATION_REFUSALS.contains(refused.reason())) {
+                    addToolMessage(call.id(), "Error: the engine refused to delegate to '" + delegate.process()
+                            + "': " + refused.getMessage());
+                    return;
+                }
+                throw limitOrRethrow(refused);
+            }
+            if (recorded == null) {
+                addToolMessage(call.id(), "Error: this engine cannot start '" + delegate.process()
+                        + "' for you. Continue without it.");
+                return;
+            }
+            if (propose) throw new AwaitingApproval(delegate.tool(), sequence);
+            throw new AwaitingChild(delegate.process(), sequence);
+        }
+
+        /** What the model reads for a finished delegation, or null while it still waits. */
+        private String delegationAnswer(AgentStep step) {
+            JsonNode result = step.result();
+            return switch (step.state()) {
+                case "COMPLETED" -> result == null ? "{}" : toJson(JSON.convertValue(result.path("outputs"), Object.class));
+                case "FAILED" -> "The delegated process ended " + (result == null ? "without completing"
+                        : result.path("status").asText("without completing")) + "; it returned nothing.";
+                case "REJECTED" -> "Rejected: a person did not approve this delegation. Reason: "
+                        + (result == null ? "" : result.path("comment").asText(""));
+                default -> null;
+            };
+        }
+
         private Map<String, Object> toolResult(McpToolClient.ToolOutcome outcome) {
             String text = outcome.text() == null ? "" : outcome.text();
             if ((text.isEmpty()) && outcome.structured() != null) text = toJson(outcome.structured());
@@ -597,6 +706,12 @@ final class AgentLoop {
     }
 
     /** An OpenAI-compatible function name for a binding: {@code server__tool}, other characters as {@code _}. */
+    /** {@code delegate__<process>}: tool servers may not be named {@code delegate}, so this never collides. */
+    static String delegateFunctionName(AgentDelegate delegate) {
+        String name = ("delegate__" + delegate.process()).replaceAll("[^A-Za-z0-9_-]", "_");
+        return name.length() > 64 ? name.substring(0, 64) : name;
+    }
+
     static String functionName(ToolBinding binding) {
         String name = (binding.server() + "__" + binding.tool()).replaceAll("[^A-Za-z0-9_-]", "_");
         return name.length() > 64 ? name.substring(0, 64) : name;

@@ -1,0 +1,22 @@
+version: abada.io/v1
+metadata:
+  key: refund_payout
+  name: Refund payout
+  variables:
+    - { name: order, type: string }
+    - { name: amount, type: number }
+    - { name: payout_id, type: string }
+    - { name: ledger_entry, type: string }
+flow:
+  entry: request
+  nodes:
+    - id: request
+      type: webhook
+      next: pay
+    # The payment service sets payout_id (and its own ledger_entry) when it completes the task.
+    - id: pay
+      type: engine-task
+      service: payments.payout
+      next: done
+    - id: done
+      type: end

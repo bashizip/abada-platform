@@ -653,7 +653,7 @@ with checked inputs and, when required, a human's approval. Lineage is visible
 and a crash neither duplicates nor orphans a child.
 
 Split into **E20a call-process** (never cut within E20; ✅ done) and **E20b
-agent-proposed delegation** (cut before E9/E10).
+agent-proposed delegation** (cut before E9/E10; ✅ done).
 
 **Files.** `engine/src/main/resources/db/migration/V29__call_process.sql`,
 `ENGINE/core/model/{CallProcessMeta,DelegationMeta}.java`,
@@ -735,6 +735,42 @@ tests (→ V29), `SecurityAuthorizationContractTest` (lineage), Studio
   acquirable again and the agent continues.
 - Agent identity (node id, definition version, prompt version, model) is on
   every step, every delegation and the child's `started_by`.
+
+**As built (E20b) ✅ done.** `AplParser.parseDelegates` reads `delegates`
+into `DelegationMeta`; `CallTargetService` pins each delegate under
+`<node>#delegate:<process>` in `call_targets` and builds its input schema from
+the child's declared variables, which the descriptor carries as `delegates`
+(engine and SDK `AgentDelegate`). `AgentStepService` journals `DELEGATION`
+steps: `PROPOSED` goes through the E10 approval, `STARTED` is checked by
+`AbadaEngine.checkDelegation` and starts the child with
+`startDelegatedChild`, parking the work `AWAITING_CHILD` (V32
+`agent_steps.child_instance_id`). The child's `CHILD_DONE` job reaches
+`DelegationResultService`, which finishes the step with the declared outputs
+(or the child's status) and reopens the work. The worker offers delegates as
+`delegate__<process>` functions and parks (`AwaitingChild`). Lineage shows
+`startedByAgent`. Tests: `AplDelegationParserTest`,
+`PostgresAgentDelegationTest` (PostgreSQL: undeclared target, invalid inputs
+with no child, replay starts no second child, declared outputs only, the
+agent completes; approval required → approve → child; a cancelled child is
+reported to the agent; parent cancel cascades with no resume; depth limit;
+restarts while the child runs and before the resume give one child and one
+result), schema and token upgrade tests (→ V32), SDK `AbadaWorkerClientTest`,
+worker `AgentLoopTest` and `AgentToolLoopEndToEndTest`, Studio
+`LineagePanel.test.tsx` and `parser.test.ts`.
+
+**Deviations (E20b).**
+- Migration V32 (`agent_steps.child_instance_id`); step kind `DELEGATION` and
+  task status `AWAITING_CHILD` need no DDL.
+- `outputs` is required on each delegate (default-deny, as for call-process).
+- A failed or cancelled child finishes the step `FAILED` with its status; the
+  agent reads it and decides, instead of failing the agent's work.
+- The worker names the functions `delegate__<process>` (function names cannot
+  contain `:`); a tool server may not be named `delegate`.
+- `approval: required` needs `approvers` on the delegate
+  (`ABADA-APL-TOOL-003`); approvals reuse the E10 task and card.
+- Refusals are typed: `DELEGATION_INPUT_INVALID`, `DELEGATION_DEPTH`,
+  `DELEGATION_REFUSED` (the child's agent models have no provider).
+- Editing `delegates` in Studio is E12; it round-trips verbatim.
 
 **Acceptance tests.**
 - `AplCallProcessParserTest`: unknown process, unpinnable version, cycles

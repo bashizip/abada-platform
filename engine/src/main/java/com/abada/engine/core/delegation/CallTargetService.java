@@ -64,7 +64,9 @@ public class CallTargetService {
     }
 
     public Resolution resolve(String projectId, ParsedProcessDefinition definition, byte[] source) {
-        if (definition.getCallProcesses().isEmpty()) return new Resolution(Map.of(), List.of());
+        if (definition.getCallProcesses().isEmpty() && definition.getAllDelegations().isEmpty()) {
+            return new Resolution(Map.of(), List.of());
+        }
         Map<String, String> pointers = nodePointers(source);
         Map<String, CallTarget> targets = new LinkedHashMap<>();
         List<BpmnValidationIssue> errors = new ArrayList<>();
@@ -92,6 +94,34 @@ public class CallTargetService {
             targets.put(call.id(), new CallTarget(call.processKey(), child.getDeploymentId(), child.getVersion(),
                     declared));
         }
+        definition.getAllDelegations().forEach((nodeId, delegates) -> {
+            String nodePointer = pointers.getOrDefault(nodeId, "/flow/nodes");
+            for (int index = 0; index < delegates.size(); index++) {
+                com.abada.engine.core.model.DelegationMeta delegate = delegates.get(index);
+                String pointer = nodePointer + "/delegates/" + index;
+                ProcessDefinitionEntity child = persistence.findProcessDefinitionByProjectAndId(projectId,
+                        delegate.process());
+                if (child == null) {
+                    errors.add(error(nodeId, pointer + "/process", "agent node '" + nodeId + "' delegates to '"
+                            + delegate.process() + "', which is not deployed in this project",
+                            "Deploy '" + delegate.process() + "' first, then deploy this process"));
+                    continue;
+                }
+                Map<String, String> declared = declaredTypes(child);
+                if (!declared.isEmpty()) {
+                    for (String output : delegate.outputs()) {
+                        if (!declared.containsKey(output)) {
+                            errors.add(error(nodeId, pointer + "/outputs", "agent node '" + nodeId + "' reads back '"
+                                    + output + "', which '" + delegate.process()
+                                    + "' does not declare in metadata.variables",
+                                    "Read back only variables the delegated process declares"));
+                        }
+                    }
+                }
+                targets.put(delegate.targetKey(), new CallTarget(delegate.process(), child.getDeploymentId(),
+                        child.getVersion(), declared));
+            }
+        });
         return new Resolution(Map.copyOf(targets), List.copyOf(errors));
     }
 
@@ -132,6 +162,30 @@ public class CallTargetService {
             case "list" -> value instanceof List;
             default -> true;
         };
+    }
+
+    /**
+     * The JSON Schema of a delegated child's inputs, from its declared
+     * variables: what the agent's tool call may pass. A child that declares no
+     * variables accepts any object.
+     */
+    public static Map<String, Object> inputSchema(CallTarget target) {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        if (target.declaredTypes().isEmpty()) return schema;
+        Map<String, Object> properties = new LinkedHashMap<>();
+        target.declaredTypes().forEach((name, type) -> {
+            Map<String, Object> property = new LinkedHashMap<>();
+            switch (type) {
+                case "string", "number", "integer", "boolean", "object" -> property.put("type", type);
+                case "list" -> property.put("type", "array");
+                default -> { /* any: no constraint */ }
+            }
+            properties.put(name, property);
+        });
+        schema.put("properties", properties);
+        schema.put("additionalProperties", false);
+        return schema;
     }
 
     private static Map<String, String> declaredTypes(ProcessDefinitionEntity child) {

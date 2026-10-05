@@ -213,6 +213,7 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `on_invalid_output` | nodeId | no | Where to go when the result does not match `output_schema`. |
 | `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the worker reports an error code, or when the last attempt fails (code `WORK_FAILED`). Without it a last failure opens an incident. |
 | `on_timeout` | `{ after, then }` | no | If the step is not done within `after` (e.g. `PT1H`), its work is cancelled and the flow continues at `then`. |
+| `delegates` | list of `{process, outputs, approval?, approvers?, description?, max_depth?}` | no | Processes the agent may start as a governed child through the engine-provided tool `delegate:<process>`; pinned at deployment, inputs checked against the child's declared variables, only `outputs` come back, `approval: required` goes to `approvers` first (APL specification §3.2.3). |
 | `routes` | map of `{next, description, when?}` | no | 2–8 next steps the agent chooses from by `description`; the engine adds a required `route` enum to the output contract, vetoes a route whose CEL `when` is false (invalid output), writes `<id>_route` and records `ROUTE_TAKEN`. Replaces `next` (APL specification §2.8). |
 | `next` | nodeId | yes, unless `routes` | The step that runs after the agent completes. |
 
