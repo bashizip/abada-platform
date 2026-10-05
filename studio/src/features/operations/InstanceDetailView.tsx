@@ -33,6 +33,7 @@ import { TooltipProvider, UITooltip } from '@/components/ui';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
 import { IncidentsPanel } from '@/features/operations/IncidentsPanel';
 import { LineagePanel } from '@/features/operations/LineagePanel';
+import { AgentStepEvidence, EvidenceAPI } from '@/api/evidence';
 import { agentStepModel } from '@/lib/run/incidents';
 import {
   deriveBusinessLabel,
@@ -85,6 +86,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   const [history, setHistory] = useState<ActivityHistoryDTO[]>([]);
   const [variables, setVariables] = useState<Record<string, unknown> | null>(null);
   const [jobs, setJobs] = useState<ProjectJob[]>([]);
+  const [agentSteps, setAgentSteps] = useState<AgentStepEvidence[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [tab, setTab] = useState<InspectorTab>('telemetry');
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -142,6 +144,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
       ]);
       setVariables(vars);
       setJobs(jobList);
+      setAgentSteps(await EvidenceAPI.steps(projectId, instanceId).catch(() => []));
     } catch {
       // Keep the last known snapshot; the next tick retries.
     }
@@ -543,6 +546,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                     variables={variables}
                     onRetry={retryJob}
                     projectId={projectId}
+                    agentSteps={agentSteps}
                   />
                 ) : (
                   <div className="space-y-3">
