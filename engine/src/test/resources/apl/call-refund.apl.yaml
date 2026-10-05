@@ -1,0 +1,36 @@
+version: abada.io/v1
+metadata:
+  key: refund_with_check
+  name: Refund with fraud check
+  variables:
+    - { name: case_id, type: string }
+    - { name: amount, type: number }
+flow:
+  entry: request
+  nodes:
+    - id: request
+      type: webhook
+      next: fraud_check
+    # A governed child: only case_id and amount go in, only verdict comes back.
+    - id: fraud_check
+      type: call-process
+      description: Check the refund for fraud
+      process: fraud_check
+      inputs:
+        case_id: "${case_id}"
+        amount: "${amount}"
+      outputs:
+        fraud_verdict: verdict
+      on_error: manual_review
+      on_timeout: { after: PT1H, then: manual_review }
+      next: decide
+    - id: decide
+      type: engine-task
+      service: refund.pay
+      next: done
+    - id: manual_review
+      type: human-input
+      assignees: [finance]
+      next: done
+    - id: done
+      type: end

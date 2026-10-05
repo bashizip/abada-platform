@@ -479,3 +479,46 @@ describe('APL round trip: tool references', () => {
     });
   });
 });
+
+describe('APL round trip: call-process', () => {
+  it('keeps the called process, inputs, outputs, depth and routes through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'refund', name: 'Refund' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'check' },
+          {
+            id: 'check',
+            type: 'call-process',
+            process: 'fraud_check',
+            inputs: { case_id: '${case_id}' },
+            outputs: { fraud_verdict: 'verdict' },
+            max_depth: 2,
+            on_error: 'manual',
+            on_timeout: { after: 'PT1H', then: 'manual' },
+            next: 'done',
+          },
+          { id: 'manual', type: 'human-input', assignees: ['finance'], next: 'done' },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const workflow = aplToWorkflow(document);
+    expect(workflow.nodes.find((node) => node.id === 'check')?.type).toBe('call-process');
+    expect(workflow.edges.filter((edge) => edge.source === 'check').map((edge) => edge.label))
+      .toEqual(expect.arrayContaining(['on_error', 'on_timeout']));
+    const saved = workflowToAPL(workflow).flow.nodes.find((node) => node.id === 'check');
+    expect(saved).toMatchObject({
+      type: 'call-process',
+      process: 'fraud_check',
+      inputs: { case_id: '${case_id}' },
+      outputs: { fraud_verdict: 'verdict' },
+      max_depth: 2,
+      on_error: 'manual',
+      on_timeout: { after: 'PT1H', then: 'manual' },
+      next: 'done',
+    });
+  });
+});

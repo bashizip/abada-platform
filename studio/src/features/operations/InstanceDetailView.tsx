@@ -32,6 +32,7 @@ import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
 import { IncidentsPanel } from '@/features/operations/IncidentsPanel';
+import { LineagePanel } from '@/features/operations/LineagePanel';
 import { agentStepModel } from '@/lib/run/incidents';
 import {
   deriveBusinessLabel,
@@ -62,6 +63,8 @@ interface InstanceDetailViewProps {
   initialInstance: ProcessInstanceDTO;
   onBack: () => void;
   onOpenCanvas: (instance: ProcessInstanceDTO) => void;
+  /** Opens a related instance (a caller or a called process). */
+  onOpenInstance?: (instanceId: string) => void;
 }
 
 type InspectorTab = 'telemetry' | 'variables' | 'audit';
@@ -73,6 +76,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   initialInstance,
   onBack,
   onOpenCanvas,
+  onOpenInstance,
 }) => {
   const [instance, setInstance] = useState<ProcessInstanceDTO>(initialInstance);
   const [workflow, setWorkflow] = useState<WorkflowFile | null>(null);
@@ -406,6 +410,9 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
           void loadVariablesAndJobs();
         }}
       />
+
+      {/* ===== Call-process lineage ===== */}
+      <LineagePanel projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} />
 
       {/* ===== Split workspace ===== */}
       <div className="relative flex min-h-0 flex-1">

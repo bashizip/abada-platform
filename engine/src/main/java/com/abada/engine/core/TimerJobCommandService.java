@@ -37,6 +37,24 @@ public class TimerJobCommandService {
         return repository.saveAll(jobs);
     }
 
+    /**
+     * Leases one job by id if it is still available, e.g. a CHILD_DONE job run
+     * right after the child's command committed. False when another runner
+     * (a replica's poller) already took it.
+     */
+    @AtomicRuntimeCommand
+    public boolean claim(String jobId, String leaseOwner, Instant now) {
+        JobEntity job = repository.findByIdForUpdate(jobId).orElse(null);
+        if (job == null || job.getStatus() != JobEntity.Status.AVAILABLE
+                || job.getExecutionTimestamp().isAfter(now)) return false;
+        job.setStatus(JobEntity.Status.LEASED);
+        job.setLeaseOwner(leaseOwner);
+        job.setLeaseExpiresAt(now.plusSeconds(120));
+        job.setAttempts(job.getAttempts() + 1);
+        repository.save(job);
+        return true;
+    }
+
     /** Executes one already-leased timer and its workflow advancement atomically. */
     @AtomicRuntimeCommand
     public boolean execute(String jobId, String leaseOwner, Instant now) {
@@ -71,6 +89,8 @@ public class TimerJobCommandService {
             case BOUNDARY_TIMEOUT -> engine.fireTimeout(job.getProcessInstanceId(), job.getEventId(),
                     job.getTokenId(), job.getBoundaryId());
             case SLA -> engine.escalateTask(job.getProcessInstanceId(), job.getEventId(), job.getTokenId());
+            case CHILD_DONE -> engine.childEnded(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(),
+                    job.getRelatedInstanceId());
         };
 
         ProcessInstance instance = engine.getProcessInstanceById(job.getProcessInstanceId());

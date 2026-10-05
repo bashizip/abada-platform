@@ -521,10 +521,10 @@ result. An agent can propose that delegation, but only to declared targets,
 with checked inputs and, when required, a human's approval. Lineage is visible
 and a crash neither duplicates nor orphans a child.
 
-Split into **E20a call-process** (never cut within E20) and **E20b
+Split into **E20a call-process** (never cut within E20; ✅ done) and **E20b
 agent-proposed delegation** (cut before E9/E10).
 
-**Files.** `engine/src/main/resources/db/migration/V31__call_process.sql`,
+**Files.** `engine/src/main/resources/db/migration/V29__call_process.sql`,
 `ENGINE/core/model/{CallProcessMeta,DelegationMeta}.java`,
 `ENGINE/parser/{AplParser,AplVariables,DeploymentValidator}.java`,
 `ENGINE/core/{AbadaEngine,ProcessInstance,JobScheduler,TimerJobCommandService}.java`,
@@ -537,9 +537,10 @@ agent-proposed delegation** (cut before E9/E10).
 - APL node `call-process`: `process: <key>`, `inputs: { child_var: <CEL> }`,
   `outputs: { parent_var: child_var }` (default-deny: nothing else returns),
   `on_error`, `on_timeout`. The child version is resolved and pinned at
-  deployment. Inputs are checked against the child's `metadata.variables`
+  deployment (V29 `process_definitions.call_targets`); redeploy the parent to
+  pick up a newer child. Inputs are checked against the child's `metadata.variables`
   types at deployment where static, at runtime otherwise.
-- V31: `process_instances.parent_instance_id`, `parent_token_id`,
+- V29: `process_instances.parent_instance_id`, `parent_token_id`,
   `root_instance_id`, `depth`, `started_by` (JSON agent identity or null);
   index on parent and root. `max_depth` is a global setting (default 4) with
   a stricter per-node override.
@@ -551,10 +552,45 @@ agent-proposed delegation** (cut before E9/E10).
   maps outputs and moves the token; it is idempotent by parent token id. A
   failed child fires the parent's `on_error` or opens a `CHILD_FAILED`
   incident.
-- Cancel and fail cascade to running children through the same job path.
-  Parent timeouts cancel the child.
+- Cancel and fail cascade to running descendants inline, in the parent's
+  transaction (parent before child; a child command never locks its parent).
+  Parent timeouts cancel the child the same way. Only completion goes through
+  the `CHILD_DONE` job.
 - History: `CHILD_STARTED` / `CHILD_COMPLETED` on both sides with both ids.
   `GET .../instances/{id}/lineage` returns ancestors and children.
+
+**As built (E20a) ✅ done.** V29 adds lineage on `process_instances`,
+`process_definitions.call_targets` and `jobs.related_instance_id`;
+`CallTargetService` pins targets, `AbadaEngine` starts children in `armWork`,
+resumes the parent in `childEnded` (job kind `CHILD_DONE`) and cascades
+cancels in `cancelChildren`. Tests: `AplCallProcessParserTest`,
+`PostgresCallProcessTest` (outputs only, operator-cancelled child →
+`on_error`, invalid input types, incident → retry with a new child,
+two-level cancel cascade with no resume jobs, timeout cancels the child, depth
+limit, version pinning), `PostgresCallProcessCrashTest` (restart after the
+child starts, between its end and the resume, with the job leased by a crashed
+replica; two replicas at once; immediate resume), schema and token upgrade
+tests (→ V29), `SecurityAuthorizationContractTest` (lineage), Studio
+`parser.test.ts` and `LineagePanel.test.tsx`.
+
+**Deviations (E20a).**
+- Error codes beyond `CHILD_FAILED`: `CHILD_INPUT_INVALID` (an input fails to
+  evaluate or does not fit the child's declared type), `CHILD_DEPTH_EXCEEDED`
+  and `CHILD_START_REFUSED` (agent models without a provider). Each takes a
+  matching `on_error` or opens a `CHILD_FAILED` incident whose message names
+  the code.
+- `outputs` is required (at least one); a call to the process's own key is
+  refused at deployment; inputs must be declared by the child when it
+  declares `metadata.variables`.
+- The `CHILD_DONE` job also runs right after the child's commit
+  (`abada.call-process.resume-immediately`, default on); the poller stays the
+  fallback. `max_depth` defaults to `abada.call-process.max-depth=4`.
+- The child runs with the parent's `startedBy`; `started_by_agent` is
+  reserved (null) until E20b.
+- Studio round-trips the node, draws it (and as a BPMN call activity in the
+  BPMN view), and shows lineage on the instance page; editing `inputs` and
+  `outputs` is in E12 (they are kept verbatim). BPMN `callActivity` import
+  stays rejected.
 
 **Changes (E20b agent-proposed delegation).**
 - Agent `delegates: [{ process, approval: required | none }]`. Each becomes an
@@ -582,7 +618,7 @@ agent-proposed delegation** (cut before E9/E10).
 - `PostgresAgentDelegationTest`: undeclared target refused; invalid inputs
   refused; approval required → approve → child → agent resumes with the
   result; lineage and `started_by` correct.
-- `PostgresSchemaUpgradeTest` (→ V31), `OpenApiContractTest`.
+- `PostgresSchemaUpgradeTest` (→ V29), `OpenApiContractTest`.
 
 **Invariants.** Parent and child are separate instances with their own locks
 and versions; nothing is shared in memory. Delegation never bypasses the

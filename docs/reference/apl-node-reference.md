@@ -64,6 +64,7 @@ BPMN *pattern* it replaces with a simpler, safer shape.
 | `message-catch` | Message Catch | Intermediate Catch Event (message) | BPMN message catch — wait for a correlated message |
 | `timer` | Timer Catch | Intermediate Catch Event (timer, duration form) | BPMN timer catch — wait for a duration |
 | `signal` | Signal Catch | Intermediate Catch Event (signal) | BPMN signal catch — wait for a broadcast |
+| `call-process` | Call Process | Call Activity (notation only) | A governed child process; BPMN `callActivity` itself is not imported |
 
 > **What "replaced" means.** APL is not a BPMN dialect; it is the canonical
 > authoring format. The Studio canvas serializes to APL and the engine parses
@@ -259,6 +260,46 @@ topic. APL replaces the Camunda external-task pattern with a typed node.
   description: Persist decision record
   service: decision.record
   next: done
+```
+
+---
+
+### 4.4a Call Process — `call-process`
+
+**What it does.** Starts a governed child instance of another process in the
+same project, waits for it, and continues with only the variables the node
+maps back. The child runs under its own definition version, locks and
+history; nothing else of the parent leaks in or out.
+
+**When to use it.** A sub-case with its own lifecycle and reviewers (a fraud
+check, a KYC refresh) that several processes reuse.
+
+**BPMN equivalent.** Call Activity. Studio draws it that way; importing a BPMN
+`callActivity` is still rejected.
+
+**Properties.**
+
+| Property | Type | Required | What it does |
+| --- | --- | --- | --- |
+| `process` | string | yes | Key of the process to call, in this project. Its current version is **pinned when this process is deployed**; redeploy this process to call a newer one. A process cannot call itself. |
+| `inputs` | map | no | Child variable → expression on this instance's variables, e.g. `case_id: ${case.id}`. When the child declares `metadata.variables`, only those names are accepted and values must fit their types. Nothing else is passed. |
+| `outputs` | map | yes | This instance's variable → child variable copied back when the child completes. Nothing else returns. |
+| `max_depth` | integer | no | 1–10. A stricter nesting limit than the engine's `abada.call-process.max-depth` (default 4). |
+| `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the child fails or is cancelled (`CHILD_FAILED`), its inputs do not fit (`CHILD_INPUT_INVALID`), the depth limit is reached (`CHILD_DEPTH_EXCEEDED`) or it cannot start (`CHILD_START_REFUSED`). Without it, a `CHILD_FAILED` incident opens; retrying it starts a new child. |
+| `on_timeout` | `{ after, then }` | no | If the child has not completed within `after`, it is cancelled and the flow continues at `then`. |
+| `next` | nodeId | yes | The step after the child completes. |
+
+**Example.**
+
+```yaml
+- id: fraud_check
+  type: call-process
+  process: fraud_check
+  inputs: { case_id: "${case_id}", amount: "${amount}" }
+  outputs: { fraud_verdict: verdict }
+  on_error: manual_review
+  on_timeout: { after: PT4H, then: manual_review }
+  next: decide
 ```
 
 ---

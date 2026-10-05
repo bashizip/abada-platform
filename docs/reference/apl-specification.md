@@ -807,6 +807,29 @@ arrives.
   description: Onboarding concluded
 ```
 
+### 3.15 `call-process` — governed child process
+
+Parks the token while a child instance of `process` (same project) runs, then
+continues with only the mapped `outputs`. Deployment pins the child to its
+latest version (stored with this version as `call_targets`) and refuses an
+unknown key (`ABADA-APL-CALL-001`), a call to the process itself, no
+`outputs`, or an input the child does not declare in `metadata.variables`.
+At runtime the inputs are evaluated in the parent's command and checked
+against the child's declared types; the child is created in the same
+transaction, with lineage (`parentInstanceId`, `rootInstanceId`, depth). See
+`apl-node-reference.md` §4.4a for the fields and `runtime-semantics.md` for the
+lifecycle.
+
+```yaml
+- id: fraud_check
+  type: call-process
+  process: fraud_check
+  inputs: { case_id: "${case_id}" }
+  outputs: { fraud_verdict: verdict }
+  on_error: manual_review
+  next: decide
+```
+
 ---
 
 ## 4. Native Decision Tables (ADR-002 Integration)

@@ -41,6 +41,9 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
     List<ActiveProcessCount> countActiveProcessesByDefinitionId(
             @Param("activeStatuses") Collection<ProcessStatus> activeStatuses);
 
+    /** Direct children of an instance (V29 lineage), oldest first. */
+    List<ProcessInstanceEntity> findByParentInstanceIdOrderByStartDateAsc(String parentInstanceId);
+
     interface ActiveProcessCount {
         String getProcessDefinitionId();
         long getInstanceCount();

@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
-import { Bot, Code2, ShieldAlert, Table, UserCheck, Zap } from 'lucide-react';
+import { Bot, Code2, ShieldAlert, Table, UserCheck, Workflow, Zap } from 'lucide-react';
 import type { NodeType } from '@/types';
 import { TASK_HEIGHT, TASK_WIDTH, outcomePortPoint } from '@/lib/layout/nodeGeometry';
 import { EDGE_COLORS } from '../edgeStyle';
@@ -22,6 +22,8 @@ function TaskIcon({ type, className }: { type: NodeType; className?: string }) {
       return <Table {...props} />;
     case 'engine-task':
       return <Zap {...props} />;
+    case 'call-process':
+      return <Workflow {...props} />;
     case 'script':
       return <Code2 {...props} />;
     default:

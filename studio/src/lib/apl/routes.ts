@@ -42,17 +42,20 @@ function durationSeconds(value: string): number {
 /** Outcome names the engine accepts. */
 export const OUTCOME_NAME = /^[a-z][a-z0-9_]{0,31}$/;
 
-const isTask = (node: WorkflowNode) => node.type === 'agent' || node.type === 'engine-task' || node.type === 'human';
+const isTask = (node: WorkflowNode) => node.type === 'agent' || node.type === 'engine-task' || node.type === 'human'
+  || node.type === 'call-process';
 
 const errorRouteOf = (node: WorkflowNode): OnErrorRoute | undefined =>
   node.type === 'agent' ? node.agentConfig?.onError
     : node.type === 'engine-task' ? node.engineTaskConfig?.onError
-      : node.type === 'human' ? node.humanConfig?.onError : undefined;
+      : node.type === 'call-process' ? node.callProcessConfig?.onError
+        : node.type === 'human' ? node.humanConfig?.onError : undefined;
 
 const timeoutOf = (node: WorkflowNode) =>
   node.type === 'agent' ? node.agentConfig?.onTimeout
     : node.type === 'engine-task' ? node.engineTaskConfig?.onTimeout
-      : node.type === 'human' ? node.humanConfig?.onTimeout : undefined;
+      : node.type === 'call-process' ? node.callProcessConfig?.onTimeout
+        : node.type === 'human' ? node.humanConfig?.onTimeout : undefined;
 
 /** The route edges a node's config implies, in a stable order with stable ids. */
 export function routeEdges(node: WorkflowNode): WorkflowEdge[] {
@@ -198,6 +201,9 @@ function withConfig(node: WorkflowNode, patch: { onError?: OnErrorRoute; onTimeo
     return { ...node, engineTaskConfig: { service: node.engineTaskConfig?.service ?? '', ...node.engineTaskConfig, [key]: value } };
   }
   if (node.type === 'human' && node.humanConfig) return { ...node, humanConfig: { ...node.humanConfig, [key]: value } };
+  if (node.type === 'call-process') {
+    return { ...node, callProcessConfig: { process: node.callProcessConfig?.process ?? '', ...node.callProcessConfig, [key]: value } };
+  }
   return node;
 }
 

@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("28");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("29");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,19 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V29: call-process lineage, pinned call targets and the CHILD_DONE job's child.
+            for (String[] column : new String[][] {{"process_definitions", "call_targets"},
+                    {"process_instances", "parent_instance_id"}, {"process_instances", "parent_token_id"},
+                    {"process_instances", "parent_activity_id"}, {"process_instances", "root_instance_id"},
+                    {"process_instances", "call_depth"}, {"process_instances", "started_by_agent"},
+                    {"jobs", "related_instance_id"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "process_instances", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_process_instances_parent", "idx_process_instances_root");
             }
             // V28: journaled agent steps and the attempt an external task is on.
             try (var columns = metadata.getColumns(null, schema, "external_tasks", "attempt")) {

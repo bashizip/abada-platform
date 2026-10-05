@@ -48,6 +48,15 @@ Open an instance to see the path it took on the canvas and three tabs:
 The engine stores attempt metadata only — never prompts, model responses or
 provider keys.
 
+### Called processes
+
+An instance started by a **call-process** step shows *Called by* with the
+chain of callers up to the root; an instance whose steps called other
+processes lists them under *Called processes* with their status. Each one
+opens its own instance page. The same tree is available from
+`GET /api/v1/projects/$PROJECT_ID/instances/$INSTANCE_ID/lineage`. Cancelling
+an instance cancels the processes it called that are still running.
+
 ## Instance actions
 
 | Action | In Studio | Effect |
@@ -71,6 +80,7 @@ instance — other branches, timers — keeps going.
 | `WORK_FAILED` | A step's last attempt failed and the step has no `on_error` | Fix the cause (provider key, quota, worker), then retry |
 | `LOOP_EXHAUSTED` | A loop reached `max_iterations` and has no `on_exhausted` | Retry (the step starts a fresh pass) or cancel |
 | `MISSING_CORRELATION_KEY` | A message wait has no `correlationKey` value | Set the variable, then retry |
+| `CHILD_FAILED` | A called process failed, was cancelled, or could not start (inputs, depth) and the call step has no `on_error` | Look at the child (it is linked from the instance), fix the cause, then retry: a new child starts |
 | `TOOL_OUTCOME_UNKNOWN` | An agent write was interrupted and its tool server takes no idempotency key, so it may or may not have happened | Check the target system, then confirm: **It happened** or **It did not happen**. The agent resumes with that fact; the write is never re-sent blindly |
 
 ### In Studio

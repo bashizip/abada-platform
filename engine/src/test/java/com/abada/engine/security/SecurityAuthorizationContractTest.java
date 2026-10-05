@@ -326,6 +326,15 @@ class SecurityAuthorizationContractTest {
         assertForbidden(post(steps).contentType(MediaType.APPLICATION_JSON).content(step), "operator");
         assertForbidden(post(steps).contentType(MediaType.APPLICATION_JSON).content(step), "tasks");
 
+        String lineage = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/instances/missing/lineage";
+        mvc.perform(get(lineage)).andExpect(status().isUnauthorized());
+        mvc.perform(get(lineage).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(lineage).header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "abada-admin"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(get(lineage), "worker");
+        // Allowed to read operations, but not a member of the project: it does not exist for them.
+        mvc.perform(get(lineage).header("Authorization", "Bearer operator")).andExpect(status().isNotFound());
+
         String manage = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/tool-credentials/crm-token";
         String body = "{\"secret\":\"never-stored\"}";
         mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body))

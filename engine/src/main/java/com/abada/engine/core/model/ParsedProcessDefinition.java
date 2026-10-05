@@ -26,6 +26,7 @@ public class ParsedProcessDefinition implements Serializable {
 
     private final Map<String, List<String>> flowGraph = new HashMap<>();
     private Map<String, LoopMeta> loops = Map.of();
+    private Map<String, CallProcessMeta> callProcesses = Map.of();
     private Map<String, List<BoundaryMeta>> boundaries = Map.of();
     /** Back-edges of the depth-first walk from the start event, keyed by {@link #edgeKey}. */
     private final Set<String> backEdges = new LinkedHashSet<>();
@@ -102,6 +103,24 @@ public class ParsedProcessDefinition implements Serializable {
     }
 
     /** Declares the loop bounds of this definition (set once by the parser). */
+    /** Declares the call-process nodes of this definition (set once by the parser). */
+    public ParsedProcessDefinition withCallProcesses(Map<String, CallProcessMeta> declared) {
+        this.callProcesses = Map.copyOf(declared);
+        return this;
+    }
+
+    public CallProcessMeta getCallProcess(String activityId) {
+        return callProcesses.get(activityId);
+    }
+
+    public boolean isCallProcess(String activityId) {
+        return callProcesses.containsKey(activityId);
+    }
+
+    public Map<String, CallProcessMeta> getCallProcesses() {
+        return callProcesses;
+    }
+
     public ParsedProcessDefinition withLoops(Map<String, LoopMeta> declared) {
         this.loops = Map.copyOf(declared);
         return this;

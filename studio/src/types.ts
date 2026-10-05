@@ -1,6 +1,6 @@
 import type { APLAgentNode } from './lib/apl/types.generated';
 
-export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script';
+export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script' | 'call-process';
 
 export type EventSubtype = 'start' | 'end' | 'timer' | 'message' | 'signal';
 export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive' | 'event';
@@ -100,6 +100,17 @@ export interface HumanConfig {
   formFields: string[];
 }
 
+/**
+ * A `call-process` node: a governed child instance of `process` (same project,
+ * version pinned when this process is deployed). `inputs`, `outputs` and
+ * `max_depth` are kept verbatim; editing them comes with the designer work.
+ */
+export interface CallProcessConfig {
+  process: string;
+  onError?: OnErrorRoute;
+  onTimeout?: OnTimeoutRoute;
+}
+
 export interface EngineTaskConfig {
   /** External-task topic the engine publishes for this activity. */
   service: string;
@@ -134,6 +145,7 @@ export interface WorkflowNode {
   dmnConfig?: DMNConfig;
   humanConfig?: HumanConfig;
   engineTaskConfig?: EngineTaskConfig;
+  callProcessConfig?: CallProcessConfig;
   scriptConfig?: ScriptConfig;
   catchEventConfig?: CatchEventConfig;
   /** Bound of the loop whose back-edges return to this step (APL `loop`). */
