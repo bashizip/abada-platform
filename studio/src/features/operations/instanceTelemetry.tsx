@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { AgentStepInspector } from '@/features/operations/AgentStepInspector';
 import {
   Activity,
   AlertTriangle,
@@ -25,7 +26,7 @@ import { ActivityHistoryDTO, ProjectJob } from '@/api/engine';
 import { ErrorDetailsDialog } from '@/features/operations/ErrorDetailsDialog';
 import { failureOf, type FailureContext } from '@/lib/run/errorReport';
 import { WorkflowFile, toolRefOf } from '@/types';
-import { AgentStepEvidence, formatUsd } from '@/api/evidence';
+import { AgentStepEvidence } from '@/api/evidence';
 import { aggregateNodeTelemetry, boundarySummary, eventMeta } from '@/lib/run/instanceDetail';
 import { formatDuration, humanize, unwrapVariable } from '@/lib/run/instanceFormat';
 
@@ -293,35 +294,6 @@ export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ his
 export const failedJobsFor = (activityId: string, jobs: ProjectJob[]): ProjectJob[] =>
   jobs.filter((job) => job.activityId === activityId);
 
-/** The journaled model and tool calls of an agent step, with engine-computed cost. */
-export const AgentCalls: React.FC<{ steps: AgentStepEvidence[] }> = ({ steps }) => {
-  if (steps.length === 0) return null;
-  const priced = steps.reduce((sum, step) => sum + (step.costUsd ?? 0), 0);
-  const unpriced = steps.some((step) => step.costUnpriced);
-  return (
-    <div className="mt-2 rounded-lg border border-[#3A322E] bg-[#14110D] p-2" aria-label="Agent calls">
-      <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-[#A89F91]">
-        <span>Calls ({steps.length})</span>
-        <span className="font-mono normal-case">
-          {formatUsd(priced)}{unpriced && <span className="ml-1 text-[#F4A261]">+ unpriced</span>}
-        </span>
-      </div>
-      <ul className="space-y-0.5 text-[11px]">
-        {steps.map((step) => (
-          <li key={step.id} className="flex items-center gap-2 text-[#EAE3D9]">
-            <span className="font-mono text-[10px] text-[#A89F91]">{step.attempt}.{step.sequence}</span>
-            <span className="truncate">{step.kind === 'TOOL_CALL' ? step.toolRef : step.model ?? 'model'}</span>
-            <span className="text-[10px] text-[#A89F91]">{step.state.toLowerCase()}</span>
-            <span className="ml-auto font-mono text-[10px]">
-              {step.costUnpriced ? <span className="text-[#F4A261]">unpriced</span> : step.costUsd !== undefined && step.costUsd !== null ? formatUsd(step.costUsd) : ''}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
 export const NodeIcon: React.FC<{ type: WorkflowFile['nodes'][number]['type']; subtype?: string }> = ({ type, subtype }) => {
   switch (type) {
     case 'agent': return <Bot className="h-4 w-4 text-[#9D4EDD]" />;
@@ -350,7 +322,10 @@ export const NodeTelemetry: React.FC<{
   projectId?: string;
   /** Journaled agent steps of the instance (summaries: tokens and engine-computed cost). */
   agentSteps?: AgentStepEvidence[];
-}> = ({ nodeId, workflow, history, jobs, variables, onRetry, projectId, agentSteps = [] }) => {
+  /** For opening step payloads and a delegated child instance. */
+  instanceId?: string;
+  onOpenInstance?: (instanceId: string) => void;
+}> = ({ nodeId, workflow, history, jobs, variables, onRetry, projectId, agentSteps = [], instanceId, onOpenInstance }) => {
   const [openFailure, setOpenFailure] = useState<{ jobId: string; context: FailureContext } | null>(null);
   const node = workflow.nodes.find((item) => item.id === nodeId);
   const telemetry = aggregateNodeTelemetry(history, nodeId, jobs);
@@ -412,7 +387,8 @@ export const NodeTelemetry: React.FC<{
                 </InfoRow>
                 {node.agentConfig.maxTokens !== undefined && <InfoRow label="Max tokens">{node.agentConfig.maxTokens}</InfoRow>}
                 {node.agentConfig.maxAttempts !== undefined && <InfoRow label="Max attempts">{node.agentConfig.maxAttempts}</InfoRow>}
-                <AgentCalls steps={agentSteps.filter((step) => step.activityId === nodeId)} />
+                <AgentStepInspector steps={agentSteps.filter((step) => step.activityId === nodeId)}
+                  projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} />
               </>
             )}
           </div>
@@ -470,7 +446,7 @@ export const NodeTelemetry: React.FC<{
           )}
 
           <p className="rounded-xl border border-dashed border-[#3A322E] bg-[#1A1614] p-3 text-[10px] leading-relaxed text-[#A89F91]">
-            The engine persists attempt metadata only (model, tools, token counts, prompt hash) — prompts and request/response payloads are never stored (privacy by design). The APL-declared prompt is available in the definition source.
+            Each attempt keeps its metadata (model, tools, token counts, prompt hash). Journaled step payloads are kept encrypted as the project's evidence policy allows (redacted by default) and open to evidence readers only, each read recorded. The APL-declared prompt is in the definition source.
           </p>
         </div>
       )}

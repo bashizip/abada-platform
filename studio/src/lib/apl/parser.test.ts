@@ -509,6 +509,52 @@ describe('APL round trip: agent delegates', () => {
   });
 });
 
+describe('APL round trip: agent limits and clearing edited fields', () => {
+  const document = (): APLDocument => ({
+    version: 'abada.io/v1',
+    metadata: { key: 'limited', name: 'Limited' },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'triage' },
+        {
+          id: 'triage', type: 'agent', model: 'gemini-3.6-flash', prompt: 'Work',
+          max_turns: 6, max_tokens_total: 20000, budget_usd: 0.5,
+          delegates: [{ process: 'refund_payout', outputs: ['payout_id'] }],
+          next: 'call',
+        },
+        { id: 'call', type: 'call-process', process: 'fraud_check', inputs: { amount: 'amount' },
+          outputs: { verdict: 'fraud_verdict' }, max_depth: 2, next: 'done' },
+        { id: 'done', type: 'end' },
+      ],
+    },
+  });
+
+  it('keeps limits, delegates and call-process fields through a save', () => {
+    const saved = workflowToAPL(aplToWorkflow(document())).flow.nodes;
+    expect(saved.find((node) => node.id === 'triage')).toMatchObject({ max_turns: 6, max_tokens_total: 20000,
+      budget_usd: 0.5, delegates: [{ process: 'refund_payout', outputs: ['payout_id'] }] });
+    expect(saved.find((node) => node.id === 'call')).toMatchObject({ inputs: { amount: 'amount' },
+      outputs: { verdict: 'fraud_verdict' }, max_depth: 2 });
+  });
+
+  it('clears a field the designer removed instead of restoring the old value', () => {
+    const workflow = aplToWorkflow(document());
+    const triage = workflow.nodes.find((node) => node.id === 'triage')!;
+    triage.agentConfig = { ...triage.agentConfig!, maxTurns: undefined, delegates: undefined };
+    const call = workflow.nodes.find((node) => node.id === 'call')!;
+    call.callProcessConfig = { ...call.callProcessConfig!, inputs: undefined, maxDepth: undefined };
+    const saved = workflowToAPL(workflow).flow.nodes as unknown as Record<string, unknown>[];
+    const agent = saved.find((node) => node.id === 'triage')!;
+    expect(agent.max_turns).toBeUndefined();
+    expect(agent.delegates).toBeUndefined();
+    expect(agent.budget_usd).toBe(0.5);
+    const called = saved.find((node) => node.id === 'call')!;
+    expect(called.inputs).toBeUndefined();
+    expect(called.max_depth).toBeUndefined();
+  });
+});
+
 describe('APL round trip: call-process', () => {
   it('keeps the called process, inputs, outputs, depth and routes through a save', () => {
     const document: APLDocument = {

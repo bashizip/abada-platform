@@ -35,7 +35,7 @@ export interface AgentStepEvidence {
   activityId: string;
   attempt: number;
   sequence: number;
-  kind: 'MODEL_CALL' | 'TOOL_CALL';
+  kind: 'MODEL_CALL' | 'TOOL_CALL' | 'DELEGATION';
   toolRef?: string;
   policy?: string;
   state: string;
@@ -48,6 +48,20 @@ export interface AgentStepEvidence {
   startedAt: string;
   finishedAt?: string;
   purgedAt?: string;
+  /** Who approved or rejected a PROPOSED step, and when. */
+  resolvedBy?: string;
+  decidedAt?: string;
+  /** The child process a DELEGATION step started. */
+  childInstanceId?: string;
+  errorType?: string;
+}
+
+/** The evidence copy of one step's payloads, as the evidence policy kept them. */
+export interface AgentStepPayloads {
+  stepId: string;
+  payloadMode: 'none' | 'redacted' | 'full';
+  request?: unknown;
+  result?: unknown;
 }
 
 const json = { 'Content-Type': 'application/json' };
@@ -84,6 +98,14 @@ export class EvidenceAPI {
     const res = await authenticatedFetch(`${config.apiUrl}/v1/projects/${projectId}/evidence-policy`, {
       method: 'PUT', headers: json, body: JSON.stringify(policy),
     });
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  /** Evidence readers only (403 otherwise); every read is recorded in the instance history. */
+  static async payloads(projectId: string, instanceId: string, stepId: string): Promise<AgentStepPayloads> {
+    const res = await authenticatedFetch(`${config.apiUrl}/v1/projects/${projectId}/instances/`
+      + `${encodeURIComponent(instanceId)}/agent-steps/${encodeURIComponent(stepId)}/payloads`);
     if (!res.ok) throw await apiError(res);
     return res.json();
   }

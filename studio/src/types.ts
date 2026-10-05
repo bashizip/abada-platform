@@ -1,4 +1,7 @@
-import type { APLAgentNode } from './lib/apl/types.generated';
+import type { APLAgentNode, Delegates } from './lib/apl/types.generated';
+
+/** One process an agent may delegate to (`delegates`, E20b). */
+export type AgentDelegate = Delegates[number];
 
 export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script' | 'call-process';
 
@@ -54,6 +57,14 @@ export interface AgentConfig {
   onTimeout?: OnTimeoutRoute;
   /** Models tried in order when the model before is unavailable (`fallback_models`). */
   fallbackModels?: string[];
+  /** Model calls per attempt (`max_turns`, 1–32). */
+  maxTurns?: number;
+  /** Tokens for the whole task across attempts (`max_tokens_total`). */
+  maxTokensTotal?: number;
+  /** Engine-computed spend cap for the whole task, in USD (`budget_usd`). */
+  budgetUsd?: number;
+  /** Processes the agent may start as governed children (`delegates`). */
+  delegates?: AgentDelegate[];
   /** Next steps the agent chooses from (`routes`); a node with routes has no `next`. */
   routes?: Record<string, AgentRoute>;
   inputs?: Record<string, string>;
@@ -118,6 +129,12 @@ export interface HumanConfig {
  */
 export interface CallProcessConfig {
   process: string;
+  /** Child variable → CEL expression over the parent's variables. */
+  inputs?: Record<string, string | number | boolean>;
+  /** Parent variable ← child variable; at least one. */
+  outputs?: Record<string, string>;
+  /** Nesting limit for this call, tighter than the engine's. */
+  maxDepth?: number;
   onError?: OnErrorRoute;
   onTimeout?: OnTimeoutRoute;
 }
