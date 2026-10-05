@@ -155,6 +155,12 @@ flow:
   scaffold when none is reachable. You review the result before it applies.
 - **Decision tables** have a matrix editor (inputs, rows, hit policy,
   `otherwise`).
+- **Agent steps** pick their tools from the project's tool servers, with each
+  tool's policy: a step may tighten a policy (for example require approval)
+  but never loosen it, and an approval-required tool asks who approves it.
+  Loop limits (turns, tokens, budget), routes, delegates and the inputs and
+  outputs of a call-process step are edited in the inspector, with the
+  engine's rules checked as you type.
 - **Undo and redo** cover every edit of the open process (<kbd>⌘Z</kbd> /
   <kbd>Ctrl+Z</kbd>, <kbd>⇧⌘Z</kbd> / <kbd>Ctrl+Y</kbd>), 100 steps per process.
 

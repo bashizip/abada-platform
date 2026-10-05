@@ -559,7 +559,7 @@ token upgrade tests (→ V30); Studio `ModelPricesSettings.test.tsx`,
   for the current worker before E8.
 - Development-key re-encryption also covers tool credentials (missed in E7).
 
-## E12 — Studio: live events and agent-step inspector
+## E12 — Studio: live events and agent-step inspector ✅ done
 
 **Goal.** An operator watches an agent work in real time and can see every
 turn, tool call, approval, cost and delegation without reading logs.
@@ -591,6 +591,41 @@ fallback), `AgentStepInspector.test.tsx`, `parser.test.ts` round trips for
 every new APL field; browser check of the exit demo in Studio.
 
 **Out of scope.** SSE for tasks and inbox; replaying an agent run in the UI.
+
+**As built.** V33 adds `outbox_events.seq` and `project_id`;
+`OutboxStreamService` tails committed rows by `seq` on every replica, holds a
+fresh gap (insert order is not commit order) and fans events out to
+`ProjectEventStreamController` subscribers, ids only; `Last-Event-ID` replays
+from the table; streams close before the web server's graceful shutdown.
+Studio reads the stream with `fetch` (`api/eventStream.ts`,
+`hooks/useInstanceEvents.ts`) on the instance page and the live canvas, with
+polling as the fallback and a Live/Polling indicator.
+`AgentStepInspector` replaces the flat call list (kind, policy, state,
+decider, delegation link, tokens and cost per step and attempt, payloads on
+demand). The designer gains `AgentToolsEditor` (the project's tool servers,
+tighten only, approvers), `AgentLimitsEditor`, `DelegatesEditor` and
+`CallProcessEditor`; limits, delegates and call-process inputs, outputs and
+max depth are first-class in the APL mapping. Tests: `ProjectEventStreamTest`
+(PostgreSQL over HTTP: order and ids only, other projects never appear,
+resume without loss or duplicates, members only, any replica, gap held then
+skipped), `SecurityAuthorizationContractTest`, the schema and token upgrade
+tests (→ V33); Studio `eventStream.test.ts`, `useInstanceEvents.test.tsx`,
+`AgentStepInspector.test.tsx`, `toolServers.test.ts`,
+`AgentEditors.test.tsx`, `parser.test.ts`. Browser check against an isolated
+engine and the dev Keycloak: the instance page went Live and showed journaled
+steps as a worker recorded them, payloads were refused without the evidence
+role with an explanation, and the designer picked and tightened a tool from
+the project's tool server and wrote the expected APL.
+
+**Deviations from the plan.**
+- The stream is read with `fetch`, not `EventSource`, which cannot send the
+  bearer token; the reconnect logic is Studio's own.
+- The outbox gained `seq` and `project_id` (V33) to order and filter the
+  stream; rows written before V33 are not streamed (a replica starts at the
+  newest row).
+- Refusals need `Accept: text/event-stream, application/json` to arrive as
+  JSON (`406` otherwise).
+- The step inspector lives in the instance telemetry tab, per agent node.
 
 ## E13 — Routing agents ✅ done
 
