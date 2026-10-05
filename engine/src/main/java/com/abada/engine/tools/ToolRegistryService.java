@@ -34,6 +34,8 @@ import org.springframework.stereotype.Service;
 public class ToolRegistryService {
     /** A tool reference that does not resolve, or a node that loosens a server's policy. */
     public static final String RESOLUTION_CODE = "ABADA-APL-TOOL-002";
+    /** An approval_required tool nobody may approve: neither the node nor the server names approvers. */
+    public static final String APPROVERS_CODE = "ABADA-APL-TOOL-003";
 
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<Map<String, List<ToolBinding>>> BINDINGS = new TypeReference<>() {};
@@ -157,14 +159,36 @@ public class ToolRegistryService {
                     }
                     if (requested != null) policy = requested;
                 }
+                List<String> approvers = tool.approvers();
+                if (entry.isObject() && entry.path("approvers").isArray() && !entry.path("approvers").isEmpty()) {
+                    if (policy != ToolPolicy.APPROVAL_REQUIRED) {
+                        errors.add(error(nodeId, pointer + "/approvers", "agent node '" + nodeId + "' names approvers"
+                                + " for tool '" + ref + "', which is " + policy.wireName() + ", not approval_required",
+                                "Remove approvers, or declare policy: approval_required"));
+                        continue;
+                    }
+                    List<String> groups = new ArrayList<>();
+                    entry.path("approvers").forEach(group -> groups.add(group.asText().strip()));
+                    approvers = groups;
+                }
+                if (policy == ToolPolicy.APPROVAL_REQUIRED && approvers.isEmpty()) {
+                    errors.add(new BpmnValidationIssue(APPROVERS_CODE, ValidationSeverity.ERROR, "agent node '"
+                            + nodeId + "' uses approval_required tool '" + ref + "' but nobody may approve it",
+                            null, nodeId, AplParser.LANGUAGE_VERSION, null,
+                            "Add approvers to the tool entry, or to the tool in tool server '" + serverName + "'",
+                            pointer));
+                    continue;
+                }
                 String idempotency = tool.idempotency();
                 if (policy != ToolPolicy.READ && idempotency == null) {
                     // A read tool tightened to a write: it was never keyed, so a crash must not resend it.
                     idempotency = "none";
                 }
-                nodeBindings.add(new ToolBinding(serverName, toolName, policy, idempotency, tool.approvers(),
+                nodeBindings.add(new ToolBinding(serverName, toolName, policy, idempotency,
+                        policy == ToolPolicy.APPROVAL_REQUIRED ? approvers : List.of(),
                         server.document().url(), server.document().transport(), server.document().credential(),
-                        server.resource().getId(), server.resource().getEntityVersion(), tool.inputSchemaSha256()));
+                        server.resource().getId(), server.resource().getEntityVersion(), tool.inputSchemaSha256(),
+                        policy == ToolPolicy.APPROVAL_REQUIRED ? tool.approvalSlaHours() : null));
             }
             if (!nodeBindings.isEmpty()) bindings.put(nodeId, List.copyOf(nodeBindings));
         }

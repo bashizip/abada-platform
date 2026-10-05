@@ -55,11 +55,13 @@ public interface AgentStepRepository extends JpaRepository<AgentStepEntity, Stri
 
     /**
      * Whether an attempt left a write STARTED (its outcome not journaled): a new
-     * attempt must not begin over it, or the write could be sent again.
+     * attempt must not begin over it, or the write could be sent again. An
+     * approved call not yet run counts too: the same attempt runs it, so a
+     * person's approval is never lost to a retry.
      */
     @org.springframework.data.jpa.repository.Query("select count(s) > 0 from AgentStepEntity s "
             + "where s.externalTaskId = :taskId and s.attempt = :attempt and s.kind = 'TOOL_CALL' "
-            + "and s.state = 'STARTED' and s.policy <> 'read'")
+            + "and s.state in ('STARTED', 'APPROVED') and s.policy <> 'read'")
     boolean hasOpenWrite(@org.springframework.data.repository.query.Param("taskId") String taskId,
             @org.springframework.data.repository.query.Param("attempt") int attempt);
 }

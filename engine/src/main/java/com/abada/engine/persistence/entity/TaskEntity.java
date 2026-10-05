@@ -68,6 +68,19 @@ public class TaskEntity {
     @Column(name = "form_key")
     private String formKey;
 
+    /** {@code USER} for a process node's task, {@code TOOL_APPROVAL} for an agent's proposed tool call (V31). */
+    @Column(name = "kind", nullable = false, length = 32)
+    private String kind = "USER";
+
+    /** The agent step a {@code TOOL_APPROVAL} task decides (V31). */
+    @Column(name = "agent_step_id", length = 36)
+    private String agentStepId;
+
+    public String getKind() { return kind; }
+    public void setKind(String value) { this.kind = value == null ? "USER" : value; }
+    public String getAgentStepId() { return agentStepId; }
+    public void setAgentStepId(String value) { this.agentStepId = value; }
+
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;

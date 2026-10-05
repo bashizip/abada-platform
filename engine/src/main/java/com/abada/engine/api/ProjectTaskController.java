@@ -39,10 +39,13 @@ public class ProjectTaskController {
     private final UserStatsService userStats;
     private final IdempotencyService idempotencyService;
     private final TaskGroupResolver taskGroupResolver;
+    private final com.abada.engine.core.agent.ToolApprovalService toolApprovals;
 
     public ProjectTaskController(AbadaEngine engine, UserContextProvider context,
             ProjectAccessService access, UserStatsService userStats,
-            IdempotencyService idempotencyService, TaskGroupResolver taskGroupResolver) {
+            IdempotencyService idempotencyService, TaskGroupResolver taskGroupResolver,
+            com.abada.engine.core.agent.ToolApprovalService toolApprovals) {
+        this.toolApprovals = toolApprovals;
         this.engine = engine;
         this.context = context;
         this.access = access;
@@ -74,7 +77,7 @@ public class ProjectTaskController {
                 .collect(Collectors.toSet());
         Map<String, ProcessInstance> instances = engine.getProcessInstancesByIds(ids);
         return ResponseEntity.ok().headers(Pagination.headers(visible)).body(visible.stream()
-                .map(task -> TaskDetailsDto.from(task, instances.get(task.getProcessInstanceId())))
+                .map(task -> details(task, instances.get(task.getProcessInstanceId())))
                 .toList());
     }
 
@@ -152,7 +155,7 @@ public class ProjectTaskController {
         return ResponseEntity.ok(idempotencyService.execute(idempotencyKey, "task.decision",
                 decision.fingerprint(taskId, context.getUsername()),
                 new TypeReference<TaskActionResponse>() {}, () -> {
-                    engine.decideTask(taskId, context.getUsername(), context.getGroups(), decision.outcome(),
+                    toolApprovals.decideTask(taskId, context.getUsername(), context.getGroups(), decision.outcome(),
                             decision.comment(), decision.variablesOrEmpty());
                     return new TaskActionResponse("Decided", taskId);
                 }));
@@ -186,6 +189,10 @@ public class ProjectTaskController {
 
     private TaskDetailsDto toDetails(TaskInstance task) {
         ProcessInstance instance = engine.getProcessInstanceById(task.getProcessInstanceId());
-        return TaskDetailsDto.from(task, instance);
+        return details(task, instance);
+    }
+
+    private TaskDetailsDto details(com.abada.engine.core.model.TaskInstance task, ProcessInstance instance) {
+        return TaskDetailsDto.from(task, instance, task.isToolApproval() ? toolApprovals.view(task, instance) : null);
     }
 }

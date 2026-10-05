@@ -458,6 +458,7 @@ public class AbadaEngine {
         // Variable names only: submitted values (and comments) never reach the logs.
         log.info("Completing task {} with variables {}", taskId, variables == null ? Set.of() : variables.keySet());
         TaskInstance currentTask = loadTaskForUpdate(taskId);
+        requireUserTask(currentTask);
 
         String processInstanceId = currentTask.getProcessInstanceId();
         ProcessInstanceEntity authoritativeInstance =
@@ -556,6 +557,7 @@ public class AbadaEngine {
     @AtomicRuntimeCommand
     public void failTask(String taskId) {
         TaskInstance task = loadTaskForUpdate(taskId);
+        requireUserTask(task);
         requireActiveProcessForTask(task);
         taskManager.failTask(task);
         persistTask(task);
@@ -1520,8 +1522,8 @@ public class AbadaEngine {
 
     private static final List<JobEntity.Status> PENDING_JOBS =
             List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED);
-    private static final List<ExternalTaskEntity.Status> OPEN_EXTERNAL =
-            List.of(ExternalTaskEntity.Status.OPEN, ExternalTaskEntity.Status.LOCKED);
+    private static final List<ExternalTaskEntity.Status> OPEN_EXTERNAL = List.of(ExternalTaskEntity.Status.OPEN,
+            ExternalTaskEntity.Status.LOCKED, ExternalTaskEntity.Status.AWAITING_APPROVAL);
     private static final List<com.abada.engine.core.model.TaskStatus> OPEN_TASKS =
             List.of(com.abada.engine.core.model.TaskStatus.AVAILABLE, com.abada.engine.core.model.TaskStatus.CLAIMED);
 
@@ -1709,8 +1711,7 @@ public class AbadaEngine {
 
     private void createExternalTaskJobs(ProcessInstance instance) {
         ParsedProcessDefinition definition = instance.getDefinition();
-        List<ExternalTaskEntity.Status> open = List.of(ExternalTaskEntity.Status.OPEN,
-                ExternalTaskEntity.Status.LOCKED);
+        List<ExternalTaskEntity.Status> open = OPEN_EXTERNAL;
         for (ProcessToken token : instance.getWaitingTokens()) {
             String activityId = token.activityId();
             if (definition.isServiceTask(activityId)) {
@@ -1867,6 +1868,8 @@ public class AbadaEngine {
         entity.setCandidateGroups(new ArrayList<>(taskInstance.getCandidateGroups()));
         entity.setFormKey(taskInstance.getFormKey());
         entity.setTokenId(taskInstance.getTokenId());
+        entity.setKind(taskInstance.getKind());
+        entity.setAgentStepId(taskInstance.getAgentStepId());
         entity.setEntityVersion(taskInstance.getEntityVersion());
 
         return entity;
@@ -1878,6 +1881,62 @@ public class AbadaEngine {
             throw new ProcessEngineException("Task not found: " + taskId);
         }
         return taskManager.materialize(entity);
+    }
+
+    /** A tool approval is decided through its own command, never completed or failed like a node's task. */
+    private static void requireUserTask(TaskInstance task) {
+        if (task.isToolApproval()) {
+            throw new ProcessEngineException("Task " + task.getId() + " approves a tool call: decide it with"
+                    + " outcome approve or reject");
+        }
+    }
+
+    /**
+     * Opens the human task that approves one proposed tool call, in the
+     * caller's step command (the external-task row is already locked, then the
+     * instance here). The task carries the agent's token so a cancel or timeout
+     * boundary retires it, and never moves that token. History and the outbox
+     * get the tool, the step and the argument digest, never the arguments.
+     *
+     * @return the approval task id
+     */
+    public String openToolApproval(String processInstanceId, String tokenId, String activityId, String stepId,
+            String toolRef, int sequence, String argumentsDigest, List<String> approvers, Double slaHours) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null || isTerminal(instance)) {
+            throw new com.abada.engine.api.ApiException(org.springframework.http.HttpStatus.GONE,
+                    com.abada.engine.api.ApiErrorCode.WORK_RETIRED, "Process instance " + processInstanceId
+                            + " has ended; its agent work no longer acts");
+        }
+        TaskInstance approval = taskManager.createTaskSnapshot(activityId, "Approve " + toolRef, processInstanceId,
+                null, List.of(), approvers, null, com.abada.engine.core.model.assignment.AssignmentStrategy.CLAIM);
+        approval.setTokenId(tokenId);
+        approval.setKind(TaskInstance.KIND_TOOL_APPROVAL);
+        approval.setAgentStepId(stepId);
+        if (slaHours != null) approval.setDueAt(approval.getStartDate().plus(slaDuration(slaHours)));
+        persistTask(approval);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("taskId", approval.getId());
+        details.put("toolRef", toolRef);
+        details.put("sequence", sequence);
+        details.put("argumentsDigest", argumentsDigest);
+        details.put("approvers", approvers);
+        historyService.record("TASK_CREATED", instance, activityId,
+                Map.of("assignee", "", "assignmentStrategy", com.abada.engine.core.model.assignment.AssignmentStrategy.CLAIM.name(),
+                        "kind", TaskInstance.KIND_TOOL_APPROVAL));
+        historyService.record("TOOL_APPROVAL_REQUESTED", instance, activityId, details);
+        if (slaHours != null && tokenId != null) {
+            jobScheduler.scheduleTaskJob(processInstanceId, activityId, tokenId, JobEntity.Kind.SLA, null,
+                    approval.getDueAt());
+        }
+        return approval.getId();
+    }
+
+    /** Cancels the pending SLA timer of a decided tool approval; the token's other timers keep running. */
+    public void retireApprovalTimer(String processInstanceId, String tokenId) {
+        if (tokenId == null) return;
+        cancelJobs(jobRepository.findPendingForTokensSkipLocked(processInstanceId, Set.of(tokenId)).stream()
+                .filter(job -> job.getKind() == JobEntity.Kind.SLA).toList());
     }
 
     private ProcessInstance loadProcessInstance(String processInstanceId) {

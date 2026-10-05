@@ -41,14 +41,17 @@ public class TaskController {
     private final UserStatsService userStatsService;
     private final IdempotencyService idempotencyService;
     private final TaskGroupResolver taskGroupResolver;
+    private final com.abada.engine.core.agent.ToolApprovalService toolApprovals;
 
     public TaskController(
         AbadaEngine engine,
         UserContextProvider context,
         UserStatsService userStatsService,
         IdempotencyService idempotencyService,
-        TaskGroupResolver taskGroupResolver
+        TaskGroupResolver taskGroupResolver,
+        com.abada.engine.core.agent.ToolApprovalService toolApprovals
     ) {
+        this.toolApprovals = toolApprovals;
         this.engine = engine;
         this.context = context;
         this.userStatsService = userStatsService;
@@ -83,7 +86,7 @@ public class TaskController {
 
         List<TaskDetailsDto> taskDetailsDtos = visible.getContent()
             .stream()
-            .map(task -> TaskDetailsDto.from(task, processInstances.get(task.getProcessInstanceId())))
+            .map(task -> details(task, processInstances.get(task.getProcessInstanceId())))
             .collect(Collectors.toList());
 
         return ResponseEntity.ok()
@@ -122,7 +125,7 @@ public class TaskController {
 
         List<TaskDetailsDto> taskDetailsDtos = visible.getContent()
             .stream()
-            .map(task -> TaskDetailsDto.from(task, processInstances.get(task.getProcessInstanceId())))
+            .map(task -> details(task, processInstances.get(task.getProcessInstanceId())))
             .collect(Collectors.toList());
 
         return ResponseEntity.ok()
@@ -154,7 +157,7 @@ public class TaskController {
             task.getProcessInstanceId()
         );
 
-        TaskDetailsDto taskDetails = TaskDetailsDto.from(task, processInstance);
+        TaskDetailsDto taskDetails = details(task, processInstance);
         return ResponseEntity.ok(taskDetails);
     }
 
@@ -229,7 +232,7 @@ public class TaskController {
         TaskActionResponse response = idempotencyService.execute(idempotencyKey, "task.decision",
                 decision.fingerprint(taskId, context.getUsername()),
                 new TypeReference<TaskActionResponse>() {}, () -> {
-                    engine.decideTask(taskId, context.getUsername(), context.getGroups(), decision.outcome(),
+                    toolApprovals.decideTask(taskId, context.getUsername(), context.getGroups(), decision.outcome(),
                             decision.comment(), decision.variablesOrEmpty());
                     return new TaskActionResponse("Decided", taskId);
                 });
@@ -307,5 +310,9 @@ public class TaskController {
             throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                     "Task not found: " + taskId);
         }
+    }
+
+    private TaskDetailsDto details(com.abada.engine.core.model.TaskInstance task, ProcessInstance instance) {
+        return TaskDetailsDto.from(task, instance, task.isToolApproval() ? toolApprovals.view(task, instance) : null);
     }
 }

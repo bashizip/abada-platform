@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("30");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("31");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,16 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V31: tool approvals (task kind and agent step, decision time on the step).
+            for (String[] column : new String[][] {{"tasks", "kind"}, {"tasks", "agent_step_id"},
+                    {"agent_steps", "decided_at"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "tasks", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_tasks_agent_step");
             }
             // V30: evidence policy, payload copies, retention, cost and model prices.
             for (String[] column : new String[][] {{"agent_steps", "cost_usd"}, {"agent_steps", "cost_unpriced"},

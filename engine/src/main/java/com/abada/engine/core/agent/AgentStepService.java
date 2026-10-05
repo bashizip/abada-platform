@@ -116,6 +116,9 @@ public class AgentStepService {
                     "External task " + externalTaskId + " is " + task.getStatus() + "; its lease no longer acts");
         }
         if (request.workerId() == null || request.workerId().isBlank()) throw invalid("workerId is required");
+        if (task.getStatus() == ExternalTaskEntity.Status.AWAITING_APPROVAL) {
+            return replayProposal(task, request);
+        }
         if (task.getStatus() != ExternalTaskEntity.Status.LOCKED || task.getLockExpirationTime() == null
                 || task.getLockExpirationTime().isBefore(Instant.now())) {
             throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.WORKER_LOCK_EXPIRED,
@@ -132,6 +135,11 @@ public class AgentStepService {
         Kind kind = parse(Kind.class, request.kind(), "kind");
         State state = parse(State.class, request.state(), "state");
         if (state == State.OUTCOME_UNKNOWN) throw invalid("OUTCOME_UNKNOWN is set by the engine, not by a worker");
+        if (state == State.APPROVED || state == State.REJECTED) {
+            throw invalid(state + " is set by a person's decision, not by a worker");
+        }
+        if (state == State.PROPOSED && kind != Kind.TOOL_CALL) throw invalid("only a tool call is proposed");
+        if (state == State.PROPOSED && request.result() != null) throw invalid("a PROPOSED step carries no result");
         if (kind == Kind.MODEL_CALL && request.toolRef() != null) throw invalid("a model call names no toolRef");
         if (kind == Kind.TOOL_CALL && (request.toolRef() == null || request.toolRef().isBlank())) {
             throw invalid("a tool call needs toolRef");
@@ -159,8 +167,9 @@ public class AgentStepService {
         if (request.sequence() != expected) {
             throw rejected("SEQUENCE", "The next step of attempt " + task.getAttempt() + " is " + expected);
         }
-        if (last != null && last.getState() == State.STARTED) {
-            throw rejected("OPEN_STEP", "Step " + last.getSequence() + " is still STARTED; finish it first");
+        if (last != null && !last.getState().terminal()) {
+            throw rejected("OPEN_STEP", "Step " + last.getSequence() + " is still " + last.getState()
+                    + "; finish it first");
         }
         if (steps.countByExternalTaskId(task.getId()) >= MAX_STEPS_PER_TASK) {
             throw rejected("STEP_LIMIT", "An agent task may journal at most " + MAX_STEPS_PER_TASK + " steps");
@@ -188,6 +197,7 @@ public class AgentStepService {
         step.setStartedAt(Instant.now());
 
         boolean reused = false;
+        ToolBinding proposed = null;
         if (kind == Kind.TOOL_CALL) {
             String ref = request.toolRef().strip();
             ToolBinding binding = engine.toolBindings(instance, task.getActivityId()).stream()
@@ -195,12 +205,30 @@ public class AgentStepService {
                     .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
                             "Tool '" + ref + "' is not bound to this agent task", Map.of("reason", "TOOL_NOT_BOUND")));
             ToolPolicy policy = binding.policy();
-            if (policy == ToolPolicy.APPROVAL_REQUIRED) {
-                throw rejected("APPROVAL_REQUIRED", "Tool '" + ref + "' needs a person's approval before it runs");
+            if (policy == ToolPolicy.APPROVAL_REQUIRED && state != State.PROPOSED) {
+                throw rejected("APPROVAL_REQUIRED", "Tool '" + ref + "' needs a person's approval before it runs;"
+                        + " journal the call as PROPOSED");
+            }
+            if (policy != ToolPolicy.APPROVAL_REQUIRED && state == State.PROPOSED) {
+                throw invalid("Tool '" + ref + "' is " + policy.wireName() + "; only approval_required calls are"
+                        + " proposed");
             }
             step.setToolRef(ref);
             step.setPolicy(policy.wireName());
-            if (policy != ToolPolicy.READ) {
+            if (policy == ToolPolicy.APPROVAL_REQUIRED) {
+                AgentStepEntity done = priorIdenticalWrite(task, ref, requestDigest);
+                if (done != null) {
+                    // An earlier attempt already ran this exact approved call: its result, no second approval.
+                    step.setState(State.COMPLETED);
+                    step.setResultEnc(done.getResultEnc());
+                    step.setEvidenceResultEnc(done.getEvidenceResultEnc());
+                    step.setResultDigest(done.getResultDigest());
+                    step.setFinishedAt(Instant.now());
+                    reused = true;
+                } else {
+                    proposed = binding;
+                }
+            } else if (policy != ToolPolicy.READ) {
                 if (state != State.STARTED) {
                     throw rejected("WRITE_AHEAD_REQUIRED",
                             "A write is journaled as STARTED before it runs, then finished");
@@ -226,7 +254,81 @@ public class AgentStepService {
         }
         steps.save(step);
         recordToolHistory(instance, step, reused);
+        if (proposed != null) park(task, step, proposed);
         return view(step, reused, reused);
+    }
+
+    /**
+     * Parks the agent's work on a proposed call: the lease is released, the
+     * task is not acquirable, and a person in the binding's approver groups
+     * gets the approval task. All in the step command.
+     */
+    private void park(ExternalTaskEntity task, AgentStepEntity step, ToolBinding binding) {
+        task.setStatus(ExternalTaskEntity.Status.AWAITING_APPROVAL);
+        task.setWorkerId(null);
+        task.setLockExpirationTime(null);
+        externalTasks.save(task);
+        engine.openToolApproval(task.getProcessInstanceId(), task.getTokenId(), task.getActivityId(), step.getId(),
+                step.getToolRef(), step.getSequence(), step.getRequestDigest(), binding.approvers(),
+                binding.approvalSlaHours());
+    }
+
+    /**
+     * A worker re-sending the proposal it made (its response was lost) gets the
+     * step back; anything else on parked work is refused, as it holds no lease.
+     */
+    private AgentStepDto replayProposal(ExternalTaskEntity task, AgentStepRequest request) {
+        AgentStepEntity step = request.sequence() == null || request.attempt() == null
+                || request.attempt() != task.getAttempt() ? null
+                : steps.findByExternalTaskIdAndAttemptAndSequence(task.getId(), task.getAttempt(), request.sequence())
+                        .orElse(null);
+        if (step != null && step.getState() == State.PROPOSED && "PROPOSED".equalsIgnoreCase(trim(request.state()))
+                && request.workerId().equals(step.getWorkerId())
+                && Objects.equals(step.getToolRef(), trim(request.toolRef()))
+                && step.getRequestDigest().equals(sha256(canonical(request.request(), "request")))) {
+            return view(step, false, false);
+        }
+        throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.WORKER_LOCK_EXPIRED, "External task "
+                + task.getId() + " is waiting for a person to approve a tool call; it holds no lease");
+    }
+
+    /**
+     * A person's decision on a {@code PROPOSED} step, under the caller's lock
+     * of its external task. Approve: the call may run next, with exactly these
+     * arguments. Reject: the step finishes with the rejection as its result,
+     * which the agent reads when it resumes.
+     */
+    public void decide(AgentStepEntity step, ProcessInstance instance, boolean approved, String comment,
+            String actor) {
+        if (step.getState() != State.PROPOSED) {
+            throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.ENGINE_COMMAND_REJECTED,
+                    "Step " + step.getSequence() + " is " + step.getState() + ", not waiting for approval");
+        }
+        Instant now = Instant.now();
+        step.setResolvedBy(actor);
+        step.setDecidedAt(now);
+        if (approved) {
+            step.setState(State.APPROVED);
+        } else {
+            com.fasterxml.jackson.databind.node.ObjectNode result = json.createObjectNode();
+            result.put("rejected", true);
+            result.put("comment", comment);
+            String resultJson = canonicalJson(result);
+            step.setState(State.REJECTED);
+            step.setResultEnc(encrypt(resultJson));
+            step.setEvidenceResultEnc(evidenceCopy(EvidencePolicy.Mode.fromWire(step.getPayloadMode()), instance,
+                    result));
+            step.setResultDigest(sha256(resultJson));
+            step.setFinishedAt(now);
+        }
+        steps.save(step);
+        recordToolHistory(instance, step, false);
+    }
+
+    /** The arguments of a proposed call as the evidence policy keeps them; null under {@code none} or purged. */
+    public JsonNode proposedArguments(AgentStepEntity step) {
+        JsonNode request = decrypt(step.getEvidenceRequestEnc());
+        return request == null ? null : request.path("arguments").isMissingNode() ? request : request.get("arguments");
     }
 
     private AgentStepDto continueStep(AgentStepEntity existing, ProcessInstance instance, Kind kind, State state,
@@ -234,6 +336,25 @@ public class AgentStepService {
         if (existing.getKind() != kind || !Objects.equals(existing.getToolRef(), trim(request.toolRef()))
                 || !existing.getRequestDigest().equals(requestDigest)) {
             throw rejected("DIVERGENT_STEP", "Step " + existing.getSequence() + " was journaled with another request");
+        }
+        if (existing.getState() == State.APPROVED) {
+            if (state != State.STARTED) {
+                throw rejected("WRITE_AHEAD_REQUIRED", "An approved call is journaled as STARTED before it runs");
+            }
+            // The approved arguments, unchanged (the digest check above): the call may run now.
+            ToolBinding binding = engine.toolBindings(instance, existing.getActivityId()).stream()
+                    .filter(candidate -> candidate.ref().equals(existing.getToolRef())).findFirst()
+                    .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
+                            "Tool '" + existing.getToolRef() + "' is not bound to this agent task",
+                            Map.of("reason", "TOOL_NOT_BOUND")));
+            existing.setState(State.STARTED);
+            if ("key".equals(binding.idempotency())) {
+                existing.setIdempotencyKey(sha256(existing.getExternalTaskId() + ":" + existing.getAttempt() + ":"
+                        + existing.getSequence()));
+            }
+            steps.save(existing);
+            recordToolHistory(instance, existing, false);
+            return view(existing, false, false);
         }
         if (existing.getState() == state) {
             if (state.terminal() && !Objects.equals(existing.getResultDigest(), resultDigest)) {

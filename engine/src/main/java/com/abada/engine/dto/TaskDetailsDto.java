@@ -103,11 +103,29 @@ public record TaskDetailsDto(
     Map<String, Object> variables,
     @Schema(description = "Decisions a reviewer chooses from (empty for an ordinary task); "
         + "submit one with the decision endpoint")
-    List<TaskOutcomeDto> outcomes
+    List<TaskOutcomeDto> outcomes,
+    @Schema(description = "USER for a process node's task; TOOL_APPROVAL for an agent's proposed tool call",
+        example = "USER")
+    String kind,
+    @Schema(description = "The proposed tool call a TOOL_APPROVAL task decides (null for other tasks)")
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    ToolApprovalDto toolApproval
 ) {
     public static TaskDetailsDto from(
         TaskInstance task,
         ProcessInstance processInstance
+    ) {
+        return from(task, processInstance, null);
+    }
+
+    /**
+     * A tool approval shows its proposed call and the fixed approve/reject
+     * outcomes, never the process variables: approvers decide on the call alone.
+     */
+    public static TaskDetailsDto from(
+        TaskInstance task,
+        ProcessInstance processInstance,
+        ToolApprovalDto toolApproval
     ) {
         String processDefinitionId = null;
         String processDefinitionName = null;
@@ -144,6 +162,11 @@ public record TaskDetailsDto(
             variables = processInstance.getVariables();
         }
 
+        if (task.isToolApproval()) {
+            variables = Map.of();
+            outcomes = com.abada.engine.core.agent.ToolApprovalService.OUTCOMES.stream()
+                .map(outcome -> new TaskOutcomeDto(outcome.name(), outcome.commentRequired())).toList();
+        }
         return new TaskDetailsDto(
             task.getId(),
             task.getTaskDefinitionKey(),
@@ -165,7 +188,9 @@ public record TaskDetailsDto(
             currentActivityId,
             processInstance != null ? processInstance.getProjectId() : null,
             variables,
-            outcomes
+            outcomes,
+            task.getKind(),
+            task.isToolApproval() ? toolApproval : null
         );
     }
 }
