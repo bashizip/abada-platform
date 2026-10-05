@@ -141,8 +141,28 @@ committed step:
   a model without a price). Journal model calls `STARTED` before calling the
   model so the refusal comes before the spend.
 - A failed attempt never starts a new attempt while a write of the current
-  one is still `STARTED`: the same attempt resumes and the write is re-sent
-  with its key (or, unkeyed, goes to a person).
+  one is still `STARTED`, or an approved call has not run yet: the same
+  attempt resumes and the write is re-sent with its key (or, unkeyed, goes to
+  a person).
+- **Approval-required tools.** A call to an `approval_required` tool is
+  journaled with `state: PROPOSED` (its `{callId, arguments}` request, no
+  result); any other state is refused with `APPROVAL_REQUIRED`, and only
+  approval-required tools may be proposed. Recording the proposal **parks**
+  the task: the lease is released, the task is `AWAITING_APPROVAL` and not
+  acquirable, and a person in the binding's approver groups gets a
+  `TOOL_APPROVAL` task. The worker returns the slot without completing or
+  failing anything; re-sending the identical proposal (a lost response)
+  returns the same step, anything else on parked work is
+  `409 WORKER_LOCK_EXPIRED`. A decision makes the task acquirable again, on
+  the same attempt:
+  - `APPROVED`: journal the same `sequence` and the **same request** as
+    `STARTED` (any other request is `DIVERGENT_STEP`), receive the
+    idempotency key, call the tool, then finish the step as for a write;
+  - `REJECTED`: the step is finished with result
+    `{rejected: true, comment}`; give the model the comment as the tool
+    result and continue with the next sequence.
+  An identical call an earlier attempt already ran is answered `reused`, with
+  no new approval.
 - `Idempotency-Key` is accepted but not needed: the journal is idempotent by
   attempt, sequence and request, and step responses are never copied into the
   idempotency store (they may carry decrypted results).

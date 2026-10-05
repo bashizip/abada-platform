@@ -154,6 +154,14 @@ class PostgresToolRegistryTest {
         assertThat(deploymentErrors(agent("loosened", """
                         - { ref: crm/create_ticket, policy: read }
                 """))).extracting(BpmnValidationIssue::path).containsExactly("/flow/nodes/1/tools/0/policy");
+        // An approval_required tool somebody must be able to approve: the node's list, else the server's.
+        assertThat(deploymentErrors(agent("unapprovable", """
+                        - { ref: crm/create_ticket, policy: approval_required }
+                """))).extracting(BpmnValidationIssue::code, BpmnValidationIssue::path)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("ABADA-APL-TOOL-003", "/flow/nodes/1/tools/0"));
+        assertThat(deploymentErrors(agent("approvers_on_a_write", """
+                        - { ref: crm/create_ticket, approvers: [support] }
+                """))).extracting(BpmnValidationIssue::path).containsExactly("/flow/nodes/1/tools/0/approvers");
     }
 
     @Test
@@ -179,7 +187,7 @@ class PostgresToolRegistryTest {
         AbadaEngine engine = context.getBean(AbadaEngine.class);
         String source = agent("frozen", """
                         - crm/get_customer
-                        - { ref: crm/create_ticket, policy: approval_required }
+                        - { ref: crm/create_ticket, policy: approval_required, approvers: [support] }
                         - web_search
                 """);
         ProcessDefinitionEntity first = deploy(source);
@@ -213,6 +221,8 @@ class PostgresToolRegistryTest {
                 org.assertj.core.groups.Tuple.tuple("crm/get_customer", ToolPolicy.WRITE),
                 org.assertj.core.groups.Tuple.tuple("crm/create_ticket", ToolPolicy.APPROVAL_REQUIRED));
         assertThat(old.get(1).idempotency()).isEqualTo("key");
+        assertThat(old.get(1).approvers()).containsExactly("support");
+        assertThat(old.get(0).approvers()).isEmpty();
         assertThat(old.get(0).credential()).isEqualTo("crm-token");
         assertThat(old.get(0).resourceRevision()).isLessThan(current.get(0).resourceRevision());
         // The advisory name is passed on, but never bound.

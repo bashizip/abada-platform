@@ -23,10 +23,17 @@ public class AgentStepEntity {
     public enum State {
         STARTED, COMPLETED, FAILED,
         /** A write that may or may not have happened; never re-sent, resolved by an operator. */
-        OUTCOME_UNKNOWN;
+        OUTCOME_UNKNOWN,
+        /** An approval_required call waiting for a person; the agent's work is parked. */
+        PROPOSED,
+        /** A person approved the call; it runs next, with exactly the proposed arguments. */
+        APPROVED,
+        /** A person rejected the call; its result is the rejection, which the agent reads. */
+        REJECTED;
 
+        /** A finished step carries its result and lets the next step be journaled. */
         public boolean terminal() {
-            return this != STARTED;
+            return this != STARTED && this != PROPOSED && this != APPROVED;
         }
     }
 
@@ -79,6 +86,13 @@ public class AgentStepEntity {
     private String workerId;
     @Column(name = "resolved_by")
     private String resolvedBy;
+
+    /** When a person approved or rejected a PROPOSED step (V31). */
+    @Column(name = "decided_at")
+    private Instant decidedAt;
+
+    public Instant getDecidedAt() { return decidedAt; }
+    public void setDecidedAt(Instant value) { decidedAt = value; }
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
     @Column(name = "finished_at")

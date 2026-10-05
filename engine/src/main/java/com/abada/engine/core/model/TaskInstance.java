@@ -29,6 +29,19 @@ public class TaskInstance {
     /** The waiting token this task resumes; null for tasks created before V23. */
     private String tokenId;
     private long entityVersion;
+    /** {@code USER}, or {@code TOOL_APPROVAL} for an agent's proposed tool call. */
+    private String kind = KIND_USER;
+    private String agentStepId;
+
+    public static final String KIND_USER = "USER";
+    public static final String KIND_TOOL_APPROVAL = "TOOL_APPROVAL";
+
+    public String getKind() { return kind; }
+    public void setKind(String value) { this.kind = value == null ? KIND_USER : value; }
+    public String getAgentStepId() { return agentStepId; }
+    public void setAgentStepId(String value) { this.agentStepId = value; }
+    @JsonIgnore
+    public boolean isToolApproval() { return KIND_TOOL_APPROVAL.equals(kind); }
     
     @JsonIgnore
     private Timer.Sample waitingTimeSample;

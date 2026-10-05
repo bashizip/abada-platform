@@ -325,7 +325,7 @@ public class TaskManager {
                 .toList();
     }
 
-    TaskInstance materialize(TaskEntity entity) {
+    public TaskInstance materialize(TaskEntity entity) {
         TaskInstance task = new TaskInstance();
         task.setId(entity.getId());
         task.setProcessInstanceId(entity.getProcessInstanceId());
@@ -343,6 +343,8 @@ public class TaskManager {
         task.setEntityVersion(entity.getEntityVersion());
         task.setFormKey(entity.getFormKey());
         task.setTokenId(entity.getTokenId());
+        task.setKind(entity.getKind());
+        task.setAgentStepId(entity.getAgentStepId());
         return task;
     }
 

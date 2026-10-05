@@ -347,6 +347,22 @@ class SecurityAuthorizationContractTest {
         assertForbidden(get(payloads), "operator");
         assertForbidden(get(payloads), "admin");
 
+        // Deciding a tool approval: authenticated people only, never a worker credential.
+        String decision = "/v1/tasks/missing/decision";
+        String approve = "{\"outcome\":\"approve\"}";
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve)
+                        .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve)
+                        .header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "finance"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve), "worker");
+
         String prices = "/v1/model-prices";
         String price = "{\"model\":\"m\",\"inputPerMillion\":1,\"outputPerMillion\":2}";
         mvc.perform(get(prices)).andExpect(status().isUnauthorized());

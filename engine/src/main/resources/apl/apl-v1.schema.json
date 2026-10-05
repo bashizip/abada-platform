@@ -337,7 +337,7 @@
         },
         "tools": {
           "type": "array",
-          "description": "Tools from the project's tool servers, as <server>/<tool> or { ref, policy } to tighten the server's policy. A name without a server is advisory only (deprecated).",
+          "description": "Tools from the project's tool servers, as <server>/<tool> or { ref, policy, approvers } to tighten the server's policy or name who approves an approval_required tool. A name without a server is advisory only (deprecated).",
           "items": {
             "oneOf": [
               {
@@ -348,8 +348,19 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
-                  "ref",
-                  "policy"
+                  "ref"
+                ],
+                "anyOf": [
+                  {
+                    "required": [
+                      "policy"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "approvers"
+                    ]
+                  }
                 ],
                 "properties": {
                   "ref": {
@@ -362,6 +373,15 @@
                       "write",
                       "approval_required"
                     ]
+                  },
+                  "approvers": {
+                    "description": "Groups who may approve this tool's calls; overrides the tool server's approvers. approval_required tools only.",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
                   }
                 }
               }

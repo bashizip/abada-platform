@@ -268,7 +268,7 @@ write keeps the attempt), `AplToolReferenceTest` (limits).
 - A tool server outage during a write defers the attempt (the same attempt
   resumes and re-sends the write with its key); during a read it is an error
   turn to the model.
-- `approval_required` tools are answered with an error turn until E10.
+- `approval_required` tools were answered with an error turn until E10, which replaced it with the approval flow.
 - The cross-process exit demo (engine, worker and PostgreSQL together) is the
   M3 release step; E8 proves the worker side over real HTTP against a
   journaling engine stub and the engine side under PostgreSQL.
@@ -382,7 +382,7 @@ token upgrade tests (→ V28), SDK `AbadaWorkerClientTest`, Studio
 - The worker side (rebuilding the conversation from `steps`) lands with the
   E8 loop, which is the first worker code that journals steps.
 
-## E10 — Approval-required tools ✱ never cut
+## E10 — Approval-required tools ✱ never cut ✅ done
 
 **Goal.** When an agent wants to use an `approval_required` tool, the agent
 stops, a person sees exactly what it proposes, and the write happens only
@@ -436,6 +436,44 @@ separate commands; the write happens in the worker, outside any transaction.
 
 **Out of scope.** Editing arguments before approving; multi-approver
 sign-off; approving a whole class of calls in advance.
+
+**As built.** V31 adds `tasks.kind`, `tasks.agent_step_id` and
+`agent_steps.decided_at`; steps gain `PROPOSED`, `APPROVED` and `REJECTED`, and
+external tasks `AWAITING_APPROVAL`. `AgentStepService` parks the work and calls
+`AbadaEngine.openToolApproval` in the step command; `ToolApprovalService`
+decides (locks: external task, then approval task; never the instance) and
+renders the proposed call for `TaskDetailsDto.toolApproval`. The worker
+journals the proposal, returns the slot (`AgentLoop.AwaitingApproval`), and on
+the next lease runs an approved call once with its key or hands the model the
+rejection. Studio shows `ToolApprovalCard` in the Task Inbox with the existing
+decision buttons. Tests: `PostgresToolApprovalTest` (PostgreSQL: park, approve
+→ one keyed write with the approved arguments only, reject → the agent reads
+the comment, restart while waiting, SLA mark, timeout boundary and cancel
+retire both, `410` after retirement, proposal rules), `ToolApprovalApiTest`
+(detail view without variables, visibility, outsider `403`, worker credential
+`403`, comment required, plain completion refused),
+`SecurityAuthorizationContractTest` (`401` missing/invalid/expired/forged,
+worker token `403`), `PostgresToolRegistryTest` and `AplToolReferenceTest`
+(`approvers`, `ABADA-APL-TOOL-003`), worker `AgentLoopTest` and
+`AgentToolLoopEndToEndTest` (park, approve, the write runs once over real
+HTTP), Studio `ToolApprovalCard.test.tsx`, `decision.test.ts`,
+`parser.test.ts`.
+
+**Deviations from the plan.**
+- The migration is V31 (E20a took V29).
+- Approvers come from the node's tool entry (`{ ref, approvers }`), else the
+  tool server's; agent nodes have no `escalate_to` to fall back on. With
+  neither, deployment fails with `ABADA-APL-TOOL-003`.
+- `approval_sla_hours` marks a late approval escalated and emits
+  `TASK_SLA_BREACHED`; candidates do not change (tools have no escalation
+  groups).
+- An outsider deciding gets `403` (the existing task authorization), not
+  `404`.
+- An approved call not yet run blocks a new attempt like a `STARTED` write, so
+  a retry never discards a person's approval; an identical call an earlier
+  attempt already ran is answered `reused` without a new approval.
+- Approval tasks expose no process variables to the approver; the arguments
+  follow the evidence policy (redacted by default, hidden under `none`).
 
 ## E11 — Evidence and cost ✅ done
 

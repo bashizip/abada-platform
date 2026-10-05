@@ -337,8 +337,9 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   locks only the external-task row, never advances the process and never
   holds the instance lock. The engine accepts only sequence `last + 1` (an
   identical replay is idempotent, a divergent one is `409`), only tools
-  frozen in the definition's bindings (`403` otherwise), no
-  `approval_required` tool until E10, and at most 256 steps per task. A write
+  frozen in the definition's bindings (`403` otherwise), an
+  `approval_required` call only as a `PROPOSED` step (see below), and at most
+  256 steps per task. A write
   must be journaled `STARTED` before it runs; when its server accepts a key,
   the engine returns `sha256(externalTaskId:attempt:sequence)` as its
   idempotency key, the same key on every resumed lease. Fetch-and-lock
@@ -348,6 +349,25 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   again. Retired work answers `410`. Digests are computed by the engine from
   canonical JSON; payloads are AES-GCM encrypted at rest. Evidence:
   [`PostgresAgentStepJournalTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresAgentStepJournalTest.java).
+- **Tool approvals.** Journaling a `PROPOSED` call parks the agent's work in
+  the same command: the external task becomes `AWAITING_APPROVAL` (no lease,
+  never acquired) and a human task of kind `TOOL_APPROVAL` opens for the
+  binding's approver groups, on the agent's token but not as a process node:
+  `TOOL_APPROVAL_REQUESTED` goes to history and the outbox with the tool, the
+  step and the argument digest, never the arguments. Deciding it
+  (`POST .../tasks/{id}/decision`, outcome `approve` or `reject`, a comment
+  required to reject) locks the external task, then the approval task, never
+  the instance, and never moves the token: the step becomes `APPROVED` or
+  `REJECTED` with the actor and time, and the work is acquirable again on the
+  same attempt. Only candidates decide; a worker credential never does (`403`)
+  and a project role is not enough. Completing or failing an approval like a
+  node's task is refused. An approved call runs only with the approved request
+  digest (`DIVERGENT_STEP` otherwise). A timeout boundary, a cancel or the end
+  of the instance retires both the parked work and the approval (deciding it
+  then is `410`). `approval_sla_hours` marks a late approval escalated
+  (`TASK_SLA_BREACHED`) without changing its candidates. Evidence:
+  [`PostgresToolApprovalTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresToolApprovalTest.java),
+  [`ToolApprovalApiTest`](../../engine/src/test/java/com/abada/engine/api/ToolApprovalApiTest.java).
 - Worker death mid-task is served by lease expiry: an expired `LOCKED` task is
   re-acquired with `SKIP LOCKED`, so another worker retries it without the
   engine re-creating work or advancing state twice. Restarting the engine does

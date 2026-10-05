@@ -94,6 +94,30 @@ class AgentToolLoopEndToEndTest {
                 .filter(tool -> tool.contains("/")).toList());
     }
 
+    @Test
+    void anApprovalRequiredWriteParksTheWorkAndRunsOnceAfterAPersonApproves() throws Exception {
+        JournalingEngine engine = new JournalingEngine(work("approval_required"));
+
+        try (AgentWorkerMain.Runner first = runner(engine)) {      // proposes the write, then gives the slot back
+            first.pollOnce();
+        }
+        assertEquals("PROPOSED", engine.steps.getLast().state());
+        assertEquals(0, crm.callsTo("create_ticket").size(), "nothing written before the approval");
+        assertEquals(2, llmCalls.get());
+        assertTrue(engine.completed == null && !engine.deferred, "parked work is neither completed nor failed");
+
+        engine.decide("APPROVED");                                // a person in the approver group approves
+        try (AgentWorkerMain.Runner second = runner(engine)) {
+            second.pollOnce();
+        }
+        assertNotNull(engine.completed, "the task completed");
+        assertEquals(1, crm.effectiveWrites.size());
+        assertEquals(1, crm.callsTo("create_ticket").size(), "the approved write ran once");
+        assertEquals("key-" + engine.steps.stream().filter(step -> "crm/create_ticket".equals(step.toolRef()))
+                .findFirst().orElseThrow().sequence(), crm.callsTo("create_ticket").getFirst().get("headerKey"));
+        assertEquals(3, llmCalls.get(), "no model turn paid for twice");
+    }
+
     private AgentWorkerMain.Runner runner(JournalingEngine engine) {
         WorkerConfig config = new WorkerConfig(URI.create("http://engine.invalid"), "token", null, "", "",
                 URI.create("http://llm.invalid/v1"), "key", URI.create("http://127.0.0.1:" + llm.getAddress().getPort() + "/v1"),
@@ -106,10 +130,15 @@ class AgentToolLoopEndToEndTest {
     }
 
     private AgentWorkDescriptor work() {
+        return work("write");
+    }
+
+    private AgentWorkDescriptor work(String ticketPolicy) {
         List<ToolBinding> bindings = List.of(
                 new ToolBinding("crm", "get_customer", "read", null, List.of(), crm.url().toString(), "streamable-http",
                         null, "r1", 1L, null),
-                new ToolBinding("crm", "create_ticket", "write", "key", List.of(), crm.url().toString(),
+                new ToolBinding("crm", "create_ticket", ticketPolicy, "key",
+                        "approval_required".equals(ticketPolicy) ? List.of("support") : List.of(), crm.url().toString(),
                         "streamable-http", null, "r1", 1L,
                         AgentLoop.sha256(AgentLoop.canonical(StubMcpServer.TICKET_SCHEMA))));
         return new AgentWorkDescriptor("abada.agent/v1", "model-a", "Triage the refund for ${case}", Map.of(),
@@ -155,16 +184,26 @@ class AgentToolLoopEndToEndTest {
                 String state, String toolRef, Object request, Object result, String errorType, String model,
                 Integer promptTokens, Integer completionTokens) {
             AgentStep existing = steps.stream().filter(step -> step.sequence() == sequence).findFirst().orElse(null);
-            String key = existing != null ? existing.idempotencyKey()
+            String key = existing != null && existing.idempotencyKey() != null ? existing.idempotencyKey()
                     : "TOOL_CALL".equals(kind) && "STARTED".equals(state) && "crm/create_ticket".equals(toolRef)
                             ? "key-" + sequence : null;
-            AgentStep step = new AgentStep(attempt, sequence, kind, state, toolRef,
-                    toolRef == null ? null : toolRef.endsWith("create_ticket") ? "write" : "read", key, "d", null,
+            String policy = toolRef == null ? null : work.toolBindings().stream()
+                    .filter(binding -> binding.ref().equals(toolRef)).findFirst().orElseThrow().policy();
+            AgentStep step = new AgentStep(attempt, sequence, kind, state, toolRef, policy, key, "d", null,
                     JSON.valueToTree(request), result == null ? null : JSON.valueToTree(result), errorType, model,
                     promptTokens, completionTokens, null);
             if (existing != null) steps.set(steps.indexOf(existing), step);
             else steps.add(step);
             return step;
+        }
+
+        /** A person's decision on the proposed step: the work is acquirable again. */
+        synchronized void decide(String state) {
+            AgentStep proposed = steps.getLast();
+            steps.set(steps.size() - 1, new AgentStep(proposed.attempt(), proposed.sequence(), proposed.kind(), state,
+                    proposed.toolRef(), proposed.policy(), null, proposed.requestDigest(), null, proposed.request(),
+                    null, null, null, null, null, null));
+            available = true;
         }
 
         @Override

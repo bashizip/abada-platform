@@ -71,7 +71,10 @@ ABADA_LLM_GEMINI_API_KEY=...
   `budget_usd` on the node bound the loop; reaching one ends the step through
   `on_error` with `AGENT_BUDGET_EXHAUSTED`. Tool results are capped at
   `ABADA_AGENT_MAX_TOOL_RESULT_BYTES` (64 KiB) and each MCP request at
-  `ABADA_AGENT_TOOL_TIMEOUT_MS` (30 s).
+  `ABADA_AGENT_TOOL_TIMEOUT_MS` (30 s). An `approval_required` tool pauses
+  the agent until a person approves the exact call in the Task Inbox (see
+  [Approving an agent's tool call](/user/process-patterns/#approving-an-agents-tool-call));
+  meanwhile the worker holds no lease and spends nothing.
 - `ABADA_AGENT_ALLOWED_TOOLS` lists the tool servers the worker may reach. A
   node's `crm/get_customer` is allowed when `crm` (or the exact reference) is
   listed; a deployment can never widen this list. Tools themselves are

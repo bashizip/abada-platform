@@ -416,8 +416,14 @@ tools:
   not embed credentials.
 
 On an agent node, `tools:` entries are `<server>/<tool>` or
-`{ ref: <server>/<tool>, policy: <policy> }`. A node may **tighten** a policy
-(`write` → `approval_required`), never loosen it. Deployment resolves every
+`{ ref: <server>/<tool>, policy: <policy>, approvers: [<group>, ...] }`
+(`ref` plus `policy`, `approvers` or both). A node may **tighten** a policy
+(`write` → `approval_required`), never loosen it. `approvers` names the groups
+who may approve an `approval_required` tool's calls on this node, replacing the
+server's list; an `approval_required` tool with neither is an
+`ABADA-APL-TOOL-003` error, and `approvers` on any other policy is an error at
+its path. `approval_sla_hours` on the server's tool marks an approval that
+waits longer as escalated (`TASK_SLA_BREACHED`); its candidates do not change. Deployment resolves every
 reference against the project's tool servers; an unknown server or tool, or a
 loosened policy, is an `ABADA-APL-TOOL-002` error at the entry's path. The
 resolved bindings (server URL, tool, effective policy, idempotency, approvers,

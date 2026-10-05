@@ -114,6 +114,8 @@ public class ExternalTaskEntity {
         COMPLETED,
         FAILED,
         BPMN_ERROR,
+        /** An agent proposed an approval_required tool call: no lease, not acquirable until a person decides. */
+        AWAITING_APPROVAL,
         /** Retired without a result: an on_timeout boundary fired or the instance ended. */
         CANCELLED
     }

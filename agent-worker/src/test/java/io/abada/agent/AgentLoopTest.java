@@ -88,18 +88,77 @@ class AgentLoopTest {
     }
 
     @Test
-    void anApprovalRequiredToolIsReportedToTheModelInsteadOfRun() throws Exception {
+    void anApprovalRequiredCallIsProposedAndTheAttemptParksWithoutRunningIt() {
         FakeJournal journal = new FakeJournal();
-        journal.refuseToolStart = "APPROVAL_REQUIRED";
         StubTools tools = new StubTools();
         ScriptedGateway model = new ScriptedGateway()
                 .then(calls(call("c1", "crm__refund", "{\"amount\":10}")))
-                .then(answer("needs a person"));
+                .then(answer("should not be reached"));
 
-        run(work(List.of(APPROVAL), null), List.of(), model, tools, journal);
+        AgentLoop.AwaitingApproval waiting = assertThrows(AgentLoop.AwaitingApproval.class,
+                () -> run(work(List.of(APPROVAL), null), List.of(), model, tools, journal));
 
+        assertEquals("crm/refund", waiting.toolRef);
+        assertEquals(2, waiting.sequence);
         assertTrue(tools.calls.isEmpty());
-        assertTrue(String.valueOf(model.received.get(1).getLast().get("content")).contains("approval"));
+        assertEquals(1, model.received.size());
+        assertEquals(List.of("1 MODEL_CALL STARTED", "1 MODEL_CALL COMPLETED", "2 TOOL_CALL PROPOSED"), journal.log);
+    }
+
+    @Test
+    void anApprovedCallRunsOnceWithTheApprovedArgumentsAndTheEnginesKey() throws Exception {
+        List<AgentStep> journaled = List.of(proposalTurn(),
+                step(2, "TOOL_CALL", "APPROVED", "crm/refund", null,
+                        Map.of("callId", "c1", "arguments", Map.of("amount", 10)), null));
+        ScriptedGateway model = new ScriptedGateway().then(answer("refunded"));
+        StubTools tools = new StubTools();
+        FakeJournal journal = new FakeJournal();
+
+        AgentLoop.Outcome outcome = run(work(List.of(APPROVAL), null), journaled, model, tools, journal);
+
+        assertEquals("refunded", outcome.result().value());
+        assertEquals(List.of("refund {\"amount\":10}"), tools.calls);
+        assertEquals(List.of("key-2"), tools.keys);
+        assertTrue(journal.log.containsAll(List.of("2 TOOL_CALL STARTED", "2 TOOL_CALL COMPLETED")));
+        assertEquals(1, model.received.size(), "the proposing turn was not paid for again");
+    }
+
+    @Test
+    void aRejectionReachesTheModelWithThePersonsReason() throws Exception {
+        List<AgentStep> journaled = List.of(proposalTurn(),
+                step(2, "TOOL_CALL", "REJECTED", "crm/refund", null,
+                        Map.of("callId", "c1", "arguments", Map.of("amount", 10)),
+                        Map.of("rejected", true, "comment", "already refunded last week")));
+        ScriptedGateway model = new ScriptedGateway().then(answer("no refund"));
+        StubTools tools = new StubTools();
+        FakeJournal journal = new FakeJournal();
+
+        AgentLoop.Outcome outcome = run(work(List.of(APPROVAL), null), journaled, model, tools, journal);
+
+        assertEquals("no refund", outcome.result().value());
+        assertTrue(tools.calls.isEmpty());
+        Map<String, Object> rejection = model.received.getFirst().getLast();
+        assertEquals("tool", rejection.get("role"));
+        assertTrue(String.valueOf(rejection.get("content")).contains("already refunded last week"));
+        assertEquals(List.of("3 MODEL_CALL STARTED", "3 MODEL_CALL COMPLETED"), journal.log);
+    }
+
+    @Test
+    void aStillProposedCallParksAgainWithoutCallingAnything() {
+        List<AgentStep> journaled = List.of(proposalTurn(), step(2, "TOOL_CALL", "PROPOSED", "crm/refund", null,
+                Map.of("callId", "c1", "arguments", Map.of("amount", 10)), null));
+        ScriptedGateway model = new ScriptedGateway();
+        FakeJournal journal = new FakeJournal();
+        assertThrows(AgentLoop.AwaitingApproval.class,
+                () -> run(work(List.of(APPROVAL), null), journaled, model, new StubTools(), journal));
+        assertTrue(model.received.isEmpty());
+        assertTrue(journal.log.isEmpty());
+    }
+
+    private static AgentStep proposalTurn() {
+        return step(1, "MODEL_CALL", "COMPLETED", null, null, Map.of("turn", 1, "model", "model-a"),
+                Map.of("content", "", "toolCalls", List.of(Map.of("id", "c1", "name", "crm__refund",
+                        "arguments", "{\"amount\":10}"))));
     }
 
     @Test

@@ -77,6 +77,39 @@ says where the process goes and whether the reviewer must explain it:
 In BPMN, the same decision is a user task with `abada:outcomes` (see [BPMN
 import and compatibility](/compatibility/bpmn/)).
 
+## Approving an agent's tool call
+
+Some tool calls should not run until a person agrees. Mark the tool
+`approval_required` on its tool server, and say who approves it there or on the
+node:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: Decide whether to refund ${order}
+  tools:
+    - payments/lookup
+    - { ref: payments/refund, approvers: [finance] }
+  next: done
+```
+
+- When the agent wants to call `payments/refund`, it stops. A **Tool call
+  awaiting approval** task appears in the Task Inbox for the `finance` group,
+  showing the tool, the agent and the arguments (sensitive values redacted
+  under the project's evidence policy).
+- **Approve** runs exactly that call, once, and the agent carries on.
+  **Reject** needs a comment: the agent reads it as the tool's answer and
+  continues without the call.
+- Only members of the approver groups can decide; the step's project role is
+  not enough, and a worker credential never is. Changing the arguments after
+  approval is refused by the engine.
+- The process does not move while it waits. A timeout on the node or a cancel
+  withdraws the approval. `approval_sla_hours` on the tool marks a late
+  approval as escalated.
+- Without approvers on the node or the server, the process does not deploy
+  (`ABADA-APL-TOOL-003`).
+
 ## Weak or malformed AI answers
 
 The engine checks every agent result before it touches the process:

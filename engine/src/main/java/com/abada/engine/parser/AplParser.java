@@ -914,14 +914,32 @@ public final class AplParser {
                                 + "' tool entries in object form need ref: <server>/<tool>");
                     }
                     ToolPolicy policy = ToolPolicy.fromWire(entry.path("policy").asText(null));
-                    if (policy == null) {
+                    JsonNode approvers = entry.path("approvers");
+                    boolean hasApprovers = !approvers.isMissingNode() && !approvers.isNull();
+                    if (policy == null && (entry.has("policy") || !hasApprovers)) {
                         throw validation(field + "/policy", "agent node '" + nodeId + "' tool '" + ref
                                 + "' policy must be read, write or approval_required");
                     }
-                    toolPolicies.put(ref, policy);
+                    if (hasApprovers) {
+                        if (!approvers.isArray() || approvers.isEmpty()) {
+                            throw validation(field + "/approvers", "agent node '" + nodeId + "' tool '" + ref
+                                    + "' approvers must be a non-empty list of groups");
+                        }
+                        for (JsonNode group : approvers) {
+                            if (!group.isTextual() || group.asText().isBlank()) {
+                                throw validation(field + "/approvers", "agent node '" + nodeId + "' tool '" + ref
+                                        + "' approvers has an empty group");
+                            }
+                        }
+                        if (policy != null && policy != ToolPolicy.APPROVAL_REQUIRED) {
+                            throw validation(field + "/approvers", "agent node '" + nodeId + "' tool '" + ref
+                                    + "' names approvers but is not approval_required");
+                        }
+                    }
+                    if (policy != null) toolPolicies.put(ref, policy);
                 } else {
                     throw validation(field, "agent node '" + nodeId
-                            + "' tools entries must be <server>/<tool> or { ref, policy }");
+                            + "' tools entries must be <server>/<tool> or { ref, policy, approvers }");
                 }
                 if (ref.isEmpty()) {
                     throw validation(field, "agent node '" + nodeId + "' declares an empty tool");

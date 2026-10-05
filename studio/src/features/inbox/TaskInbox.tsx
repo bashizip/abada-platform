@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { EngineAPI, EngineUserTaskDTO } from '@/api/engine';
 import { decisionError, decisionPayload, humanize, TaskOutcome } from './decision';
+import { ToolApprovalCard } from './ToolApprovalCard';
 import { ProjectAPI } from '@/api/projects';
 import { useToast } from '@/components/ToastContext';
 import {
@@ -319,7 +320,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                       )}
                     </>
                   )}
-                  {(selectedTask.status === 'AVAILABLE' || selectedTask.status === 'CLAIMED') && (
+                  {(selectedTask.status === 'AVAILABLE' || selectedTask.status === 'CLAIMED')
+                    && selectedTask.kind !== 'TOOL_APPROVAL' && (
                     <button
                       onClick={handleFail}
                       disabled={actionLoading}
@@ -338,6 +340,10 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                 <InfoTile label="Candidates" value={selectedTask.candidateGroups?.join(', ') || selectedTask.candidateUsers?.join(', ') || '—'} />
                 <InfoTile label="Project" value={selectedTask.projectId ? selectedTask.projectId.slice(0, 8) : '—'} mono />
               </div>
+
+              {selectedTask.kind === 'TOOL_APPROVAL' && selectedTask.toolApproval && (
+                <ToolApprovalCard approval={selectedTask.toolApproval} />
+              )}
 
               {formLoading ? (
                 <div className="flex items-center justify-center py-10">
@@ -405,7 +411,9 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                     onChange={(event) => { setComment(event.target.value); setCommentError(null); }}
                     disabled={selectedTask.status !== 'CLAIMED'}
                     rows={3}
-                    placeholder="Explain your decision; the next step receives this comment."
+                    placeholder={selectedTask.kind === 'TOOL_APPROVAL'
+                      ? 'Explain your decision; the agent reads this comment if you reject.'
+                      : 'Explain your decision; the next step receives this comment.'}
                     className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51] disabled:opacity-50"
                   />
                   {commentError && <p className="text-[11px] text-[#E76F51]">{commentError}</p>}

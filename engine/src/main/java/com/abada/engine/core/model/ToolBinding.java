@@ -25,7 +25,9 @@ public record ToolBinding(
         String resourceId,
         Long resourceRevision,
         // SHA-256 of the canonical inputSchema the tool server document pins; null when not pinned.
-        String inputSchemaSha256) implements Serializable {
+        String inputSchemaSha256,
+        // Hours an approval of this tool may wait before it is marked escalated; null for none.
+        Double approvalSlaHours) implements Serializable {
 
     public ToolBinding {
         approvers = approvers == null ? List.of() : List.copyOf(approvers);

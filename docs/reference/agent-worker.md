@@ -109,8 +109,13 @@ bounded conversation instead of a single call:
 - Every model call is journaled `STARTED` before it runs and `COMPLETED` (with
   tokens) after; a read tool is journaled when it returns; a write is journaled
   `STARTED` first and sent with the engine's per-step key (`Idempotency-Key`
-  header and `_meta.idempotencyKey`), then finished. An `approval_required`
-  tool is refused by the engine and reported to the model (E10 adds approval).
+  header and `_meta.idempotencyKey`), then finished.
+- An `approval_required` call is journaled `PROPOSED`: the engine parks the
+  task and opens an approval for the tool's approver groups, and the worker
+  gives the slot back without completing or failing. After a person decides,
+  the next lease resumes the same conversation: an approved call runs once,
+  with exactly the proposed arguments and the engine's key; a rejected one is
+  answered to the model with the person's comment.
 - Limits: `max_turns` per attempt, `max_tokens_total` and `budget_usd` for the
   whole task. The worker stops early; the engine refuses the next model call
   either way. Both end the attempt with the routable code

@@ -30,6 +30,27 @@ class AplToolReferenceTest {
     }
 
     @Test
+    void aToolEntryMayNameWhoApprovesIt() {
+        var result = parser.parseDetailed(agentWithTools("""
+                        - { ref: payments/refund, approvers: [finance] }
+                        - { ref: crm/close_case, policy: approval_required, approvers: [support, finance] }
+                """));
+        AgentWorkDescriptor work = result.definition().getServiceTask("triage").agentWork();
+        assertThat(work.tools()).containsExactly("payments/refund", "crm/close_case");
+        // Approvers alone keep the server's policy; the registry checks it is approval_required.
+        assertThat(work.toolPolicies()).containsOnlyKeys("crm/close_case");
+        assertThat(errors("""
+                        - { ref: crm/get_customer, policy: read, approvers: [support] }
+                """)).extracting(BpmnValidationIssue::path).containsExactly("/flow/nodes/1/tools/0/approvers");
+        assertThat(errors("""
+                        - { ref: crm/close_case, approvers: [] }
+                """)).extracting(BpmnValidationIssue::path).isNotEmpty();
+        assertThat(errors("""
+                        - { ref: crm/close_case }
+                """)).extracting(BpmnValidationIssue::path).isNotEmpty();
+    }
+
+    @Test
     void aNameWithoutAServerIsAnAdvisoryWarning() {
         var result = parser.parseDetailed(agentWithTools("""
                         - web_search
