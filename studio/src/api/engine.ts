@@ -95,6 +95,8 @@ export interface LineageLinkDTO {
   depth?: number;
   startDate?: string;
   endDate?: string;
+  /** The agent that delegated to this instance (node, model, step); absent for call-process children. */
+  startedByAgent?: { nodeId?: string; model?: string; step?: number; promptVersion?: string };
 }
 
 /** Where an instance sits in a call-process tree. */

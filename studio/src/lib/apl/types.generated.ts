@@ -50,6 +50,39 @@ export type NodeId = string;
  */
 export type AgentModel = string;
 /**
+ * Processes the agent may start as a governed child through the engine-provided tool delegate:<process>. The engine pins the child at deployment, checks the inputs against its declared variables, the depth and, with approval: required, a person's approval; only the declared outputs come back.
+ *
+ * @maxItems 8
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "delegates".
+ */
+export type Delegates = {
+  /**
+   * Key of a process deployed in this project.
+   */
+  process: string;
+  /**
+   * Child variables the agent reads back when the child completes.
+   *
+   * @minItems 1
+   */
+  outputs: string[];
+  /**
+   * required: a person in approvers approves each delegation first.
+   */
+  approval?: 'none' | 'required';
+  /**
+   * @minItems 1
+   */
+  approvers?: string[];
+  /**
+   * What the delegated process does; offered to the model with the tool.
+   */
+  description?: string;
+  max_depth?: number;
+}[];
+/**
  * Error route: a node id, or a list of {code?, then}; at most one entry may omit code.
  *
  * This interface was referenced by `APLDocument`'s JSON-Schema
@@ -221,6 +254,7 @@ export interface APLAgentNode {
       })
   )[];
   routes?: Routes;
+  delegates?: Delegates;
   confidence_threshold?: number;
   temperature?: number;
   /**
