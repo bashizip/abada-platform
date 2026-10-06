@@ -38,6 +38,7 @@ export default defineConfig({
           label: 'Start here',
           items: [
             { label: 'Documentation home', slug: 'index' },
+            { label: 'Concepts', slug: 'concepts' },
             { label: 'Guide scope and contracts', slug: 'scope' },
           ],
         },
@@ -46,11 +47,13 @@ export default defineConfig({
           items: [
             { label: 'Quickstart', slug: 'user/quickstart' },
             { label: 'Tutorial: a reviewed AI reply', slug: 'user/first-workflow' },
+            { label: 'Tutorial: an agent that acts', slug: 'user/tutorial-agent-that-acts' },
           ],
         },
         {
           label: 'Build processes',
           items: [
+            { label: 'Use cases', slug: 'user/use-cases' },
             { label: 'Author processes in APL', slug: 'user/authoring' },
             { label: 'Loops, routes and review decisions', slug: 'user/process-patterns' },
             { label: 'Agent nodes and the Agent Worker', slug: 'user/agent-worker' },
