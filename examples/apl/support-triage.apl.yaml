@@ -1,0 +1,116 @@
+version: abada.io/v1
+
+# Support triage with routing and delegation (documentation: "Use cases").
+# A routing agent chooses the next step among declared routes, and the engine
+# checks the choice. For refunds, an investigating agent may delegate a fraud
+# check to a governed child process; the payout itself is a plain call to
+# another governed process. Lineage links every child to this instance.
+#
+# Deploy fraud-check.apl.yaml and refund-payout.apl.yaml first: children are
+# pinned when this process is deployed.
+metadata:
+  key: support_triage
+  name: Support triage
+  owner: customer-care
+  variables:
+    - name: request
+      type: object
+      required: true
+
+flow:
+  entry: request-received
+  nodes:
+    - id: request-received
+      type: webhook
+      description: Support request received
+      next: triage
+
+    # The agent picks a route; `when` lets the engine veto a refund above 500.
+    - id: triage
+      type: agent
+      description: Route the support request
+      model: gemini-3.6-flash
+      prompt: |
+        Route this support request: ${request.text}
+        Give a one-sentence summary.
+      confidence_threshold: 70
+      loop:
+        max_iterations: 2
+        on_exhausted: manual
+      output_schema:
+        type: object
+        properties:
+          summary: { type: string }
+      routes:
+        refund:
+          next: investigate
+          description: The customer asks for money back
+          when: "request.amount <= 500.0"
+        escalate:
+          next: manual
+          description: Anything unclear, angry or legal
+        clarify:
+          next: ask-customer
+          description: The request misses the order number
+      on_low_confidence: manual
+      on_invalid_output: manual
+
+    - id: ask-customer
+      type: human-input
+      description: Ask the customer for the order number
+      assignees: [support]
+      next: triage
+
+    # The agent decides whether a fraud check is needed and may start one itself.
+    - id: investigate
+      type: agent
+      description: Investigate the refund
+      model: gemini-3.6-flash
+      prompt: |
+        Decide whether to approve the refund of ${request.amount} for order
+        ${request.order_id}. For amounts above 100, run a fraud check first.
+      delegates:
+        - process: fraud_check
+          description: Assess the fraud risk of a refund
+          outputs: [verdict]
+      result_variable: investigation
+      output_schema:
+        type: object
+        required: [approve, reason]
+        properties:
+          approve: { type: boolean }
+          reason: { type: string }
+      on_error: manual
+      next: decide
+
+    # Rules decide: only an approved investigation pays out.
+    - id: decide
+      type: condition
+      description: Pay out only an approved refund
+      rules:
+        - if: "${investigation.approve == true}"
+          then: payout
+        - else: manual
+          then: manual
+
+    - id: payout
+      type: call-process
+      description: Pay the refund out
+      process: refund_payout
+      inputs:
+        order_id: ${request.order_id}
+        amount: ${request.amount}
+      outputs:
+        payout_id: payout_id
+      on_error: manual
+      next: done
+
+    - id: manual
+      type: human-input
+      description: Handle the request by hand
+      assignees: [support]
+      next: done
+
+    - id: done
+      type: end
+      description: Request handled

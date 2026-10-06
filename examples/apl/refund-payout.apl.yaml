@@ -1,0 +1,30 @@
+version: abada.io/v1
+
+# A governed child process of the support-triage example, called with
+# `call-process`: the payment service completes `pay` and sets payout_id.
+metadata:
+  key: refund_payout
+  name: Refund payout
+  owner: finance
+  variables:
+    - { name: order_id, type: string, required: true }
+    - { name: amount, type: number, required: true }
+    - { name: payout_id, type: string }
+
+flow:
+  entry: payout-requested
+  nodes:
+    - id: payout-requested
+      type: webhook
+      description: Payout requested
+      next: pay
+
+    - id: pay
+      type: engine-task
+      description: Pay the refund out
+      service: payments.payout
+      next: done
+
+    - id: done
+      type: end
+      description: Refund paid

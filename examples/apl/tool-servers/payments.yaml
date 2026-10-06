@@ -1,0 +1,16 @@
+# The payments tool server of the refund-agent example (documentation: "Tutorial: an
+# agent that acts"). Create it in Studio as a TOOL_SERVER resource of the project.
+#
+# The URL is the stub server of scripts/dev/m3-demo, reachable on loopback from the
+# agent worker. A real deployment points at its own MCP server over https.
+name: payments
+description: Orders and refunds
+transport: streamable-http
+url: http://127.0.0.1:8765/mcp
+tools:
+  # Reads have no side effects: the agent calls them freely.
+  get_order: { policy: read }
+  # Refunds move money: a person in finance approves each exact call first. This
+  # service takes no idempotency key, so a refund interrupted by a crash is never
+  # re-sent; a person confirms what happened instead.
+  refund: { policy: approval_required, idempotency: none, approvers: [finance], approval_sla_hours: 4 }
