@@ -39,6 +39,12 @@ public class ProjectEventStreamController {
         long now = stream.highWater();
         Long after = parse(lastEventHeader != null ? lastEventHeader : lastEventParam);
         SseEmitter emitter = new SseEmitter(TIMEOUT_MILLIS);
+        try {
+            // Flushes the headers now, so a client knows the stream is open before the first event or heartbeat.
+            emitter.send(SseEmitter.event().comment("connected"));
+        } catch (java.io.IOException exception) {
+            throw new java.io.UncheckedIOException(exception);
+        }
         OutboxStreamService.Subscription subscription = stream.subscribe(projectId, emitter);
         if (after == null || after >= now) {
             subscription.replayed(List.of(), now);
