@@ -234,6 +234,9 @@ class PostgresAgentStepJournalTest {
         assertThat(resumed.steps()).singleElement().satisfies(step -> {
             assertThat(step.state()).isEqualTo("FAILED");
             assertThat(step.errorType()).isEqualTo("NOT_PERFORMED_CONFIRMED");
+            // The lease holder rebuilds the conversation from the journal: the call has a readable result.
+            assertThat(step.result().path("content").asText()).startsWith("Not performed");
+            assertThat(step.result().path("isError").asBoolean()).isTrue();
         });
         // The agent decides again with that fact, as the next step.
         record(resumed, step("w2", 1, 2, "MODEL_CALL", "COMPLETED", null, "{\"turn\":2}", "{\"final\":true}"));

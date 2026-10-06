@@ -182,8 +182,10 @@ should use external tasks and an idempotent worker operation.
   happened, so the engine never hands it out again. The step becomes
   `OUTCOME_UNKNOWN`, the external task `FAILED`, and no boundary routes it.
   Retrying requires `{ "toolOutcome": "PERFORMED" | "NOT_PERFORMED" }`: the step
-  is finished with the confirmed fate (and the actor), the task reopens on the
-  **same** attempt, and the agent resumes from its journal. A job retry
+  is finished with the confirmed fate, which becomes the call's result (the
+  tool's own answer is lost), the task reopens on the **same** attempt, and the
+  agent resumes from its journal and reads that result. The confirming actor is
+  recorded with the incident; an approved call keeps its approver. A job retry
   (`POST .../jobs/{jobId}/retries`) is refused while such a step is open.
 - `CHILD_FAILED` opens when a call-process child fails or is cancelled, or
   cannot start, and the call declares no `on_error`; the token stops at the
@@ -344,9 +346,10 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   the engine returns `sha256(externalTaskId:attempt:sequence)` as its
   idempotency key, the same key on every resumed lease. Fetch-and-lock
   returns the attempt's steps (with decrypted payloads, to the lease holder
-  only) and the writes earlier attempts completed; an identical write in a
-  later attempt is answered from the journal (`reused`) instead of being sent
-  again. Retired work answers `410`. Digests are computed by the engine from
+  only) and the writes earlier attempts completed; a write in a later
+  attempt with the same tool and arguments (whatever call id the model gave
+  it) is answered from the journal (`reused`) instead of being sent again.
+  Retired work answers `410`. Digests are computed by the engine from
   canonical JSON; payloads are AES-GCM encrypted at rest. Evidence:
   [`PostgresAgentStepJournalTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresAgentStepJournalTest.java).
 - **Agent routes.** An agent node with `routes` leaves only through the route

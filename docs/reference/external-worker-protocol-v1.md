@@ -118,11 +118,15 @@ committed step:
 - The response carries `idempotencyKey` for writes whose server accepts one:
   send it with the tool call, and the same key again when resuming a
   `STARTED` write. `reused: true` means an earlier attempt already performed
-  this exact write: use `result` and do not call the tool.
+  this write (same tool and arguments; the call id is ignored): use `result`
+  and do not call the tool.
 - On resume: reuse finished steps, re-run a `STARTED` read or model call,
   re-send a `STARTED` keyed write with its key. A `STARTED` write without a
   key is never handed out: the engine marks it `OUTCOME_UNKNOWN` and opens a
-  `TOOL_OUTCOME_UNKNOWN` incident.
+  `TOOL_OUTCOME_UNKNOWN` incident. Once a person confirms it, the work is
+  handed out again with that step `COMPLETED` (performed) or `FAILED` (not
+  performed) and a `result` like any tool result (`content`, `isError`): give
+  it to the model as the call's answer.
 - Refusals: `403 WORKER_LOCK_NOT_OWNED`, `403 ACCESS_DENIED`
   (`details.reason: TOOL_NOT_BOUND`), `409 WORKER_LOCK_EXPIRED`,
   `409 AGENT_STEP_REJECTED` with `details.reason` one of `STALE_ATTEMPT`,
@@ -176,8 +180,8 @@ committed step:
   - `REJECTED`: the step is finished with result
     `{rejected: true, comment}`; give the model the comment as the tool
     result and continue with the next sequence.
-  An identical call an earlier attempt already ran is answered `reused`, with
-  no new approval.
+  A call with the same tool and arguments that an earlier attempt already ran
+  is answered `reused`, with no new approval.
 - `Idempotency-Key` is accepted but not needed: the journal is idempotent by
   attempt, sequence and request, and step responses are never copied into the
   idempotency store (they may carry decrypted results).

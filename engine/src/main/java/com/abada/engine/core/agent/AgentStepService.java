@@ -241,7 +241,7 @@ public class AgentStepService {
             step.setToolRef(ref);
             step.setPolicy(policy.wireName());
             if (policy == ToolPolicy.APPROVAL_REQUIRED) {
-                AgentStepEntity done = priorIdenticalWrite(task, ref, requestDigest);
+                AgentStepEntity done = priorIdenticalWrite(task, ref, request.request());
                 if (done != null) {
                     // An earlier attempt already ran this exact approved call: its result, no second approval.
                     step.setState(State.COMPLETED);
@@ -261,7 +261,7 @@ public class AgentStepService {
                 if ("key".equals(binding.idempotency())) {
                     step.setIdempotencyKey(sha256(task.getId() + ":" + task.getAttempt() + ":" + request.sequence()));
                 }
-                AgentStepEntity done = priorIdenticalWrite(task, ref, requestDigest);
+                AgentStepEntity done = priorIdenticalWrite(task, ref, request.request());
                 if (done != null) {
                     // An earlier attempt already performed this exact write: record its result, never resend it.
                     step.setState(State.COMPLETED);
@@ -572,12 +572,23 @@ public class AgentStepService {
         }
     }
 
-    private AgentStepEntity priorIdenticalWrite(ExternalTaskEntity task, String ref, String requestDigest) {
+    /**
+     * A write an earlier attempt completed with the same tool and arguments. The call id is the model's
+     * own and differs between attempts, so it takes no part in the match.
+     */
+    private AgentStepEntity priorIdenticalWrite(ExternalTaskEntity task, String ref, JsonNode request) {
+        String arguments = argumentsDigest(request);
         return steps.findByExternalTaskIdOrderByAttemptAscSequenceAsc(task.getId()).stream()
                 .filter(step -> step.getAttempt() < task.getAttempt())
                 .filter(step -> step.getKind() == Kind.TOOL_CALL && ref.equals(step.getToolRef()))
-                .filter(step -> step.getState() == State.COMPLETED && requestDigest.equals(step.getRequestDigest()))
+                .filter(step -> step.getState() == State.COMPLETED)
+                .filter(step -> arguments.equals(argumentsDigest(decrypt(step.getRequestEnc()))))
                 .findFirst().orElse(null);
+    }
+
+    private static String argumentsDigest(JsonNode request) {
+        JsonNode arguments = request == null ? null : request.get("arguments");
+        return digest(arguments == null ? request : arguments);
     }
 
     /**
@@ -642,7 +653,8 @@ public class AgentStepService {
         return sha256(canonicalJson(payload));
     }
 
-    private static String canonicalJson(JsonNode payload) {
+    /** The canonical (key-sorted) JSON of a payload, as digested and stored. */
+    public static String canonicalJson(JsonNode payload) {
         try {
             Object plain = CANONICAL.treeToValue(payload == null ? NullNode.getInstance() : payload, Object.class);
             return CANONICAL.writeValueAsString(plain);
