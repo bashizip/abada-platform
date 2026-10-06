@@ -92,6 +92,7 @@ public class AbadaEngine {
     private final EventSubscriptionRepository eventSubscriptionRepository;
     private final JobRepository jobRepository;
     private final ObjectMapper om;
+    private final com.abada.engine.security.AesEncryption encryption;
     private final EngineMetrics engineMetrics;
     private final Tracer tracer;
     private final ActivityHistoryService historyService;
@@ -120,7 +121,9 @@ public class AbadaEngine {
             com.abada.engine.core.delegation.CallTargetService callTargets,
             com.abada.engine.persistence.repository.ProcessInstanceRepository processInstanceRepository,
             @Value("${abada.call-process.max-depth:4}") int maxCallDepth,
-            @Value("${abada.call-process.resume-immediately:true}") boolean resumeChildImmediately) {
+            @Value("${abada.call-process.resume-immediately:true}") boolean resumeChildImmediately,
+            com.abada.engine.security.AesEncryption encryption) {
+        this.encryption = encryption;
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
         this.aplParser = new AplParser(allowedAgentModels);
@@ -1410,16 +1413,20 @@ public class AbadaEngine {
                 .map(com.abada.engine.security.Identity::username).orElse("system");
         step.setState(performed ? com.abada.engine.persistence.entity.AgentStepEntity.State.COMPLETED
                 : com.abada.engine.persistence.entity.AgentStepEntity.State.FAILED);
-        if (performed) {
-            // The tool's own answer is lost; the agent continues with the operator's confirmation.
-            com.fasterxml.jackson.databind.node.ObjectNode result = om.createObjectNode()
-                    .put("confirmedByOperator", true).put("performed", true);
-            step.setResultDigest(com.abada.engine.core.agent.AgentStepService.digest(result));
-            step.setResultEnc(null);
-        } else {
-            step.setErrorType("NOT_PERFORMED_CONFIRMED");
-        }
-        step.setResolvedBy(actor);
+        // The tool's own answer is lost: the agent resumes with the confirmed fate as the call's result,
+        // shaped like any tool result so the worker can rebuild its conversation from the journal.
+        com.fasterxml.jackson.databind.node.ObjectNode result = om.createObjectNode()
+                .put("content", performed
+                        ? "Performed: the call was interrupted before its response arrived, and a person confirmed"
+                                + " it took effect. Its response is not available. Do not repeat it."
+                        : "Not performed: the call was interrupted, and a person confirmed it did not take effect.")
+                .put("isError", !performed).put("truncated", false)
+                .put("confirmedByOperator", true).put("performed", performed);
+        step.setResultDigest(com.abada.engine.core.agent.AgentStepService.digest(result));
+        step.setResultEnc(encryption.encrypt(com.abada.engine.core.agent.AgentStepService.canonicalJson(result)));
+        if (!performed) step.setErrorType("NOT_PERFORMED_CONFIRMED");
+        // An approved call keeps its approver; who confirmed the outcome is in the incident's history.
+        if (step.getDecidedAt() == null) step.setResolvedBy(actor);
         agentSteps.save(step);
         // Resume the same attempt: the journal already says what happened.
         task.setStatus(ExternalTaskEntity.Status.OPEN);

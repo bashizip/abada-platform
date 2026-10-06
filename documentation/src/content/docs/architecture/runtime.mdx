@@ -80,10 +80,21 @@ approves them.
   decision — its open task, external job and timers are retired in the same
   transaction, before the instance lock, so a late worker report is rejected
   instead of advancing the process twice.
+- **Agent work that waits.** An agent waiting for a person's approval of a
+  tool call, or for a child process it delegated to, holds no lease and no
+  worker; the decision or the child's end makes it acquirable again on the
+  same attempt. Its token stays on the agent step meanwhile.
+- **Live events.** Every history record also writes an outbox row with a
+  sequence number, in the same transaction. Delivery to webhooks leases those
+  rows; the project event stream that Studio follows tails the committed rows
+  in sequence order, holding a gap for a few seconds while an earlier
+  transaction may still commit. Events carry identifiers only.
 - **Incidents.** A path that cannot continue (a failed step without
   `on_error`, an exhausted loop without `on_exhausted`, a message wait without
   a correlation value) stops with an incident row. The rest of the instance
-  keeps running; an operator retry restarts that path in a new command.
+  keeps running; an operator retry restarts that path in a new command. An
+  agent write interrupted without an idempotency key stops the same way, until
+  a person says whether it happened.
 
 ## Failure semantics
 

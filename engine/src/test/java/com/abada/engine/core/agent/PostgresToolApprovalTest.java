@@ -66,6 +66,7 @@ class PostgresToolApprovalTest {
             tools:
               lookup: { policy: read }
               refund: { policy: approval_required, idempotency: key, approvers: [finance], approval_sla_hours: 4 }
+              payout: { policy: approval_required, idempotency: none, approvers: [finance] }
             """;
     private static final String AGENT = """
             version: abada.io/v1
@@ -79,7 +80,7 @@ class PostgresToolApprovalTest {
                   model: gemini-3.6-flash
                   prompt: Decide the refund
                   max_attempts: 3
-                  tools: [payments/lookup, payments/refund]
+                  tools: [payments/lookup, payments/refund, payments/payout]
                   on_timeout: { after: PT8H, then: late }
                   next: done
                 - { id: late, type: end }
@@ -280,6 +281,58 @@ class PostgresToolApprovalTest {
                         error -> assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
 
+    @Test
+    void anApprovedWriteWithAnUnknownOutcomeKeepsItsApproverAndIsNeverAskedOrSentAgain() {
+        LockedExternalTask task = startAndLock("unknown_payout", "w1");
+        modelTurn(task, 1);
+        String payout = "{\"callId\":\"call-a\",\"arguments\":{\"order\":\"A-9\",\"amount\":12}}";
+        record(task, payoutStep("w1", 1, 2, "PROPOSED", payout));
+        decide(approvalOf(task.processInstanceId()).getId(), "fiona", List.of("finance"), "approve", null);
+        LockedExternalTask approved = lock(task.processInstanceId(), "w2");
+        record(approved, payoutStep("w2", 1, 2, "STARTED", payout));
+
+        // The lease is lost before the result comes back: a write without a key is never handed out again.
+        ExternalTaskEntity row = externalTask(task.id());
+        row.setLockExpirationTime(Instant.now().minusSeconds(5));
+        context.getBean(ExternalTaskRepository.class).save(row);
+        assertThat(lockAll("w3")).noneMatch(locked -> locked.id().equals(task.id()));
+        var incident = context.getBean(com.abada.engine.persistence.repository.IncidentRepository.class)
+                .findByProcessInstanceIdAndResolvedAtIsNull(task.processInstanceId()).stream()
+                .filter(open -> open.getType().equals("TOOL_OUTCOME_UNKNOWN")).findFirst().orElseThrow();
+        com.abada.engine.security.IdentityContext.set(new com.abada.engine.security.Identity("olga", "olga",
+                List.of("ops")));
+        try {
+            engine().retryIncident(task.processInstanceId(), incident.getId(), null, null, "PERFORMED");
+        } finally {
+            com.abada.engine.security.IdentityContext.clear();
+        }
+
+        // The approval evidence keeps its approver; the agent resumes with a readable confirmed result.
+        assertThat(stepRow(task.id(), 2).getResolvedBy()).isEqualTo("fiona");
+        LockedExternalTask resumed = lock(task.processInstanceId(), "w3");
+        assertThat(resumed.attempt()).isEqualTo(1);
+        AgentStepDto confirmed = resumed.steps().getLast();
+        assertThat(confirmed.state()).isEqualTo("COMPLETED");
+        assertThat(confirmed.result().path("content").asText()).startsWith("Performed");
+
+        // A later attempt proposing the same payout, under the model's new call id, gets that result:
+        // no second approval and nothing sent.
+        context.getBean(ExternalTaskCommandService.class).handleFailure(resumed.id(),
+                new com.abada.engine.dto.ExternalTaskFailureDto("w3", "invalid output", "", 2, 0L));
+        LockedExternalTask next = lock(task.processInstanceId(), "w4");
+        assertThat(next.attempt()).isEqualTo(2);
+        modelTurn(next, 1);
+        AgentStepDto again = record(next, payoutStep("w4", 2, 2, "PROPOSED",
+                "{\"callId\":\"call-b\",\"arguments\":{\"amount\":12,\"order\":\"A-9\"}}"));
+        assertThat(again.state()).isEqualTo("COMPLETED");
+        assertThat(again.reused()).isTrue();
+        assertThat(again.result().path("content").asText()).startsWith("Performed");
+        assertThat(externalTask(task.id()).getStatus()).isEqualTo(ExternalTaskEntity.Status.LOCKED);
+        assertThat(context.getBean(TaskRepository.class).findAll().stream()
+                .filter(approval -> approval.getProcessInstanceId().equals(task.processInstanceId()))
+                .filter(approval -> "TOOL_APPROVAL".equals(approval.getKind()))).hasSize(1);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static AbadaEngine engine() {
@@ -368,6 +421,12 @@ class PostgresToolApprovalTest {
 
     private static AgentStepRequest step(String workerId, int attempt, int sequence, String state, String request) {
         return new AgentStepRequest(workerId, attempt, sequence, "TOOL_CALL", state, "payments/refund",
+                json(request), null, null, null, null, null, null);
+    }
+
+    private static AgentStepRequest payoutStep(String workerId, int attempt, int sequence, String state,
+            String request) {
+        return new AgentStepRequest(workerId, attempt, sequence, "TOOL_CALL", state, "payments/payout",
                 json(request), null, null, null, null, null, null);
     }
 

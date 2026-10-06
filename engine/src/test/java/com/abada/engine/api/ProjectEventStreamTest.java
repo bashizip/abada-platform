@@ -115,6 +115,18 @@ class ProjectEventStreamTest {
     }
 
     @Test
+    void aQuietStreamOpensBeforeTheFirstHeartbeat() throws Exception {
+        // Clients show "live" once the response starts; nothing may hold it back until an event or heartbeat.
+        HttpResponse<java.io.InputStream> response = HTTP.sendAsync(request(replicaA, bobsProject, "bob", null)
+                .build(), HttpResponse.BodyHandlers.ofInputStream()).get(5, java.util.concurrent.TimeUnit.SECONDS);
+        try (java.io.InputStream body = response.body()) {
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(new String(body.readNBytes(":connected".length()), StandardCharsets.UTF_8))
+                    .isEqualTo(":connected");
+        }
+    }
+
+    @Test
     void onlyMembersMayListen() throws Exception {
         HttpResponse<String> stranger = HTTP.send(request(replicaA, alicesProject, "mallory", null).build(),
                 HttpResponse.BodyHandlers.ofString());

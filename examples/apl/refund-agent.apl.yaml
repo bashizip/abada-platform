@@ -1,0 +1,64 @@
+version: abada.io/v1
+
+# An agent that acts (documentation: "Tutorial: an agent that acts").
+# The agent reads the order through the payments tool server and may propose a
+# refund; finance approves the exact refund before it runs. Turns and spend are
+# bounded, and anything the agent cannot finish goes to a person.
+#
+# Needs the project's payments tool server (tool-servers/payments.yaml).
+metadata:
+  key: refund_agent
+  name: Refund agent
+  owner: customer-care
+  variables:
+    - name: request
+      type: object
+      required: true
+
+flow:
+  entry: request-received
+  nodes:
+    - id: request-received
+      type: webhook
+      description: Refund request received
+      next: handle
+
+    # The agent may read freely; the refund tool is approval-required on the server.
+    - id: handle
+      type: agent
+      description: Check the order and refund the customer
+      model: gemini-3.6-flash
+      prompt: |
+        A customer asks for a refund. Look up the order with the get_order tool.
+        Refund the amount paid with the refund tool only when the order was
+        delivered damaged or never delivered; otherwise refund nothing.
+        Answer with whether you refunded, the amount and a one-sentence reason.
+      inputs:
+        request: ${request}
+      tools:
+        - payments/get_order
+        - payments/refund
+      max_turns: 6
+      budget_usd: 0.05
+      result_variable: decision
+      output_schema:
+        type: object
+        required: [refunded, reason]
+        properties:
+          refunded: { type: boolean }
+          amount: { type: number }
+          reason: { type: string }
+      on_invalid_output: manual
+      on_error: manual
+      on_timeout: { after: P2D, then: manual }
+      next: done
+
+    - id: manual
+      type: human-input
+      description: Handle the refund by hand
+      assignees: [finance]
+      next: done
+
+    - id: done
+      type: end
+      description: Refund request handled
