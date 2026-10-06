@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Archive, ChevronRight, FileJson, FileText, FileUp, Folder,
   FolderInput, FolderPlus, FolderTree, Download, Loader2, Lock, Pencil, Plus,
@@ -839,9 +840,8 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
         </div>
       )}
 
-      {renderMovePicker()}
-      {renderNewResourceModal()}
-      {renderPreview()}
+      {/* Dialogs render on the body: the sidebar's stacking context would put them under the canvas. */}
+      {createPortal(<>{renderMovePicker()}{renderNewResourceModal()}{renderPreview()}</>, document.body)}
     </div>
   );
 };
