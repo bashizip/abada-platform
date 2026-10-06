@@ -36,11 +36,25 @@ sequenceDiagram
 | Operations | `operations:read`, `operations:write` | `abada-operator` | Inspect state, history, jobs and retries |
 | Workers | `worker:execute` | `abada-worker` | Use worker protocol v1; the first-party Agent Worker self-registers global capabilities |
 | Insight | `insight:read`, `insight:review`, `insight:configure` | Project `REVIEWER` role plus a named approval lane | Read proposals/policies; approve or reject; update policies |
-| Administration | all domains | `abada-admin` | Full engine access (cannot satisfy an Insight approval lane) |
+| Agent evidence | `agent-evidence:read` | `abada-evidence-reader` | Read journaled agent payloads of a visible project; every read is recorded |
+| Administration | all domains | `abada-admin` | Full engine access (cannot satisfy an Insight approval lane or read agent payloads) |
 
 Business groups used for BPMN assignment do not grant engine permissions.
 Task actions require both the platform permission and durable
 assignee/candidate authorization.
+
+Agents add three boundaries, enforced by the engine:
+
+- **Tool approvals.** Only a candidate of an approval task — a member of its
+  approver groups — can approve or reject an agent's tool call. A project role
+  is not enough, and a worker credential is always refused, whatever else it
+  holds.
+- **Tool bindings.** A worker may journal and run only the tools frozen in the
+  definition's bindings, and receives a tool credential only for the servers
+  of the task it holds the lease of. The secret never appears in a process,
+  an event or a log.
+- **Event stream.** The project event stream is open to project members only
+  (others get `404`) and carries identifiers, never variables or payloads.
 
 ## Trusted proxy mode
 

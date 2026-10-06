@@ -29,8 +29,17 @@ is allowed to change.
 - **Governed.** Model output is validated by the engine against a declared schema and
   confidence threshold; invalid or low-confidence answers go to a person. Rules are
   sandboxed CEL.
+- **Acts under policy** (on `dev`, for `1.1.0-rc.2`). Agents use tools from your MCP servers
+  under read, write or approval-required policies; a person approves each risky call with its
+  exact arguments, a crash never repeats a write blindly, and turns, tokens and spend are
+  bounded and priced by the engine. Agents can route a case and delegate a sub-case to another
+  governed process.
 - **Evidenced.** Every model call leaves an auditable record, and each release candidate
   passes a recorded gate, including an end-to-end test you can rerun.
+
+New here? [Concepts](https://docs.abadaplatform.com/concepts/) introduces every capability in a
+few lines, and [Use cases](https://docs.abadaplatform.com/user/use-cases/) shows five runnable
+processes.
 
 Website: [abadaplatform.com](https://abadaplatform.com) · Documentation:
 [docs.abadaplatform.com](https://docs.abadaplatform.com)
