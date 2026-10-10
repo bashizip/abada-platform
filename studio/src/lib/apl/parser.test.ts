@@ -451,3 +451,149 @@ describe('APL round trip: review outcomes', () => {
     expect(saved.next).toBeUndefined();
   });
 });
+
+describe('APL round trip: tool references', () => {
+  it('keeps <server>/<tool> refs and tightened policies through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'tools', name: 'Tools' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'triage' },
+          {
+            id: 'triage',
+            type: 'agent',
+            model: 'gemini-3.6-flash',
+            prompt: 'Triage the request',
+            tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required', approvers: ['finance'] }],
+            next: 'done',
+          },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'triage');
+    expect(saved).toMatchObject({
+      tools: ['crm/get_customer', { ref: 'crm/refund', policy: 'approval_required', approvers: ['finance'] }],
+    });
+  });
+});
+
+describe('APL round trip: agent delegates', () => {
+  it('keeps an agent\'s delegates verbatim through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'desk', name: 'Desk' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'triage' },
+          {
+            id: 'triage',
+            type: 'agent',
+            model: 'gemini-3.6-flash',
+            prompt: 'Handle it',
+            delegates: [{ process: 'refund_payout', outputs: ['payout_id'], approval: 'required', approvers: ['finance'] }],
+            next: 'done',
+          },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'triage');
+    expect(saved).toMatchObject({
+      delegates: [{ process: 'refund_payout', outputs: ['payout_id'], approval: 'required', approvers: ['finance'] }],
+      next: 'done',
+    });
+  });
+});
+
+describe('APL round trip: agent limits and clearing edited fields', () => {
+  const document = (): APLDocument => ({
+    version: 'abada.io/v1',
+    metadata: { key: 'limited', name: 'Limited' },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'triage' },
+        {
+          id: 'triage', type: 'agent', model: 'gemini-3.6-flash', prompt: 'Work',
+          max_turns: 6, max_tokens_total: 20000, budget_usd: 0.5,
+          delegates: [{ process: 'refund_payout', outputs: ['payout_id'] }],
+          next: 'call',
+        },
+        { id: 'call', type: 'call-process', process: 'fraud_check', inputs: { amount: 'amount' },
+          outputs: { verdict: 'fraud_verdict' }, max_depth: 2, next: 'done' },
+        { id: 'done', type: 'end' },
+      ],
+    },
+  });
+
+  it('keeps limits, delegates and call-process fields through a save', () => {
+    const saved = workflowToAPL(aplToWorkflow(document())).flow.nodes;
+    expect(saved.find((node) => node.id === 'triage')).toMatchObject({ max_turns: 6, max_tokens_total: 20000,
+      budget_usd: 0.5, delegates: [{ process: 'refund_payout', outputs: ['payout_id'] }] });
+    expect(saved.find((node) => node.id === 'call')).toMatchObject({ inputs: { amount: 'amount' },
+      outputs: { verdict: 'fraud_verdict' }, max_depth: 2 });
+  });
+
+  it('clears a field the designer removed instead of restoring the old value', () => {
+    const workflow = aplToWorkflow(document());
+    const triage = workflow.nodes.find((node) => node.id === 'triage')!;
+    triage.agentConfig = { ...triage.agentConfig!, maxTurns: undefined, delegates: undefined };
+    const call = workflow.nodes.find((node) => node.id === 'call')!;
+    call.callProcessConfig = { ...call.callProcessConfig!, inputs: undefined, maxDepth: undefined };
+    const saved = workflowToAPL(workflow).flow.nodes as unknown as Record<string, unknown>[];
+    const agent = saved.find((node) => node.id === 'triage')!;
+    expect(agent.max_turns).toBeUndefined();
+    expect(agent.delegates).toBeUndefined();
+    expect(agent.budget_usd).toBe(0.5);
+    const called = saved.find((node) => node.id === 'call')!;
+    expect(called.inputs).toBeUndefined();
+    expect(called.max_depth).toBeUndefined();
+  });
+});
+
+describe('APL round trip: call-process', () => {
+  it('keeps the called process, inputs, outputs, depth and routes through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'refund', name: 'Refund' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'check' },
+          {
+            id: 'check',
+            type: 'call-process',
+            process: 'fraud_check',
+            inputs: { case_id: '${case_id}' },
+            outputs: { fraud_verdict: 'verdict' },
+            max_depth: 2,
+            on_error: 'manual',
+            on_timeout: { after: 'PT1H', then: 'manual' },
+            next: 'done',
+          },
+          { id: 'manual', type: 'human-input', assignees: ['finance'], next: 'done' },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const workflow = aplToWorkflow(document);
+    expect(workflow.nodes.find((node) => node.id === 'check')?.type).toBe('call-process');
+    expect(workflow.edges.filter((edge) => edge.source === 'check').map((edge) => edge.label))
+      .toEqual(expect.arrayContaining(['on_error', 'on_timeout']));
+    const saved = workflowToAPL(workflow).flow.nodes.find((node) => node.id === 'check');
+    expect(saved).toMatchObject({
+      type: 'call-process',
+      process: 'fraud_check',
+      inputs: { case_id: '${case_id}' },
+      outputs: { fraud_verdict: 'verdict' },
+      max_depth: 2,
+      on_error: 'manual',
+      on_timeout: { after: 'PT1H', then: 'manual' },
+      next: 'done',
+    });
+  });
+});

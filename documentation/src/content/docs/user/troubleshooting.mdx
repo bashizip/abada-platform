@@ -25,7 +25,12 @@ Start with configuration and service state:
 | Workflow succeeds while collector is down | Expected: telemetry export is best-effort and independent of workflow correctness |
 | Instance stays `ACTIVE` at an agent node | Expected without a worker or AI provider; check the Agent Worker is Online in Operations and a provider serving the node's model is set in Studio → Settings → AI Providers |
 | Worker shows Error or Offline in Operations | Inspect last rejection and consecutive failures; verify engine URL, OIDC client credentials and LLM endpoint reachability |
-| Deployment refused with a model error | The node's `model` (or one of its `fallback_models`) is outside `ABADA_AGENT_ALLOWED_MODELS`, or requested `tools` are outside `ABADA_AGENT_ALLOWED_TOOLS` |
+| Deployment refused with a model error | The node's `model` (or one of its `fallback_models`) is outside `ABADA_AGENT_ALLOWED_MODELS` |
+| Cost shows **+ unpriced** | A model the agents used has no price in Settings → Model Prices (or none in effect at the time of the call). Add a price; earlier calls stay unpriced |
+| Evidence payloads answer `403` | Reading payloads needs the `abada-evidence-reader` group, which `abada-admin` does not imply |
+| Deployment refused with `ABADA-APL-CALL-001` | A `call-process` step calls a process this project has not deployed yet, or passes an input the called process does not declare in `metadata.variables`. Deploy the called process first, or fix the inputs |
+| Deployment refused with `ABADA-APL-TOOL-002` | A `tools` entry names a tool server the project does not define, a tool its server does not list, or a policy looser than the server's. Add or fix the `TOOL_SERVER` resource, or the reference |
+| Agent task fails with "tools outside the configured allow-list" | The worker's `ABADA_AGENT_ALLOWED_TOOLS` does not list the tool's server |
 | Deployment refused: "cycle back to node … needs a bound" | A route goes back to an earlier step that declares no `loop`. Add `loop: { max_iterations: N }` to that step (Studio: **Add loop bound**) |
 | A reviewer cannot see a task | The task's `assignees` must match one of their identity groups or a project task group (Admin → Projects), and they need `abada-task-user` |
 | Instance stops with an open incident | List them with `GET /api/v1/projects/{projectId}/incidents`. `WORK_FAILED`: a step's last attempt failed and it has no `on_error`; `LOOP_EXHAUSTED`: a loop hit `max_iterations` with no `on_exhausted`; `MISSING_CORRELATION_KEY`: a message wait has no `correlationKey` value. Fix the cause, then `POST .../incidents/{incidentId}/retry` or cancel the instance — see [Operate running processes](/user/operations/#incidents) |

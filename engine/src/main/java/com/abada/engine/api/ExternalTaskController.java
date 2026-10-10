@@ -40,12 +40,18 @@ public class ExternalTaskController {
     private final WorkerCapabilityService workerCapabilities;
     private final ProjectAccessService access;
     private final WorkerHealthService workerHealth;
+    private final com.abada.engine.tools.ToolCredentialService toolCredentials;
+    private final com.abada.engine.core.agent.AgentStepService agentSteps;
 
     public ExternalTaskController(ExternalTaskCommandService commands, IdempotencyService idempotency,
             ObjectMapper objectMapper, @Value("${abada.security.mode:disabled}") String securityMode,
             ProjectWorkerService projectWorkers, WorkerCapabilityService workerCapabilities,
             ProjectAccessService access,
-            WorkerHealthService workerHealth) {
+            WorkerHealthService workerHealth,
+            com.abada.engine.tools.ToolCredentialService toolCredentials,
+            com.abada.engine.core.agent.AgentStepService agentSteps) {
+        this.toolCredentials = toolCredentials;
+        this.agentSteps = agentSteps;
         this.commands = commands;
         this.idempotency = idempotency;
         this.objectMapper = objectMapper;
@@ -144,6 +150,38 @@ public class ExternalTaskController {
             return Map.of("status", "Failure recorded", "externalTaskId", id);
         });
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Journals one agent step (E9) for the worker holding the task's lease:
+     * a model or tool call recorded before it runs and again when it finishes.
+     * The engine refuses tools the task is not bound to, approval-required
+     * tools, sequence gaps and divergent replays; an identical request is
+     * idempotent. Never advances the process.
+     *
+     * <p>{@code Idempotency-Key} is accepted for protocol uniformity but not
+     * stored: the journal itself is idempotent by attempt, sequence and request
+     * digest, and keeping responses in the idempotency store would copy step
+     * results out of their encrypted columns.
+     */
+    @PostMapping("/{id}/steps")
+    public ResponseEntity<com.abada.engine.dto.AgentStepDto> recordStep(@PathVariable String id,
+            @RequestBody com.abada.engine.dto.AgentStepRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (!"disabled".equalsIgnoreCase(securityMode)) workerCapabilities.requireWorkerForTask(id);
+        return ResponseEntity.ok(agentSteps.record(id, request));
+    }
+
+    /**
+     * The credential of a tool server this task is bound to, for the worker
+     * holding its lease. Never cached; only names are logged.
+     */
+    @GetMapping("/{id}/tool-credentials/{server}")
+    public ResponseEntity<com.abada.engine.tools.ToolCredentialService.IssuedCredential> toolCredential(
+            @PathVariable String id, @PathVariable String server, @RequestParam String workerId) {
+        if (!"disabled".equalsIgnoreCase(securityMode)) workerCapabilities.requireWorkerForTask(id);
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .header("Pragma", "no-cache").body(toolCredentials.issueForTask(id, workerId, server));
     }
 
     @PostMapping("/{id}/extend-lock")

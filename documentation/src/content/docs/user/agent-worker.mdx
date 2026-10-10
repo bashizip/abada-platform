@@ -57,15 +57,40 @@ a key saved in Studio always wins:
 ABADA_LLM_GEMINI_API_KEY=...
 ```
 
-## Cost and tool control are local
+## Tools and limits
 
-- `ABADA_AGENT_ALLOWED_MODELS` (comma-separated) is the operator allow-list.
-  An `agent` node naming a model outside it **fails at deployment or authoring
-  validation** — not at first execution. Default:
+The operator decides what a worker may reach; the project decides which tools
+exist and how dangerous they are; the engine enforces both.
+
+- **Models.** `ABADA_AGENT_ALLOWED_MODELS` (comma-separated) is the operator
+  allow-list. An `agent` node naming a model outside it **fails at deployment
+  or authoring validation** — not at first execution. Default:
   `gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
-- Requested `tools` on a node must all appear in `ABADA_AGENT_ALLOWED_TOOLS`.
-  The worker does not execute arbitrary tool code; identifiers are model
-  context for adapters operators add deliberately.
+- **Tool servers.** Tools are declared per project as tool server resources
+  (MCP over streamable HTTP), each with a policy: `read`, `write` or
+  `approval_required`. A node binds tools as `<server>/<tool>` and may only
+  tighten their policy; the bindings are frozen with the definition version.
+  `ABADA_AGENT_ALLOWED_TOOLS` lists the tool servers this worker may reach: a
+  node's `crm/get_customer` runs only when `crm` (or the exact reference) is
+  listed, so a deployment can never widen what the operator allowed.
+- **The tool loop.** An agent that binds tools talks to the model over several
+  turns and calls the tools it asks for, with the project's tool credential.
+  Every call is journaled with the engine first, so a restarted worker
+  continues where it stopped without paying for a model turn twice or sending
+  a write twice. Tool results are capped at `ABADA_AGENT_MAX_TOOL_RESULT_BYTES`
+  (64 KiB) and each MCP request at `ABADA_AGENT_TOOL_TIMEOUT_MS` (30 s).
+- **Approvals.** An `approval_required` call pauses the agent until a person
+  approves the exact call in the Task Inbox (see
+  [Approving an agent's tool call](/user/process-patterns/#approving-an-agents-tool-call));
+  meanwhile the worker holds no lease and spends nothing.
+- **Limits and cost.** `max_turns`, `max_tokens_total` and `budget_usd` on the
+  node bound the loop; reaching one ends the step through `on_error` with
+  `AGENT_BUDGET_EXHAUSTED`. Cost is computed by the engine from the token
+  counts and the prices in **Settings → Model Prices** (USD per million tokens,
+  effective-dated); a budget fails closed for an unpriced model.
+
+See [Tutorial: an agent that acts](/user/tutorial-agent-that-acts/) for all of
+this on one process.
 
 ## What the engine keeps durable
 
@@ -94,10 +119,13 @@ ABADA_LLM_GEMINI_API_KEY=...
   completion.
 
 <Aside type="caution" title="External effects are at-least-once">
-  A model call or a downstream tool effect cannot be rolled back by
-  PostgreSQL. Providers and tool adapters must support their own stable
-  deduplication keys. Logs contain task/activity IDs and counters — never
-  tokens, prompts, variables or model responses.
+  A model call or a tool's side effect cannot be rolled back by PostgreSQL.
+  A write whose server accepts an idempotency key is re-sent with the same key
+  after a crash, so the server must deduplicate by it. A write without a key
+  that was interrupted is never re-sent: the engine opens a
+  `TOOL_OUTCOME_UNKNOWN` incident and a person says whether it happened. Logs
+  contain task/activity IDs and counters — never tokens, prompts, variables or
+  model responses.
 </Aside>
 
 ## Observing the worker

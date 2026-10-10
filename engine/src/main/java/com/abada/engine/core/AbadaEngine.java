@@ -18,6 +18,7 @@ import com.abada.engine.llm.AiProviderRegistry;
 import com.abada.engine.observability.EngineMetrics;
 import com.abada.engine.observability.TraceLogContext;
 import com.abada.engine.parser.AplParser;
+import com.abada.engine.tools.ToolRegistryService;
 import com.abada.engine.parser.BpmnParser;
 import com.abada.engine.persistence.PersistenceService;
 import com.abada.engine.persistence.entity.EventSubscriptionEntity;
@@ -75,6 +76,14 @@ public class AbadaEngine {
     private final PersistenceService persistenceService;
     private final BpmnParser parser;
     private final AplParser aplParser;
+    private final ToolRegistryService toolRegistry;
+    private final com.abada.engine.persistence.repository.AgentStepRepository agentSteps;
+    private final com.abada.engine.core.delegation.CallTargetService callTargets;
+    private final com.abada.engine.persistence.repository.ProcessInstanceRepository processInstanceRepository;
+    /** Deepest call-process nesting the engine allows (a root instance is depth 0). */
+    private final int maxCallDepth;
+    /** Run a CHILD_DONE job right after the child's command commits instead of waiting for the poller. */
+    private final boolean resumeChildImmediately;
 
     private final TaskManager taskManager;
     private final EventManager eventManager;
@@ -83,6 +92,7 @@ public class AbadaEngine {
     private final EventSubscriptionRepository eventSubscriptionRepository;
     private final JobRepository jobRepository;
     private final ObjectMapper om;
+    private final com.abada.engine.security.AesEncryption encryption;
     private final EngineMetrics engineMetrics;
     private final Tracer tracer;
     private final ActivityHistoryService historyService;
@@ -105,7 +115,15 @@ public class AbadaEngine {
             InsightFactWriter insightFactWriter,
             TaskGroupResolver taskGroupResolver,
             @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels,
-            @Autowired(required = false) AiProviderRegistry aiProviders) {
+            @Autowired(required = false) AiProviderRegistry aiProviders,
+            ToolRegistryService toolRegistry,
+            com.abada.engine.persistence.repository.AgentStepRepository agentSteps,
+            com.abada.engine.core.delegation.CallTargetService callTargets,
+            com.abada.engine.persistence.repository.ProcessInstanceRepository processInstanceRepository,
+            @Value("${abada.call-process.max-depth:4}") int maxCallDepth,
+            @Value("${abada.call-process.resume-immediately:true}") boolean resumeChildImmediately,
+            com.abada.engine.security.AesEncryption encryption) {
+        this.encryption = encryption;
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
         this.aplParser = new AplParser(allowedAgentModels);
@@ -125,6 +143,12 @@ public class AbadaEngine {
         this.insightFactWriter = insightFactWriter;
         this.taskGroupResolver = taskGroupResolver;
         this.aiProviders = aiProviders;
+        this.toolRegistry = toolRegistry;
+        this.agentSteps = agentSteps;
+        this.callTargets = callTargets;
+        this.processInstanceRepository = processInstanceRepository;
+        this.maxCallDepth = maxCallDepth;
+        this.resumeChildImmediately = resumeChildImmediately;
     }
 
     @PostConstruct
@@ -192,7 +216,28 @@ public class AbadaEngine {
                 }
             }
             ParsedProcessDefinition definition = parseResult.definition();
-            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId);
+            String toolBindings = null;
+            if (schema == DefinitionSchema.APL_NATIVE) {
+                // Tool references resolve against the project's tool servers now and stay frozen with this version.
+                ToolRegistryService.Resolution tools = toolRegistry.resolve(projectId, source);
+                if (!tools.ok()) {
+                    List<com.abada.engine.bpmn.compatibility.BpmnValidationIssue> issues =
+                            new ArrayList<>(tools.errors());
+                    issues.addAll(parseResult.report().issues());
+                    throw new com.abada.engine.bpmn.compatibility.BpmnValidationException(issues);
+                }
+                toolBindings = toolRegistry.toJson(tools.bindings());
+            }
+            // Called processes are pinned to their current version now, with this version.
+            com.abada.engine.core.delegation.CallTargetService.Resolution calls =
+                    callTargets.resolve(projectId, definition, source);
+            if (!calls.ok()) {
+                List<com.abada.engine.bpmn.compatibility.BpmnValidationIssue> issues = new ArrayList<>(calls.errors());
+                issues.addAll(parseResult.report().issues());
+                throw new com.abada.engine.bpmn.compatibility.BpmnValidationException(issues);
+            }
+            ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId, toolBindings,
+                    callTargets.toJson(calls.targets()));
             historyService.record("PROCESS_DEFINITION_DEPLOYED", null, definition.getId(), null,
                     Map.of("deploymentId", persisted.getDeploymentId(), "version", persisted.getVersion(),
                             "projectId", projectId));
@@ -234,6 +279,42 @@ public class AbadaEngine {
     public ParsedProcessDefinition getParsedProcessDefinition(String processDefinitionId) {
         ProcessDefinitionEntity latest = persistenceService.findProcessDefinitionById(processDefinitionId);
         return latest == null ? null : cacheDefinition(latest);
+    }
+
+    /**
+     * The tool bindings an agent activity of this instance may use, as frozen
+     * when its definition version was deployed. Empty when it binds none.
+     */
+    public List<com.abada.engine.core.model.ToolBinding> toolBindings(ProcessInstance instance, String activityId) {
+        String deploymentId = instance.getProcessDefinitionDeploymentId();
+        if (deploymentId == null) return List.of();
+        ProcessDefinitionEntity deployment = persistenceService.findProcessDefinitionByDeploymentId(deploymentId);
+        if (deployment == null) return List.of();
+        return toolRegistry.bindingsFor(deploymentId, deployment.getToolBindings())
+                .getOrDefault(activityId, List.of());
+    }
+
+    /** The child process a delegate of {@code activityId} was pinned to when this version was deployed. */
+    public com.abada.engine.core.delegation.CallTargetService.CallTarget delegationTarget(ProcessInstance instance,
+            com.abada.engine.core.model.DelegationMeta delegate) {
+        String deploymentId = instance.getProcessDefinitionDeploymentId();
+        if (deploymentId == null) return null;
+        ProcessDefinitionEntity deployment = persistenceService.findProcessDefinitionByDeploymentId(deploymentId);
+        if (deployment == null) return null;
+        return callTargets.targetsFor(deploymentId, deployment.getCallTargets()).get(delegate.targetKey());
+    }
+
+    /** The delegations an agent may propose, as its worker sees them. */
+    public List<com.abada.engine.core.model.AgentDelegate> delegates(ProcessInstance instance, String activityId) {
+        List<com.abada.engine.core.model.AgentDelegate> delegates = new ArrayList<>();
+        for (com.abada.engine.core.model.DelegationMeta delegate : instance.getDefinition().getDelegations(activityId)) {
+            var target = delegationTarget(instance, delegate);
+            if (target == null) continue;
+            delegates.add(new com.abada.engine.core.model.AgentDelegate(delegate.process(), delegate.toolRef(),
+                    delegate.description(), com.abada.engine.core.delegation.CallTargetService.inputSchema(target),
+                    delegate.approvalRequired() ? "required" : "none", delegate.outputs()));
+        }
+        return delegates;
     }
 
     private void registerDefinition(ParsedProcessDefinition definition, ProcessDefinitionEntity entity) {
@@ -287,39 +368,10 @@ public class AbadaEngine {
                         + ". Add a provider and its API key in Studio Settings > AI Providers.");
             }
 
-            ProcessInstance instance = new ProcessInstance(definition);
-            instance.setProcessDefinitionDeploymentId(deployment.getDeploymentId());
-            instance.setProjectId(projectId);
-            instance.putAllVariables(initialVariables);
-            instance.setStartedBy(username != null && !username.isBlank() ? username : "system");
-
+            ProcessInstance instance = launch(deployment, definition, projectId, username, initialVariables, null);
             span.setAttribute("process.instance.id", instance.getId());
             span.setAttribute("process.definition.id", processDefinitionId);
             span.setAttribute("process.definition.name", definition.getName());
-
-            engineMetrics.recordProcessStarted(processDefinitionId);
-            log.info("Started process instance: {} of definition: {} by user: {}",
-                    instance.getId(), processDefinitionId, username != null ? username : "system");
-
-            ProcessInstanceEntity entity = convertToEntity(instance);
-            entity.setStartedBy(instance.getStartedBy());
-            persistRuntimeState(instance, entity);
-
-            List<UserTaskPayload> userTasks = instance.advance();
-            if (instance.isCompleted() && instance.getEndDate() == null) {
-                instance.setEndDate(Instant.now());
-                engineMetrics.recordProcessCompleted(processDefinitionId);
-            }
-
-            entity = convertToEntity(instance);
-            entity.setStartedBy(instance.getStartedBy());
-            persistRuntimeState(instance, entity);
-
-            historyService.record("PROCESS_STARTED", instance, definition.getStartEventId(), Map.of());
-            recordDecisionTableAudits(instance);
-            recordLoopExhaustions(instance);
-
-            armWork(instance, userTasks);
             engineMetrics.recordProcessDuration(sample, processDefinitionId);
             return instance;
         } catch (Exception e) {
@@ -330,6 +382,55 @@ public class AbadaEngine {
         } finally {
             span.end();
         }
+    }
+
+    /**
+     * Creates, advances and persists one instance of a deployed version and
+     * arms its work, in the caller's transaction. A root instance has no
+     * lineage; a call-process child names its parent, token and call activity.
+     */
+    private ProcessInstance launch(ProcessDefinitionEntity deployment, ParsedProcessDefinition definition,
+            String projectId, String username, Map<String, Object> initialVariables,
+            ProcessInstance.Lineage lineage) {
+        String processDefinitionId = definition.getId();
+        ProcessInstance instance = new ProcessInstance(definition);
+        instance.setProcessDefinitionDeploymentId(deployment.getDeploymentId());
+        instance.setProjectId(projectId);
+        instance.putAllVariables(initialVariables);
+        instance.setStartedBy(username != null && !username.isBlank() ? username : "system");
+        instance.setLineage(lineage);
+
+        engineMetrics.recordProcessStarted(processDefinitionId);
+        log.info("Started process instance: {} of definition: {} by user: {}",
+                instance.getId(), processDefinitionId, username != null ? username : "system");
+
+        ProcessInstanceEntity entity = convertToEntity(instance);
+        entity.setStartedBy(instance.getStartedBy());
+        persistRuntimeState(instance, entity);
+
+        List<UserTaskPayload> userTasks = instance.advance();
+        if (instance.isCompleted() && instance.getEndDate() == null) {
+            instance.setEndDate(Instant.now());
+            engineMetrics.recordProcessCompleted(processDefinitionId);
+        }
+
+        entity = convertToEntity(instance);
+        entity.setStartedBy(instance.getStartedBy());
+        persistRuntimeState(instance, entity);
+
+        Map<String, Object> started = new LinkedHashMap<>();
+        if (lineage != null) {
+            started.put("parentInstanceId", lineage.parentInstanceId());
+            started.put("parentTokenId", lineage.parentTokenId());
+            started.put("parentActivityId", lineage.parentActivityId());
+            started.put("depth", lineage.depth());
+        }
+        historyService.record("PROCESS_STARTED", instance, definition.getStartEventId(), started);
+        recordDecisionTableAudits(instance);
+        recordLoopExhaustions(instance);
+
+        armWork(instance, userTasks);
+        return instance;
     }
 
     // Overloaded version for backward compatibility
@@ -383,6 +484,7 @@ public class AbadaEngine {
         // Variable names only: submitted values (and comments) never reach the logs.
         log.info("Completing task {} with variables {}", taskId, variables == null ? Set.of() : variables.keySet());
         TaskInstance currentTask = loadTaskForUpdate(taskId);
+        requireUserTask(currentTask);
 
         String processInstanceId = currentTask.getProcessInstanceId();
         ProcessInstanceEntity authoritativeInstance =
@@ -481,6 +583,7 @@ public class AbadaEngine {
     @AtomicRuntimeCommand
     public void failTask(String taskId) {
         TaskInstance task = loadTaskForUpdate(taskId);
+        requireUserTask(task);
         requireActiveProcessForTask(task);
         taskManager.failTask(task);
         persistTask(task);
@@ -504,6 +607,7 @@ public class AbadaEngine {
         }
 
         log.info("Failing process instance {}", processInstanceId);
+        cancelChildren(instance.getId(), null, "the parent instance failed");
         instance.setStatus(ProcessStatus.FAILED);
         instance.setEndDate(Instant.now());
         instance.setActiveTokens(Collections.emptyList()); // Clear active tokens to stop execution
@@ -534,6 +638,7 @@ public class AbadaEngine {
                     "Process instance is already in a terminal state: " + instance.getStatus());
         }
 
+        cancelChildren(instance.getId(), null, "the parent instance was cancelled");
         instance.setStatus(ProcessStatus.CANCELLED);
         instance.setEndDate(Instant.now());
         instance.setActiveTokens(Collections.emptyList());
@@ -541,6 +646,333 @@ public class AbadaEngine {
 
         persistRuntimeState(instance);
         historyService.record("PROCESS_CANCELLED", instance, null, Map.of("reason", reason == null ? "" : reason));
+    }
+
+    // ---- call-process (E20a) ---------------------------------------------------------------------------
+
+    /** Ancestors (root first) and direct children of an instance; read-only. */
+    @Transactional(readOnly = true)
+    public com.abada.engine.dto.LineageDto lineage(String instanceId) {
+        ProcessInstanceEntity self = processInstanceRepository.findById(instanceId)
+                .orElseThrow(() -> new ProcessEngineException("Process instance not found: " + instanceId));
+        List<com.abada.engine.dto.LineageDto.Link> ancestors = new ArrayList<>();
+        String parentId = self.getParentInstanceId();
+        int guard = 0;
+        while (parentId != null && guard++ < 64) {
+            ProcessInstanceEntity parent = processInstanceRepository.findById(parentId).orElse(null);
+            if (parent == null) break;
+            ancestors.add(0, link(parent));
+            parentId = parent.getParentInstanceId();
+        }
+        List<com.abada.engine.dto.LineageDto.Link> children = processInstanceRepository
+                .findByParentInstanceIdOrderByStartDateAsc(instanceId).stream().map(this::link).toList();
+        return new com.abada.engine.dto.LineageDto(instanceId,
+                self.getRootInstanceId() == null ? instanceId : self.getRootInstanceId(), self.getCallDepth(),
+                List.copyOf(ancestors), children);
+    }
+
+    private com.abada.engine.dto.LineageDto.Link link(ProcessInstanceEntity row) {
+        return new com.abada.engine.dto.LineageDto.Link(row.getId(), row.getProcessDefinitionId(),
+                row.getStatus() == null ? null : row.getStatus().name(), row.getParentActivityId(),
+                row.getCallDepth(), row.getStartDate(), row.getEndDate(),
+                row.getStartedByAgent() == null ? null : readMap(row.getStartedByAgent()));
+    }
+
+    /**
+     * Starts one child per token that parked at a call-process node in this
+     * command, in the same transaction. A call that cannot start (inputs fail
+     * to evaluate or do not fit the child's declared types, or the depth limit
+     * is reached) leaves through on_error or stops at a CHILD_FAILED incident.
+     */
+    private void startChildren(ProcessInstance instance, List<ProcessInstance.Parked> parkedTokens) {
+        for (ProcessInstance.Parked parked : parkedTokens) {
+            com.abada.engine.core.model.CallProcessMeta call =
+                    instance.getDefinition().getCallProcess(parked.activityId());
+            if (call == null || !instance.isWaitingAt(parked.tokenId(), parked.activityId())) continue;
+            startChild(instance, parked.tokenId(), call);
+        }
+    }
+
+    private void startChild(ProcessInstance instance, String tokenId, com.abada.engine.core.model.CallProcessMeta call) {
+        ProcessDefinitionEntity parentDeployment =
+                persistenceService.findProcessDefinitionByDeploymentId(instance.getProcessDefinitionDeploymentId());
+        com.abada.engine.core.delegation.CallTargetService.CallTarget target = parentDeployment == null ? null
+                : callTargets.targetsFor(parentDeployment.getDeploymentId(), parentDeployment.getCallTargets())
+                        .get(call.id());
+        if (target == null) {
+            throw new ProcessEngineException("Call '" + call.id() + "' of definition '" + instance.getDefinition().getId()
+                    + "' has no pinned target; redeploy the definition");
+        }
+        int depth = instance.getCallDepth() + 1;
+        int limit = call.maxDepth() == null ? maxCallDepth : Math.min(maxCallDepth, call.maxDepth());
+        if (depth > limit) {
+            callFailed(instance, tokenId, call.id(), "CHILD_DEPTH_EXCEEDED", "calling '" + target.processKey()
+                    + "' would nest " + depth + " deep; the limit is " + limit, null);
+            return;
+        }
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        for (Map.Entry<String, String> input : call.inputs().entrySet()) {
+            Object value;
+            try {
+                value = com.abada.engine.expression.WorkflowExpressions.compile(input.getValue())
+                        .evaluate(instance.getVariables());
+            } catch (RuntimeException exception) {
+                callFailed(instance, tokenId, call.id(), "CHILD_INPUT_INVALID", "input '" + input.getKey()
+                        + "' could not be evaluated: " + exception.getMessage(), null);
+                return;
+            }
+            String type = target.declaredTypes().get(input.getKey());
+            if (!com.abada.engine.core.delegation.CallTargetService.fits(value, type)) {
+                callFailed(instance, tokenId, call.id(), "CHILD_INPUT_INVALID", "input '" + input.getKey()
+                        + "' is not a " + type + " as '" + target.processKey() + "' declares", null);
+                return;
+            }
+            inputs.put(input.getKey(), value);
+        }
+        ProcessDefinitionEntity childDeployment = persistenceService.findProcessDefinitionByDeploymentId(
+                target.deploymentId());
+        if (childDeployment == null) {
+            throw new ProcessEngineException("Pinned version " + target.version() + " of '" + target.processKey()
+                    + "' no longer exists");
+        }
+        ParsedProcessDefinition childDefinition = cacheDefinition(childDeployment);
+        List<String> unconfigured = unconfiguredAgentModels(childDefinition);
+        if (!unconfigured.isEmpty()) {
+            callFailed(instance, tokenId, call.id(), "CHILD_START_REFUSED", "'" + target.processKey()
+                    + "' has agent tasks but no AI provider is configured for model(s) "
+                    + String.join(", ", unconfigured), null);
+            return;
+        }
+        ProcessInstance child = launch(childDeployment, childDefinition, instance.getProjectId(),
+                instance.getStartedBy(), inputs, new ProcessInstance.Lineage(instance.getId(), tokenId, call.id(),
+                        instance.getRootInstanceId(), depth));
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("childInstanceId", child.getId());
+        details.put("processKey", target.processKey());
+        details.put("version", target.version());
+        details.put("inputs", List.copyOf(inputs.keySet()));
+        historyService.record("CHILD_STARTED", instance, call.id(), details);
+    }
+
+    /**
+     * Starts the child an agent delegated to (E20b), inside the caller's step
+     * command (the agent's external-task row is locked; the parent instance is
+     * locked here, then the child is created: parent before child). The pinned
+     * target, the inputs against the child's declared variables and the depth
+     * are checked first; a refusal changes nothing and names its reason.
+     *
+     * @return the child instance id
+     */
+    public String startDelegatedChild(String parentInstanceId, String tokenId, String activityId,
+            com.abada.engine.core.model.DelegationMeta delegate, Map<String, Object> arguments,
+            String startedByAgentJson) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(parentInstanceId);
+        if (instance == null || isTerminal(instance)) {
+            throw new com.abada.engine.api.ApiException(org.springframework.http.HttpStatus.GONE,
+                    com.abada.engine.api.ApiErrorCode.WORK_RETIRED, "Process instance " + parentInstanceId
+                            + " has ended; its agent work no longer acts");
+        }
+        com.abada.engine.core.delegation.CallTargetService.CallTarget target = checkDelegation(instance, activityId,
+                delegate, arguments);
+        Map<String, Object> inputs = new LinkedHashMap<>(arguments == null ? Map.of() : arguments);
+        ProcessDefinitionEntity childDeployment = persistenceService.findProcessDefinitionByDeploymentId(
+                target.deploymentId());
+        if (childDeployment == null) {
+            throw new ProcessEngineException("Pinned version " + target.version() + " of '" + target.processKey()
+                    + "' no longer exists");
+        }
+        ParsedProcessDefinition childDefinition = cacheDefinition(childDeployment);
+        List<String> unconfigured = unconfiguredAgentModels(childDefinition);
+        if (!unconfigured.isEmpty()) {
+            throw delegationRefused("DELEGATION_REFUSED", "'" + target.processKey() + "' has agent tasks but no AI"
+                    + " provider is configured for model(s) " + String.join(", ", unconfigured));
+        }
+        ProcessInstance child = launch(childDeployment, childDefinition, instance.getProjectId(),
+                instance.getStartedBy(), inputs, new ProcessInstance.Lineage(instance.getId(), tokenId, activityId,
+                        instance.getRootInstanceId(), instance.getCallDepth() + 1, startedByAgentJson));
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("childInstanceId", child.getId());
+        details.put("processKey", target.processKey());
+        details.put("version", target.version());
+        details.put("inputs", List.copyOf(inputs.keySet()));
+        details.put("delegated", true);
+        historyService.record("CHILD_STARTED", instance, activityId, details);
+        return child.getId();
+    }
+
+    /**
+     * Whether an agent may delegate to {@code delegate} with these inputs: the
+     * pinned target exists, the nesting stays within the depth limit, and every
+     * input is declared by the child with a fitting type. Throws the refusal.
+     */
+    public com.abada.engine.core.delegation.CallTargetService.CallTarget checkDelegation(ProcessInstance instance,
+            String activityId, com.abada.engine.core.model.DelegationMeta delegate, Map<String, Object> arguments) {
+        com.abada.engine.core.delegation.CallTargetService.CallTarget target = delegationTarget(instance, delegate);
+        if (target == null) {
+            throw new ProcessEngineException("Delegate '" + delegate.process() + "' of '" + activityId
+                    + "' has no pinned target; redeploy the definition");
+        }
+        int depth = instance.getCallDepth() + 1;
+        int limit = delegate.maxDepth() == null ? maxCallDepth : Math.min(maxCallDepth, delegate.maxDepth());
+        if (depth > limit) {
+            throw delegationRefused("DELEGATION_DEPTH", "delegating to '" + target.processKey() + "' would nest "
+                    + depth + " deep; the limit is " + limit);
+        }
+        Map<String, Object> inputs = arguments == null ? Map.of() : arguments;
+        for (Map.Entry<String, Object> input : inputs.entrySet()) {
+            if (!target.declaredTypes().isEmpty() && !target.declaredTypes().containsKey(input.getKey())) {
+                throw delegationRefused("DELEGATION_INPUT_INVALID", "'" + target.processKey()
+                        + "' does not declare an input '" + input.getKey() + "'");
+            }
+            String type = target.declaredTypes().get(input.getKey());
+            if (!com.abada.engine.core.delegation.CallTargetService.fits(input.getValue(), type)) {
+                throw delegationRefused("DELEGATION_INPUT_INVALID", "input '" + input.getKey() + "' is not a "
+                        + type + " as '" + target.processKey() + "' declares");
+            }
+        }
+        return target;
+    }
+
+    private static com.abada.engine.api.ApiException delegationRefused(String reason, String message) {
+        return new com.abada.engine.api.ApiException(org.springframework.http.HttpStatus.CONFLICT,
+                com.abada.engine.api.ApiErrorCode.AGENT_STEP_REJECTED, message, Map.of("reason", reason));
+    }
+
+    /**
+     * A call failed for the parent token: through an on_error boundary that
+     * catches {@code code} (or catches all), otherwise the token stops at a
+     * CHILD_FAILED incident that, retried, starts a new child.
+     */
+    private void callFailed(ProcessInstance instance, String tokenId, String activityId, String code, String message,
+            String childInstanceId) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("code", code);
+        if (childInstanceId != null) details.put("childInstanceId", childInstanceId);
+        details.put("message", truncate(message, 500));
+        historyService.record("CHILD_FAILED", instance, activityId, details);
+        BoundaryMeta boundary = instance.getDefinition().boundaryFor(activityId, BoundaryMeta.Kind.ERROR, code);
+        if (boundary != null && !instance.isSuspended()) {
+            Map<String, Object> variables = new LinkedHashMap<>();
+            variables.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_ERROR);
+            variables.put(AplParser.errorCodeVariable(activityId), code);
+            leaveViaBoundary(instance, tokenId, boundary, variables, details);
+            return;
+        }
+        retireTaskJobs(instance, tokenId);
+        instance.stopAtIncident(tokenId);
+        persistRuntimeState(instance);
+        incidentService.open(instance, tokenId, activityId, IncidentEntity.Type.CHILD_FAILED,
+                "call at '" + activityId + "' failed (" + code + "): " + truncate(message, 900));
+        log.warn("Process instance {}: call at '{}' failed with no on_error route; incident opened",
+                instance.getId(), activityId);
+    }
+
+    /**
+     * Resumes a parent token whose child ended (a CHILD_DONE job). Locks only
+     * the parent; the child is read. A token that already left (timeout,
+     * cancel) is left alone. A completed child's mapped outputs are written
+     * and the token moves on; a failed or cancelled child takes on_error or
+     * opens a CHILD_FAILED incident.
+     *
+     * @return true when the parent token moved or stopped
+     */
+    @AtomicRuntimeCommand
+    public boolean childEnded(String parentInstanceId, String activityId, String parentTokenId,
+            String childInstanceId) {
+        ProcessInstance parent = loadProcessInstanceForUpdate(parentInstanceId);
+        if (parent == null || isTerminal(parent)) return false;
+        ProcessInstance child = getProcessInstanceById(childInstanceId);
+        if (child == null || child.getLineage() == null || !parentTokenId.equals(child.getLineage().parentTokenId())
+                || !parent.isWaitingAt(parentTokenId, activityId)) {
+            historyService.record("CHILD_RESULT_IGNORED", parent, activityId,
+                    Map.of("childInstanceId", childInstanceId, "reason", "the calling token is no longer waiting"));
+            return false;
+        }
+        com.abada.engine.core.model.CallProcessMeta call = parent.getDefinition().getCallProcess(activityId);
+        if (call == null) {
+            // Not a call-process node (a delegation's child is resumed by DelegationResultService).
+            historyService.record("CHILD_RESULT_IGNORED", parent, activityId,
+                    Map.of("childInstanceId", childInstanceId, "reason", "'" + activityId + "' calls no process"));
+            return false;
+        }
+        if (child.getStatus() != ProcessStatus.COMPLETED) {
+            callFailed(parent, parentTokenId, activityId, "CHILD_FAILED", "child " + childInstanceId + " ended "
+                    + child.getStatus(), childInstanceId);
+            return true;
+        }
+        Map<String, Object> outputs = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
+        for (Map.Entry<String, String> output : call.outputs().entrySet()) {
+            if (!child.getVariables().containsKey(output.getValue())) missing.add(output.getValue());
+            outputs.put(output.getKey(), child.getVariables().get(output.getValue()));
+        }
+        outputs.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_OK);
+        if (parent.getVariables().containsKey(AplParser.errorCodeVariable(activityId))) {
+            outputs.put(AplParser.errorCodeVariable(activityId), null);
+        }
+        parent.putAllVariables(outputs);
+        retireTaskJobs(parent, parentTokenId);
+        List<UserTaskPayload> nextTasks = parent.advance(parentTokenId);
+        recordDecisionTableAudits(parent);
+        recordLoopExhaustions(parent);
+        if (parent.isCompleted() && parent.getEndDate() == null) {
+            parent.setEndDate(Instant.now());
+        }
+        persistRuntimeState(parent);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("childInstanceId", childInstanceId);
+        details.put("outputs", List.copyOf(call.outputs().keySet()));
+        if (!missing.isEmpty()) details.put("missingChildVariables", missing);
+        historyService.record("CHILD_COMPLETED", parent, activityId, details);
+        armWork(parent, nextTasks);
+        return true;
+    }
+
+    /**
+     * When a child instance reaches its end, schedules the job that resumes its
+     * parent token (once per child), in the child's command. The child never
+     * locks its parent. A child cancelled by its parent schedules nothing.
+     */
+    private void scheduleParentResume(ProcessInstance instance) {
+        ProcessInstance.Lineage lineage = instance.getLineage();
+        if (lineage == null || !isTerminal(instance) || instance.isEndedByParent()) return;
+        String jobId = jobScheduler.scheduleChildDone(lineage.parentInstanceId(), lineage.parentActivityId(),
+                lineage.parentTokenId(), instance.getId());
+        if (jobId == null || !resumeChildImmediately) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    jobScheduler.runSoon(jobId);
+                }
+            });
+        }
+    }
+
+    /**
+     * Cancels the running children of an instance (all of them, or those of
+     * some tokens) and their descendants, in the caller's transaction. The
+     * caller holds the parent's lock: the order is always parent, then child.
+     */
+    private void cancelChildren(String parentInstanceId, Set<String> tokenIds, String reason) {
+        for (ProcessInstanceEntity row : processInstanceRepository.findByParentInstanceIdOrderByStartDateAsc(
+                parentInstanceId)) {
+            if (tokenIds != null && !tokenIds.contains(row.getParentTokenId())) continue;
+            if (row.getStatus() == ProcessStatus.COMPLETED || row.getStatus() == ProcessStatus.FAILED
+                    || row.getStatus() == ProcessStatus.CANCELLED) continue;
+            retireAllWork(row.getId());
+            ProcessInstance child = loadProcessInstanceForUpdate(row.getId());
+            if (child == null || isTerminal(child)) continue;
+            cancelChildren(child.getId(), null, "its parent instance ended");
+            child.setEndedByParent(true);
+            child.setStatus(ProcessStatus.CANCELLED);
+            child.setEndDate(Instant.now());
+            child.setActiveTokens(Collections.emptyList());
+            incidentService.resolveAll(child.getId(), IncidentService.RESOLVED_BY_CANCEL);
+            persistRuntimeState(child);
+            historyService.record("PROCESS_CANCELLED", child, null,
+                    Map.of("reason", reason, "parentInstanceId", parentInstanceId));
+        }
     }
 
     @AtomicRuntimeCommand
@@ -700,6 +1132,11 @@ public class AbadaEngine {
         instance.setProjectId(entity.getProjectId());
         instance.setEntityVersion(entity.getEntityVersion());
         instance.setStartedBy(entity.getStartedBy());
+        if (entity.getParentInstanceId() != null) {
+            instance.setLineage(new ProcessInstance.Lineage(entity.getParentInstanceId(), entity.getParentTokenId(),
+                    entity.getParentActivityId(), entity.getRootInstanceId(), entity.getCallDepth(),
+                    entity.getStartedByAgent()));
+        }
         instance.putAllVariables(readMap(entity.getVariablesJson()));
         List<ProcessTokenEntity> rows = processTokenRepository
                 .findByProcessInstanceIdOrderByCreatedAtAscIdAsc(entity.getId());
@@ -786,6 +1223,18 @@ public class AbadaEngine {
      */
     @AtomicRuntimeCommand
     public void retryIncident(String processInstanceId, String incidentId, String model, String reason) {
+        retryIncident(processInstanceId, incidentId, model, reason, null);
+    }
+
+    /**
+     * Retries an incident. For {@code TOOL_OUTCOME_UNKNOWN} the operator must
+     * first say whether the interrupted write happened ({@code PERFORMED}) or
+     * not ({@code NOT_PERFORMED}); the agent then resumes its attempt with
+     * that fact and the write is never re-sent blindly.
+     */
+    @AtomicRuntimeCommand
+    public void retryIncident(String processInstanceId, String incidentId, String model, String reason,
+            String toolOutcome) {
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null) {
             throw new ProcessEngineException("No process instance found for id=" + processInstanceId);
@@ -795,6 +1244,18 @@ public class AbadaEngine {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("incidentId", incidentId);
         details.put("type", incident.getType());
+        if (IncidentEntity.Type.TOOL_OUTCOME_UNKNOWN.name().equals(incident.getType())) {
+            if (model != null) {
+                throw new ProcessEngineException("A model cannot be chosen when confirming a tool outcome");
+            }
+            details.putAll(resolveUnknownToolOutcome(instance, incident, toolOutcome));
+            incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
+            historyService.record("INCIDENT_RETRIED", instance, incident.getActivityId(), details);
+            return;
+        }
+        if (toolOutcome != null) {
+            throw new ProcessEngineException("A tool outcome is only confirmed for a TOOL_OUTCOME_UNKNOWN incident");
+        }
         if (IncidentEntity.Type.WORK_FAILED.name().equals(incident.getType())) {
             details.putAll(reopenFailedWork(instance, incident.getTokenId(), incident.getActivityId(), model, reason));
             incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
@@ -861,6 +1322,13 @@ public class AbadaEngine {
      */
     Map<String, Object> reopenExternalTask(ExternalTaskEntity task, ServiceTaskMeta meta, String model,
             String reason) {
+        boolean unknownWrite = agentSteps.findByExternalTaskIdOrderByAttemptAscSequenceAsc(task.getId()).stream()
+                .anyMatch(step -> step.getState()
+                        == com.abada.engine.persistence.entity.AgentStepEntity.State.OUTCOME_UNKNOWN);
+        if (unknownWrite) {
+            throw new ProcessEngineException("Task " + task.getId() + " stopped on a write with an unknown outcome;"
+                    + " retry its TOOL_OUTCOME_UNKNOWN incident with the confirmed outcome instead");
+        }
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("externalTaskId", task.getId());
         if (model != null) {
@@ -887,10 +1355,90 @@ public class AbadaEngine {
                 ? meta.agentWork().maxAttempts() : 3;
         task.setRetries(attempts);
         task.setDeferrals(0);
+        // A retry is a new attempt: a fresh conversation, with earlier completed writes passed on as done;
+        // unless a write is still STARTED, which the same attempt must resume with its key.
+        if (!agentSteps.hasOpenWrite(task.getId(), task.getAttempt())) task.setAttempt(task.getAttempt() + 1);
         task.setStatus(ExternalTaskEntity.Status.OPEN);
         task.setWorkerId(null);
         task.setLockExpirationTime(null);
         details.put("retries", attempts);
+        return details;
+    }
+
+    /**
+     * An agent write without an idempotency key was interrupted (E9): the
+     * engine never re-sends it. Opens a {@code TOOL_OUTCOME_UNKNOWN} incident
+     * for a person to confirm what happened; no boundary routes it.
+     */
+    public void toolOutcomeUnknown(String processInstanceId, String tokenId, String activityId, String toolRef,
+            int sequence) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null || isTerminal(instance)) return;
+        String token = instance.waitingTokenId(tokenId != null ? tokenId : activityId);
+        incidentService.open(instance, token, activityId, IncidentEntity.Type.TOOL_OUTCOME_UNKNOWN,
+                "write '" + toolRef + "' (step " + sequence + ") at '" + activityId
+                        + "' was interrupted and its server accepts no idempotency key; confirm whether it happened");
+        historyService.record("TOOL_OUTCOME_UNKNOWN", instance, activityId,
+                Map.of("toolRef", toolRef, "sequence", sequence));
+        log.warn("Process instance {}: write {} at '{}' has an unknown outcome; incident opened",
+                instance.getId(), toolRef, activityId);
+    }
+
+    private Map<String, Object> resolveUnknownToolOutcome(ProcessInstance instance, IncidentEntity incident,
+            String toolOutcome) {
+        String outcome = toolOutcome == null ? "" : toolOutcome.strip().toUpperCase(java.util.Locale.ROOT);
+        if (!outcome.equals("PERFORMED") && !outcome.equals("NOT_PERFORMED")) {
+            throw new ProcessEngineException("Confirm the interrupted write first: toolOutcome must be PERFORMED"
+                    + " or NOT_PERFORMED");
+        }
+        java.util.function.Predicate<String> ofToken = token -> incident.getTokenId() == null ? token == null
+                : incident.getTokenId().equals(token);
+        ExternalTaskEntity task = externalTaskRepository
+                .findByProcessInstanceIdAndStatusInForUpdate(instance.getId(),
+                        List.of(ExternalTaskEntity.Status.FAILED)).stream()
+                .filter(candidate -> ofToken.test(candidate.getTokenId())
+                        && incident.getActivityId().equals(candidate.getActivityId()))
+                .findFirst()
+                .orElseThrow(() -> new ProcessEngineException("No stopped agent work found at '"
+                        + incident.getActivityId() + "' of process instance " + instance.getId()));
+        com.abada.engine.persistence.entity.AgentStepEntity step = agentSteps
+                .findByExternalTaskIdOrderByAttemptAscSequenceAsc(task.getId()).stream()
+                .filter(candidate -> candidate.getState()
+                        == com.abada.engine.persistence.entity.AgentStepEntity.State.OUTCOME_UNKNOWN)
+                .findFirst()
+                .orElseThrow(() -> new ProcessEngineException("No write with an unknown outcome found for task "
+                        + task.getId()));
+        boolean performed = outcome.equals("PERFORMED");
+        String actor = com.abada.engine.security.IdentityContext.get()
+                .map(com.abada.engine.security.Identity::username).orElse("system");
+        step.setState(performed ? com.abada.engine.persistence.entity.AgentStepEntity.State.COMPLETED
+                : com.abada.engine.persistence.entity.AgentStepEntity.State.FAILED);
+        // The tool's own answer is lost: the agent resumes with the confirmed fate as the call's result,
+        // shaped like any tool result so the worker can rebuild its conversation from the journal.
+        com.fasterxml.jackson.databind.node.ObjectNode result = om.createObjectNode()
+                .put("content", performed
+                        ? "Performed: the call was interrupted before its response arrived, and a person confirmed"
+                                + " it took effect. Its response is not available. Do not repeat it."
+                        : "Not performed: the call was interrupted, and a person confirmed it did not take effect.")
+                .put("isError", !performed).put("truncated", false)
+                .put("confirmedByOperator", true).put("performed", performed);
+        step.setResultDigest(com.abada.engine.core.agent.AgentStepService.digest(result));
+        step.setResultEnc(encryption.encrypt(com.abada.engine.core.agent.AgentStepService.canonicalJson(result)));
+        if (!performed) step.setErrorType("NOT_PERFORMED_CONFIRMED");
+        // An approved call keeps its approver; who confirmed the outcome is in the incident's history.
+        if (step.getDecidedAt() == null) step.setResolvedBy(actor);
+        agentSteps.save(step);
+        // Resume the same attempt: the journal already says what happened.
+        task.setStatus(ExternalTaskEntity.Status.OPEN);
+        task.setWorkerId(null);
+        task.setLockExpirationTime(null);
+        if (task.getRetries() == null || task.getRetries() < 1) task.setRetries(1);
+        externalTaskRepository.save(task);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("toolRef", step.getToolRef());
+        details.put("sequence", step.getSequence());
+        details.put("toolOutcome", outcome);
         return details;
     }
 
@@ -1012,20 +1560,33 @@ public class AbadaEngine {
      */
     @AtomicRuntimeCommand
     public String workFailed(String processInstanceId, String activityId, String tokenId, String message) {
+        return workFailed(processInstanceId, activityId, tokenId, message, null);
+    }
+
+    /**
+     * Work at an activity failed for good. With an {@code errorCode} (a coded,
+     * final failure such as {@code AGENT_BUDGET_EXHAUSTED}) the {@code on_error}
+     * route catching that code is taken; otherwise the one catching
+     * {@code WORK_FAILED}. Without a route a WORK_FAILED incident opens.
+     */
+    public String workFailed(String processInstanceId, String activityId, String tokenId, String message,
+            String errorCode) {
         ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
         if (instance == null || isTerminal(instance)) return null;
         String token = instance.waitingTokenId(tokenId != null ? tokenId : activityId);
+        String code = errorCode == null ? BoundaryMeta.WORK_FAILED : errorCode;
         BoundaryMeta boundary = instance.getDefinition()
-                .boundaryFor(activityId, BoundaryMeta.Kind.ERROR, BoundaryMeta.WORK_FAILED);
+                .boundaryFor(activityId, BoundaryMeta.Kind.ERROR, code);
         if (boundary != null && !instance.isSuspended()) {
             Map<String, Object> variables = new LinkedHashMap<>();
             variables.put(AplParser.outcomeVariable(activityId), AplParser.OUTCOME_ERROR);
-            variables.put(AplParser.errorCodeVariable(activityId), BoundaryMeta.WORK_FAILED);
+            variables.put(AplParser.errorCodeVariable(activityId), code);
             leaveViaBoundary(instance, token, boundary, variables, Map.of("message", truncate(message, 500)));
             return boundary.target();
         }
         incidentService.open(instance, token, activityId, IncidentEntity.Type.WORK_FAILED,
-                "work at '" + activityId + "' failed: " + truncate(message, 900));
+                "work at '" + activityId + "' failed" + (errorCode == null ? "" : " (" + errorCode + ")") + ": "
+                        + truncate(message, 880));
         log.warn("Process instance {}: work at '{}' failed with no on_error route; incident opened",
                 instance.getId(), activityId);
         return null;
@@ -1057,13 +1618,16 @@ public class AbadaEngine {
         eventManager.registerWaitStates(instance);
         scheduleWaitingTimerEvents(instance);
         createExternalTaskJobs(instance);
-        scheduleTaskTimers(instance);
+        List<ProcessInstance.Parked> parked = instance.takeParked();
+        scheduleTaskTimers(instance, parked);
+        // Last: a child that cannot start may move the token on through on_error.
+        startChildren(instance, parked);
     }
 
-    private void scheduleTaskTimers(ProcessInstance instance) {
+    private void scheduleTaskTimers(ProcessInstance instance, List<ProcessInstance.Parked> parkedTokens) {
         ParsedProcessDefinition definition = instance.getDefinition();
         Instant now = Instant.now();
-        for (ProcessInstance.Parked parked : instance.takeParked()) {
+        for (ProcessInstance.Parked parked : parkedTokens) {
             for (BoundaryMeta boundary : definition.boundariesOf(parked.activityId())) {
                 if (boundary.kind() == BoundaryMeta.Kind.TIMEOUT) {
                     jobScheduler.scheduleTaskJob(instance.getId(), parked.activityId(), parked.tokenId(),
@@ -1080,8 +1644,9 @@ public class AbadaEngine {
 
     private static final List<JobEntity.Status> PENDING_JOBS =
             List.of(JobEntity.Status.AVAILABLE, JobEntity.Status.LEASED);
-    private static final List<ExternalTaskEntity.Status> OPEN_EXTERNAL =
-            List.of(ExternalTaskEntity.Status.OPEN, ExternalTaskEntity.Status.LOCKED);
+    private static final List<ExternalTaskEntity.Status> OPEN_EXTERNAL = List.of(ExternalTaskEntity.Status.OPEN,
+            ExternalTaskEntity.Status.LOCKED, ExternalTaskEntity.Status.AWAITING_APPROVAL,
+            ExternalTaskEntity.Status.AWAITING_CHILD);
     private static final List<com.abada.engine.core.model.TaskStatus> OPEN_TASKS =
             List.of(com.abada.engine.core.model.TaskStatus.AVAILABLE, com.abada.engine.core.model.TaskStatus.CLAIMED);
 
@@ -1100,6 +1665,7 @@ public class AbadaEngine {
      * timer holds are skipped (that timer finds the token gone).
      */
     private void retireWork(ProcessInstance instance, Set<String> tokenIds) {
+        cancelChildren(instance.getId(), tokenIds, "the calling step left through a boundary");
         cancelJobs(jobRepository.findPendingForTokensSkipLocked(instance.getId(), tokenIds));
         for (String tokenId : tokenIds) {
             cancelExternalTasks(externalTaskRepository.findByTokenAndStatusInForUpdate(instance.getId(), tokenId,
@@ -1268,8 +1834,7 @@ public class AbadaEngine {
 
     private void createExternalTaskJobs(ProcessInstance instance) {
         ParsedProcessDefinition definition = instance.getDefinition();
-        List<ExternalTaskEntity.Status> open = List.of(ExternalTaskEntity.Status.OPEN,
-                ExternalTaskEntity.Status.LOCKED);
+        List<ExternalTaskEntity.Status> open = OPEN_EXTERNAL;
         for (ProcessToken token : instance.getWaitingTokens()) {
             String activityId = token.activityId();
             if (definition.isServiceTask(activityId)) {
@@ -1332,6 +1897,15 @@ public class AbadaEngine {
         entity.setJoinExpectedTokensJson(writeValue(instance.getJoinExpectedTokens()));
         entity.setJoinArrivedTokensJson(writeValue(instance.getJoinArrivedTokens()));
         entity.setEntityVersion(instance.getEntityVersion());
+        ProcessInstance.Lineage lineage = instance.getLineage();
+        if (lineage != null) {
+            entity.setParentInstanceId(lineage.parentInstanceId());
+            entity.setParentTokenId(lineage.parentTokenId());
+            entity.setParentActivityId(lineage.parentActivityId());
+            entity.setRootInstanceId(lineage.rootInstanceId());
+            entity.setCallDepth(lineage.depth());
+            entity.setStartedByAgent(lineage.startedByAgent());
+        }
         return entity;
     }
 
@@ -1342,6 +1916,7 @@ public class AbadaEngine {
     private void persistRuntimeState(ProcessInstance instance, ProcessInstanceEntity entity) {
         ProcessInstanceEntity saved = persistenceService.saveOrUpdateProcessInstance(entity);
         instance.setEntityVersion(saved.getEntityVersion());
+        scheduleParentResume(instance);
         if (instance.isStoredTokensStale()) {
             processTokenRepository.deleteByProcessInstanceId(instance.getId());
             instance.clearStoredTokensStale();
@@ -1417,6 +1992,8 @@ public class AbadaEngine {
         entity.setCandidateGroups(new ArrayList<>(taskInstance.getCandidateGroups()));
         entity.setFormKey(taskInstance.getFormKey());
         entity.setTokenId(taskInstance.getTokenId());
+        entity.setKind(taskInstance.getKind());
+        entity.setAgentStepId(taskInstance.getAgentStepId());
         entity.setEntityVersion(taskInstance.getEntityVersion());
 
         return entity;
@@ -1428,6 +2005,62 @@ public class AbadaEngine {
             throw new ProcessEngineException("Task not found: " + taskId);
         }
         return taskManager.materialize(entity);
+    }
+
+    /** A tool approval is decided through its own command, never completed or failed like a node's task. */
+    private static void requireUserTask(TaskInstance task) {
+        if (task.isToolApproval()) {
+            throw new ProcessEngineException("Task " + task.getId() + " approves a tool call: decide it with"
+                    + " outcome approve or reject");
+        }
+    }
+
+    /**
+     * Opens the human task that approves one proposed tool call, in the
+     * caller's step command (the external-task row is already locked, then the
+     * instance here). The task carries the agent's token so a cancel or timeout
+     * boundary retires it, and never moves that token. History and the outbox
+     * get the tool, the step and the argument digest, never the arguments.
+     *
+     * @return the approval task id
+     */
+    public String openToolApproval(String processInstanceId, String tokenId, String activityId, String stepId,
+            String toolRef, int sequence, String argumentsDigest, List<String> approvers, Double slaHours) {
+        ProcessInstance instance = loadProcessInstanceForUpdate(processInstanceId);
+        if (instance == null || isTerminal(instance)) {
+            throw new com.abada.engine.api.ApiException(org.springframework.http.HttpStatus.GONE,
+                    com.abada.engine.api.ApiErrorCode.WORK_RETIRED, "Process instance " + processInstanceId
+                            + " has ended; its agent work no longer acts");
+        }
+        TaskInstance approval = taskManager.createTaskSnapshot(activityId, "Approve " + toolRef, processInstanceId,
+                null, List.of(), approvers, null, com.abada.engine.core.model.assignment.AssignmentStrategy.CLAIM);
+        approval.setTokenId(tokenId);
+        approval.setKind(TaskInstance.KIND_TOOL_APPROVAL);
+        approval.setAgentStepId(stepId);
+        if (slaHours != null) approval.setDueAt(approval.getStartDate().plus(slaDuration(slaHours)));
+        persistTask(approval);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("taskId", approval.getId());
+        details.put("toolRef", toolRef);
+        details.put("sequence", sequence);
+        details.put("argumentsDigest", argumentsDigest);
+        details.put("approvers", approvers);
+        historyService.record("TASK_CREATED", instance, activityId,
+                Map.of("assignee", "", "assignmentStrategy", com.abada.engine.core.model.assignment.AssignmentStrategy.CLAIM.name(),
+                        "kind", TaskInstance.KIND_TOOL_APPROVAL));
+        historyService.record("TOOL_APPROVAL_REQUESTED", instance, activityId, details);
+        if (slaHours != null && tokenId != null) {
+            jobScheduler.scheduleTaskJob(processInstanceId, activityId, tokenId, JobEntity.Kind.SLA, null,
+                    approval.getDueAt());
+        }
+        return approval.getId();
+    }
+
+    /** Cancels the pending SLA timer of a decided tool approval; the token's other timers keep running. */
+    public void retireApprovalTimer(String processInstanceId, String tokenId) {
+        if (tokenId == null) return;
+        cancelJobs(jobRepository.findPendingForTokensSkipLocked(processInstanceId, Set.of(tokenId)).stream()
+                .filter(job -> job.getKind() == JobEntity.Kind.SLA).toList());
     }
 
     private ProcessInstance loadProcessInstance(String processInstanceId) {
@@ -1534,11 +2167,20 @@ public class AbadaEngine {
 
     private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema,
             String projectId) {
+        return saveProcessDefinition(parseResult, schema, projectId, null, null);
+    }
+
+    private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema,
+            String projectId, String toolBindings, String pinnedCalls) {
         ParsedProcessDefinition definition = parseResult.definition();
         String checksum = sha256(definition.getRawXml());
         ProcessDefinitionEntity latest = persistenceService
                 .findProcessDefinitionByProjectAndId(projectId, definition.getId());
-        if (latest != null && checksum.equals(latest.getChecksum())) {
+        // Same source, tools and called versions: nothing changed. A changed tool server or a newer
+        // called process makes a new version.
+        if (latest != null && checksum.equals(latest.getChecksum())
+                && java.util.Objects.equals(toolBindings, latest.getToolBindings())
+                && java.util.Objects.equals(pinnedCalls, latest.getCallTargets())) {
             return latest;
         }
         ProcessDefinitionEntity entity = new ProcessDefinitionEntity();
@@ -1554,6 +2196,8 @@ public class AbadaEngine {
         entity.setCompatibilityProfiles(String.join(",", parseResult.activeProfiles()));
         entity.setDetectedNamespaces(String.join(",", new TreeSet<>(parseResult.detectedNamespaces())));
         entity.setCompilerVersion(schema == DefinitionSchema.APL_NATIVE ? "apl-1" : "1");
+        entity.setToolBindings(toolBindings);
+        entity.setCallTargets(pinnedCalls);
         try {
             entity.setCompatibilityReport(om.writeValueAsString(parseResult.report()));
         } catch (JsonProcessingException exception) {

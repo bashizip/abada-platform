@@ -103,7 +103,39 @@ class PostgresTokenUpgradeTest {
         // Back to the rc.8 schema (V22) with the state rc.8 itself would have written.
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword()); var statement = connection.createStatement()) {
-            // Undo V26, V25, V24, then V23.
+            // Undo V33, V32, V31, V30, V29, V28, V27, V26, V25, V24, then V23.
+            statement.execute("drop index idx_outbox_project_seq");
+            statement.execute("drop index idx_outbox_seq");
+            statement.execute("alter table outbox_events drop column project_id");
+            statement.execute("alter table outbox_events drop column seq");
+            statement.execute("drop index idx_agent_steps_child");
+            statement.execute("alter table agent_steps drop column child_instance_id");
+            statement.execute("drop index idx_tasks_agent_step");
+            statement.execute("alter table tasks drop column kind");
+            statement.execute("alter table tasks drop column agent_step_id");
+            statement.execute("drop table model_prices");
+            statement.execute("alter table projects drop column evidence_payloads");
+            statement.execute("alter table projects drop column evidence_retention_days");
+            for (String column : List.of("attempt_cost_usd", "attempt_cost_unpriced", "attempt_prompt_tokens",
+                    "attempt_completion_tokens")) {
+                statement.execute("alter table external_tasks drop column " + column);
+            }
+            statement.execute("drop index idx_jobs_related_instance");
+            statement.execute("alter table jobs drop column related_instance_id");
+            statement.execute("drop index idx_process_instances_parent");
+            statement.execute("drop index idx_process_instances_root");
+            for (String column : List.of("parent_instance_id", "parent_token_id", "parent_activity_id",
+                    "root_instance_id", "call_depth", "started_by_agent")) {
+                statement.execute("alter table process_instances drop column " + column);
+            }
+            statement.execute("alter table process_definitions drop column call_targets");
+            statement.execute("drop table agent_steps");
+            statement.execute("alter table external_tasks drop column attempt");
+            statement.execute("drop table tool_credentials");
+            statement.execute("alter table process_definitions drop column tool_bindings");
+            statement.execute("alter table project_resources drop constraint ck_project_resource_kind");
+            statement.execute("alter table project_resources add constraint ck_project_resource_kind "
+                    + "check (kind in ('FORM', 'RESOURCE'))");
             statement.execute("drop index idx_jobs_instance_token_kind");
             statement.execute("alter table jobs drop column job_kind");
             statement.execute("alter table jobs drop column boundary_id");
@@ -119,7 +151,7 @@ class PostgresTokenUpgradeTest {
             for (String table : List.of("tasks", "external_tasks", "jobs", "event_subscriptions")) {
                 statement.execute("alter table " + table + " drop column token_id");
             }
-            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26')");
+            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33')");
             legacyState(statement, joinId, "b", "[\"b\"]", "{\"join\":2}", "{\"join\":[\"a\"]}");
             legacyState(statement, raceId, "race_e0", "[\"race_e0\",\"race_e1\"]", "{}", "{}");
             legacyState(statement, reviewId, "review", "[\"review\"]", "{}", "{}");

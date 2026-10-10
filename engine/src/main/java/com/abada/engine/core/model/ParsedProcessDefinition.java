@@ -26,6 +26,15 @@ public class ParsedProcessDefinition implements Serializable {
 
     private final Map<String, List<String>> flowGraph = new HashMap<>();
     private Map<String, LoopMeta> loops = Map.of();
+    private Map<String, CallProcessMeta> callProcesses = Map.of();
+    private Set<String> sensitiveVariables = Set.of();
+    /** Agent node id to its {@code evidence} override: payloads mode (wire name) and retention days. */
+    private Map<String, EvidenceOverride> evidenceOverrides = Map.of();
+    private Map<String, List<AgentRouteMeta>> agentRoutes = Map.of();
+    private Map<String, List<DelegationMeta>> delegations = Map.of();
+
+    /** A node's {@code evidence: { payloads, retention_days }}; null fields leave the project's setting. */
+    public record EvidenceOverride(String payloads, Integer retentionDays) implements java.io.Serializable {}
     private Map<String, List<BoundaryMeta>> boundaries = Map.of();
     /** Back-edges of the depth-first walk from the start event, keyed by {@link #edgeKey}. */
     private final Set<String> backEdges = new LinkedHashSet<>();
@@ -102,6 +111,78 @@ public class ParsedProcessDefinition implements Serializable {
     }
 
     /** Declares the loop bounds of this definition (set once by the parser). */
+    /** Variables declared {@code sensitive: true} (set once by the parser). */
+    public ParsedProcessDefinition withSensitiveVariables(Set<String> declared) {
+        this.sensitiveVariables = Set.copyOf(declared);
+        return this;
+    }
+
+    public Set<String> getSensitiveVariables() {
+        return sensitiveVariables;
+    }
+
+    /** Declares the agent nodes' evidence overrides (set once by the parser). */
+    public ParsedProcessDefinition withEvidenceOverrides(Map<String, EvidenceOverride> declared) {
+        this.evidenceOverrides = Map.copyOf(declared);
+        return this;
+    }
+
+    /** The delegates each agent node declares, by node id (set once by the parser). */
+    public ParsedProcessDefinition withDelegations(Map<String, List<DelegationMeta>> declared) {
+        Map<String, List<DelegationMeta>> copy = new LinkedHashMap<>();
+        declared.forEach((node, delegates) -> copy.put(node, List.copyOf(delegates)));
+        this.delegations = Map.copyOf(copy);
+        return this;
+    }
+
+    /** The processes the agent at {@code activityId} may delegate to; empty for none. */
+    public List<DelegationMeta> getDelegations(String activityId) {
+        return delegations.getOrDefault(activityId, List.of());
+    }
+
+    public Map<String, List<DelegationMeta>> getAllDelegations() {
+        return delegations;
+    }
+
+    /** The routes each routing agent node declares, by node id (set once by the parser). */
+    public ParsedProcessDefinition withAgentRoutes(Map<String, List<AgentRouteMeta>> declared) {
+        Map<String, List<AgentRouteMeta>> copy = new LinkedHashMap<>();
+        declared.forEach((node, routes) -> copy.put(node, List.copyOf(routes)));
+        this.agentRoutes = Map.copyOf(copy);
+        return this;
+    }
+
+    /** The routes the agent at {@code activityId} may choose; empty when it continues through {@code next}. */
+    public List<AgentRouteMeta> getAgentRoutes(String activityId) {
+        return agentRoutes.getOrDefault(activityId, List.of());
+    }
+
+    public Map<String, List<AgentRouteMeta>> getAllAgentRoutes() {
+        return agentRoutes;
+    }
+
+    public EvidenceOverride getEvidenceOverride(String activityId) {
+        return evidenceOverrides.get(activityId);
+    }
+
+    /** Declares the call-process nodes of this definition (set once by the parser). */
+    public ParsedProcessDefinition withCallProcesses(Map<String, CallProcessMeta> declared) {
+        this.callProcesses = Map.copyOf(declared);
+        return this;
+    }
+
+    public CallProcessMeta getCallProcess(String activityId) {
+        return callProcesses.get(activityId);
+    }
+
+    public boolean isCallProcess(String activityId) {
+        return callProcesses.containsKey(activityId);
+    }
+
+    public Map<String, CallProcessMeta> getCallProcesses() {
+        return callProcesses;
+    }
+
     public ParsedProcessDefinition withLoops(Map<String, LoopMeta> declared) {
         this.loops = Map.copyOf(declared);
         return this;
@@ -131,7 +212,7 @@ public class ParsedProcessDefinition implements Serializable {
     public BoundaryMeta boundaryFor(String activityId, BoundaryMeta.Kind kind, String code) {
         for (BoundaryMeta boundary : boundariesOf(activityId)) {
             if (boundary.kind() != kind) continue;
-            if (kind == BoundaryMeta.Kind.OUTCOME) {
+            if (kind == BoundaryMeta.Kind.OUTCOME || kind == BoundaryMeta.Kind.ROUTE) {
                 if (boundary.code().equals(code)) return boundary;
             } else if (kind != BoundaryMeta.Kind.ERROR || boundary.catches(code)) {
                 return boundary;

@@ -3,6 +3,7 @@ import { Project, ProjectAPI, ProjectMember, ProjectRole, Principal } from '@/ap
 import { useToast } from '@/components/ToastContext';
 import { Users, Shield, Plus, X, Search, ShieldAlert, Loader2, Check } from 'lucide-react';
 import { keycloak } from '@/auth/keycloakClient';
+import { EvidencePolicyCard } from '@/features/admin/EvidencePolicyCard';
 
 interface ProjectAdminProps {
   project: Project;
@@ -146,6 +147,7 @@ export const ProjectAdmin: React.FC<ProjectAdminProps> = ({ project }) => {
       </div>
 
       <div className="flex-1 overflow-auto p-8">
+        <EvidencePolicyCard projectId={project.id} canEdit={project.currentUserRoles?.includes('OWNER') ?? false} />
         <div className="border border-[#3A322E] rounded-xl overflow-hidden bg-[#25201D]">
           <table className="w-full text-left border-collapse">
             <thead>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, Sparkles, User } from 'lucide-react';
 import { ProcessInstanceDTO } from '@/api/engine';
+import { formatUsd } from '@/api/evidence';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
 import {
   deriveBusinessLabel,
@@ -79,6 +80,18 @@ export const InstanceOverviewBar: React.FC<InstanceOverviewBarProps> = ({
       <Stat label="Ended">
         {instance.endDate ? <span className="font-mono">{formatWhen(instance.endDate)}</span> : '—'}
       </Stat>
+
+      {instance.agentCost && (
+        <Stat label="Agent cost">
+          <span className="font-mono" title={`${instance.agentCost.promptTokens} prompt + ${instance.agentCost.completionTokens} completion tokens`}>
+            {formatUsd(instance.agentCost.usd)}
+            {instance.agentCost.includesUnpriced && (
+              <span className="ml-1 text-[#F4A261]" title="Some calls use a model without a price; the real cost is higher">+ unpriced</span>
+            )}
+            <span className="ml-1 text-[#A89F91]">· {(instance.agentCost.promptTokens + instance.agentCost.completionTokens).toLocaleString()} tokens</span>
+          </span>
+        </Stat>
+      )}
 
       <Stat label="Suspended">
         <span className={instance.suspended ? 'text-[#F4A261]' : 'text-[#90A955]'}>

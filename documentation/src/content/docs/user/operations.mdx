@@ -45,8 +45,38 @@ Open an instance to see the path it took on the canvas and three tabs:
 
 ![A completed instance: the taken path, including the way back to Draft, and the audit trail](../../../assets/screens/tutorial/22-instance-history.webp)
 
-The engine stores attempt metadata only — never prompts, model responses or
-provider keys.
+The engine stores attempt metadata in history — never prompts, model responses
+or provider keys. Journaled agent calls keep their prompts and results as the
+project's evidence policy allows (redacted by default, 30 days), encrypted, and
+readable only by `abada-evidence-reader` members.
+
+**Live updates.** While an instance runs, its page follows the project's event
+stream and refreshes as soon as something happens; the header shows **Live**.
+When the stream is not available (a proxy that cuts long requests, for
+example) it shows **Polling** and refreshes every two seconds instead.
+
+**Agent steps.** For an agent step, the telemetry tab lists every model call,
+tool call and delegation in order, attempt by attempt: the tool's policy
+(read, write, approval required), the state (a write whose outcome is unknown
+is highlighted; a proposed call shows who approved or rejected it, and when; a
+delegation links to the process it started), tokens and cost, with totals.
+Click a step to read its payloads as the evidence policy kept them; that needs
+the `abada-evidence-reader` role and every read is recorded in the history.
+
+**Agent cost.** The instance bar shows what its agent calls cost and how many
+tokens they used; the telemetry of an agent step lists each call with its
+cost. The engine computes cost from the model prices in **Settings → Model
+Prices**. A call to a model without a price shows **unpriced**: the real cost
+is higher than the total shown.
+
+### Called processes
+
+An instance started by a **call-process** step shows *Called by* with the
+chain of callers up to the root; an instance whose steps called other
+processes lists them under *Called processes* with their status. Each one
+opens its own instance page. The same tree is available from
+`GET /api/v1/projects/$PROJECT_ID/instances/$INSTANCE_ID/lineage`. Cancelling
+an instance cancels the processes it called that are still running.
 
 ## Instance actions
 
@@ -71,6 +101,8 @@ instance — other branches, timers — keeps going.
 | `WORK_FAILED` | A step's last attempt failed and the step has no `on_error` | Fix the cause (provider key, quota, worker), then retry |
 | `LOOP_EXHAUSTED` | A loop reached `max_iterations` and has no `on_exhausted` | Retry (the step starts a fresh pass) or cancel |
 | `MISSING_CORRELATION_KEY` | A message wait has no `correlationKey` value | Set the variable, then retry |
+| `CHILD_FAILED` | A called process failed, was cancelled, or could not start (inputs, depth) and the call step has no `on_error` | Look at the child (it is linked from the instance), fix the cause, then retry: a new child starts |
+| `TOOL_OUTCOME_UNKNOWN` | An agent write was interrupted and its tool server takes no idempotency key, so it may or may not have happened | Check the target system, then confirm: **It happened** or **It did not happen**. The agent resumes with that fact; the write is never re-sent blindly |
 
 ### In Studio
 
@@ -98,6 +130,14 @@ curl "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents" -H "Authorization: Beare
 # Retry one
 curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retry" \
   -H "Authorization: Bearer $TOKEN"
+```
+
+A `TOOL_OUTCOME_UNKNOWN` incident needs the confirmed outcome in the body:
+
+```bash
+curl -X POST "$ABADA_URL/api/v1/projects/$PROJECT_ID/incidents/$INCIDENT_ID/retry" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"toolOutcome":"NOT_PERFORMED"}'
 ```
 
 ### Retry an agent step on another model

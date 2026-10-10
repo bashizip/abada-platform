@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { X, Settings, Server, Key, Cpu, Globe, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Plug } from 'lucide-react';
+import { X, Settings, Server, Key, Cpu, Globe, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Plug, DollarSign } from 'lucide-react';
 import { InsightAPI, InsightLlmConfig, InsightApprovalPolicy } from '@/api/insight';
 import { AiProvidersSettings } from '@/components/settings/AiProvidersSettings';
+import { ModelPricesSettings } from '@/components/settings/ModelPricesSettings';
 import { presetFor } from '@/lib/aiProviders';
 
 interface SettingsPanelProps {
@@ -11,7 +12,7 @@ interface SettingsPanelProps {
   projectId?: string;
 }
 
-type Tab = 'ai' | 'insight' | 'governance';
+type Tab = 'ai' | 'prices' | 'insight' | 'governance';
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, definitionKey, projectId }) => {
   const [activeTab, setActiveTab] = useState<Tab>('ai');
@@ -76,6 +77,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: 'ai', label: 'AI Providers', icon: Plug },
+    { id: 'prices', label: 'Model Prices', icon: DollarSign },
     { id: 'insight', label: 'Insight Engine', icon: Cpu },
     { id: 'governance', label: 'Governance', icon: ShieldCheck },
   ];
@@ -150,6 +152,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
 
           {/* AI Providers Tab */}
           {activeTab === 'ai' && <AiProvidersSettings onError={setError} />}
+          {activeTab === 'prices' && <ModelPricesSettings onError={setError} />}
 
           {/* Insight Engine Tab */}
           {activeTab === 'insight' && !isLoading && config && (

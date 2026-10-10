@@ -1,0 +1,50 @@
+version: abada.io/v1
+
+# A governed child process of the support-triage example: the investigating agent
+# there may delegate a fraud check here. Only `verdict` goes back to it.
+metadata:
+  key: fraud_check
+  name: Fraud check
+  owner: risk-team
+  variables:
+    - { name: case_id, type: string, required: true }
+    - { name: amount, type: number, required: true }
+    - { name: verdict, type: object }
+
+flow:
+  entry: case-received
+  nodes:
+    - id: case-received
+      type: webhook
+      description: Fraud check requested
+      next: assess
+
+    # The child has its own contract and its own human fallback.
+    - id: assess
+      type: agent
+      description: Assess the fraud risk of the refund
+      model: gemini-3.6-flash
+      prompt: |
+        Assess the fraud risk of refunding ${amount} for case ${case_id}.
+        Answer with the risk (low or high) and a one-sentence reason.
+      result_variable: verdict
+      output_schema:
+        type: object
+        required: [risk, reason]
+        properties:
+          risk: { enum: [low, high] }
+          reason: { type: string }
+      confidence_threshold: 80
+      on_low_confidence: review
+      on_invalid_output: review
+      next: done
+
+    - id: review
+      type: human-input
+      description: Review the fraud risk
+      assignees: [fraud-analysts]
+      next: done
+
+    - id: done
+      type: end
+      description: Fraud check done

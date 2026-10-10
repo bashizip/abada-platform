@@ -222,7 +222,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target || connection.source === connection.target) return;
     const source = rawNodes.find((node) => node.id === connection.source);
-    if (source && (source.type === 'agent' || source.type === 'engine-task' || source.type === 'human')) {
+    if (source && (source.type === 'agent' || source.type === 'engine-task' || source.type === 'human'
+      || source.type === 'call-process')) {
       setPendingConnect({ source: connection.source, target: connection.target });
       return;
     }

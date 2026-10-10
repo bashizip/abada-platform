@@ -219,12 +219,28 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onError: aplNode.on_error,
           onTimeout: aplNode.on_timeout,
           fallbackModels: aplNode.fallback_models,
+          routes: aplNode.routes,
+          maxTurns: aplNode.max_turns,
+          maxTokensTotal: aplNode.max_tokens_total,
+          budgetUsd: aplNode.budget_usd,
+          delegates: aplNode.delegates,
         };
         break;
       case 'engine-task':
         wNode.type = 'engine-task';
         wNode.engineTaskConfig = {
           service: aplNode.service,
+          onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
+        };
+        break;
+      case 'call-process':
+        wNode.type = 'call-process';
+        wNode.callProcessConfig = {
+          process: aplNode.process,
+          inputs: aplNode.inputs,
+          outputs: aplNode.outputs,
+          maxDepth: aplNode.max_depth,
           onError: aplNode.on_error,
           onTimeout: aplNode.on_timeout,
         };
@@ -488,7 +504,13 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         on_error: node.agentConfig?.onError || undefined,
         on_timeout: node.agentConfig?.onTimeout || undefined,
         fallback_models: node.agentConfig?.fallbackModels?.length ? node.agentConfig.fallbackModels : undefined,
-        next: getNextNode(node.id, node.type),
+        // With routes the agent chooses its exit: every exit is a route's next.
+        routes: hasAgentRoutes(node) ? node.agentConfig?.routes : undefined,
+        max_turns: node.agentConfig?.maxTurns,
+        max_tokens_total: node.agentConfig?.maxTokensTotal,
+        budget_usd: node.agentConfig?.budgetUsd,
+        delegates: node.agentConfig?.delegates?.length ? node.agentConfig.delegates : undefined,
+        next: hasAgentRoutes(node) ? undefined : getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
       aplNodes.push({
@@ -598,6 +620,19 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         on_timeout: node.engineTaskConfig?.onTimeout || undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
+    } else if (node.type === 'call-process') {
+      aplNodes.push({
+        ...baseNode,
+        type: 'call-process',
+        process: node.callProcessConfig?.process ?? '',
+        inputs: node.callProcessConfig?.inputs && Object.keys(node.callProcessConfig.inputs).length
+          ? node.callProcessConfig.inputs : undefined,
+        outputs: node.callProcessConfig?.outputs ?? {},
+        max_depth: node.callProcessConfig?.maxDepth,
+        on_error: node.callProcessConfig?.onError,
+        on_timeout: node.callProcessConfig?.onTimeout || undefined,
+        next: getNextNode(node.id, node.type),
+      } as APLNode);
     } else if (node.type === 'script') {
       aplNodes.push({
         ...baseNode,
@@ -673,3 +708,6 @@ function metadataExtras(metadata: APLDocument['metadata']): Record<string, unkno
 /** Route edges are labelled `on_*` or `outcome: <name>`; see `routes.ts`. */
 export { isOutcomeRouteEdge };
 
+function hasAgentRoutes(node: WorkflowNode): boolean {
+  return Object.keys(node.agentConfig?.routes ?? {}).length > 0;
+}

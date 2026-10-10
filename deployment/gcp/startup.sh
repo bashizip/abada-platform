@@ -9,7 +9,7 @@
 #   sudo /opt/abada/release/abada-platform up server
 #
 # Instance metadata attributes (all optional):
-#   abada-version     exact release, e.g. 1.1.0-rc.1 (default: published latest)
+#   abada-version     exact release, e.g. 1.1.0-rc.2 (default: published latest)
 #   abada-domain      ABADA_DOMAIN, e.g. demo.abadaplatform.com
 #   abada-acme-email  ABADA_ACME_EMAIL for Let's Encrypt
 #   abada-autostart   "true" to run `up server` after installation

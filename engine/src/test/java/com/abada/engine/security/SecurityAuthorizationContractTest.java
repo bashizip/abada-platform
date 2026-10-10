@@ -296,6 +296,108 @@ class SecurityAuthorizationContractTest {
     }
 
     @Test
+    void toolCredentialsAreServedOnlyToWorkersAndManagedOnlyByProjectMaintainers() throws Exception {
+        String credential = "/v1/external-tasks/missing/tool-credentials/crm";
+        mvc.perform(get(credential).param("workerId", "w")).andExpect(status().isUnauthorized());
+        mvc.perform(get(credential).param("workerId", "w").header("X-Auth-Request-User", "forged-worker")
+                        .header("X-Auth-Request-Groups", "abada-worker"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get(credential).param("workerId", "w").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get(credential).param("workerId", "w").header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(get(credential).param("workerId", "w"), "admin");
+        assertForbidden(get(credential).param("workerId", "w"), "operator");
+        // A worker reaches the endpoint, which then requires the task's lease (unknown task here).
+        mvc.perform(get(credential).param("workerId", "w").header("Authorization", "Bearer worker"))
+                .andExpect(status().isNotFound());
+
+        String steps = "/v1/external-tasks/missing/steps";
+        String step = "{\"workerId\":\"w\",\"attempt\":1,\"sequence\":1,\"kind\":\"MODEL_CALL\","
+                + "\"state\":\"COMPLETED\",\"request\":{},\"result\":{}}";
+        mvc.perform(post(steps).contentType(MediaType.APPLICATION_JSON).content(step))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(steps).contentType(MediaType.APPLICATION_JSON).content(step)
+                        .header("X-Auth-Request-User", "forged-worker").header("X-Auth-Request-Groups", "abada-worker"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(steps).contentType(MediaType.APPLICATION_JSON).content(step)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(post(steps).contentType(MediaType.APPLICATION_JSON).content(step), "operator");
+        assertForbidden(post(steps).contentType(MediaType.APPLICATION_JSON).content(step), "tasks");
+
+        String lineage = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/instances/missing/lineage";
+        mvc.perform(get(lineage)).andExpect(status().isUnauthorized());
+        mvc.perform(get(lineage).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(lineage).header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "abada-admin"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(get(lineage), "worker");
+        // Allowed to read operations, but not a member of the project: it does not exist for them.
+        mvc.perform(get(lineage).header("Authorization", "Bearer operator")).andExpect(status().isNotFound());
+
+        String payloads = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID
+                + "/instances/missing/agent-steps/missing/payloads";
+        mvc.perform(get(payloads)).andExpect(status().isUnauthorized());
+        mvc.perform(get(payloads).header("Authorization", "Bearer invalid")).andExpect(status().isUnauthorized());
+        mvc.perform(get(payloads).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(payloads).header("X-Auth-Request-User", "forged")
+                        .header("X-Auth-Request-Groups", "abada-evidence-reader"))
+                .andExpect(status().isUnauthorized());
+        // Operations access and administration do not include evidence payloads.
+        assertForbidden(get(payloads), "operator");
+        assertForbidden(get(payloads), "admin");
+
+        // Deciding a tool approval: authenticated people only, never a worker credential.
+        String decision = "/v1/tasks/missing/decision";
+        String approve = "{\"outcome\":\"approve\"}";
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve)
+                        .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve)
+                        .header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "finance"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(post(decision).contentType(MediaType.APPLICATION_JSON).content(approve), "worker");
+
+        // The project event stream: authenticated members only.
+        String stream = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/events/stream";
+        mvc.perform(get(stream)).andExpect(status().isUnauthorized());
+        mvc.perform(get(stream).header("Authorization", "Bearer invalid")).andExpect(status().isUnauthorized());
+        mvc.perform(get(stream).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(stream).header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "abada-admin"))
+                .andExpect(status().isUnauthorized());
+
+        String prices = "/v1/model-prices";
+        String price = "{\"model\":\"m\",\"inputPerMillion\":1,\"outputPerMillion\":2}";
+        mvc.perform(get(prices)).andExpect(status().isUnauthorized());
+        mvc.perform(get(prices).header("Authorization", "Bearer tasks")).andExpect(status().isOk());
+        assertForbidden(post(prices).contentType(MediaType.APPLICATION_JSON).content(price), "operator");
+        assertForbidden(post(prices).contentType(MediaType.APPLICATION_JSON).content(price), "insight-reviewer");
+        mvc.perform(post(prices).contentType(MediaType.APPLICATION_JSON).content(price)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+
+        String manage = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/tool-credentials/crm-token";
+        String body = "{\"secret\":\"never-stored\"}";
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        // Not a member of the project: it does not exist for them.
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer tasks"))
+                .andExpect(status().isNotFound());
+        mvc.perform(put(manage).contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header("Authorization", "Bearer worker"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void aiProviderManagementRequiresInsightConfigure() throws Exception {
         assertForbidden(put("/v1/ai-providers/gemini").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"apiKey\":\"k\"}"), "insight-reviewer");

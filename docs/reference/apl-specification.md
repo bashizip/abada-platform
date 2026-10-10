@@ -97,7 +97,9 @@ flow:                     # required — the executable graph
 `metadata.variables` declares the variables expressions may read: the start
 payload and anything written by an `engine-task`, `script` or `human-input`
 node. Declarations are checked statically (§6.1); the engine does **not** yet
-enforce them on the start payload.
+enforce them on the start payload. A declaration with `sensitive: true` is
+masked in redacted agent evidence (§3.2.2): fields with that name and the
+variable's value wherever it appears.
 
 - `version` is currently `abada.io/v1`. It is the APL language version, not a
   process semantic version.
@@ -295,6 +297,51 @@ completion:
 - History records `TASK_COMPLETED` with the outcome and the comment length;
   the comment text stays in the process variable only.
 
+### 2.8 Agent routes
+
+An agent may **choose the next step**, but only among routes its node
+declares, and the engine checks the choice:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Route this request: ${request_text}"
+  confidence_threshold: 70
+  routes:
+    refund:   { next: refund, description: The customer asks for money back, when: "amount <= 500.0" }
+    escalate: { next: manual, description: Anything unclear, angry or legal }
+    clarify:  { next: ask_customer, description: The request misses the order number }
+  on_low_confidence: manual
+  on_invalid_output: manual
+```
+
+- `routes` declares 2–8 routes, named like outcomes (§2.7). Each has a `next`,
+  a `description` (1–500 characters; the model chooses by it) and an optional
+  CEL `when`. A node with `routes` declares no `next`; `routes` on any other
+  node type is an error. A route back to an earlier step is a cycle and needs
+  a `loop` bound (§2.3).
+- The engine adds a required `route` property (an enum of the route names,
+  described with each route's description) to the node's output contract:
+  merged into an object `output_schema`, or the whole contract when the node
+  declares none. An `output_schema` that does not describe an object, or that
+  declares `route` itself, is an error. The worker sees the contract as any
+  other output schema.
+- On completion the engine validates the result as usual. A missing or
+  undeclared `route` is invalid output (`on_invalid_output`, otherwise a
+  failed attempt). Low confidence takes `on_low_confidence` as before, whatever
+  route was named.
+- A route's `when` is evaluated by the engine over the instance variables and
+  the agent's result variable. `false` vetoes the route: the result is
+  treated as invalid output. An expression that cannot be evaluated (for
+  example a missing variable) rejects the completion with
+  `EXPRESSION_EVALUATION_FAILED`; nothing changes.
+- An allowed route writes `<id>_route` and `<id>_outcome = OK`, leaves through
+  the route, and records `ROUTE_TAKEN` with the route, its target and the
+  confidence. `<id>_route` is cleared when the agent leaves another way.
+- Routes are APL-only: the Studio's BPMN export does not carry them (as for
+  review outcomes).
+
 ---
 
 ## 3. Node Types & Primitives Reference
@@ -342,7 +389,7 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
     Extract {income, creditScore, requestedAmount} from the payload.
     Return strict JSON only.
   tools:
-    - database.read
+    - crm/get_customer
   inputs:
     payload: ${payload}
   result_variable: extracted
@@ -364,12 +411,15 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `inputs` | map | no | named process-variable bindings |
 | `result_variable` | string | no | completion variable; default `<nodeId>_result` |
 | `output_schema` | map | no | requires a JSON-object response |
-| `tools` | string[] | no | requested identifiers, enforced against the worker allowlist |
+| `tools` | list | no | `<server>/<tool>` or `{ ref, policy }` from the project's tool servers (§3.2.1); resolved and frozen at deployment |
 | `confidence_threshold` | number | no | 0–100 |
 | `temperature` | number | no | 0–2 |
 | `max_tokens` | integer | no | positive provider response bound |
 | `timeout_ms` | integer | no | 1–3,600,000 |
 | `max_attempts` | integer | no | 1–20 durable attempts |
+| `max_turns` | integer | no | 1–32, default 8: model calls per attempt while using tools |
+| `max_tokens_total` | integer | no | tokens for the whole task; default 50 000 when tools are bound |
+| `budget_usd` | number | no | engine-computed cost for the whole task; fails closed for an unpriced model |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |
 | `fallback_models` | string[] | no | up to 3 allowed models tried while the model before is unavailable (§2.6) |
 | `on_low_confidence` | nodeId | no | route when `_confidence` is missing or below `confidence_threshold` |
@@ -377,6 +427,70 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error (optionally per code) or the last failed attempt (`WORK_FAILED`) |
 | `on_timeout` | `{after, then}` | no | interrupting timeout of the whole step (§2.6) |
 | `next` | nodeId | yes | linear successor |
+
+#### 3.2.1 Tools and tool servers
+
+An agent may only use tools declared by a **tool server**: a project resource
+of kind `TOOL_SERVER` (YAML, validated against
+`engine/src/main/resources/apl/tool-server-v1.schema.json` on every save).
+
+```yaml
+name: crm                      # used in references: crm/<tool>; unique per project
+transport: streamable-http     # MCP streamable HTTP; stdio is not supported
+url: https://crm-mcp.internal/mcp
+credential: crm-token          # name of a project tool credential, never the secret
+tools:
+  get_customer:  { policy: read }
+  create_ticket: { policy: write, idempotency: key }
+  refund:        { policy: approval_required, idempotency: none, approvers: [finance] }
+```
+
+- `policy` is `read` (no side effects), `write` (side effects, journaled with an
+  idempotency key) or `approval_required` (a person approves the exact call
+  first). A tool the document does not list is denied.
+- `idempotency` is required for `write` and `approval_required`: `key` when the
+  server accepts an idempotency key (the worker sends it as the
+  `Idempotency-Key` HTTP header and in the call's `_meta.idempotencyKey`),
+  `none` when it does not.
+- `input_schema_sha256` (optional) pins a tool's input schema: the SHA-256 of
+  its canonical (key-sorted) JSON. The worker refuses the tool when the
+  server's schema differs. A `none` write
+  interrupted by a crash is never re-sent; it opens an incident instead.
+- The URL must use `https` (plain `http` only for loopback hosts, or when the
+  engine sets `abada.tools.allow-insecure-http=true` for development) and must
+  not embed credentials.
+
+On an agent node, `tools:` entries are `<server>/<tool>` or
+`{ ref: <server>/<tool>, policy: <policy>, approvers: [<group>, ...] }`
+(`ref` plus `policy`, `approvers` or both). A node may **tighten** a policy
+(`write` → `approval_required`), never loosen it. `approvers` names the groups
+who may approve an `approval_required` tool's calls on this node, replacing the
+server's list; an `approval_required` tool with neither is an
+`ABADA-APL-TOOL-003` error, and `approvers` on any other policy is an error at
+its path. `approval_sla_hours` on the server's tool marks an approval that
+waits longer as escalated (`TASK_SLA_BREACHED`); its candidates do not change. Deployment resolves every
+reference against the project's tool servers; an unknown server or tool, or a
+loosened policy, is an `ABADA-APL-TOOL-002` error at the entry's path. The
+resolved bindings (server URL, tool, effective policy, idempotency, approvers,
+resource id and revision) are stored with the definition version and delivered
+to the worker in the agent descriptor as `toolBindings`. Editing a tool server
+later never changes running instances: redeploying makes a new version with the
+new bindings (an unchanged source with changed bindings is a new version).
+
+A name without a server (`web_search`, the rc.x form) is an
+`ABADA-APL-TOOL-001` warning: it is passed to the worker as an advisory name
+and never executed. It becomes an error at 1.1.0.
+
+Tool credentials are managed with `PUT/GET/DELETE
+/v1/projects/{projectId}/tool-credentials/{name}` (owners and maintainers
+write; responses carry a hint, never the value; every change is recorded in
+history with the actor). They are encrypted with `ABADA_ENCRYPTION_KEY` and
+issued only to the worker holding the lease of a task bound to the server
+(see `external-worker-protocol-v1.md`). The engine itself never connects to a
+tool server.
+
+`POST /v1/apl/validate` resolves tools the same way when the request names a
+`projectId`.
 
 **Data the agent receives (default-deny).** The locked task carries only the
 node's `inputs`, resolved by the engine and keyed by input name. When `inputs`
@@ -416,6 +530,83 @@ commands).
 
 The reference sidecar, retry/idempotency behavior, OIDC configuration, and
 at-least-once boundary are defined in [Agent worker](agent-worker.md).
+
+At runtime the agent worker offers exactly the bound tools to the model, runs
+the calls it asks for in order (journaled, writes with a per-step idempotency
+key) and stops at the node's limits; a missing tool or a changed pinned schema
+(`input_schema_sha256` in the tool server document) ends the attempt with
+`TOOL_CONTRACT_MISMATCH`, a limit with `AGENT_BUDGET_EXHAUSTED`. Both are final
+and routable through `on_error` by code. See `agent-worker.md` (Tool loop).
+
+#### 3.2.2 Agent evidence and cost
+
+Every model and tool call of an agent is journaled (`agent_steps`). What the
+journal keeps of the **payloads** (prompts and model replies, tool arguments
+and results) follows the project's evidence policy (`PUT
+/v1/projects/{id}/evidence-policy`, owners): `payloads: none | redacted | full`
+and `retention_days` (default `redacted`, 30 days). An agent node may make it
+stricter, never looser:
+
+```yaml
+- id: triage
+  type: agent
+  evidence: { payloads: none, retention_days: 7 }
+```
+
+`redacted` masks credentials (bearer tokens, Authorization headers, key-,
+token-, secret- and password-like fields) and the variables declared
+`sensitive: true`. Payloads are AES-GCM encrypted; digests (computed from the
+full payload), tokens, cost, model, timings and actors are kept with the
+instance even after payloads are purged. Payloads are read with `GET
+.../instances/{id}/agent-steps/{stepId}/payloads` by members holding the
+`abada-evidence-reader` role (not implied by administration); every read is
+recorded as `EVIDENCE_READ`.
+
+Cost is computed by the engine, never reported by a worker: tokens times the
+model price in effect at the time of the call (`/v1/model-prices`, effective-
+dated, USD per million tokens). A call with tokens but no price is
+**unpriced** (cost unknown, never 0). Instances carry `agentCost` (USD, tokens,
+`includesUnpriced`).
+
+#### 3.2.3 Agent delegation
+
+An agent may start another process of the project as a governed child, when
+its node declares it:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Handle the refund request for ${order}"
+  delegates:
+    - process: refund_payout
+      description: Pay a refund out to the customer
+      outputs: [payout_id]
+    - { process: large_payout, outputs: [payout_id], approval: required, approvers: [finance] }
+  next: done
+```
+
+- Each delegate becomes an engine-provided tool `delegate:<process>` in the
+  agent's loop (the worker offers it as `delegate__<process>`), with the
+  child's declared `metadata.variables` as its input schema.
+- The child version is pinned when this process is deployed (as for
+  `call-process`, §3.15): a delegate to an undeployed process, or an output
+  the child does not declare, is an `ABADA-APL-CALL-001` error. `outputs`
+  names the child variables the agent reads back; nothing else returns.
+- `approval: required` needs `approvers` (else `ABADA-APL-TOOL-003`): a person
+  in those groups approves each delegation, with its exact inputs, before the
+  child starts (§3.2.1 approvals). `max_depth` tightens the global nesting
+  limit (`abada.call-process.max-depth`, default 4). At most 8 delegates; a
+  process may not delegate to itself.
+- At runtime the engine checks the target is declared, the inputs fit the
+  child's declared variables and the nesting stays within the limit, then
+  starts the child with the agent's identity (node, model, prompt version,
+  step) as its `startedByAgent` lineage. The agent's work waits without a
+  lease and its token stays on the agent node. When the child ends, its
+  declared outputs (or its final status when it did not complete) become the
+  tool's result and the agent continues. Cancelling the parent, or the agent's
+  `on_timeout`, cancels the child.
+- No tool server may be named `delegate`.
 
 ### 3.3 `engine-task` — standard service task
 
@@ -754,6 +945,29 @@ arrives.
   description: Onboarding concluded
 ```
 
+### 3.15 `call-process` — governed child process
+
+Parks the token while a child instance of `process` (same project) runs, then
+continues with only the mapped `outputs`. Deployment pins the child to its
+latest version (stored with this version as `call_targets`) and refuses an
+unknown key (`ABADA-APL-CALL-001`), a call to the process itself, no
+`outputs`, or an input the child does not declare in `metadata.variables`.
+At runtime the inputs are evaluated in the parent's command and checked
+against the child's declared types; the child is created in the same
+transaction, with lineage (`parentInstanceId`, `rootInstanceId`, depth). See
+`apl-node-reference.md` §4.4a for the fields and `runtime-semantics.md` for the
+lifecycle.
+
+```yaml
+- id: fraud_check
+  type: call-process
+  process: fraud_check
+  inputs: { case_id: "${case_id}" }
+  outputs: { fraud_verdict: verdict }
+  on_error: manual_review
+  next: decide
+```
+
 ---
 
 ## 4. Native Decision Tables (ADR-002 Integration)
@@ -959,7 +1173,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
-| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, invalid `outcomes` (count, name, target, comment rule, or `outcomes` together with `next`), an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
+| `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, invalid `outcomes` (count, name, target, comment rule, or `outcomes` together with `next`), invalid agent `routes` (count, name, target, description, a `when` that is not valid CEL, `routes` together with `next`, or an `output_schema` that is not an object or declares `route`), an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;
 `strict=false` (Studio default) accepts harmless metadata extensions while

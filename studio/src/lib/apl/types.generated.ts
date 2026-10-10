@@ -35,7 +35,8 @@ export type APLNode =
   | APLEventGatewayNode
   | APLMessageCatchNode
   | APLTimerNode
-  | APLSignalNode;
+  | APLSignalNode
+  | APLCallProcessNode;
 /**
  * This interface was referenced by `APLDocument`'s JSON-Schema
  * via the `definition` "nodeId".
@@ -48,6 +49,39 @@ export type NodeId = string;
  * via the `definition` "agentModel".
  */
 export type AgentModel = string;
+/**
+ * Processes the agent may start as a governed child through the engine-provided tool delegate:<process>. The engine pins the child at deployment, checks the inputs against its declared variables, the depth and, with approval: required, a person's approval; only the declared outputs come back.
+ *
+ * @maxItems 8
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "delegates".
+ */
+export type Delegates = {
+  /**
+   * Key of a process deployed in this project.
+   */
+  process: string;
+  /**
+   * Child variables the agent reads back when the child completes.
+   *
+   * @minItems 1
+   */
+  outputs: string[];
+  /**
+   * required: a person in approvers approves each delegation first.
+   */
+  approval?: 'none' | 'required';
+  /**
+   * @minItems 1
+   */
+  approvers?: string[];
+  /**
+   * What the delegated process does; offered to the model with the tool.
+   */
+  description?: string;
+  max_depth?: number;
+}[];
 /**
  * Error route: a node id, or a list of {code?, then}; at most one entry may omit code.
  *
@@ -86,7 +120,8 @@ export type NodeType =
   | 'event-gateway'
   | 'message-catch'
   | 'timer'
-  | 'signal';
+  | 'signal'
+  | 'call-process';
 
 /**
  * Abada Process Language (APL) abada.io/v1. Owned by the engine; Studio types are generated from it.
@@ -119,6 +154,10 @@ export interface VariableDeclaration {
   type?: 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'list' | 'any';
   required?: boolean;
   description?: string;
+  /**
+   * Masked in redacted agent evidence: fields with this name and this variable's values.
+   */
+  sensitive?: boolean;
 }
 export interface APLFlow {
   entry: NodeRef;
@@ -196,7 +235,26 @@ export interface APLAgentNode {
    * JSON Schema 2020-12 the agent output must satisfy.
    */
   output_schema?: {};
-  tools?: string[];
+  /**
+   * Tools from the project's tool servers, as <server>/<tool> or { ref, policy, approvers } to tighten the server's policy or name who approves an approval_required tool. A name without a server is advisory only (deprecated).
+   */
+  tools?: (
+    | string
+    | ({
+        [k: string]: unknown;
+      } & {
+        ref: string;
+        policy?: 'read' | 'write' | 'approval_required';
+        /**
+         * Groups who may approve this tool's calls; overrides the tool server's approvers. approval_required tools only.
+         *
+         * @minItems 1
+         */
+        approvers?: string[];
+      })
+  )[];
+  routes?: Routes;
+  delegates?: Delegates;
   confidence_threshold?: number;
   temperature?: number;
   /**
@@ -227,6 +285,44 @@ export interface APLAgentNode {
   on_timeout?: OnTimeout;
   loop?: Loop;
   ui?: UiPosition;
+  /**
+   * What the step journal keeps of this agent's payloads; may only be stricter than the project policy.
+   */
+  evidence?: {
+    payloads?: 'none' | 'redacted' | 'full';
+    retention_days?: number;
+  };
+  /**
+   * Model calls one attempt may make while using tools.
+   */
+  max_turns?: number;
+  /**
+   * Tokens the whole task may use across its attempts (default 50000 when the node binds tools).
+   */
+  max_tokens_total?: number;
+  /**
+   * Engine-computed cost the whole task may reach across its attempts; an unpriced model fails closed.
+   */
+  budget_usd?: number;
+}
+/**
+ * Next steps an agent may choose from. The engine adds a required 'route' enum to the output contract, checks the choice (and its optional CEL 'when'), writes <id>_route and continues at the route's 'next'. A node with routes declares no 'next'.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "routes".
+ */
+export interface Routes {
+  [k: string]: {
+    next: NodeRef;
+    /**
+     * What this route means; the agent chooses by it.
+     */
+    description: string;
+    /**
+     * Optional CEL condition over the instance variables and the agent's result; false vetoes the route (invalid output).
+     */
+    when?: string;
+  };
 }
 /**
  * Interrupting timeout boundary: if the step is not done within 'after' (ISO-8601 duration, PT1S to P365D), its work is cancelled and the flow continues at 'then'.
@@ -605,6 +701,45 @@ export interface APLSignalNode {
   description?: string;
   next?: NodeRef;
   signal: string;
+  loop?: Loop;
+  ui?: UiPosition;
+}
+/**
+ * Runs a governed child instance of another process in this project and waits for it; the child version is pinned when this definition is deployed.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "callProcessNode".
+ */
+export interface APLCallProcessNode {
+  id: NodeId;
+  type: 'call-process';
+  /**
+   * Human-readable node label.
+   */
+  description?: string;
+  next: NodeRef;
+  /**
+   * Key of the process to call, in this project.
+   */
+  process: string;
+  /**
+   * Child variable to an expression evaluated on this instance's variables.
+   */
+  inputs?: {
+    [k: string]: string | number | boolean;
+  };
+  /**
+   * Parent variable to the child variable copied back when the child completes; nothing else returns.
+   */
+  outputs: {
+    [k: string]: string;
+  };
+  /**
+   * Stricter nesting limit for this call.
+   */
+  max_depth?: number;
+  on_error?: OnError;
+  on_timeout?: OnTimeout;
   loop?: Loop;
   ui?: UiPosition;
 }

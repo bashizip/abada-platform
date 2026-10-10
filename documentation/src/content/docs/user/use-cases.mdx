@@ -1,0 +1,180 @@
+---
+title: Use cases
+description: Five runnable processes — a reviewed complaint reply, lead triage, KYC onboarding, a refund agent with an approved write, and support triage with routing and delegation — and what each one shows.
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+Each use case below is a complete APL document in
+[`examples/apl/`](https://github.com/bashizip/abada-platform/tree/dev/examples/apl).
+A test deploys every one of them into a project and starts it on PostgreSQL
+(`ExampleGalleryTest`), so the files on this page always run.
+
+To try one, open Studio, click **+** next to *Project*, choose **Paste APL**,
+paste the file and use **Deploy & Start**. The [Concepts](/concepts/) page
+explains each capability the cases use.
+
+| Use case | Agents | Rules | People | Shows |
+| --- | --- | --- | --- | --- |
+| [Complaint reply](#complaint-reply) | classify, draft | confidence routes | review with comment | rework loop, timeout, fallback model, SLA |
+| [Lead triage](#lead-triage) | classify | priority condition | senior review form | weak answers go to a person |
+| [KYC onboarding](#kyc-onboarding) | extract, screen | decision table | sign-off | deterministic law after AI advice |
+| [Refund agent](#refund-agent) | acts with tools | limits, budget | approves the write | tools, approval, crash safety, cost |
+| [Support triage](#support-triage) | routes, investigates | route veto, payout rule | fraud review | routing agent, delegation, call-process |
+
+## Complaint reply
+
+**The problem.** Customer complaints need a fast, polite answer, but nothing
+should reach a customer without a person's approval.
+
+```mermaid
+flowchart LR
+    W([Complaint received]) --> C[classify<br/>agent]
+    C -- weak answer --> T[triage<br/>person]
+    C --> D[draft<br/>agent ↻ 3]
+    D --> R{review<br/>person}
+    R -- approve --> S([Reply approved])
+    R -- reject + comment --> D
+    D -- 30 min or 3 drafts --> T
+    T --> S
+```
+
+- **Agents advise.** One agent classifies the complaint; a second drafts the
+  reply, falling back to another model when the first is rate-limited.
+- **People decide.** A support lead approves the draft or rejects it **with a
+  comment**, which the drafting agent reads on its next attempt. The review is
+  escalated to managers after four hours.
+- **Bounded.** At most three drafts, and thirty minutes for drafting, before a
+  manager takes over.
+
+File: [`complaint-reply.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/complaint-reply.apl.yaml) ·
+Built step by step in [Tutorial: a reviewed AI reply](/user/first-workflow/).
+
+## Lead triage
+
+**The problem.** Sales leads arrive faster than a team can read them; the
+important ones must reach a senior seller with the context they need.
+
+```mermaid
+flowchart LR
+    W([Lead received]) --> A[analyze-lead<br/>agent]
+    A -- weak or malformed --> S[senior review<br/>form]
+    A --> C{priority?}
+    C -- HIGH --> S
+    C -- otherwise --> E[CRM sequence<br/>service]
+    S --> X([Done])
+    E --> X
+```
+
+- **Agents advise, rules decide.** The agent classifies the lead's priority
+  against a schema with an 85% confidence threshold; a condition routes on the
+  result.
+- **People decide.** High-priority leads, and any answer the engine rejects,
+  go to a senior sales review with a form.
+
+File: [`lead-triage-demo.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/lead-triage-demo.apl.yaml)
+
+## KYC onboarding
+
+**The problem.** A credit application needs data extracted from documents, a
+risk classification that auditors can reproduce, and a human sign-off.
+
+```mermaid
+flowchart LR
+    W([Application]) --> X[extract<br/>agent]
+    X --> D[credit rules<br/>decision table]
+    D --> G[sign-off<br/>person]
+    G --> C{risk?}
+    C -- LOW --> N[notify]
+    C -- otherwise --> F[fraud screen<br/>agent]
+    F --> P[persist]
+    N --> E([Done])
+    P --> E
+```
+
+- **Rules decide.** A native decision table classifies the risk inside the
+  transaction, with a mandatory `otherwise` rule: no input falls through
+  silently. Every application is recorded as `DECISION_TABLE_APPLIED`.
+- **People decide.** A senior credit officer signs off within a 24-hour SLA.
+
+File: [`kyc-onboarding.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/kyc-onboarding.apl.yaml) ·
+the canonical example of the APL specification.
+
+## Refund agent
+
+<Badge text="New in 1.1.0-rc.2" variant="tip" />
+
+**The problem.** Refund requests are repetitive, but a refund moves money: an
+agent can do the checking, and a person must approve every payment.
+
+```mermaid
+flowchart LR
+    W([Refund request]) --> H[handle<br/>agent]
+    H -. get_order · read .-> P[(payments<br/>tool server)]
+    H -. refund · approval required .-> A{finance<br/>approves}
+    A -. approved .-> P
+    H --> D([Handled])
+    H -- error, invalid, 2 days --> M[manual<br/>finance]
+    M --> D
+```
+
+- **The agent acts.** It reads the order with `payments/get_order` and, when
+  the order arrived damaged or was lost, proposes `payments/refund`.
+- **A person approves the write.** The refund runs only after someone in
+  `finance` approves the exact call, with its arguments.
+- **Crash safety.** The payments service takes no idempotency key, so an
+  interrupted refund is never re-sent; an incident asks a person what
+  happened.
+- **Bounded cost.** Six model calls per attempt and five cents per task, priced
+  by the engine.
+
+Files: [`refund-agent.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/refund-agent.apl.yaml)
+and the tool server
+[`tool-servers/payments.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/tool-servers/payments.yaml).
+A stub payments server for local runs is in
+[`scripts/dev/m3-demo/`](https://github.com/bashizip/abada-platform/tree/dev/scripts/dev/m3-demo).
+
+<LinkCard title="Tutorial: an agent that acts" href="/user/tutorial-agent-that-acts/" description="Run the refund agent end to end, including the crash, with a screenshot at every step." />
+
+## Support triage
+
+<Badge text="New in 1.1.0-rc.2" variant="tip" />
+
+**The problem.** Support requests need routing, and refunds above a certain
+risk need a fraud check that has its own reviewers and its own audit trail.
+
+```mermaid
+flowchart LR
+    W([Support request]) --> T[triage<br/>routing agent]
+    T -- refund, if amount ≤ 500 --> I[investigate<br/>agent]
+    T -- clarify --> Q[ask the customer<br/>person] --> T
+    T -- escalate / veto --> M[manual<br/>person]
+    I -. delegates .-> F[[fraud_check<br/>child process]]
+    I --> C{approved?}
+    C -- yes --> P[[refund_payout<br/>call-process]]
+    C -- no --> M
+    P --> D([Handled])
+    M --> D
+```
+
+- **The agent chooses the route,** among `refund`, `clarify` and `escalate`.
+  The engine refuses a refund route for an amount above 500, whatever the
+  agent says, and sends the request to a person instead.
+- **The agent delegates.** The investigating agent may start a `fraud_check`
+  child process, which has its own agent, its own confidence threshold and its
+  own fraud analysts. Only the child's `verdict` comes back.
+- **Rules decide the payout.** A condition pays out only an approved
+  investigation, through a `call-process` step to `refund_payout`; only
+  `payout_id` comes back.
+- **Lineage.** Both children appear under **Called processes** on the instance
+  page, linked to the step that started them.
+
+Files: [`support-triage.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/support-triage.apl.yaml),
+[`fraud-check.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/fraud-check.apl.yaml) and
+[`refund-payout.apl.yaml`](https://github.com/bashizip/abada-platform/blob/dev/examples/apl/refund-payout.apl.yaml).
+
+<Aside type="note" title="Deploy the children first">
+  Child versions are pinned when the parent is deployed, so deploy
+  `fraud_check` and `refund_payout` before `support_triage`. The payout child
+  waits for a `payments.payout` service worker, like any `engine-task`.
+</Aside>

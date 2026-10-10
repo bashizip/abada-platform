@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aplToWorkflow, workflowToAPL } from './parser';
-import { dropNodeReferences, removeEdge, routesFor, setRoute, timeoutError } from './routes';
+import { agentRoutesProblem, dropNodeReferences, removeEdge, routesFor, setRoute, timeoutError } from './routes';
 import type { APLDocument } from './types';
 import type { WorkflowFile } from '@/types';
 
@@ -103,6 +103,43 @@ describe('route editing', () => {
     expect(kinds('review')).toEqual(['outcome:approve', 'outcome:reject', 'error', 'timeout']);
     expect(kinds('sync')).toEqual(['next', 'error', 'timeout']);
     expect(kinds('start')).toEqual(['next']);
+  });
+
+  it('lets an agent choose among its routes instead of a next step', () => {
+    const routed: APLDocument = structuredClone(doc);
+    const triage = routed.flow.nodes.find((node) => node.id === 'draft') as unknown as Record<string, unknown>;
+    delete triage.next;
+    triage.routes = {
+      ship: { next: 'review', description: 'Ready for review' },
+      redo: { next: 'manual', description: 'Needs a person', when: 'attempts < 3' },
+    };
+    let workflow = aplToWorkflow(routed);
+    expect(routesFrom(workflow, 'draft')).toEqual([['review', 'route: ship'], ['manual', 'route: redo']]);
+    expect(routesFor(workflow.nodes.find((node) => node.id === 'draft')!)
+      .map((route) => (route.kind === 'route' ? `route:${route.name}` : route.kind)))
+      .toEqual(['route:ship', 'route:redo', 'error', 'timeout', 'low_confidence', 'invalid_output', 'exhausted']);
+
+    workflow = setRoute(workflow, 'draft', { kind: 'route', name: 'redo' }, 'done');
+    expect(saved(workflow, 'draft')).toMatchObject({
+      routes: { ship: { next: 'review' }, redo: { next: 'done', description: 'Needs a person', when: 'attempts < 3' } },
+    });
+    expect(saved(workflow, 'draft').next).toBeUndefined();
+
+    const shipEdge = workflow.edges.find((edge) => edge.label === 'route: ship')!;
+    workflow = removeEdge(workflow, shipEdge.id);
+    expect(Object.keys(saved(workflow, 'draft').routes as object)).toEqual(['redo']);
+    workflow = dropNodeReferences(workflow, 'done');
+    expect(saved(workflow, 'draft').routes).toBeUndefined();
+  });
+
+  it('applies the engine rules to agent routes', () => {
+    expect(agentRoutesProblem({ only: { next: 'done', description: 'x' } })).toContain('between 2 and 8');
+    expect(agentRoutesProblem({ a: { next: 'done', description: 'x' }, b: { next: '', description: 'y' } }))
+      .toContain('Choose where "b"');
+    expect(agentRoutesProblem({ a: { next: 'done', description: 'x' }, b: { next: 'done', description: ' ' } }))
+      .toContain('Describe "b"');
+    expect(agentRoutesProblem({ a: { next: 'done', description: 'x' }, b: { next: 'done', description: 'y' } }))
+      .toBeNull();
   });
 
   it('accepts only timeouts the engine accepts', () => {

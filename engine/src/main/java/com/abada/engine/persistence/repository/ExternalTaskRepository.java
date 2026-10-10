@@ -119,4 +119,11 @@ public interface ExternalTaskRepository extends JpaRepository<ExternalTaskEntity
             + "where instance.id = task.processInstanceId and instance.projectId = :projectId)")
     Optional<ExternalTaskEntity> findByIdAndProjectId(@Param("id") String id,
             @Param("projectId") String projectId);
+
+    /** Cost and tokens agent attempts reported without journaling their model calls, per instance. */
+    @Query("select t.processInstanceId as instanceId, sum(t.attemptCostUsd) as usd, "
+            + "sum(t.attemptPromptTokens) as promptTokens, sum(t.attemptCompletionTokens) as completionTokens, "
+            + "sum(case when t.attemptCostUnpriced = true then 1 else 0 end) as unpriced "
+            + "from ExternalTaskEntity t where t.processInstanceId in :ids group by t.processInstanceId")
+    List<AgentStepRepository.CostRow> attemptCostByInstance(@Param("ids") java.util.Collection<String> ids);
 }

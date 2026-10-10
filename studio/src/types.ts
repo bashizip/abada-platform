@@ -1,4 +1,9 @@
-export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script';
+import type { APLAgentNode, Delegates } from './lib/apl/types.generated';
+
+/** One process an agent may delegate to (`delegates`, E20b). */
+export type AgentDelegate = Delegates[number];
+
+export type NodeType = 'agent' | 'human' | 'dmn' | 'gateway' | 'event' | 'engine-task' | 'script' | 'call-process';
 
 export type EventSubtype = 'start' | 'end' | 'timer' | 'message' | 'signal';
 export type GatewaySubtype = 'exclusive' | 'parallel' | 'inclusive' | 'event';
@@ -12,11 +17,26 @@ export interface ReviewOutcome {
   comment?: 'required' | 'optional';
 }
 
+/** One next step a routing agent may choose (`routes`): the engine checks the choice and its `when`. */
+export interface AgentRoute {
+  next: string;
+  /** What the route means; the agent chooses by it. */
+  description: string;
+  /** Optional CEL condition over the instance variables and the agent's result; false vetoes the route. */
+  when?: string;
+}
+
 /** An interrupting timeout boundary (`on_timeout`): after the ISO-8601 duration the step's work is cancelled. */
 export interface OnTimeoutRoute {
   after: string;
   then: string;
 }
+
+/** One entry of an agent's `tools:` list, exactly as APL accepts it. */
+export type AgentToolRef = NonNullable<APLAgentNode['tools']>[number];
+
+/** The `<server>/<tool>` reference (or advisory name) of a tools entry. */
+export const toolRefOf = (tool: AgentToolRef): string => (typeof tool === 'string' ? tool : tool.ref);
 
 export interface AgentConfig {
   profileVersion?: 'abada.agent/v1';
@@ -25,7 +45,8 @@ export interface AgentConfig {
   /** 0-100; 0 means no threshold. The engine enforces it against the model's `_confidence`. */
   confidenceThreshold: number;
   temperature: number;
-  tools: string[];
+  /** `<server>/<tool>` refs (or `{ ref, policy }` tightening the server's policy); bare names are advisory. */
+  tools: AgentToolRef[];
   /** Target node when `_confidence` is missing or below the threshold (`on_low_confidence`). */
   onLowConfidence?: string;
   /** Target node when the output violates `output_schema` (`on_invalid_output`). */
@@ -36,6 +57,16 @@ export interface AgentConfig {
   onTimeout?: OnTimeoutRoute;
   /** Models tried in order when the model before is unavailable (`fallback_models`). */
   fallbackModels?: string[];
+  /** Model calls per attempt (`max_turns`, 1–32). */
+  maxTurns?: number;
+  /** Tokens for the whole task across attempts (`max_tokens_total`). */
+  maxTokensTotal?: number;
+  /** Engine-computed spend cap for the whole task, in USD (`budget_usd`). */
+  budgetUsd?: number;
+  /** Processes the agent may start as governed children (`delegates`). */
+  delegates?: AgentDelegate[];
+  /** Next steps the agent chooses from (`routes`); a node with routes has no `next`. */
+  routes?: Record<string, AgentRoute>;
   inputs?: Record<string, string>;
   resultVariable?: string;
   outputSchema?: Record<string, unknown>;
@@ -91,6 +122,23 @@ export interface HumanConfig {
   formFields: string[];
 }
 
+/**
+ * A `call-process` node: a governed child instance of `process` (same project,
+ * version pinned when this process is deployed). `inputs`, `outputs` and
+ * `max_depth` are kept verbatim; editing them comes with the designer work.
+ */
+export interface CallProcessConfig {
+  process: string;
+  /** Child variable → CEL expression over the parent's variables. */
+  inputs?: Record<string, string | number | boolean>;
+  /** Parent variable ← child variable; at least one. */
+  outputs?: Record<string, string>;
+  /** Nesting limit for this call, tighter than the engine's. */
+  maxDepth?: number;
+  onError?: OnErrorRoute;
+  onTimeout?: OnTimeoutRoute;
+}
+
 export interface EngineTaskConfig {
   /** External-task topic the engine publishes for this activity. */
   service: string;
@@ -125,6 +173,7 @@ export interface WorkflowNode {
   dmnConfig?: DMNConfig;
   humanConfig?: HumanConfig;
   engineTaskConfig?: EngineTaskConfig;
+  callProcessConfig?: CallProcessConfig;
   scriptConfig?: ScriptConfig;
   catchEventConfig?: CatchEventConfig;
   /** Bound of the loop whose back-edges return to this step (APL `loop`). */

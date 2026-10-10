@@ -143,6 +143,30 @@ candidate at most twice, and returns a deterministic valid starter if the
 OpenAI-compatible provider is absent or unavailable. This endpoint never
 persists or deploys its candidate; Studio requires an explicit Apply action.
 
+## Project event stream
+
+`GET /api/v1/projects/{projectId}/events/stream` streams the project's
+lifecycle events as Server-Sent Events (`text/event-stream`). Any project member
+may listen; others get `404`.
+
+- Each event carries ids only: `id` is the event's sequence number, `event` its
+  type (`PROCESS_STARTED`, `TASK_CREATED`, `AGENT_TOOL_STEP`, …) and `data` is
+  `{seq, eventType, processInstanceId, activityId, occurredAt}`. Variables,
+  details, actors and payloads are never streamed: clients reload what they
+  show through the regular endpoints.
+- Every replica streams every project's committed events (it tails the outbox),
+  so a client may reconnect to any replica. Send `Last-Event-ID` (or
+  `?lastEventId=`) to resume after a sequence number; a resume point more than
+  1,000 events behind gets a `reset` event instead, telling the client to
+  reload.
+- A `:heartbeat` comment comes every 15 seconds; the server ends a stream after
+  30 minutes, and on shutdown, and the client reconnects with its last id.
+- Send `Accept: text/event-stream, application/json` so refusals come back as
+  typed JSON errors. Browsers read the stream with `fetch` (an `EventSource`
+  cannot send the bearer token).
+- `abada.events.stream.enabled` (default `true`), `poll-interval-ms` (500),
+  `gap-hold-ms` (5000) and `heartbeat-ms` (15000) tune the stream.
+
 ## Worker health
 
 `GET /api/v1/projects/{projectId}/workers/health` returns the operational

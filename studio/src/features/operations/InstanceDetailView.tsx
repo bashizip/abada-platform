@@ -28,10 +28,13 @@ import {
   ProjectJob,
 } from '@/api/engine';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
+import { useInstanceEvents } from '@/hooks/useInstanceEvents';
 import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
 import { IncidentsPanel } from '@/features/operations/IncidentsPanel';
+import { LineagePanel } from '@/features/operations/LineagePanel';
+import { AgentStepEvidence, EvidenceAPI } from '@/api/evidence';
 import { agentStepModel } from '@/lib/run/incidents';
 import {
   deriveBusinessLabel,
@@ -62,6 +65,8 @@ interface InstanceDetailViewProps {
   initialInstance: ProcessInstanceDTO;
   onBack: () => void;
   onOpenCanvas: (instance: ProcessInstanceDTO) => void;
+  /** Opens a related instance (a caller or a called process). */
+  onOpenInstance?: (instanceId: string) => void;
 }
 
 type InspectorTab = 'telemetry' | 'variables' | 'audit';
@@ -73,6 +78,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   initialInstance,
   onBack,
   onOpenCanvas,
+  onOpenInstance,
 }) => {
   const [instance, setInstance] = useState<ProcessInstanceDTO>(initialInstance);
   const [workflow, setWorkflow] = useState<WorkflowFile | null>(null);
@@ -81,6 +87,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   const [history, setHistory] = useState<ActivityHistoryDTO[]>([]);
   const [variables, setVariables] = useState<Record<string, unknown> | null>(null);
   const [jobs, setJobs] = useState<ProjectJob[]>([]);
+  const [agentSteps, setAgentSteps] = useState<AgentStepEvidence[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [tab, setTab] = useState<InspectorTab>('telemetry');
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -138,6 +145,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
       ]);
       setVariables(vars);
       setJobs(jobList);
+      setAgentSteps(await EvidenceAPI.steps(projectId, instanceId).catch(() => []));
     } catch {
       // Keep the last known snapshot; the next tick retries.
     }
@@ -148,16 +156,20 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
     void loadVariablesAndJobs();
   }, [load, loadVariablesAndJobs]);
 
-  /* ---- Poll while the instance is still advancing ---- */
+  /* ---- Live while the instance is still advancing: the event stream, polling as the fallback ---- */
   const isTerminal = ['COMPLETED', 'FAILED', 'CANCELLED'].includes(statusOf(instance));
+  const refresh = useCallback(() => {
+    void load(false);
+    void loadVariablesAndJobs();
+  }, [load, loadVariablesAndJobs]);
+  const streamState = useInstanceEvents(isTerminal ? undefined : projectId, instanceId, refresh);
+  const live = streamState === 'live';
   useEffect(() => {
     if (isTerminal) return;
-    const timer = window.setInterval(() => {
-      void load(false);
-      void loadVariablesAndJobs();
-    }, 2000);
+    // With the stream live, polling is only a safety net.
+    const timer = window.setInterval(refresh, live ? 15_000 : 2000);
     return () => window.clearInterval(timer);
-  }, [isTerminal, load, loadVariablesAndJobs]);
+  }, [isTerminal, live, refresh]);
 
   useEffect(() => {
     if (!toast) return;
@@ -326,6 +338,15 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <StatusBadge instance={instance} />
+          {!isTerminal && (
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] ${live
+                ? 'border-[#2A9D8F]/40 text-[#2A9D8F]' : 'border-[#3A322E] text-[#A89F91]'}`}
+              title={live ? 'Updates arrive from the event stream' : 'The event stream is not available; refreshing every 2 s'}
+            >
+              {live ? 'Live' : 'Polling'}
+            </span>
+          )}
           <span className="flex items-center gap-1.5 rounded-full border border-[#3A322E] bg-[#1A1614] px-2.5 py-1 font-mono text-[11px] tabular-nums text-[#A89F91]" title="Elapsed time">
             <Clock className="h-3 w-3 text-[#F4A261]" />
             {formatDuration(elapsedMs)}
@@ -406,6 +427,9 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
           void loadVariablesAndJobs();
         }}
       />
+
+      {/* ===== Call-process lineage ===== */}
+      <LineagePanel projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} />
 
       {/* ===== Split workspace ===== */}
       <div className="relative flex min-h-0 flex-1">
@@ -536,6 +560,9 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                     variables={variables}
                     onRetry={retryJob}
                     projectId={projectId}
+                    agentSteps={agentSteps}
+                    instanceId={instanceId}
+                    onOpenInstance={onOpenInstance}
                   />
                 ) : (
                   <div className="space-y-3">

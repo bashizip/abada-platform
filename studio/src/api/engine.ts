@@ -69,6 +69,44 @@ export interface ProcessInstanceDTO {
   suspended?: boolean;
   startedBy?: string;
   variables: Record<string, unknown>;
+  /** What this instance's agent calls cost (engine-computed); absent without agent calls. */
+  agentCost?: InstanceCostDTO;
+  /** Set when a call-process step of another instance started this one. */
+  parentInstanceId?: string;
+  parentActivityId?: string;
+  rootInstanceId?: string;
+}
+
+/** Agent cost of an instance: `usd` sums priced calls; `includesUnpriced` means the real cost is higher. */
+export interface InstanceCostDTO {
+  usd?: number;
+  promptTokens: number;
+  completionTokens: number;
+  includesUnpriced: boolean;
+}
+
+/** One instance related through call-process. */
+export interface LineageLinkDTO {
+  instanceId: string;
+  processDefinitionId: string;
+  status: string;
+  /** The call step of the instance above that started it; absent for the root. */
+  parentActivityId?: string;
+  depth?: number;
+  startDate?: string;
+  endDate?: string;
+  /** The agent that delegated to this instance (node, model, step); absent for call-process children. */
+  startedByAgent?: { nodeId?: string; model?: string; step?: number; promptVersion?: string };
+}
+
+/** Where an instance sits in a call-process tree. */
+export interface LineageDTO {
+  instanceId: string;
+  rootInstanceId: string;
+  depth: number;
+  /** Root first, down to the direct parent. */
+  ancestors: LineageLinkDTO[];
+  children: LineageLinkDTO[];
 }
 
 export interface EngineUserTaskDTO {
@@ -90,6 +128,27 @@ export interface EngineUserTaskDTO {
   variables?: Record<string, unknown>;
   /** Decisions a reviewer chooses from; empty for an ordinary task. */
   outcomes?: { name: string; commentRequired: boolean }[];
+  /** USER for a process node's task; TOOL_APPROVAL for an agent's proposed tool call. */
+  kind?: 'USER' | 'TOOL_APPROVAL';
+  /** The proposed call a TOOL_APPROVAL task decides. */
+  toolApproval?: ToolApprovalDTO;
+}
+
+/** A tool call an agent proposed; the decision binds to argumentsDigest. */
+export interface ToolApprovalDTO {
+  toolRef: string;
+  server?: string;
+  tool: string;
+  agentActivityId: string;
+  model?: string;
+  attempt: number;
+  sequence: number;
+  argumentsDigest: string;
+  /** As the evidence policy keeps it (redacted by default); null under `none` or after retention. */
+  arguments?: unknown;
+  payloadMode?: 'none' | 'redacted' | 'full';
+  proposedAt?: string;
+  state: string;
 }
 
 export interface TaskOperationResultDTO {
@@ -160,7 +219,7 @@ export interface EngineInfoResponse {
 }
 
 /** What stopped a token: failed work, an exhausted loop, or a message with no correlation key. */
-export type IncidentKind = 'WORK_FAILED' | 'LOOP_EXHAUSTED' | 'MISSING_CORRELATION_KEY';
+export type IncidentKind = 'WORK_FAILED' | 'LOOP_EXHAUSTED' | 'MISSING_CORRELATION_KEY' | 'TOOL_OUTCOME_UNKNOWN';
 
 /** An operator-visible runtime incident (`GET /v1/projects/{projectId}/incidents`). */
 export interface IncidentDTO {
@@ -182,9 +241,14 @@ export interface IncidentDTO {
  * model for this task only and needs a `reason`; the engine rejects it for
  * any other incident.
  */
+/**
+ * Optional retry body: another allowed model (with a reason) for failed agent
+ * work, or, required for TOOL_OUTCOME_UNKNOWN, whether the interrupted write happened.
+ */
 export interface IncidentRetryRequest {
-  model: string;
-  reason: string;
+  model?: string;
+  reason?: string;
+  toolOutcome?: 'PERFORMED' | 'NOT_PERFORMED';
 }
 
 /** Liveness and incident record for one external worker topic in a project. */
@@ -359,6 +423,15 @@ export class EngineAPI {
   }
 
   /** Lists a project's incidents, newest first; open ones only by default. */
+  static async getLineage(projectId: string, instanceId: string): Promise<LineageDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/lineage`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
   static async getIncidents(projectId: string, open = true): Promise<IncidentDTO[]> {
     const res = await authenticatedFetch(
       `${this.BASE_URL}/projects/${projectId}/incidents?open=${open}&size=100`,
@@ -383,7 +456,7 @@ export class EngineAPI {
           ...this.getHeaders(),
           ...(typeof crypto?.randomUUID === 'function' ? { 'Idempotency-Key': crypto.randomUUID() } : {}),
         },
-        body: override ? JSON.stringify({ model: override.model, reason: override.reason }) : undefined,
+        body: override ? JSON.stringify(override) : undefined,
       },
     );
     if (!res.ok) throw await apiError(res);

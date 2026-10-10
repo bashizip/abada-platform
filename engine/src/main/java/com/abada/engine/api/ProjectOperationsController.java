@@ -127,6 +127,14 @@ public class ProjectOperationsController {
                 .body(result.stream().map(item -> ActivityHistoryDto.from(item, objectMapper)).toList());
     }
 
+    /** The instance's ancestors (root first) and direct children, all within the project. */
+    @GetMapping("/lineage")
+    public ResponseEntity<com.abada.engine.dto.LineageDto> lineage(@PathVariable String projectId,
+            @PathVariable String instanceId) {
+        requireInstance(projectId, instanceId, false);
+        return ResponseEntity.ok(engine.lineage(instanceId));
+    }
+
     private ProcessInstance requireInstance(String projectId, String instanceId, boolean mutation) {
         if (mutation) access.require(projectId, Role.OPERATOR, Role.OWNER);
         else access.require(projectId, Role.VIEWER, Role.OPERATOR, Role.OWNER);

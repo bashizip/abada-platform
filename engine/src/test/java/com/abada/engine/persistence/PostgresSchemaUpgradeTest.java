@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("26");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("33");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,83 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V33: the outbox stream's order and project.
+            for (String column : new String[] {"seq", "project_id"}) {
+                try (var columns = metadata.getColumns(null, schema, "outbox_events", column)) {
+                    assertThat(columns.next()).as("outbox_events." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "outbox_events", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_outbox_project_seq", "idx_outbox_seq");
+            }
+            // V32: the child instance an agent's delegation started.
+            try (var columns = metadata.getColumns(null, schema, "agent_steps", "child_instance_id")) {
+                assertThat(columns.next()).as("agent_steps.child_instance_id").isTrue();
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "agent_steps", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_agent_steps_child");
+            }
+            // V31: tool approvals (task kind and agent step, decision time on the step).
+            for (String[] column : new String[][] {{"tasks", "kind"}, {"tasks", "agent_step_id"},
+                    {"agent_steps", "decided_at"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "tasks", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_tasks_agent_step");
+            }
+            // V30: evidence policy, payload copies, retention, cost and model prices.
+            for (String[] column : new String[][] {{"agent_steps", "cost_usd"}, {"agent_steps", "cost_unpriced"},
+                    {"agent_steps", "payload_mode"}, {"agent_steps", "evidence_request_enc"},
+                    {"agent_steps", "evidence_result_enc"}, {"agent_steps", "purge_after"},
+                    {"agent_steps", "purged_at"}, {"external_tasks", "attempt_cost_usd"},
+                    {"external_tasks", "attempt_cost_unpriced"}, {"external_tasks", "attempt_prompt_tokens"},
+                    {"external_tasks", "attempt_completion_tokens"}, {"projects", "evidence_payloads"},
+                    {"projects", "evidence_retention_days"}, {"model_prices", "input_per_million"},
+                    {"model_prices", "effective_from"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            // V29: call-process lineage, pinned call targets and the CHILD_DONE job's child.
+            for (String[] column : new String[][] {{"process_definitions", "call_targets"},
+                    {"process_instances", "parent_instance_id"}, {"process_instances", "parent_token_id"},
+                    {"process_instances", "parent_activity_id"}, {"process_instances", "root_instance_id"},
+                    {"process_instances", "call_depth"}, {"process_instances", "started_by_agent"},
+                    {"jobs", "related_instance_id"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "process_instances", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_process_instances_parent", "idx_process_instances_root");
+            }
+            // V28: journaled agent steps and the attempt an external task is on.
+            try (var columns = metadata.getColumns(null, schema, "external_tasks", "attempt")) {
+                assertThat(columns.next()).as("external_tasks.attempt").isTrue();
+            }
+            for (String column : java.util.List.of("id", "external_task_id", "process_instance_id", "token_id",
+                    "activity_id", "attempt", "sequence_no", "kind", "tool_ref", "policy", "state",
+                    "idempotency_key", "request_digest", "result_digest", "request_enc", "result_enc",
+                    "worker_id", "resolved_by", "started_at", "finished_at")) {
+                try (var columns = metadata.getColumns(null, schema, "agent_steps", column)) {
+                    assertThat(columns.next()).as("agent_steps." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "agent_steps", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_agent_steps_instance", "uk_agent_step_sequence");
+            }
+            // V27: tool registry (tool server resources, frozen bindings, credentials).
+            try (var columns = metadata.getColumns(null, schema, "process_definitions", "tool_bindings")) {
+                assertThat(columns.next()).as("process_definitions.tool_bindings").isTrue();
+            }
+            for (String column : java.util.List.of("project_id", "name", "secret_enc", "secret_hint", "version",
+                    "created_at", "updated_at")) {
+                try (var columns = metadata.getColumns(null, schema, "tool_credentials", column)) {
+                    assertThat(columns.next()).as("tool_credentials." + column).isTrue();
+                }
             }
         }
     }

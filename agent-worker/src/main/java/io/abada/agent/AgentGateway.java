@@ -1,6 +1,7 @@
 package io.abada.agent;
 
 import io.abada.worker.AgentWorkDescriptor;
+import java.util.List;
 import java.util.Map;
 
 /** Common contract for LLM provider gateways behind APL {@code agent} tasks. */
@@ -9,6 +10,28 @@ public interface AgentGateway {
 
     /** Stable provider family reported in attempt metadata, e.g. {@code openai-compatible}. */
     String provider();
+
+    /**
+     * One model call of a tool loop: the conversation so far and the tools the
+     * model may request. Returns the reply text and/or the tool calls it asks for.
+     */
+    default ChatTurn chat(AgentWorkDescriptor work, String model, List<Map<String, Object>> messages,
+            List<ToolSpec> tools) throws Exception {
+        throw new AgentConfigurationException(provider() + " does not support tool calling");
+    }
+
+    /** A tool offered to the model: an OpenAI-style function with its JSON Schema parameters. */
+    record ToolSpec(String name, String description, Map<String, Object> parameters) {}
+
+    /** A tool call the model requested; {@code arguments} is the raw JSON string it produced. */
+    record ToolCall(String id, String name, String arguments) {}
+
+    /** The model's reply: final text, or tool calls to run first; plus token usage. */
+    record ChatTurn(String content, List<ToolCall> toolCalls, Integer promptTokens, Integer completionTokens) {
+        public ChatTurn {
+            toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
+        }
+    }
 
     /**
      * Decoded agent result, the {@code _confidence} the model reported, and the

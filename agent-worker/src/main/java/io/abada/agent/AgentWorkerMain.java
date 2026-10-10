@@ -95,6 +95,24 @@ public final class AgentWorkerMain {
 
         void extendLock(LockedExternalTask task, Duration lockDuration);
 
+        /** Journals one agent step (E9); an engine without the journal answers 404. */
+        default io.abada.worker.AgentStep recordStep(LockedExternalTask task, int attempt, int sequence, String kind,
+                String state, String toolRef, Object request, Object result, String errorType, String model,
+                Integer promptTokens, Integer completionTokens) {
+            throw new io.abada.worker.WorkerProtocolException(404, "NOT_FOUND", "No agent step journal");
+        }
+
+        /** The credential of a tool server the locked task is bound to. */
+        default io.abada.worker.ToolCredential toolCredential(LockedExternalTask task, String server) {
+            throw new io.abada.worker.WorkerProtocolException(404, "NOT_FOUND", "No tool credentials");
+        }
+
+        /** A final, routable failure: never retried, routed by its code. */
+        default void failWithCode(LockedExternalTask task, String code, String message, String details,
+                AgentAttemptMetadata agent, RequestOptions options) {
+            fail(task, message + " [" + code + "]", details, 0, Duration.ZERO, agent, false, options);
+        }
+
         static Engine over(AbadaWorkerClient client, WorkerConfig config, List<String> topics) {
             return new Engine() {
                 @Override
@@ -121,6 +139,25 @@ public final class AgentWorkerMain {
                     client.extendLock(task.id(), config.workerId(), lockDuration,
                             new RequestOptions(null, task.traceParent(), null));
                 }
+
+                @Override
+                public io.abada.worker.AgentStep recordStep(LockedExternalTask task, int attempt, int sequence,
+                        String kind, String state, String toolRef, Object request, Object result, String errorType,
+                        String model, Integer promptTokens, Integer completionTokens) {
+                    return client.recordStep(task.id(), config.workerId(), attempt, sequence, kind, state, toolRef,
+                            request, result, errorType, model, null, promptTokens, completionTokens);
+                }
+
+                @Override
+                public io.abada.worker.ToolCredential toolCredential(LockedExternalTask task, String server) {
+                    return client.toolCredential(task.id(), config.workerId(), server);
+                }
+
+                @Override
+                public void failWithCode(LockedExternalTask task, String code, String message, String details,
+                        AgentAttemptMetadata agent, RequestOptions options) {
+                    client.failWithCode(task.id(), config.workerId(), code, message, details, agent, options);
+                }
             };
         }
     }
@@ -131,6 +168,10 @@ public final class AgentWorkerMain {
         private final Function<AgentWorkDescriptor, AgentGateway> gateways;
         private final WorkerConfig config;
         private final SecretRedactor redactor;
+        private final AgentLoop loop;
+        private final AgentLoop.Settings loopSettings;
+        private final java.util.function.BiFunction<LockedExternalTask, String, io.abada.agent.mcp.McpToolClient>
+                toolClients;
         private final Semaphore slots;
         private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
         private final ScheduledExecutorService heartbeats =
@@ -146,6 +187,19 @@ public final class AgentWorkerMain {
 
         Runner(Engine engine, Function<AgentWorkDescriptor, AgentGateway> gateways, WorkerConfig config,
                 SecretRedactor redactor) {
+            this(engine, gateways, config, redactor, AgentLoop.Settings.fromEnvironment(System.getenv()), null);
+        }
+
+        /**
+         * @param toolClients opens an MCP session to a bound server for a task;
+         *        null for the SDK client with the project's tool credential
+         */
+        Runner(Engine engine, Function<AgentWorkDescriptor, AgentGateway> gateways, WorkerConfig config,
+                SecretRedactor redactor, AgentLoop.Settings loopSettings,
+                java.util.function.BiFunction<LockedExternalTask, String, io.abada.agent.mcp.McpToolClient> toolClients) {
+            this.loop = new AgentLoop(loopSettings);
+            this.loopSettings = loopSettings;
+            this.toolClients = toolClients;
             this.redactor = redactor;
             this.engine = engine;
             this.gateways = gateways;
@@ -279,53 +333,65 @@ public final class AgentWorkerMain {
             String requestedModel = work == null ? config.defaultModel() : resolveModel(config, work);
             String model = requestedModel;
             String provider = "unknown";
-            Set<String> requestedTools = work == null || work.tools() == null ? Set.of() : Set.copyOf(work.tools());
+            // In declared order: the attempt metadata lists tools as the node declares them.
+            Set<String> requestedTools = work == null || work.tools() == null ? Set.of()
+                    : java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(work.tools()));
             try {
                 if (work == null || !"abada.agent/v1".equals(work.profileVersion())) {
                     throw new IllegalArgumentException("Missing or unsupported abada.agent/v1 descriptor");
                 }
-                if (!config.allowedTools().containsAll(requestedTools)) {
+                if (!requestedTools.stream().allMatch(tool -> toolAllowed(config.allowedTools(), tool))) {
                     throw new IllegalArgumentException("Agent requests tools outside the configured allow-list");
                 }
                 // The declared model first, then each fallback, but only while the
-                // model before could not run the attempt at all (rate limit, quota,
-                // outage). Any other outcome, including output the engine will
-                // reject, ends the chain: a fallback never "shops" for an answer.
-                AgentGateway.AgentResult result = null;
-                AgentGateway.AgentUnavailableException unavailable = null;
-                Duration retryAfter = null;
-                long durationMs = 0;
-                for (String candidate : modelChain(work, requestedModel)) {
-                    AgentWorkDescriptor attemptWork = candidate.equals(requestedModel) ? work : work.withModel(candidate);
-                    AgentGateway gateway = gateways.apply(attemptWork);
-                    model = candidate;
-                    provider = gateway.provider();
-                    long startedNanos = System.nanoTime();
-                    try {
-                        result = gateway.execute(attemptWork, task.variables());
-                        durationMs = TimeUnit.NANOSECONDS.toMillis(Math.max(0, System.nanoTime() - startedNanos));
-                        break;
-                    } catch (AgentGateway.AgentUnavailableException modelUnavailable) {
-                        unavailable = modelUnavailable;
-                        if (modelUnavailable.retryAfter() != null && (retryAfter == null
-                                || modelUnavailable.retryAfter().compareTo(retryAfter) > 0)) {
-                            retryAfter = modelUnavailable.retryAfter();
-                        }
-                        LOG.log(System.Logger.Level.WARNING,
-                                "agent_model_unavailable task_id={0} activity_id={1} model={2} error_type={3}",
-                                task.id(), task.activityId(), candidate, modelUnavailable.getClass().getSimpleName());
-                    }
+                // model before could not run at all (rate limit, quota, outage).
+                // Any other outcome, including output the engine will reject, ends
+                // the chain: a fallback never "shops" for an answer. Every model and
+                // tool call is journaled, so a lost lease resumes where it stopped.
+                AgentLoop.Outcome outcome;
+                long startedNanos = System.nanoTime();
+                AgentLoop.Journal journal = journalFor(task);
+                try (io.abada.agent.mcp.McpSessionPool sessions = new io.abada.agent.mcp.McpSessionPool(
+                        server -> openToolClient(task, work, server))) {
+                    outcome = loop.run(task, work, modelChain(work, requestedModel),
+                            candidate -> gateways.apply(candidate.equals(requestedModel) ? work : work.withModel(candidate)),
+                            journal, sessions);
+                } catch (AgentLoop.AwaitingChild waiting) {
+                    // The engine started the child and parked the work with the delegation: report nothing.
+                    heartbeat.stop();
+                    LOG.log(System.Logger.Level.INFO,
+                            "agent_task_awaiting_child task_id={0} activity_id={1} process={2} step={3}",
+                            task.id(), task.activityId(), waiting.process, waiting.sequence);
+                    return;
+                } catch (AgentLoop.AwaitingApproval waiting) {
+                    // The engine parked the work and released the lease with the proposal: report nothing.
+                    heartbeat.stop();
+                    LOG.log(System.Logger.Level.INFO,
+                            "agent_task_awaiting_approval task_id={0} activity_id={1} tool={2} step={3}",
+                            task.id(), task.activityId(), waiting.toolRef, waiting.sequence);
+                    return;
+                } catch (AgentLoop.AllModelsUnavailable unavailable) {
+                    if (unavailable.lastModel != null) model = unavailable.lastModel;
+                    throw new Deferral(unavailable.last == null
+                            ? new AgentGateway.AgentUnavailableException("No model available", (Throwable) null)
+                            : unavailable.last, unavailable.retryAfter);
                 }
-                if (result == null) throw new Deferral(unavailable, retryAfter);
+                long durationMs = TimeUnit.NANOSECONDS.toMillis(Math.max(0, System.nanoTime() - startedNanos));
+                model = outcome.model();
+                provider = outcome.provider();
+                AgentGateway.AgentResult result = outcome.result();
                 heartbeat.stop();
                 if (heartbeat.lockLost()) {
                     abandon(task, "complete");
                     return;
                 }
                 String resultVariable = blankToDefault(work.resultVariable(), task.activityId() + "_result");
-                Map<String, Object> variables = Map.of(resultVariable, result.value());
+                Map<String, Object> variables = new java.util.HashMap<>();
+                variables.put(resultVariable, result.value());
+                List<String> usedTools = new java.util.ArrayList<>(requestedTools);
+                outcome.toolsUsed().forEach(tool -> { if (!usedTools.contains(tool)) usedTools.add(tool); });
                 AgentAttemptMetadata metadata = new AgentAttemptMetadata(model, provider, attempt, durationMs,
-                        List.copyOf(requestedTools), resultVariable, promptHash(work.prompt()), null,
+                        List.copyOf(usedTools), resultVariable, promptHash(work.prompt()), null,
                         result.confidence(), result.promptTokens(), result.completionTokens(),
                         model.equals(requestedModel) ? null : requestedModel);
                 RequestOptions options = taskOptions(task, attempt, "complete");
@@ -345,6 +411,25 @@ public final class AgentWorkerMain {
                 LOG.log(System.Logger.Level.INFO,
                         "agent_task_completed task_id={0} activity_id={1} model={2} attempt={3} completed_total={4} failed_total={5}",
                         task.id(), task.activityId(), model, attempt, done, failed.get());
+            } catch (AgentLoop.CodedFailure coded) {
+                heartbeat.stop();
+                if (heartbeat.lockLost()) {
+                    abandon(task, "failure");
+                    return;
+                }
+                try {
+                    engine.failWithCode(task, coded.code, redactor.redact(safeMessage(coded)), null,
+                            new AgentAttemptMetadata(model, provider, attempt, null, List.of(), null, null,
+                                    coded.code, null, null, null, model.equals(requestedModel) ? null : requestedModel),
+                            taskOptions(task, attempt, "failure"));
+                } catch (RuntimeException reportFailure) {
+                    LOG.log(System.Logger.Level.WARNING, "agent_failure_report_failed task_id={0} message={1}",
+                            task.id(), safeMessage(reportFailure));
+                }
+                long total = failed.incrementAndGet();
+                LOG.log(System.Logger.Level.WARNING,
+                        "agent_task_failed task_id={0} activity_id={1} model={2} attempt={3} code={4} failed_total={5}",
+                        task.id(), task.activityId(), model, attempt, coded.code, total);
             } catch (Exception thrown) {
                 heartbeat.stop();
                 if (heartbeat.lockLost()) {
@@ -379,6 +464,48 @@ public final class AgentWorkerMain {
                         "agent_task_failed task_id={0} activity_id={1} model={2} attempt={3} retries_remaining={4} deferred={5} completed_total={6} failed_total={7}",
                         task.id(), task.activityId(), model, attempt, remaining, deferred, completed.get(), total);
             }
+        }
+
+        /** The task's step journal, or a disabled one for engines without it (they answer 404). */
+        private AgentLoop.Journal journalFor(LockedExternalTask task) {
+            int attempt = task.attempt() == null ? 1 : task.attempt();
+            java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean(true);
+            return new AgentLoop.Journal() {
+                @Override
+                public io.abada.worker.AgentStep record(int sequence, String kind, String state, String toolRef,
+                        Object request, Object result, String errorType, String model, Integer promptTokens,
+                        Integer completionTokens) {
+                    if (!enabled.get()) return null;
+                    try {
+                        return engine.recordStep(task, attempt, sequence, kind, state, toolRef, request, result,
+                                errorType, model, promptTokens, completionTokens);
+                    } catch (io.abada.worker.WorkerProtocolException missing) {
+                        if (missing.status() != 404 || missing.reason() != null) throw missing;
+                        enabled.set(false);
+                        return null;
+                    }
+                }
+
+                @Override
+                public boolean enabled() {
+                    return enabled.get();
+                }
+            };
+        }
+
+        /** An MCP session to a server the task is bound to, with the project's tool credential when it names one. */
+        private io.abada.agent.mcp.McpToolClient openToolClient(LockedExternalTask task, AgentWorkDescriptor work,
+                String server) {
+            if (toolClients != null) return toolClients.apply(task, server);
+            io.abada.worker.ToolBinding binding = work.toolBindings().stream()
+                    .filter(candidate -> candidate.server().equals(server)).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("No binding for tool server " + server));
+            if (!toolAllowed(config.allowedTools(), binding.ref())) {
+                throw new IllegalArgumentException("Tool server '" + server + "' is outside the configured allow-list");
+            }
+            String secret = binding.credential() == null ? null : engine.toolCredential(task, server).secret();
+            return new io.abada.agent.mcp.SdkMcpToolClient(server, java.net.URI.create(binding.url()), secret,
+                    loopSettings.toolTimeout());
         }
 
         private void abandon(LockedExternalTask task, String operation) {
@@ -417,7 +544,8 @@ public final class AgentWorkerMain {
         return new AgentWorkDescriptor(work.profileVersion(), work.model(), work.prompt(), work.inputs(),
                 work.resultVariable(), work.outputSchema(), work.tools(), work.confidenceThreshold(),
                 work.temperature(), work.maxTokens(), bounded, work.maxAttempts(), work.retryBackoffMs(),
-                work.fallbackModels());
+                work.fallbackModels(), work.toolPolicies(), work.toolBindings(), work.prices(), work.limits(),
+                work.delegates());
     }
 
     static Map<String, Object> localAcknowledgement(LockedExternalTask task) {
@@ -426,6 +554,18 @@ public final class AgentWorkerMain {
                 "topic", task.topicName(),
                 "processInstanceId", task.processInstanceId(),
                 "status", "ACKNOWLEDGED"));
+    }
+
+    /**
+     * {@code ABADA_AGENT_ALLOWED_TOOLS} lists the tool servers this worker may
+     * reach: a {@code <server>/<tool>} reference is allowed when its server (or
+     * the exact reference) is listed, so a deployment can never widen what an
+     * operator allowed. A name without a server must be listed exactly.
+     */
+    static boolean toolAllowed(Set<String> allowed, String requested) {
+        if (allowed.contains(requested)) return true;
+        int slash = requested.indexOf('/');
+        return slash > 0 && allowed.contains(requested.substring(0, slash));
     }
 
     private static String safeMessage(Exception exception) {

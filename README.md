@@ -29,8 +29,17 @@ is allowed to change.
 - **Governed.** Model output is validated by the engine against a declared schema and
   confidence threshold; invalid or low-confidence answers go to a person. Rules are
   sandboxed CEL.
+- **Acts under policy.** Agents use tools from your MCP servers
+  under read, write or approval-required policies; a person approves each risky call with its
+  exact arguments, a crash never repeats a write blindly, and turns, tokens and spend are
+  bounded and priced by the engine. Agents can route a case and delegate a sub-case to another
+  governed process.
 - **Evidenced.** Every model call leaves an auditable record, and each release candidate
   passes a recorded gate, including an end-to-end test you can rerun.
+
+New here? [Concepts](https://docs.abadaplatform.com/concepts/) introduces every capability in a
+few lines, and [Use cases](https://docs.abadaplatform.com/user/use-cases/) shows five runnable
+processes.
 
 Website: [abadaplatform.com](https://abadaplatform.com) · Documentation:
 [docs.abadaplatform.com](https://docs.abadaplatform.com)
@@ -188,15 +197,17 @@ only through an engine command that validates it — see
 
 ## Status
 
-The current release is **`1.1.0-rc.1`**, an evaluation release candidate
-([release notes](docs/release-notes/1.1.0-rc.1-release-notes.md),
-[gate report](docs/development/1.1-rc.1-gate-report-2026-10-04.md)): bounded rework
-loops, error and timeout routes, enforced service levels, model fallback and review
-decisions with a required comment, all editable in Studio. It targets self-hosted
-Docker Compose deployments with one or more engine instances on PostgreSQL.
+The current release is **`1.1.0-rc.2`**, an evaluation release candidate
+([release notes](docs/release-notes/1.1.0-rc.2-release-notes.md),
+[gate report](docs/development/1.1-rc.2-gate-report-2026-10-10.md)): agents that act —
+tools from your MCP servers under read, write and approval-required policies, human
+approval of each risky call, crash-safe writes, bounded and engine-priced cost, routing
+agents, call-process and agent delegation, live instance updates and an agent-step
+inspector in Studio. It builds on `1.1.0-rc.1` (bounded loops, error and timeout routes,
+service levels, model fallback, review decisions). It targets self-hosted Docker Compose
+deployments with one or more engine instances on PostgreSQL.
 
-Next on the [roadmap](docs/development/roadmap.md): tool-using agents with
-human-approved writes (`1.1.0-rc.2`). Public-cloud production certification and an independent security review
+Next on the [roadmap](docs/development/roadmap.md): governed improvement (`1.1.0`). Public-cloud production certification and an independent security review
 are not yet scheduled; see the [deployment support matrix](docs/reference/deployment-support.md).
 
 ---

@@ -45,7 +45,8 @@ export interface ProjectDocument {
   fileName?: string | null;
 }
 
-export type ResourceKind = 'FORM' | 'RESOURCE';
+/** TOOL_SERVER: an MCP tool server document (YAML), validated by the engine on every save. */
+export type ResourceKind = 'FORM' | 'RESOURCE' | 'TOOL_SERVER';
 
 export interface ProjectFolder {
   id: string;

@@ -54,6 +54,9 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_task:read", AbadaRoles.TASK_USER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/tasks/**")
                         .hasAnyAuthority("SCOPE_task:write", AbadaRoles.TASK_USER, AbadaRoles.ADMIN)
+                // Evidence payloads: evidence readers only, never implied by administration.
+                .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/*/agent-steps/*/payloads")
+                        .hasAnyAuthority(AbadaRoles.EVIDENCE_READ_SCOPE, AbadaRoles.EVIDENCE_READER)
                 .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/**")
                         .hasAnyAuthority("SCOPE_operations:read", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
                 .requestMatchers("/v1/projects/*/instances/**")
@@ -90,8 +93,9 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_operations:read", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
                 .requestMatchers("/v1/jobs/**", "/v1/process-instances/**")
                         .hasAnyAuthority("SCOPE_operations:write", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
-                // Plaintext provider keys: worker principals only, never human administrators.
-                .requestMatchers(HttpMethod.GET, "/v1/workers/me/ai-credentials")
+                // Plaintext provider keys and tool credentials: worker principals only, never human administrators.
+                .requestMatchers(HttpMethod.GET, "/v1/workers/me/ai-credentials",
+                                "/v1/external-tasks/*/tool-credentials/*")
                         .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER)
                 .requestMatchers("/v1/external-tasks/**", "/v1/workers/**")
                         .hasAnyAuthority("SCOPE_worker:execute", AbadaRoles.WORKER, AbadaRoles.ADMIN)
@@ -103,6 +107,9 @@ public class SecurityConfig {
                         "/v1/insight/config/ai/test")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.PUT, "/v1/insight/config/ai")
+                        .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.GET, "/v1/model-prices").authenticated()
+                .requestMatchers("/v1/model-prices/**", "/v1/model-prices")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.GET, "/v1/ai-providers/status").authenticated()
                 .requestMatchers(HttpMethod.GET, "/v1/ai-providers")

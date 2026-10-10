@@ -77,6 +77,95 @@ says where the process goes and whether the reviewer must explain it:
 In BPMN, the same decision is a user task with `abada:outcomes` (see [BPMN
 import and compatibility](/compatibility/bpmn/)).
 
+## Let the agent choose the next step
+
+An agent can pick where the process goes next, among routes you declare:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Route this request: ${request_text}"
+  routes:
+    refund:   { next: refund, description: The customer asks for money back, when: "amount <= 500.0" }
+    escalate: { next: manual, description: Anything unclear, angry or legal }
+  on_invalid_output: manual
+```
+
+- The agent answers with a `route` (the engine adds it to the output contract
+  and tells the model the descriptions). The engine only accepts a declared
+  route; anything else is an invalid output.
+- A route's `when` is the engine's veto: here a refund over 500 is never
+  taken, whatever the agent says, and the result goes to `on_invalid_output`.
+- The route taken is stored in `triage_route` and recorded in the history
+  with the agent's confidence. A step with routes has no `next`; a route back
+  to an earlier step needs a loop limit.
+- In Studio, open the agent's **Routes** box and choose **Let the agent
+  choose the next step**; each route draws its own edge on the canvas.
+
+## Let an agent delegate to another process
+
+An agent can start another process of the project and continue with its
+result, when its step declares it:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: "Handle the refund request for ${order}"
+  delegates:
+    - process: refund_payout
+      description: Pay a refund out to the customer
+      outputs: [payout_id]
+  next: done
+```
+
+- The agent sees a `delegate__refund_payout` tool whose inputs are the
+  variables `refund_payout` declares. The engine checks them, then starts the
+  payout as its own process; the instance page shows it under **Called
+  processes**, delegated by the agent.
+- While the payout runs, the agent waits without holding a worker. When it
+  ends, the agent reads `payout_id` (and nothing else of the payout) and
+  continues; if the payout fails or is cancelled, the agent is told and
+  decides what to do.
+- Add `approval: required` and `approvers: [finance]` to have a person approve
+  each delegation, with its inputs, before the child starts.
+- Deploy `refund_payout` first: the version is fixed when this process is
+  deployed, as for a call-process step.
+
+## Approving an agent's tool call
+
+Some tool calls should not run until a person agrees. Mark the tool
+`approval_required` on its tool server, and say who approves it there or on the
+node:
+
+```yaml
+- id: triage
+  type: agent
+  model: gemini-3.6-flash
+  prompt: Decide whether to refund ${order}
+  tools:
+    - payments/lookup
+    - { ref: payments/refund, approvers: [finance] }
+  next: done
+```
+
+- When the agent wants to call `payments/refund`, it stops. A **Tool call
+  awaiting approval** task appears in the Task Inbox for the `finance` group,
+  showing the tool, the agent and the arguments (sensitive values redacted
+  under the project's evidence policy).
+- **Approve** runs exactly that call, once, and the agent carries on.
+  **Reject** needs a comment: the agent reads it as the tool's answer and
+  continues without the call.
+- Only members of the approver groups can decide; the step's project role is
+  not enough, and a worker credential never is. Changing the arguments after
+  approval is refused by the engine.
+- The process does not move while it waits. A timeout on the node or a cancel
+  withdraws the approval. `approval_sla_hours` on the tool marks a late
+  approval as escalated.
+- Without approvers on the node or the server, the process does not deploy
+  (`ABADA-APL-TOOL-003`).
+
 ## Weak or malformed AI answers
 
 The engine checks every agent result before it touches the process:

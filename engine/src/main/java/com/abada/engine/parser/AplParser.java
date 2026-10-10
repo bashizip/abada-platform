@@ -7,7 +7,11 @@ import com.abada.engine.bpmn.compatibility.CompatibilityMapping;
 import com.abada.engine.bpmn.compatibility.CompatibilityProfiles;
 import com.abada.engine.bpmn.compatibility.CompatibilityReport;
 import com.abada.engine.bpmn.compatibility.ValidationSeverity;
+import com.abada.engine.core.model.CallProcessMeta;
+import com.abada.engine.core.model.ToolPolicy;
+import com.abada.engine.core.model.AgentRouteMeta;
 import com.abada.engine.core.model.BoundaryMeta;
+import com.abada.engine.core.model.DelegationMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
 import com.abada.engine.core.model.LoopMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
@@ -104,7 +108,7 @@ public final class AplParser {
     public static final Set<String> SUPPORTED_TYPES = Set.of(
              "webhook", "end", "agent", "engine-task", "decision-table", "script",
              "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
-             "message-catch", "timer", "signal", "human-input");
+             "message-catch", "timer", "signal", "human-input", "call-process");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -303,6 +307,9 @@ public final class AplParser {
         Map<String, GatewayMeta> gateways = new LinkedHashMap<>();
         Map<String, Object> endEvents = new LinkedHashMap<>();
         Map<String, LoopMeta> loops = new LinkedHashMap<>();
+        Map<String, CallProcessMeta> callProcesses = new LinkedHashMap<>();
+        Map<String, ParsedProcessDefinition.EvidenceOverride> evidenceOverrides = new LinkedHashMap<>();
+        Map<String, List<DelegationMeta>> delegations = new LinkedHashMap<>();
 
         // Each node is compiled independently so one invalid node never hides another's errors.
         for (Map.Entry<String, JsonNode> compiled : nodesById.entrySet()) {
@@ -319,9 +326,14 @@ public final class AplParser {
                         }
                         endEvents.put(nodeId, nodeId);
                     }
-                    case "agent" -> serviceTasks.put(nodeId,
-                            new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
-                                    parseAgentWork(node, nodeId)));
+                    case "agent" -> {
+                        serviceTasks.put(nodeId, new ServiceTaskMeta(nodeId, nodeName, null, AGENT_EXTERNAL_TOPIC,
+                                parseAgentWork(node, nodeId, pointerById.get(nodeId), warnings)));
+                        ParsedProcessDefinition.EvidenceOverride evidence = parseEvidence(node, nodeId);
+                        if (evidence != null) evidenceOverrides.put(nodeId, evidence);
+                        List<DelegationMeta> delegates = parseDelegates(node, nodeId, processId);
+                        if (!delegates.isEmpty()) delegations.put(nodeId, delegates);
+                    }
                     case "engine-task" -> {
                         String topic = node.path("service").asText(null);
                         if (topic == null || topic.isBlank()) {
@@ -601,6 +613,12 @@ public final class AplParser {
                         }
                         events.put(nodeId, new EventMeta(nodeId, nodeName, EventMeta.EventType.SIGNAL, signal));
                     }
+                    case "call-process" -> {
+                        if (!node.hasNonNull("next")) {
+                            throw validation("next", "call-process node '" + nodeId + "' requires 'next'");
+                        }
+                        callProcesses.put(nodeId, parseCallProcess(node, nodeId, nodeName, processId));
+                    }
                     case "human-input" -> {
                         // Canonical APL field is `formKey`; `formId` remains a
                         // deprecated alias so existing documents keep deploying.
@@ -650,8 +668,9 @@ public final class AplParser {
         }
 
         List<BoundaryMeta> boundaries = new ArrayList<>();
+        Map<String, List<AgentRouteMeta>> agentRoutes = new LinkedHashMap<>();
         if (errors.isEmpty()) {
-            addBoundaries(nodesById, pointerById, flows, flowIds, boundaries, errors);
+            addBoundaries(nodesById, pointerById, flows, flowIds, boundaries, agentRoutes, errors);
         }
         if (!errors.isEmpty()) throw new BpmnValidationException(errors);
 
@@ -659,7 +678,10 @@ public final class AplParser {
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
-                rawSource, null, null).withLoops(loops).withBoundaries(boundaries);
+                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses)
+                .withEvidenceOverrides(evidenceOverrides).withAgentRoutes(agentRoutes)
+                .withDelegations(delegations)
+                .withSensitiveVariables(AplVariables.sensitiveNames(root));
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
             // execution policy, so reloading stored definitions never changes.
@@ -710,6 +732,189 @@ public final class AplParser {
         return located;
     }
 
+    /** {@code evidence: { payloads, retention_days }} of an agent node; null when absent. */
+    private static ParsedProcessDefinition.EvidenceOverride parseEvidence(JsonNode node, String nodeId) {
+        JsonNode evidence = node.path("evidence");
+        if (evidence.isMissingNode() || evidence.isNull()) return null;
+        if (!evidence.isObject()) {
+            throw validation("evidence", "agent node '" + nodeId + "' evidence must be { payloads, retention_days }");
+        }
+        String payloads = null;
+        if (evidence.has("payloads")) {
+            payloads = evidence.path("payloads").asText("").strip();
+            if (!List.of("none", "redacted", "full").contains(payloads)) {
+                throw validation("evidence/payloads", "agent node '" + nodeId
+                        + "' evidence.payloads must be none, redacted or full");
+            }
+        }
+        Integer days = null;
+        if (evidence.has("retention_days")) {
+            JsonNode raw = evidence.path("retention_days");
+            if (!raw.isIntegralNumber() || raw.asInt() < 1 || raw.asInt() > 3650) {
+                throw validation("evidence/retention_days", "agent node '" + nodeId
+                        + "' evidence.retention_days must be an integer between 1 and 3650");
+            }
+            days = raw.asInt();
+        }
+        return new ParsedProcessDefinition.EvidenceOverride(payloads, days);
+    }
+
+    /** Deepest nesting a call-process node may ask for; the engine's limit may be lower. */
+    public static final int MAX_CALL_DEPTH = 10;
+    private static final java.util.regex.Pattern PROCESS_KEY = java.util.regex.Pattern.compile("[a-z][a-z0-9_-]{0,127}");
+    private static final java.util.regex.Pattern VARIABLE = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+
+    /**
+     * {@code call-process}: {@code process} (a key in the same project, pinned at
+     * deployment), {@code inputs} (child variable to expression), {@code outputs}
+     * (parent variable to child variable; at least one) and optional {@code max_depth}.
+     */
+    private static CallProcessMeta parseCallProcess(JsonNode node, String nodeId, String nodeName, String selfKey) {
+        String process = node.path("process").asText("").strip();
+        if (!PROCESS_KEY.matcher(process).matches()) {
+            throw validation("process", "call-process node '" + nodeId
+                    + "' requires 'process': the key of a process in this project");
+        }
+        if (process.equals(selfKey)) {
+            throw validation("process", "call-process node '" + nodeId + "' calls its own process '" + process
+                    + "'; recursion is not supported");
+        }
+        Map<String, String> inputs = new LinkedHashMap<>();
+        JsonNode rawInputs = node.path("inputs");
+        if (rawInputs.isObject()) {
+            for (var entry : rawInputs.properties()) {
+                if (!VARIABLE.matcher(entry.getKey()).matches()) {
+                    throw validation("inputs/" + entry.getKey(), "call-process node '" + nodeId + "' input '"
+                            + entry.getKey() + "' is not a variable name");
+                }
+                String expression = entry.getValue().isTextual() ? entry.getValue().asText()
+                        : entry.getValue().toString();
+                try {
+                    com.abada.engine.expression.WorkflowExpressions.compile(expression);
+                } catch (com.abada.engine.expression.ExpressionCompileException exception) {
+                    throw validation("inputs/" + entry.getKey(), "call-process node '" + nodeId + "' input '"
+                            + entry.getKey() + "' is not a valid expression: " + exception.getMessage());
+                }
+                inputs.put(entry.getKey(), expression);
+            }
+        } else if (!rawInputs.isMissingNode() && !rawInputs.isNull()) {
+            throw validation("inputs", "call-process node '" + nodeId + "' inputs must map child variables to expressions");
+        }
+        Map<String, String> outputs = new LinkedHashMap<>();
+        JsonNode rawOutputs = node.path("outputs");
+        if (rawOutputs.isObject()) {
+            for (var entry : rawOutputs.properties()) {
+                String childVariable = entry.getValue().asText("");
+                if (!VARIABLE.matcher(entry.getKey()).matches() || !VARIABLE.matcher(childVariable).matches()) {
+                    throw validation("outputs/" + entry.getKey(), "call-process node '" + nodeId
+                            + "' outputs map a parent variable to a child variable name");
+                }
+                outputs.put(entry.getKey(), childVariable);
+            }
+        }
+        if (outputs.isEmpty()) {
+            throw validation("outputs", "call-process node '" + nodeId + "' declares no outputs; name what the"
+                    + " child returns (parent_variable: child_variable)");
+        }
+        Integer maxDepth = null;
+        if (node.has("max_depth")) {
+            JsonNode depth = node.path("max_depth");
+            if (!depth.isIntegralNumber() || depth.asInt() < 1 || depth.asInt() > MAX_CALL_DEPTH) {
+                throw validation("max_depth", "call-process node '" + nodeId + "' max_depth must be an integer"
+                        + " between 1 and " + MAX_CALL_DEPTH);
+            }
+            maxDepth = depth.asInt();
+        }
+        return new CallProcessMeta(nodeId, nodeName, process, inputs, outputs, maxDepth);
+    }
+
+    /**
+     * {@code delegates: [{ process, outputs, approval, approvers, description, max_depth }]}
+     * of an agent node: the processes its agent may start as a child through
+     * the engine-provided tool {@code delegate:<process>}.
+     */
+    static List<DelegationMeta> parseDelegates(JsonNode node, String nodeId, String selfKey) {
+        JsonNode raw = node.path("delegates");
+        if (raw.isMissingNode() || raw.isNull()) return List.of();
+        if (!raw.isArray()) {
+            throw validation("delegates", "agent node '" + nodeId + "' delegates must be a list of"
+                    + " { process, outputs }");
+        }
+        if (raw.size() > DelegationMeta.MAX_DELEGATES) {
+            throw validation("delegates", "agent node '" + nodeId + "' may delegate to at most "
+                    + DelegationMeta.MAX_DELEGATES + " processes");
+        }
+        List<DelegationMeta> parsed = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (int index = 0; index < raw.size(); index++) {
+            JsonNode entry = raw.get(index);
+            String field = "delegates/" + index;
+            if (!entry.isObject()) {
+                throw validation(field, "agent node '" + nodeId + "' delegates entries are { process, outputs }");
+            }
+            String process = entry.path("process").asText("").strip();
+            if (!PROCESS_KEY.matcher(process).matches()) {
+                throw validation(field + "/process", "agent node '" + nodeId
+                        + "' delegate needs 'process': the key of a process in this project");
+            }
+            if (process.equals(selfKey)) {
+                throw validation(field + "/process", "agent node '" + nodeId + "' delegates to its own process '"
+                        + process + "'; recursion is not supported");
+            }
+            if (!seen.add(process)) {
+                throw validation(field + "/process", "agent node '" + nodeId + "' delegates to '" + process
+                        + "' more than once");
+            }
+            List<String> outputs = new ArrayList<>();
+            entry.path("outputs").forEach(output -> outputs.add(output.asText("").strip()));
+            if (!entry.path("outputs").isArray() || outputs.isEmpty()) {
+                throw validation(field + "/outputs", "agent node '" + nodeId + "' delegate '" + process
+                        + "' declares no outputs; name the child variables the agent may read back");
+            }
+            for (String output : outputs) {
+                if (!VARIABLE.matcher(output).matches()) {
+                    throw validation(field + "/outputs", "agent node '" + nodeId + "' delegate '" + process
+                            + "' output '" + output + "' is not a variable name");
+                }
+            }
+            String approval = entry.path("approval").asText("none");
+            if (!approval.equals("none") && !approval.equals("required")) {
+                throw validation(field + "/approval", "agent node '" + nodeId + "' delegate '" + process
+                        + "' approval must be 'required' or 'none'");
+            }
+            List<String> approvers = new ArrayList<>();
+            entry.path("approvers").forEach(group -> approvers.add(group.asText("").strip()));
+            if (approvers.stream().anyMatch(String::isEmpty)) {
+                throw validation(field + "/approvers", "agent node '" + nodeId + "' delegate '" + process
+                        + "' approvers has an empty group");
+            }
+            if (approval.equals("required") && approvers.isEmpty()) {
+                throw new BpmnValidationException(List.of(new BpmnValidationIssue(
+                        com.abada.engine.tools.ToolRegistryService.APPROVERS_CODE, ValidationSeverity.ERROR,
+                        "agent node '" + nodeId + "' delegate '" + process + "' requires approval but nobody may"
+                                + " approve it", null, nodeId, LANGUAGE_VERSION, null,
+                        "Add approvers: [<group>] to the delegate", field + "/approvers")));
+            }
+            if (!approvers.isEmpty() && approval.equals("none")) {
+                throw validation(field + "/approvers", "agent node '" + nodeId + "' delegate '" + process
+                        + "' names approvers but approval is 'none'");
+            }
+            Integer maxDepth = null;
+            if (entry.has("max_depth")) {
+                JsonNode depth = entry.path("max_depth");
+                if (!depth.isIntegralNumber() || depth.asInt() < 1 || depth.asInt() > MAX_CALL_DEPTH) {
+                    throw validation(field + "/max_depth", "agent node '" + nodeId + "' delegate '" + process
+                            + "' max_depth must be an integer between 1 and " + MAX_CALL_DEPTH);
+                }
+                maxDepth = depth.asInt();
+            }
+            String description = entry.hasNonNull("description") ? entry.path("description").asText().strip() : null;
+            parsed.add(new DelegationMeta(nodeId, process, outputs, approval.equals("required"), approvers,
+                    description == null || description.isEmpty() ? null : description, maxDepth));
+        }
+        return parsed;
+    }
+
     /** {@code loop: { max_iterations, on_exhausted }} on the node a cycle returns to. */
     private static LoopMeta parseLoop(JsonNode node, String nodeId, String type, Map<String, JsonNode> nodesById) {
         if ("webhook".equals(type) || "end".equals(type)) {
@@ -733,7 +938,8 @@ public final class AplParser {
         return new LoopMeta(nodeId, max.asInt(), onExhausted);
     }
 
-    private AgentWorkDescriptor parseAgentWork(JsonNode node, String nodeId) {
+    private AgentWorkDescriptor parseAgentWork(JsonNode node, String nodeId, String nodePointer,
+            List<BpmnValidationIssue> warnings) {
         String profile = node.path("profile").asText("abada.agent/v1");
         if (!"abada.agent/v1".equals(profile)) {
             throw validation("profile", "agent node '" + nodeId + "' declares unsupported profile '" + profile + "'");
@@ -780,6 +986,7 @@ public final class AplParser {
         if (node.path("output_schema").isObject()) {
             outputSchema = yamlMapper.convertValue(node.path("output_schema"), Map.class);
         }
+        outputSchema = withRouteContract(outputSchema, node.path("routes"), nodeId);
         if (!outputSchema.isEmpty()) {
             String problem = com.abada.engine.core.agent.AgentOutputValidator.schemaProblem(outputSchema);
             if (problem != null) {
@@ -787,9 +994,69 @@ public final class AplParser {
             }
         }
         List<String> tools = new ArrayList<>();
+        Map<String, ToolPolicy> toolPolicies = new LinkedHashMap<>();
         JsonNode rawTools = node.path("tools");
-        if (rawTools.isArray()) rawTools.forEach(tool -> tools.add(tool.asText()));
-        else if (!rawTools.isMissingNode() && !rawTools.isNull()) {
+        if (rawTools.isArray()) {
+            for (int index = 0; index < rawTools.size(); index++) {
+                JsonNode entry = rawTools.get(index);
+                String field = "tools/" + index;
+                String ref;
+                if (entry.isTextual()) {
+                    ref = entry.asText().strip();
+                } else if (entry.isObject()) {
+                    ref = entry.path("ref").asText("").strip();
+                    if (!isToolRef(ref)) {
+                        throw validation(field + "/ref", "agent node '" + nodeId
+                                + "' tool entries in object form need ref: <server>/<tool>");
+                    }
+                    ToolPolicy policy = ToolPolicy.fromWire(entry.path("policy").asText(null));
+                    JsonNode approvers = entry.path("approvers");
+                    boolean hasApprovers = !approvers.isMissingNode() && !approvers.isNull();
+                    if (policy == null && (entry.has("policy") || !hasApprovers)) {
+                        throw validation(field + "/policy", "agent node '" + nodeId + "' tool '" + ref
+                                + "' policy must be read, write or approval_required");
+                    }
+                    if (hasApprovers) {
+                        if (!approvers.isArray() || approvers.isEmpty()) {
+                            throw validation(field + "/approvers", "agent node '" + nodeId + "' tool '" + ref
+                                    + "' approvers must be a non-empty list of groups");
+                        }
+                        for (JsonNode group : approvers) {
+                            if (!group.isTextual() || group.asText().isBlank()) {
+                                throw validation(field + "/approvers", "agent node '" + nodeId + "' tool '" + ref
+                                        + "' approvers has an empty group");
+                            }
+                        }
+                        if (policy != null && policy != ToolPolicy.APPROVAL_REQUIRED) {
+                            throw validation(field + "/approvers", "agent node '" + nodeId + "' tool '" + ref
+                                    + "' names approvers but is not approval_required");
+                        }
+                    }
+                    if (policy != null) toolPolicies.put(ref, policy);
+                } else {
+                    throw validation(field, "agent node '" + nodeId
+                            + "' tools entries must be <server>/<tool> or { ref, policy, approvers }");
+                }
+                if (ref.isEmpty()) {
+                    throw validation(field, "agent node '" + nodeId + "' declares an empty tool");
+                }
+                if (tools.contains(ref)) {
+                    throw validation(field, "agent node '" + nodeId + "' lists tool '" + ref + "' more than once");
+                }
+                if (ref.contains("/") && !isToolRef(ref)) {
+                    throw validation(field, "agent node '" + nodeId + "' tool '" + ref
+                            + "' must be <server>/<tool>");
+                }
+                if (!ref.contains("/")) {
+                    warnings.add(new BpmnValidationIssue(TOOL_ADVISORY_CODE, ValidationSeverity.WARNING,
+                            "agent node '" + nodeId + "' names tool '" + ref + "' without a server: it is"
+                                    + " advisory only and never executed; use <server>/<tool> from a project"
+                                    + " tool server (an error from 1.1.0)",
+                            null, nodeId, LANGUAGE_VERSION, null, null, nodePointer + "/" + field));
+                }
+                tools.add(ref);
+            }
+        } else if (!rawTools.isMissingNode() && !rawTools.isNull()) {
             throw validation("tools", "agent node '" + nodeId + "' tools must be a list");
         }
         String model = node.path("model").asText(null);
@@ -828,7 +1095,55 @@ public final class AplParser {
         return new AgentWorkDescriptor(profile, model,
                 prompt, inputs,
                 node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
-                confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels);
+                confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels,
+                toolPolicies, List.of(), Map.of(), parseLimits(node, nodeId, tools));
+    }
+
+    /**
+     * {@code max_turns} (1–32, default 8), {@code max_tokens_total} (default
+     * 50 000 only when the node binds tools) and {@code budget_usd} (optional).
+     */
+    private static com.abada.engine.core.model.AgentLimits parseLimits(JsonNode node, String nodeId,
+            List<String> tools) {
+        int turns = com.abada.engine.core.model.AgentLimits.DEFAULT_MAX_TURNS;
+        if (node.has("max_turns")) {
+            JsonNode raw = node.path("max_turns");
+            if (!raw.isIntegralNumber() || raw.asInt() < 1 || raw.asInt() > com.abada.engine.core.model.AgentLimits.MAX_TURNS) {
+                throw validation("max_turns", "agent node '" + nodeId + "' max_turns must be an integer between 1 and "
+                        + com.abada.engine.core.model.AgentLimits.MAX_TURNS);
+            }
+            turns = raw.asInt();
+        }
+        Long tokens = tools.stream().anyMatch(AplParser::isToolRef)
+                ? com.abada.engine.core.model.AgentLimits.DEFAULT_MAX_TOKENS_TOTAL : null;
+        if (node.has("max_tokens_total")) {
+            JsonNode raw = node.path("max_tokens_total");
+            if (!raw.isIntegralNumber() || raw.asLong() < 1 || raw.asLong() > 100_000_000L) {
+                throw validation("max_tokens_total", "agent node '" + nodeId
+                        + "' max_tokens_total must be an integer between 1 and 100000000");
+            }
+            tokens = raw.asLong();
+        }
+        java.math.BigDecimal budget = null;
+        if (node.has("budget_usd")) {
+            JsonNode raw = node.path("budget_usd");
+            if (!raw.isNumber() || raw.decimalValue().signum() <= 0 || raw.decimalValue().compareTo(java.math.BigDecimal.valueOf(100_000)) > 0) {
+                throw validation("budget_usd", "agent node '" + nodeId + "' budget_usd must be a number above 0 (at most 100000)");
+            }
+            budget = raw.decimalValue();
+        }
+        return new com.abada.engine.core.model.AgentLimits(turns, tokens, budget);
+    }
+
+    /** {@code tools:} names without a server (rc.x): advisory, never executed. */
+    public static final String TOOL_ADVISORY_CODE = "ABADA-APL-TOOL-001";
+
+    private static final java.util.regex.Pattern TOOL_REF =
+            java.util.regex.Pattern.compile("[a-z][a-z0-9_-]{0,63}/[A-Za-z0-9_.-]{1,128}");
+
+    /** A resolvable tool reference: {@code <server>/<tool>}. */
+    public static boolean isToolRef(String value) {
+        return value != null && TOOL_REF.matcher(value).matches();
     }
 
     /** Fallback models an agent node may declare: tried in order only when the model before is unavailable. */
@@ -1009,20 +1324,22 @@ public final class AplParser {
      */
     private static void addBoundaries(Map<String, JsonNode> nodesById, Map<String, String> pointerById,
             List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries,
-            List<BpmnValidationIssue> errors) {
+            Map<String, List<AgentRouteMeta>> agentRoutes, List<BpmnValidationIssue> errors) {
         for (Map.Entry<String, JsonNode> entry : nodesById.entrySet()) {
             try {
-                addBoundary(entry.getKey(), entry.getValue(), nodesById, flows, flowIds, boundaries);
+                addBoundary(entry.getKey(), entry.getValue(), nodesById, flows, flowIds, boundaries, agentRoutes);
             } catch (BpmnValidationException exception) {
                 errors.addAll(locate(exception, entry.getKey(), pointerById.get(entry.getKey())));
             }
         }
     }
 
-    private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate");
+    private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate",
+            "call-process");
 
     private static void addBoundary(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
-            List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries) {
+            List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries,
+            Map<String, List<AgentRouteMeta>> agentRoutes) {
         String type = node.path("type").asText();
         boolean agent = "agent".equals(type);
         List<BoundaryMeta> declared = new ArrayList<>();
@@ -1041,7 +1358,7 @@ public final class AplParser {
         for (String field : List.of("on_error", "on_timeout")) {
             if (present(node.path(field)) && !BOUNDARY_TYPES.contains(type)) {
                 throw validation(field, "node '" + nodeId + "' declares '" + field
-                        + "', which only agent, engine-task and human-input nodes support");
+                        + "', which only agent, engine-task, human-input and call-process nodes support");
             }
         }
         JsonNode onError = node.path("on_error");
@@ -1093,6 +1410,23 @@ public final class AplParser {
                 declared.add(new BoundaryMeta("outcome:" + outcome.name(), nodeId, BoundaryMeta.Kind.OUTCOME,
                         outcome.name(), null, outcome.target()));
             }
+        }
+        boolean routes = present(node.path("routes"));
+        if (routes) {
+            if (!agent) {
+                throw validation("routes", "node '" + nodeId + "' declares 'routes', which only agent nodes support");
+            }
+            if (node.hasNonNull("next")) {
+                throw validation("next", "agent node '" + nodeId + "' declares both 'next' and 'routes'; "
+                        + "with routes every exit is a route's 'next'");
+            }
+            List<AgentRouteMeta> parsed = parseRoutes(node, nodeId, nodesById);
+            for (AgentRouteMeta route : parsed) {
+                declared.add(new BoundaryMeta("route:" + route.name(), nodeId, BoundaryMeta.Kind.ROUTE,
+                        route.name(), null, route.target()));
+            }
+            agentRoutes.put(nodeId, parsed);
+            decides = true;
         }
         declared.removeIf(Objects::isNull);
         if (declared.isEmpty()) return;
@@ -1151,6 +1485,106 @@ public final class AplParser {
             parsed.add(new com.abada.engine.core.model.OutcomeMeta(name, comment.equals("required"), target));
         }
         return parsed;
+    }
+
+    /**
+     * The output contract of a routing agent: its result must name one of the
+     * declared routes in a required {@code route} property, described for the
+     * model. Merged into an object {@code output_schema}, or the whole contract
+     * when the node declares none. Route shapes are checked by
+     * {@link #parseRoutes}; here only well-formed entries are read.
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> withRouteContract(Map<String, Object> outputSchema, JsonNode routes, String nodeId) {
+        if (!routes.isObject() || routes.isEmpty()) return outputSchema;
+        List<String> names = new ArrayList<>();
+        StringBuilder description = new StringBuilder("The next step to take. Choose exactly one: ");
+        routes.properties().forEach(entry -> {
+            names.add(entry.getKey());
+            if (names.size() > 1) description.append("; ");
+            description.append(entry.getKey()).append(": ").append(entry.getValue().path("description").asText(""));
+        });
+        Map<String, Object> property = new LinkedHashMap<>();
+        property.put("type", "string");
+        property.put("enum", List.copyOf(names));
+        property.put("description", description.toString());
+        Map<String, Object> contract = new LinkedHashMap<>(outputSchema);
+        Object type = contract.get("type");
+        if (type != null && !"object".equals(type)) {
+            throw validation("output_schema", "agent node '" + nodeId + "' declares routes, so its output_schema must"
+                    + " describe an object (the engine adds the required 'route' property)");
+        }
+        contract.put("type", "object");
+        Map<String, Object> properties = contract.get("properties") instanceof Map<?, ?> declared
+                ? new LinkedHashMap<>((Map<String, Object>) declared) : new LinkedHashMap<>();
+        if (properties.containsKey(AgentRouteMeta.RESULT_PROPERTY)) {
+            throw validation("output_schema", "agent node '" + nodeId + "' declares routes, so the engine owns the"
+                    + " 'route' property; remove it from output_schema");
+        }
+        properties.put(AgentRouteMeta.RESULT_PROPERTY, property);
+        contract.put("properties", properties);
+        List<Object> required = contract.get("required") instanceof List<?> declared
+                ? new ArrayList<>(declared) : new ArrayList<>();
+        required.add(AgentRouteMeta.RESULT_PROPERTY);
+        contract.put("required", required);
+        return contract;
+    }
+
+    /**
+     * {@code routes: { <name>: { next, description, when? } }} of an agent node:
+     * the next steps its agent may choose from, each with its own exit.
+     */
+    static List<AgentRouteMeta> parseRoutes(JsonNode node, String nodeId, Map<String, JsonNode> nodesById) {
+        JsonNode routes = node.path("routes");
+        if (!present(routes)) return List.of();
+        if (!routes.isObject()) {
+            throw validation("routes", "agent node '" + nodeId + "' routes must be a mapping of route name to"
+                    + " {next, description, when}");
+        }
+        if (routes.size() < AgentRouteMeta.MIN_ROUTES || routes.size() > AgentRouteMeta.MAX_ROUTES) {
+            throw validation("routes", "agent node '" + nodeId + "' must declare between " + AgentRouteMeta.MIN_ROUTES
+                    + " and " + AgentRouteMeta.MAX_ROUTES + " routes");
+        }
+        List<AgentRouteMeta> parsed = new ArrayList<>();
+        var names = routes.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String field = "routes/" + name;
+            if (!name.matches(com.abada.engine.core.model.OutcomeMeta.NAME_PATTERN)) {
+                throw validation("routes", "agent node '" + nodeId + "' route '" + name
+                        + "' must be lowercase letters, digits and underscores, starting with a letter (max 32)");
+            }
+            JsonNode route = routes.path(name);
+            if (!route.isObject()) {
+                throw validation(field, "agent node '" + nodeId + "' route '" + name
+                        + "' must be a mapping with 'next' and 'description'");
+            }
+            String target = route.path("next").asText(null);
+            if (target == null || target.isBlank()) {
+                throw validation(field + "/next", "agent node '" + nodeId + "' route '" + name + "' declares no 'next'");
+            }
+            if (!nodesById.containsKey(target)) {
+                throw validation(field + "/next", "agent node '" + nodeId + "' route '" + name + "' next '" + target
+                        + "' is not a declared node");
+            }
+            String description = route.path("description").asText("").strip();
+            if (description.isEmpty() || description.length() > AgentRouteMeta.MAX_DESCRIPTION_LENGTH) {
+                throw validation(field + "/description", "agent node '" + nodeId + "' route '" + name
+                        + "' needs a description of 1 to " + AgentRouteMeta.MAX_DESCRIPTION_LENGTH
+                        + " characters: the agent chooses by it");
+            }
+            String when = route.hasNonNull("when") ? route.path("when").asText().strip() : null;
+            if (when != null && when.isEmpty()) {
+                throw validation(field + "/when", "agent node '" + nodeId + "' route '" + name + "' has an empty 'when'");
+            }
+            parsed.add(new AgentRouteMeta(name, description, when, target));
+        }
+        return parsed;
+    }
+
+    /** Process variable holding the route a routing agent took. */
+    public static String routeVariable(String nodeId) {
+        return nodeId.replaceAll("[^A-Za-z0-9_]", "_") + "_route";
     }
 
     /** Process variable holding a reviewer's comment on a human task decision. */

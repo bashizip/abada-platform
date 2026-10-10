@@ -16,7 +16,18 @@ public class IncidentEntity {
         /** A message wait was reached without a correlationKey variable to correlate on. */
         MISSING_CORRELATION_KEY,
         /** Task work failed its last attempt (or a user task was failed) and declares no on_error route. */
-        WORK_FAILED
+        WORK_FAILED,
+        /**
+         * An agent's write without an idempotency key was interrupted: it may or
+         * may not have happened, so it is never re-sent. An operator confirms the
+         * outcome when retrying.
+         */
+        TOOL_OUTCOME_UNKNOWN,
+        /**
+         * A call-process child failed or was cancelled, or could not start (inputs
+         * or depth), and the call declares no on_error route. Retrying starts a new child.
+         */
+        CHILD_FAILED
     }
 
     @Id

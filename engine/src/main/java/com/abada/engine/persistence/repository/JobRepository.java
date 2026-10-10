@@ -77,4 +77,7 @@ public interface JobRepository extends JpaRepository<JobEntity, String> {
             + "or (status = 'LEASED' and lease_expires_at <= :now)) "
             + "order by execution_timestamp, id limit :batchSize for update skip locked", nativeQuery = true)
     List<JobEntity> findClaimableForUpdate(@Param("now") Instant now, @Param("batchSize") int batchSize);
+
+    /** Whether a CHILD_DONE job already exists for this child (one per child, whatever its status). */
+    boolean existsByKindAndRelatedInstanceId(JobEntity.Kind kind, String relatedInstanceId);
 }

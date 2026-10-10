@@ -64,6 +64,7 @@ BPMN *pattern* it replaces with a simpler, safer shape.
 | `message-catch` | Message Catch | Intermediate Catch Event (message) | BPMN message catch — wait for a correlated message |
 | `timer` | Timer Catch | Intermediate Catch Event (timer, duration form) | BPMN timer catch — wait for a duration |
 | `signal` | Signal Catch | Intermediate Catch Event (signal) | BPMN signal catch — wait for a broadcast |
+| `call-process` | Call Process | Call Activity (notation only) | A governed child process; BPMN `callActivity` itself is not imported |
 
 > **What "replaced" means.** APL is not a BPMN dialect; it is the canonical
 > authoring format. The Studio canvas serializes to APL and the engine parses
@@ -196,7 +197,11 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `inputs` | map | no | Named bindings from process variables to prompt inputs, e.g. `payload: ${payload}`. |
 | `result_variable` | string | no | The variable the agent's output is written to. Defaults to `<nodeId>_result`. |
 | `output_schema` | map | no | Expected JSON shape of the response. The engine validates the result against it before any state changes; see `on_invalid_output`. |
-| `tools` | string[] | no | Tool identifiers the agent may use (e.g. `database.read`). Enforced against the worker allowlist. |
+| `tools` | list | no | Tools from the project's tool servers: `crm/get_customer`, or `{ ref: crm/refund, policy: approval_required, approvers: [finance] }` to tighten the server's policy (never loosen it) and name who approves its calls (an `approval_required` tool needs approvers here or on its server: `ABADA-APL-TOOL-003`). Resolved and frozen at deployment; see the APL specification §3.2.1. A name without a server is advisory only and warns. |
+| `max_turns` | integer | no | 1–32, default 8. Model calls one attempt may make while using tools. |
+| `max_tokens_total` | integer | no | Tokens the whole task may use across its attempts. Default 50 000 when the node binds tools, otherwise no limit. |
+| `budget_usd` | number | no | Engine-computed cost the whole task may reach across its attempts. A model without a price (Settings → Model Prices) cannot run under a budget. Hitting any limit takes `on_error` with code `AGENT_BUDGET_EXHAUSTED`. |
+| `evidence` | `{ payloads, retention_days }` | no | What the step journal keeps of this agent's prompts, tool arguments and results: `none`, `redacted` or `full`, for `retention_days`. Can only be stricter than the project's evidence policy. |
 | `confidence_threshold` | number | no | 0–100. Below this confidence the output is treated as a low-confidence result. |
 | `temperature` | number | no | 0–2. Higher = more creative, lower = more deterministic. Default 0.2. |
 | `max_tokens` | integer | no | Cap on the model response size. Default 2048. |
@@ -208,7 +213,9 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `on_invalid_output` | nodeId | no | Where to go when the result does not match `output_schema`. |
 | `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the worker reports an error code, or when the last attempt fails (code `WORK_FAILED`). Without it a last failure opens an incident. |
 | `on_timeout` | `{ after, then }` | no | If the step is not done within `after` (e.g. `PT1H`), its work is cancelled and the flow continues at `then`. |
-| `next` | nodeId | yes | The step that runs after the agent completes. |
+| `delegates` | list of `{process, outputs, approval?, approvers?, description?, max_depth?}` | no | Processes the agent may start as a governed child through the engine-provided tool `delegate:<process>`; pinned at deployment, inputs checked against the child's declared variables, only `outputs` come back, `approval: required` goes to `approvers` first (APL specification §3.2.3). |
+| `routes` | map of `{next, description, when?}` | no | 2–8 next steps the agent chooses from by `description`; the engine adds a required `route` enum to the output contract, vetoes a route whose CEL `when` is false (invalid output), writes `<id>_route` and records `ROUTE_TAKEN`. Replaces `next` (APL specification §2.8). |
+| `next` | nodeId | yes, unless `routes` | The step that runs after the agent completes. |
 
 **Example.**
 
@@ -259,6 +266,46 @@ topic. APL replaces the Camunda external-task pattern with a typed node.
   description: Persist decision record
   service: decision.record
   next: done
+```
+
+---
+
+### 4.4a Call Process — `call-process`
+
+**What it does.** Starts a governed child instance of another process in the
+same project, waits for it, and continues with only the variables the node
+maps back. The child runs under its own definition version, locks and
+history; nothing else of the parent leaks in or out.
+
+**When to use it.** A sub-case with its own lifecycle and reviewers (a fraud
+check, a KYC refresh) that several processes reuse.
+
+**BPMN equivalent.** Call Activity. Studio draws it that way; importing a BPMN
+`callActivity` is still rejected.
+
+**Properties.**
+
+| Property | Type | Required | What it does |
+| --- | --- | --- | --- |
+| `process` | string | yes | Key of the process to call, in this project. Its current version is **pinned when this process is deployed**; redeploy this process to call a newer one. A process cannot call itself. |
+| `inputs` | map | no | Child variable → expression on this instance's variables, e.g. `case_id: ${case.id}`. When the child declares `metadata.variables`, only those names are accepted and values must fit their types. Nothing else is passed. |
+| `outputs` | map | yes | This instance's variable → child variable copied back when the child completes. Nothing else returns. |
+| `max_depth` | integer | no | 1–10. A stricter nesting limit than the engine's `abada.call-process.max-depth` (default 4). |
+| `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the child fails or is cancelled (`CHILD_FAILED`), its inputs do not fit (`CHILD_INPUT_INVALID`), the depth limit is reached (`CHILD_DEPTH_EXCEEDED`) or it cannot start (`CHILD_START_REFUSED`). Without it, a `CHILD_FAILED` incident opens; retrying it starts a new child. |
+| `on_timeout` | `{ after, then }` | no | If the child has not completed within `after`, it is cancelled and the flow continues at `then`. |
+| `next` | nodeId | yes | The step after the child completes. |
+
+**Example.**
+
+```yaml
+- id: fraud_check
+  type: call-process
+  process: fraud_check
+  inputs: { case_id: "${case_id}", amount: "${amount}" }
+  outputs: { fraud_verdict: verdict }
+  on_error: manual_review
+  on_timeout: { after: PT4H, then: manual_review }
+  next: decide
 ```
 
 ---

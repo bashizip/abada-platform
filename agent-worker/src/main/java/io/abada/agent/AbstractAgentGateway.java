@@ -38,13 +38,15 @@ public abstract class AbstractAgentGateway implements AgentGateway {
      * {@code ${path}} placeholder becomes a reference to an {@code <input>} block.
      * Workflow data never enters the system message.
      */
-    protected String renderPrompt(AgentWorkDescriptor work, Map<String, Object> variables) {
+    protected static String renderPrompt(AgentWorkDescriptor work, Map<String, Object> variables) {
         String prompt = blankToDefault(work.prompt(), "Process the supplied workflow inputs.");
         String instruction = PLACEHOLDER.matcher(prompt).replaceAll(match ->
                 java.util.regex.Matcher.quoteReplacement("<input name=\"" + match.group(1) + "\"/>"));
         StringBuilder system = new StringBuilder(SYSTEM_PREAMBLE).append("\n\n").append(instruction);
-        if (work.tools() != null && !work.tools().isEmpty()) {
-            system.append("\nAllowed tool identifiers: ").append(String.join(", ", work.tools()))
+        List<String> advisory = work.tools() == null ? List.of()
+                : work.tools().stream().filter(tool -> !tool.contains("/")).toList();
+        if (!advisory.isEmpty()) {
+            system.append("\nAllowed tool identifiers: ").append(String.join(", ", advisory))
                     .append(". Return a result; do not claim an unperformed side effect.");
         }
         if (work.outputSchema() != null && !work.outputSchema().isEmpty()) {
@@ -58,7 +60,7 @@ public abstract class AbstractAgentGateway implements AgentGateway {
     }
 
     /** User message: one {@code <input>} block per selected input, values JSON-encoded. */
-    protected String renderInputs(Map<String, Object> inputs) {
+    protected static String renderInputs(Map<String, Object> inputs) {
         StringBuilder user = new StringBuilder();
         for (Map.Entry<String, Object> input : inputs.entrySet()) {
             Map<String, Object> scoped = new LinkedHashMap<>();
@@ -72,7 +74,7 @@ public abstract class AbstractAgentGateway implements AgentGateway {
     }
 
     /** Emits nested {@code <input name="a.b">} blocks so prompt paths into an input resolve. */
-    private void addReferencedPaths(StringBuilder user, String prefix, Object value) {
+    private static void addReferencedPaths(StringBuilder user, String prefix, Object value) {
         if (!(value instanceof Map<?, ?> map) || prefix.chars().filter(c -> c == '.').count() >= 4) return;
         map.forEach((key, entry) -> {
             String path = prefix + "." + key;
@@ -87,7 +89,7 @@ public abstract class AbstractAgentGateway implements AgentGateway {
      * name. For older engines that send all variables, fall back to resolving
      * each input's path; with no declared inputs, nothing extra is added.
      */
-    protected Map<String, Object> selectInputs(AgentWorkDescriptor work, Map<String, Object> variables) {
+    protected static Map<String, Object> selectInputs(AgentWorkDescriptor work, Map<String, Object> variables) {
         if (work.inputs() == null || work.inputs().isEmpty()) return variables == null ? Map.of() : variables;
         Map<String, Object> selected = new LinkedHashMap<>();
         work.inputs().forEach((name, expression) -> {
@@ -129,19 +131,48 @@ public abstract class AbstractAgentGateway implements AgentGateway {
 
     protected AgentResult executeChatCompletion(URI targetUri, String apiKey, String model,
                                                  AgentWorkDescriptor work, Map<String, Object> variables) throws Exception {
+        List<Map<String, Object>> messages = List.of(
+                Map.of("role", "system", "content", renderPrompt(work, variables)),
+                Map.of("role", "user", "content", renderInputs(selectInputs(work, variables))));
+        ChatTurn turn = sendChat(targetUri, apiKey, model, work, messages, List.of());
+        if (turn.content() == null || turn.content().isBlank()) {
+            throw new AgentExecutionException(provider() + " gateway returned no assistant content");
+        }
+        AgentResult decoded = decodeResult(turn.content(), work);
+        return new AgentResult(decoded.value(), decoded.confidence(), turn.promptTokens(), turn.completionTokens());
+    }
+
+    /**
+     * One {@code /chat/completions} call. With tools, they are offered as
+     * functions and {@code response_format} is not sent (providers differ on
+     * combining them; the system prompt still asks for the schema and the
+     * engine validates the final answer). Errors map to the gateway exceptions:
+     * availability errors let the worker switch model or defer.
+     */
+    protected ChatTurn sendChat(URI targetUri, String apiKey, String model, AgentWorkDescriptor work,
+            List<Map<String, Object>> messages, List<ToolSpec> tools) throws Exception {
         if (apiKey == null || apiKey.isBlank()) {
             throw new AgentConfigurationException(provider() + " API key is not configured for model '" + model
                     + "'. Add the provider and its API key in Studio Settings > AI Providers.");
         }
         long timeoutMs = work.timeoutMs() == null ? 60_000L : work.timeoutMs();
-        String prompt = renderPrompt(work, variables);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
-        body.put("messages", List.of(
-                Map.of("role", "system", "content", prompt),
-                Map.of("role", "user", "content", renderInputs(selectInputs(work, variables)))
-        ));
-        if (work.outputSchema() != null && !work.outputSchema().isEmpty()) {
+        body.put("messages", messages);
+        if (tools != null && !tools.isEmpty()) {
+            List<Map<String, Object>> functions = new java.util.ArrayList<>();
+            for (ToolSpec tool : tools) {
+                Map<String, Object> function = new LinkedHashMap<>();
+                function.put("name", tool.name());
+                if (tool.description() != null && !tool.description().isBlank()) {
+                    function.put("description", tool.description());
+                }
+                function.put("parameters", tool.parameters() == null || tool.parameters().isEmpty()
+                        ? Map.of("type", "object", "properties", Map.of()) : tool.parameters());
+                functions.add(Map.of("type", "function", "function", function));
+            }
+            body.put("tools", functions);
+        } else if (work.outputSchema() != null && !work.outputSchema().isEmpty()) {
             Object format = config.structuredOutput().responseFormat(work.outputSchema());
             if (format != null) body.put("response_format", format);
         }
@@ -182,16 +213,24 @@ public abstract class AbstractAgentGateway implements AgentGateway {
         }
 
         JsonNode tree = JSON.readTree(response.body());
-        JsonNode contentNode = tree.path("choices").path(0).path("message").path("content");
-        if (!contentNode.isTextual() || contentNode.asText().isBlank()) {
+        JsonNode message = tree.path("choices").path(0).path("message");
+        String content = message.path("content").isTextual() ? message.path("content").asText() : null;
+        List<ToolCall> calls = new java.util.ArrayList<>();
+        for (JsonNode call : message.path("tool_calls")) {
+            JsonNode function = call.path("function");
+            if (!function.path("name").isTextual()) continue;
+            JsonNode arguments = function.path("arguments");
+            calls.add(new ToolCall(call.path("id").asText("call_" + calls.size()), function.path("name").asText(),
+                    arguments.isTextual() ? arguments.asText() : arguments.isMissingNode() ? "{}" : arguments.toString()));
+        }
+        if ((content == null || content.isBlank()) && calls.isEmpty()) {
             throw new AgentExecutionException(provider() + " gateway returned no assistant content");
         }
-        AgentResult decoded = decodeResult(contentNode.asText(), work);
         JsonNode usage = tree.path("usage");
         Integer promptTokens = usage.path("prompt_tokens").isNumber() ? usage.path("prompt_tokens").asInt() : null;
         Integer completionTokens = usage.path("completion_tokens").isNumber()
                 ? usage.path("completion_tokens").asInt() : null;
-        return new AgentResult(decoded.value(), decoded.confidence(), promptTokens, completionTokens);
+        return new ChatTurn(content, calls, promptTokens, completionTokens);
     }
 
     /** Longest Retry-After honoured; a provider asking for longer is re-checked after this. */
@@ -257,7 +296,7 @@ public abstract class AbstractAgentGateway implements AgentGateway {
      * as-is so the engine can reject it as {@code INVALID_OUTPUT}. The worker no
      * longer gates on {@code confidence_threshold}: the engine is authoritative.
      */
-    protected AgentResult decodeResult(String content, AgentWorkDescriptor work) throws Exception {
+    protected static AgentResult decodeResult(String content, AgentWorkDescriptor work) throws Exception {
         if (work.outputSchema() == null || work.outputSchema().isEmpty()) {
             return new AgentResult(content, null);
         }
@@ -274,7 +313,7 @@ public abstract class AbstractAgentGateway implements AgentGateway {
         return new AgentResult(JSON.convertValue(parsed, Object.class), confidence);
     }
 
-    protected String stripFence(String value) {
+    protected static String stripFence(String value) {
         if (value == null || value.isBlank()) return "";
         String content = value.strip();
         int fence = content.indexOf("```");

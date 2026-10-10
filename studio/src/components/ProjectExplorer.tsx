@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Archive, ChevronRight, FileJson, FileText, FileUp, Folder,
   FolderInput, FolderPlus, FolderTree, Download, Loader2, Lock, Pencil, Plus,
-  RefreshCw, Trash2, X, Check,
+  RefreshCw, Trash2, Wrench, X, Check,
 } from 'lucide-react';
 import {
   ProjectAPI, ProjectResourceContent, ProjectTreeNode,
@@ -42,7 +43,7 @@ interface MoveTarget {
   id: string;
   revision: number;
   display: string;
-  resourceKind?: 'FORM' | 'RESOURCE';
+  resourceKind?: ResourceKind;
 }
 
 interface NewResourceState {
@@ -471,8 +472,8 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
   };
 
   const renderResourceRow = (node: ProjectTreeNode, depth: number): React.ReactElement => {
-    const kind = node.status === 'FORM' ? 'FORM' : 'RESOURCE';
-    const Icon = kind === 'FORM' ? FileJson : FileText;
+    const kind: ResourceKind = node.status === 'FORM' || node.status === 'TOOL_SERVER' ? node.status : 'RESOURCE';
+    const Icon = kind === 'FORM' ? FileJson : kind === 'TOOL_SERVER' ? Wrench : FileText;
     return (
       <div key={node.id} className="group">
         <div
@@ -480,7 +481,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => void openPreview(node)}
         >
-          <Icon className={`w-4 h-4 shrink-0 ${kind === 'FORM' ? 'text-[#2A9D8F]' : 'text-[#9D4EDD]'}`} />
+          <Icon className={`w-4 h-4 shrink-0 ${kind === 'FORM' ? 'text-[#2A9D8F]' : kind === 'TOOL_SERVER' ? 'text-[#F4A261]' : 'text-[#9D4EDD]'}`} />
           <span className="text-xs truncate flex-1">{node.name}</span>
           <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
             <button title="Rename" disabled={busy}
@@ -697,10 +698,15 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                 <label className="text-xs text-[#A89F91] block font-medium">Kind</label>
                 <select value={newResource.kind}
                   disabled={targetDomain === 'forms'}
-                  onChange={(event) => setNewResource({ ...newResource, kind: event.target.value as ResourceKind })}
+                  onChange={(event) => {
+                    const kind = event.target.value as ResourceKind;
+                    setNewResource({ ...newResource, kind,
+                      contentType: kind === 'TOOL_SERVER' ? 'application/yaml' : newResource.contentType });
+                  }}
                   className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] disabled:opacity-50">
                   <option value="FORM">FORM</option>
                   <option value="RESOURCE">RESOURCE</option>
+                  <option value="TOOL_SERVER">TOOL_SERVER (MCP)</option>
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -834,9 +840,8 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
         </div>
       )}
 
-      {renderMovePicker()}
-      {renderNewResourceModal()}
-      {renderPreview()}
+      {/* Dialogs render on the body: the sidebar's stacking context would put them under the canvas. */}
+      {createPortal(<>{renderMovePicker()}{renderNewResourceModal()}{renderPreview()}</>, document.body)}
     </div>
   );
 };

@@ -68,14 +68,16 @@ Full specifications: [`m2-task-specs.md`](m2-task-specs.md) (added as tasks star
 
 Full specifications: [`m3-task-specs.md`](m3-task-specs.md).
 
-- [ ] E7 Tool registry: `TOOL_SERVER` project resources (MCP), per-tool policy read / write / approval-required, deploy-time resolution
-- [ ] E8 Tool loop in the worker with `max_turns`, `max_tokens_total`, `budget_usd`
-- [ ] E9 Journaled steps: `POST /v1/external-tasks/{id}/steps`; resume after the last committed step; idempotency keys on write tools
-- [ ] E10 Approval-required tools suspend the agent and create a human task
-- [ ] E11 Evidence and cost: `agent_steps` with retention/redaction policy, encrypted at rest; per-model price table
-- [ ] E12 Studio: SSE from the outbox; agent-step inspector
-- [ ] E13 Routing agents: `routes:` validated by the engine
-- [ ] E20 Governed delegation: `call-process` node on the E2 token model (child linked by `parent_instance_id` / `parent_token_id`, typed inputs and outputs, `max_depth`); agents may declare `delegates:` and propose a delegation admitted only through an engine command (declared target, schema-checked inputs, optional `approval: required`); agent identity (id, prompt version, model) recorded on every step and delegation. Done when an engine kill mid-child neither duplicates nor orphans it and lineage shows in audit and Studio
+- [x] E7 Tool registry: `TOOL_SERVER` project resources (MCP), per-tool policy read / write / approval-required, deploy-time resolution
+- [x] E8 Tool loop in the worker with `max_turns`, `max_tokens_total`, `budget_usd`
+- [x] E9 Journaled steps: `POST /v1/external-tasks/{id}/steps`; resume after the last committed step; idempotency keys on write tools
+- [x] E10 Approval-required tools suspend the agent and create a human task
+- [x] E11 Evidence and cost: `agent_steps` with retention/redaction policy, encrypted at rest; per-model price table
+- [x] E12 Studio: SSE from the outbox; agent-step inspector
+- [x] E13 Routing agents: `routes:` validated by the engine
+- [x] E20 Governed delegation: `call-process` node on the E2 token model (child linked by `parent_instance_id` / `parent_token_id`, typed inputs and outputs, `max_depth`); agents may declare `delegates:` and propose a delegation admitted only through an engine command (declared target, schema-checked inputs, optional `approval: required`); agent identity (id, prompt version, model) recorded on every step and delegation. Done when an engine kill mid-child neither duplicates nor orphans it and lineage shows in audit and Studio
+
+Released as `1.1.0-rc.2` on 2026-10-10 ([gate report](1.1-rc.2-gate-report-2026-10-10.md)).
 
 The engine never calls tool servers; MCP lives in the worker.
 

@@ -84,6 +84,42 @@ public final class AbadaWorkerClient {
         send("/" + segment(taskId) + "/complete", body, options);
     }
 
+    /**
+     * Journals one agent step for the task this worker holds. Record a write
+     * as {@code STARTED} before calling the tool (with the returned
+     * {@code idempotencyKey}, when there is one) and again when it finishes.
+     * The engine computes digests itself; a refused step raises a
+     * {@link WorkerProtocolException} whose {@code reason()} names the rule.
+     *
+     * @param request what is sent (tool arguments, or the model call's input summary)
+     * @param result what came back; null while {@code STARTED}
+     */
+    public AgentStep recordStep(String taskId, String workerId, int attempt, int sequence, String kind,
+            String state, String toolRef, Object request, Object result, String errorType, String model,
+            String promptVersion, Integer promptTokens, Integer completionTokens) {
+        java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("workerId", workerId);
+        body.put("attempt", attempt);
+        body.put("sequence", sequence);
+        body.put("kind", kind);
+        body.put("state", state);
+        if (toolRef != null) body.put("toolRef", toolRef);
+        body.put("request", request);
+        if (result != null) body.put("result", result);
+        if (errorType != null) body.put("errorType", errorType);
+        if (model != null) body.put("model", model);
+        if (promptVersion != null) body.put("promptVersion", promptVersion);
+        if (promptTokens != null) body.put("promptTokens", promptTokens);
+        if (completionTokens != null) body.put("completionTokens", completionTokens);
+        HttpResponse<String> response = send("/" + segment(taskId) + "/steps", body, RequestOptions.defaults());
+        try {
+            return objectMapper.readValue(response.body(), AgentStep.class);
+        } catch (IOException exception) {
+            throw new WorkerProtocolException(response.statusCode(), "INVALID_RESPONSE",
+                    "Could not decode agent step response");
+        }
+    }
+
     public void heartbeat(String taskId, String workerId, Duration lockDuration, RequestOptions options) {
         send("/" + segment(taskId) + "/heartbeat",
                 Map.of("workerId", workerId, "lockDuration", lockDuration.toMillis()), options);
@@ -123,6 +159,23 @@ public final class AbadaWorkerClient {
         send("/" + segment(taskId) + "/failure", body, options);
     }
 
+    /**
+     * Reports a final, routable failure ({@code AGENT_BUDGET_EXHAUSTED},
+     * {@code TOOL_CONTRACT_MISMATCH}, …): the engine never retries it and takes
+     * the node's {@code on_error} route catching the code, or opens an incident.
+     */
+    public void failWithCode(String taskId, String workerId, String errorCode, String message, String details,
+            AgentAttemptMetadata agent, RequestOptions options) {
+        java.util.LinkedHashMap<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("workerId", workerId);
+        body.put("errorMessage", message);
+        body.put("errorDetails", details);
+        body.put("retries", 0);
+        body.put("errorCode", errorCode);
+        if (agent != null) body.put("agent", agent);
+        send("/" + segment(taskId) + "/failure", body, options);
+    }
+
     public void bpmnError(String taskId, String workerId, String errorCode, String errorMessage,
             Map<String, Object> variables, RequestOptions options) {
         send("/" + segment(taskId) + "/bpmn-error",
@@ -159,6 +212,26 @@ public final class AbadaWorkerClient {
         } catch (IOException exception) {
             throw new WorkerProtocolException(response.statusCode(), "INVALID_RESPONSE",
                     "Could not decode AI credentials response");
+        }
+    }
+
+    /**
+     * The credential of a tool server the locked task is bound to. The engine
+     * issues it only to the worker holding the task's lease, so fetch it after
+     * {@code fetchAndLock} and drop it when the task ends. Callers must never
+     * log the secret.
+     */
+    public ToolCredential toolCredential(String taskId, String workerId, String server) {
+        String path = "/v1/external-tasks/" + segment(taskId) + "/tool-credentials/" + segment(server)
+                + "?workerId=" + segment(workerId);
+        HttpResponse<String> response = sendEngine(path, "GET", null);
+        try {
+            return objectMapper.readerFor(ToolCredential.class)
+                    .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(response.body());
+        } catch (IOException exception) {
+            throw new WorkerProtocolException(response.statusCode(), "INVALID_RESPONSE",
+                    "Could not decode tool credential response");
         }
     }
 
@@ -231,8 +304,9 @@ public final class AbadaWorkerClient {
     private WorkerProtocolException protocolError(HttpResponse<String> response) {
         try {
             JsonNode error = objectMapper.readTree(response.body());
+            String reason = error.path("details").path("reason").asText(null);
             return new WorkerProtocolException(response.statusCode(), error.path("code").asText("HTTP_ERROR"),
-                    error.path("message").asText("Engine rejected worker request"));
+                    error.path("message").asText("Engine rejected worker request"), reason);
         } catch (Exception ignored) {
             return new WorkerProtocolException(response.statusCode(), "HTTP_ERROR", "Engine rejected worker request");
         }

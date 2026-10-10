@@ -28,6 +28,10 @@ public class JobEntity {
     @Column(name = "boundary_id")
     private String boundaryId;
 
+    /** For CHILD_DONE: the child instance that ended (V29). */
+    @Column(name = "related_instance_id")
+    private String relatedInstanceId;
+
     private Instant executionTimestamp;
 
     @Enumerated(EnumType.STRING)
@@ -50,7 +54,8 @@ public class JobEntity {
     public enum Status { AVAILABLE, LEASED, COMPLETED, FAILED, CANCELLED }
 
     /** What a due job does: resume a timer catch event, fire a task's on_timeout, or escalate a task. */
-    public enum Kind { EVENT, BOUNDARY_TIMEOUT, SLA }
+    /** CHILD_DONE: a child started by a call-process node ended; resume (or route) the parent token. */
+    public enum Kind { EVENT, BOUNDARY_TIMEOUT, SLA, CHILD_DONE }
 
     public JobEntity() {
         this.id = UUID.randomUUID().toString();
@@ -113,6 +118,9 @@ public class JobEntity {
 
     public Kind getKind() { return kind; }
     public void setKind(Kind kind) { this.kind = kind; }
+    public String getRelatedInstanceId() { return relatedInstanceId; }
+    public void setRelatedInstanceId(String value) { this.relatedInstanceId = value; }
+
     public String getBoundaryId() { return boundaryId; }
     public void setBoundaryId(String boundaryId) { this.boundaryId = boundaryId; }
     public String getTokenId() { return tokenId; }

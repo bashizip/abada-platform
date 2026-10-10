@@ -72,6 +72,15 @@ export function compileAPLToBPMN(apl: APLDocument): string {
             }
           }
         };
+      case 'call-process':
+        // Notation only: the engine runs APL call-process natively and rejects imported callActivity.
+        return {
+          'bpmn:callActivity': {
+            '@_id': node.id,
+            '@_name': node.description || 'Call process',
+            '@_calledElement': (node as { process?: string }).process ?? '',
+          }
+        };
       case 'engine-task':
         return {
           'bpmn:serviceTask': {

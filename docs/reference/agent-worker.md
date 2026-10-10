@@ -90,11 +90,58 @@ JSON on its `agent_metadata` column, so model/tool/confidence facts survive
 restarts and are ready for the live instance view, where the achieved score
 is rendered against the declared threshold.
 
+## Tool loop
+
+An agent whose node binds tools (see the APL specification §3.2.1) runs a
+bounded conversation instead of a single call:
+
+- Before the first model call the worker lists each bound server's tools (MCP
+  `tools/list` over streamable HTTP, with the project's tool credential as a
+  bearer token). A bound tool the server no longer offers, or whose input
+  schema no longer matches the document's `input_schema_sha256`, ends the
+  attempt with the routable code `TOOL_CONTRACT_MISMATCH`.
+- Only the bound tools are offered to the model, as functions named
+  `<server>__<tool>`. A call to anything else, including a tool named in a
+  tool result, is answered with an error turn and never runs. Tool results are
+  passed only as tool messages, capped at `ABADA_AGENT_MAX_TOOL_RESULT_BYTES`
+  (default 65536) and marked when truncated; they cannot change the tools,
+  the limits or the result variable.
+- Every model call is journaled `STARTED` before it runs and `COMPLETED` (with
+  tokens) after; a read tool is journaled when it returns; a write is journaled
+  `STARTED` first and sent with the engine's per-step key (`Idempotency-Key`
+  header and `_meta.idempotencyKey`), then finished.
+- Delegates in the descriptor are offered as functions `delegate__<process>`.
+  Calling one journals a `DELEGATION` step (`PROPOSED` first when it needs
+  approval); the engine starts the child and parks the task, and the worker
+  gives the slot back. The next lease hands the model the child's declared
+  outputs, or the status it ended with. Engine refusals of the inputs or the
+  depth are answered to the model as the tool's error.
+- An `approval_required` call is journaled `PROPOSED`: the engine parks the
+  task and opens an approval for the tool's approver groups, and the worker
+  gives the slot back without completing or failing. After a person decides,
+  the next lease resumes the same conversation: an approved call runs once,
+  with exactly the proposed arguments and the engine's key; a rejected one is
+  answered to the model with the person's comment.
+- Limits: `max_turns` per attempt, `max_tokens_total` and `budget_usd` for the
+  whole task. The worker stops early; the engine refuses the next model call
+  either way. Both end the attempt with the routable code
+  `AGENT_BUDGET_EXHAUSTED`. A budget with an unpriced model fails closed.
+- A lost lease, a deferral or a crash resumes the same attempt from the
+  journal: finished calls are reused (no model turn is paid for twice), a
+  started model or read call is re-run, a started write is re-sent with its
+  key. A tool server outage during a write defers the attempt rather than
+  failing it, so the write is resumed with its key, never re-decided.
+- Tool calls run in order; `ABADA_AGENT_TOOL_TIMEOUT_MS` (default 30000)
+  bounds each MCP request. The MCP client is the official MCP Java SDK
+  (`io.modelcontextprotocol.sdk`, MIT).
+
 ## Safety and delivery
 
-- Requested tools must all appear in `ABADA_AGENT_ALLOWED_TOOLS`. The v1
-  sidecar does not execute arbitrary tool code; allowed identifiers are
-  provided as model context for adapters added deliberately by operators.
+- `ABADA_AGENT_ALLOWED_TOOLS` lists the tool servers this worker may reach.
+  A `<server>/<tool>` reference is allowed when its server (or the exact
+  reference) is listed, so a deployment can never widen what the operator
+  allowed; a name without a server must be listed exactly. A task requesting
+  anything else fails before any model call.
 - Concurrency and locks: each locked task runs on its own virtual thread,
   bounded by `ABADA_AGENT_MAX_TASKS` (default 4). The worker fetches only as
   many tasks as it has free slots. While a task runs, the worker extends its

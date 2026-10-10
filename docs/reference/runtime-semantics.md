@@ -176,6 +176,20 @@ should use external tasks and an idempotent worker operation.
   their model — and history records `fromModel`, `toModel`, `reason` and the
   actor. The output contract (schema, confidence threshold, tools) is
   unchanged.
+- `TOOL_OUTCOME_UNKNOWN` opens when an agent's write tool, whose server takes
+  no idempotency key (`idempotency: none`), was journaled `STARTED` and its
+  lease was lost before the result came back: the write may or may not have
+  happened, so the engine never hands it out again. The step becomes
+  `OUTCOME_UNKNOWN`, the external task `FAILED`, and no boundary routes it.
+  Retrying requires `{ "toolOutcome": "PERFORMED" | "NOT_PERFORMED" }`: the step
+  is finished with the confirmed fate, which becomes the call's result (the
+  tool's own answer is lost), the task reopens on the **same** attempt, and the
+  agent resumes from its journal and reads that result. The confirming actor is
+  recorded with the incident; an approved call keeps its approver. A job retry
+  (`POST .../jobs/{jobId}/retries`) is refused while such a step is open.
+- `CHILD_FAILED` opens when a call-process child fails or is cancelled, or
+  cannot start, and the call declares no `on_error`; the token stops at the
+  call. Retrying restarts it there, which starts a new child.
 - `POST .../incidents/{incidentId}/retry` restarts the stopped token at its
   activity in one transaction: a loop step begins a fresh pass, a message wait
   re-reads `correlationKey` (set it first with the variables endpoint). The
@@ -308,6 +322,76 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   The model that produced a result is recorded in the attempt metadata and the
   step's `EXTERNAL_TASK_COMPLETED` / `EXTERNAL_TASK_FAILED` history, with
   `requestedModel` when a fallback replaced the declared model.
+- **Coded failures.** A worker failure carrying `errorCode` is final: the task
+  is not retried; the node's `on_error` catching that code (or the catch-all)
+  is taken with `<id>_error_code` set, otherwise a `WORK_FAILED` incident opens
+  whose message names the code.
+- **Agent limits.** `max_turns` (per attempt), `max_tokens_total` and
+  `budget_usd` (per task, across attempts) are checked when a model call is
+  journaled; past a limit the step is refused (`TURN_LIMIT`, `TOKEN_LIMIT`,
+  `BUDGET`, `BUDGET_UNPRICED`) and the worker reports `AGENT_BUDGET_EXHAUSTED`.
+  A failure never starts a new attempt while a write is still `STARTED`.
+- **Attempts and the step journal (agent work).** An agent task is on an
+  `attempt` (1 at first). A counted failure that will run again, or an
+  operator retry, starts the next attempt (a fresh conversation); a lost lease
+  or a deferral resumes the same one. The worker holding the lease journals
+  every model and tool call with `POST /v1/external-tasks/{id}/steps`, which
+  locks only the external-task row, never advances the process and never
+  holds the instance lock. The engine accepts only sequence `last + 1` (an
+  identical replay is idempotent, a divergent one is `409`), only tools
+  frozen in the definition's bindings (`403` otherwise), an
+  `approval_required` call only as a `PROPOSED` step (see below), and at most
+  256 steps per task. A write
+  must be journaled `STARTED` before it runs; when its server accepts a key,
+  the engine returns `sha256(externalTaskId:attempt:sequence)` as its
+  idempotency key, the same key on every resumed lease. Fetch-and-lock
+  returns the attempt's steps (with decrypted payloads, to the lease holder
+  only) and the writes earlier attempts completed; a write in a later
+  attempt with the same tool and arguments (whatever call id the model gave
+  it) is answered from the journal (`reused`) instead of being sent again.
+  Retired work answers `410`. Digests are computed by the engine from
+  canonical JSON; payloads are AES-GCM encrypted at rest. Evidence:
+  [`PostgresAgentStepJournalTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresAgentStepJournalTest.java).
+- **Agent routes.** An agent node with `routes` leaves only through the route
+  its agent names in the result's `route`, after the output contract (which
+  requires a declared route) and the confidence threshold are checked. A
+  route's CEL `when` is evaluated in the completion command over the instance
+  variables and the result; `false` turns the result into invalid output, an
+  evaluation error rejects the completion with nothing changed. The chosen
+  route writes `<id>_route`, leaves through its boundary in the same command
+  and records `ROUTE_TAKEN` with the confidence. Evidence:
+  [`AplRoutingRuntimeTest`](../../engine/src/test/java/com/abada/engine/core/agent/AplRoutingRuntimeTest.java).
+- **Agent delegation.** Journaling a `STARTED` delegation checks the declared
+  target, the inputs against the pinned child's declared variables and the
+  depth, then in the same step command parks the agent's work
+  (`AWAITING_CHILD`), locks the parent instance and creates the child with
+  the agent's identity in `started_by_agent` (external task, then parent, then
+  child). The child's end runs through the same idempotent `CHILD_DONE` job as
+  `call-process`; for a delegation it locks the agent's external task, then
+  the step, finishes the step with the declared outputs (or the child's
+  status) and reopens the work. The parent token never moves. A boundary,
+  cancel or failure of the parent cancels the child inline and retires the
+  parked work; a child ended by its parent schedules no resume. Evidence:
+  [`PostgresAgentDelegationTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresAgentDelegationTest.java).
+- **Tool approvals.** Journaling a `PROPOSED` call parks the agent's work in
+  the same command: the external task becomes `AWAITING_APPROVAL` (no lease,
+  never acquired) and a human task of kind `TOOL_APPROVAL` opens for the
+  binding's approver groups, on the agent's token but not as a process node:
+  `TOOL_APPROVAL_REQUESTED` goes to history and the outbox with the tool, the
+  step and the argument digest, never the arguments. Deciding it
+  (`POST .../tasks/{id}/decision`, outcome `approve` or `reject`, a comment
+  required to reject) locks the external task, then the approval task, never
+  the instance, and never moves the token: the step becomes `APPROVED` or
+  `REJECTED` with the actor and time, and the work is acquirable again on the
+  same attempt. Only candidates decide; a worker credential never does (`403`)
+  and a project role is not enough. Completing or failing an approval like a
+  node's task is refused. An approved call runs only with the approved request
+  digest (`DIVERGENT_STEP` otherwise). A timeout boundary, a cancel or the end
+  of the instance retires both the parked work and the approval (deciding it
+  then is `410`). `approval_sla_hours` marks a late approval escalated
+  (`TASK_SLA_BREACHED`) without changing its candidates. Evidence:
+  [`PostgresToolApprovalTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresToolApprovalTest.java),
+  [`ToolApprovalApiTest`](../../engine/src/test/java/com/abada/engine/api/ToolApprovalApiTest.java).
 - Worker death mid-task is served by lease expiry: an expired `LOCKED` task is
   re-acquired with `SKIP LOCKED`, so another worker retries it without the
   engine re-creating work or advancing state twice. Restarting the engine does
@@ -318,6 +402,63 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   written. Resuming re-admits the same worker completion; a cancelled instance
   can never advance, even after its lease passes to another worker. Evidence:
   [`AgentWorkerResilienceTest`](../../engine/src/test/java/com/abada/engine/core/AgentWorkerResilienceTest.java).
+
+## Agent evidence and cost
+
+- When a step is journaled the engine stores two encrypted copies of its
+  payloads: the worker's **working copy** (complete, so a resumed lease can
+  continue) and the **evidence copy**, shaped by the evidence policy (project
+  policy tightened by the node's `evidence`): none, redacted or full. Digests
+  are always computed from the complete payload. The working copy is cleared
+  once the task is completed or cancelled; the evidence copy and every copy
+  past `purge_after` (recorded at journaling: start + retention days) are
+  cleared by the retention sweep (`abada.evidence.purge-interval-ms`, default
+  15 minutes), which locks rows with `SKIP LOCKED` so replicas purge each row
+  once, and records `EVIDENCE_PURGED` per instance and batch.
+- A finished model call is priced by the engine from its tokens and the price
+  in effect at its start (`model_prices`, a provider-specific price before a
+  provider-less one). No price: `cost_unpriced`, cost null. The tokens an
+  attempt reports in its metadata are priced the same way when that attempt
+  journaled no model call, so nothing is counted twice. Instance cost sums
+  both; `abada_agent_cost_usd_total` is tagged by process key and model.
+- The agent descriptor carries the current `prices` of the node's model and
+  fallbacks, for a worker's budget checks.
+- Development-key ciphertext (step payloads, tool credentials) is re-encrypted
+  with `ABADA_ENCRYPTION_KEY` after startup, like AI provider keys.
+- Evidence:
+  [`PostgresEvidenceAndCostTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresEvidenceAndCostTest.java),
+  [`EvidenceAccessApiTest`](../../engine/src/test/java/com/abada/engine/api/EvidenceAccessApiTest.java).
+
+## Call-process (child instances)
+
+- A token reaching a `call-process` node parks `WAITING`. In the same command
+  the engine evaluates the inputs, checks them against the child's declared
+  variable types and the depth limit, and creates the child instance of the
+  version pinned at the parent's deployment, with lineage (parent instance,
+  token and call activity, root, depth). The child starts with the inputs
+  only and the parent's `startedBy`.
+- When the child ends, its own command records a durable `CHILD_DONE` job for
+  the parent token (one per child) and never locks the parent. The job locks
+  the parent: a completed child's mapped `outputs` are written (and
+  `<id>_outcome = OK`) and the token moves on; a failed child, or one
+  cancelled by someone else, takes `on_error` with code `CHILD_FAILED` or
+  opens a `CHILD_FAILED` incident. Retrying that incident starts a new child.
+  A token that already left (timeout, cancel) ignores the result
+  (`CHILD_RESULT_IGNORED`). The job runs right after the child's commit
+  (`abada.call-process.resume-immediately`, default on) with the job poller as
+  the durable fallback; two replicas running it apply it once.
+- Cancelling or failing an instance cancels its running descendants in the
+  same transaction; a call's `on_timeout` cancels its child. Lock order is
+  always parent, then child.
+- History: `CHILD_STARTED`, `CHILD_COMPLETED`, `CHILD_FAILED` on the parent
+  with both instance ids and the input/output **names**; the child's
+  `PROCESS_STARTED` names its parent. `GET
+  /v1/projects/{p}/instances/{id}/lineage` returns the ancestors and children.
+- Evidence:
+  [`PostgresCallProcessTest`](../../engine/src/test/java/com/abada/engine/core/delegation/PostgresCallProcessTest.java),
+  [`PostgresCallProcessCrashTest`](../../engine/src/test/java/com/abada/engine/core/delegation/PostgresCallProcessCrashTest.java)
+  (engine restarts after the child starts, between its end and the resume,
+  with the job leased by a crashed replica; two replicas at once).
 
 ## History and lifecycle delivery
 

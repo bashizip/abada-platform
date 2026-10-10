@@ -33,8 +33,11 @@ public class ProjectProcessController {
     private final ProjectAccessService access;
     private final IdempotencyService idempotency;
 
+    private final com.abada.engine.core.agent.AgentCostService agentCosts;
+
     public ProjectProcessController(AbadaEngine engine, ProjectAccessService access,
-            IdempotencyService idempotency) {
+            IdempotencyService idempotency, com.abada.engine.core.agent.AgentCostService agentCosts) {
+        this.agentCosts = agentCosts;
         this.engine = engine;
         this.access = access;
         this.idempotency = idempotency;
@@ -87,8 +90,10 @@ public class ProjectProcessController {
         var pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100),
                 Sort.by("startDate").descending());
         var result = engine.getProcessInstances(projectId, status, processDefinitionId, pageable);
+        var costs = agentCosts.costs(result.stream().map(instance -> instance.getId()).toList());
         return ResponseEntity.ok().headers(Pagination.headers(result))
-                .body(result.stream().map(Mapper.ProcessInstanceMapper::toDto).toList());
+                .body(result.stream().map(instance -> Mapper.ProcessInstanceMapper.toDto(instance)
+                        .withAgentCost(costs.get(instance.getId()))).toList());
     }
 
     @GetMapping("/instances/{instanceId}")
@@ -100,7 +105,8 @@ public class ProjectProcessController {
             throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
                     "Project process instance not found");
         }
-        return ResponseEntity.ok(Mapper.ProcessInstanceMapper.toDto(instance));
+        return ResponseEntity.ok(Mapper.ProcessInstanceMapper.toDto(instance)
+                .withAgentCost(agentCosts.cost(instanceId)));
     }
 
     @PostMapping("/instances/{instanceId}/fail")

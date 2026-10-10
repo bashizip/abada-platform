@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { LoopEditor, OutcomesEditor } from './RouteEditors';
+import { AgentRoutesEditor, LoopEditor, OutcomesEditor } from './RouteEditors';
 import { blur, buttons, byLabel, click, render, type } from '@/test/render';
 import type { WorkflowNode } from '@/types';
 
@@ -34,6 +34,30 @@ describe('outcomes editor', () => {
     const checkboxes = container.querySelectorAll('input[type="checkbox"]');
     click(checkboxes[1]);
     expect(onChange).toHaveBeenCalledWith({ approve: { next: 'done' }, reject: { next: 'draft', comment: 'required' } });
+  });
+});
+
+describe('agent routes editor', () => {
+  it('starts two routes from the current next step', () => {
+    const onChange = vi.fn();
+    const container = render(<AgentRoutesEditor nextTarget="done" nodes={nodes} excludeId="draft" onChange={onChange} />);
+    expect(container.textContent).toContain('Let the agent choose the next step');
+    click(buttons(container)[0]);
+    const routes = onChange.mock.calls[0][0];
+    expect(Object.keys(routes)).toEqual(['continue', 'escalate']);
+    expect(routes.continue.next).toBe('done');
+  });
+
+  it('asks for a description and applies the name rules', () => {
+    const onChange = vi.fn();
+    const container = render(<AgentRoutesEditor routes={{ ship: { next: 'done', description: 'Ready' },
+      redo: { next: 'review', description: '' } }} nodes={nodes} excludeId="draft" onChange={onChange} />);
+    expect(container.textContent).toContain('Describe "redo"');
+    type(byLabel<HTMLInputElement>(container, 'New route name'), 'Bad-Name');
+    expect(buttons(container).find((button) => button.textContent === 'Add')!.disabled).toBe(true);
+    type(byLabel<HTMLInputElement>(container, 'Route redo when'), 'amount <= 500.0');
+    expect(onChange).toHaveBeenLastCalledWith({ ship: { next: 'done', description: 'Ready' },
+      redo: { next: 'review', description: '', when: 'amount <= 500.0' } });
   });
 });
 

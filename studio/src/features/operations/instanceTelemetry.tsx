@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { AgentStepInspector } from '@/features/operations/AgentStepInspector';
 import {
   Activity,
   AlertTriangle,
@@ -17,13 +18,15 @@ import {
   Search,
   Table,
   UserCheck,
+  Workflow,
   XCircle,
   Zap,
 } from 'lucide-react';
 import { ActivityHistoryDTO, ProjectJob } from '@/api/engine';
 import { ErrorDetailsDialog } from '@/features/operations/ErrorDetailsDialog';
 import { failureOf, type FailureContext } from '@/lib/run/errorReport';
-import { WorkflowFile } from '@/types';
+import { WorkflowFile, toolRefOf } from '@/types';
+import { AgentStepEvidence } from '@/api/evidence';
 import { aggregateNodeTelemetry, boundarySummary, eventMeta } from '@/lib/run/instanceDetail';
 import { formatDuration, humanize, unwrapVariable } from '@/lib/run/instanceFormat';
 
@@ -295,6 +298,7 @@ export const NodeIcon: React.FC<{ type: WorkflowFile['nodes'][number]['type']; s
   switch (type) {
     case 'agent': return <Bot className="h-4 w-4 text-[#9D4EDD]" />;
     case 'engine-task': return <Zap className="h-4 w-4 text-[#90A955]" />;
+    case 'call-process': return <Workflow className="h-4 w-4 text-[#F4A261]" />;
     case 'script': return <Code2 className="h-4 w-4 text-[#2A9D8F]" />;
     case 'human': return <UserCheck className="h-4 w-4 text-[#E76F51]" />;
     case 'dmn': return <Table className="h-4 w-4 text-[#2A9D8F]" />;
@@ -316,7 +320,12 @@ export const NodeTelemetry: React.FC<{
   onRetry: (job: ProjectJob) => void;
   /** Enables the error details dialog (stack traces are project-scoped). */
   projectId?: string;
-}> = ({ nodeId, workflow, history, jobs, variables, onRetry, projectId }) => {
+  /** Journaled agent steps of the instance (summaries: tokens and engine-computed cost). */
+  agentSteps?: AgentStepEvidence[];
+  /** For opening step payloads and a delegated child instance. */
+  instanceId?: string;
+  onOpenInstance?: (instanceId: string) => void;
+}> = ({ nodeId, workflow, history, jobs, variables, onRetry, projectId, agentSteps = [], instanceId, onOpenInstance }) => {
   const [openFailure, setOpenFailure] = useState<{ jobId: string; context: FailureContext } | null>(null);
   const node = workflow.nodes.find((item) => item.id === nodeId);
   const telemetry = aggregateNodeTelemetry(history, nodeId, jobs);
@@ -374,10 +383,12 @@ export const NodeTelemetry: React.FC<{
                   <span className="font-mono">{node.agentConfig.resultVariable ?? '—'}</span>
                 </InfoRow>
                 <InfoRow label="Tools">
-                  {node.agentConfig.tools?.length ? node.agentConfig.tools.join(', ') : '—'}
+                  {node.agentConfig.tools?.length ? node.agentConfig.tools.map(toolRefOf).join(', ') : '—'}
                 </InfoRow>
                 {node.agentConfig.maxTokens !== undefined && <InfoRow label="Max tokens">{node.agentConfig.maxTokens}</InfoRow>}
                 {node.agentConfig.maxAttempts !== undefined && <InfoRow label="Max attempts">{node.agentConfig.maxAttempts}</InfoRow>}
+                <AgentStepInspector steps={agentSteps.filter((step) => step.activityId === nodeId)}
+                  projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} />
               </>
             )}
           </div>
@@ -435,7 +446,7 @@ export const NodeTelemetry: React.FC<{
           )}
 
           <p className="rounded-xl border border-dashed border-[#3A322E] bg-[#1A1614] p-3 text-[10px] leading-relaxed text-[#A89F91]">
-            The engine persists attempt metadata only (model, tools, token counts, prompt hash) — prompts and request/response payloads are never stored (privacy by design). The APL-declared prompt is available in the definition source.
+            Each attempt keeps its metadata (model, tools, token counts, prompt hash). Journaled step payloads are kept encrypted as the project's evidence policy allows (redacted by default) and open to evidence readers only, each read recorded. The APL-declared prompt is in the definition source.
           </p>
         </div>
       )}

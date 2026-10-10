@@ -44,6 +44,17 @@ public class ProjectEntity {
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
 
+    /** Evidence policy (V30): payloads none | redacted | full, kept this many days. */
+    @Column(name = "evidence_payloads", nullable = false)
+    private String evidencePayloads = "redacted";
+    @Column(name = "evidence_retention_days", nullable = false)
+    private int evidenceRetentionDays = 30;
+
+    public String getEvidencePayloads() { return evidencePayloads; }
+    public void setEvidencePayloads(String value) { evidencePayloads = value; }
+    public int getEvidenceRetentionDays() { return evidenceRetentionDays; }
+    public void setEvidenceRetentionDays(int value) { evidenceRetentionDays = value; }
+
     public String getId() { return id; }
     public void setId(String value) { id = value; }
     public String getSlug() { return slug; }

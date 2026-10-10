@@ -32,7 +32,8 @@ console.
 | `abada-operator` | Read and act on instances, variables, history, incidents and retries |
 | `abada-project-creator` | Create projects |
 | `abada-insight-reviewer` | Review Insight proposals |
-| `abada-admin` | Everything, including the Admin tab |
+| `abada-evidence-reader` | Read agent evidence payloads (prompts, tool arguments and results, as the project's evidence policy kept them) in projects they belong to. Every read is recorded |
+| `abada-admin` | Everything, including the Admin tab, **except** reading agent evidence payloads, which needs `abada-evidence-reader` |
 
 `abada-worker` is for **service accounts** of external workers (such as the
 Agent Worker), not for people. Business groups such as `managers` grant no

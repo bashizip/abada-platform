@@ -14,11 +14,14 @@ public class TimerJobCommandService {
     private final JobRepository repository;
     private final AbadaEngine engine;
     private final ActivityHistoryService history;
+    private final com.abada.engine.core.agent.DelegationResultService delegations;
 
-    public TimerJobCommandService(JobRepository repository, @Lazy AbadaEngine engine, ActivityHistoryService history) {
+    public TimerJobCommandService(JobRepository repository, @Lazy AbadaEngine engine, ActivityHistoryService history,
+            @Lazy com.abada.engine.core.agent.DelegationResultService delegations) {
         this.repository = repository;
         this.engine = engine;
         this.history = history;
+        this.delegations = delegations;
     }
 
     /** How long a due job of a suspended instance waits before it is checked again. */
@@ -35,6 +38,24 @@ public class TimerJobCommandService {
             job.setAttempts(job.getAttempts() + 1);
         }
         return repository.saveAll(jobs);
+    }
+
+    /**
+     * Leases one job by id if it is still available, e.g. a CHILD_DONE job run
+     * right after the child's command committed. False when another runner
+     * (a replica's poller) already took it.
+     */
+    @AtomicRuntimeCommand
+    public boolean claim(String jobId, String leaseOwner, Instant now) {
+        JobEntity job = repository.findByIdForUpdate(jobId).orElse(null);
+        if (job == null || job.getStatus() != JobEntity.Status.AVAILABLE
+                || job.getExecutionTimestamp().isAfter(now)) return false;
+        job.setStatus(JobEntity.Status.LEASED);
+        job.setLeaseOwner(leaseOwner);
+        job.setLeaseExpiresAt(now.plusSeconds(120));
+        job.setAttempts(job.getAttempts() + 1);
+        repository.save(job);
+        return true;
     }
 
     /** Executes one already-leased timer and its workflow advancement atomically. */
@@ -71,6 +92,10 @@ public class TimerJobCommandService {
             case BOUNDARY_TIMEOUT -> engine.fireTimeout(job.getProcessInstanceId(), job.getEventId(),
                     job.getTokenId(), job.getBoundaryId());
             case SLA -> engine.escalateTask(job.getProcessInstanceId(), job.getEventId(), job.getTokenId());
+            // A child an agent delegated to resumes the agent's work; a call-process child moves the token.
+            case CHILD_DONE -> delegations.childEnded(job.getRelatedInstanceId())
+                    || engine.childEnded(job.getProcessInstanceId(), job.getEventId(), job.getTokenId(),
+                            job.getRelatedInstanceId());
         };
 
         ProcessInstance instance = engine.getProcessInstanceById(job.getProcessInstanceId());

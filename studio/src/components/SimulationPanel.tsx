@@ -13,7 +13,8 @@ import {
   Zap,
   Circle,
   Clock,
-  GripVertical
+  GripVertical,
+  Workflow
 } from 'lucide-react';
 
 interface SimulationPanelProps {
@@ -76,6 +77,8 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
         return <Table className="w-3.5 h-3.5 text-[#2A9D8F]" />;
       case 'engine-task':
         return <Zap className="w-3.5 h-3.5 text-[#90A955]" />;
+      case 'call-process':
+        return <Workflow className="w-3.5 h-3.5 text-[#F4A261]" />;
       case 'script':
         return <Terminal className="w-3.5 h-3.5 text-[#2A9D8F]" />;
       case 'gateway':

@@ -29,6 +29,16 @@ public class OutboxEventEntity {
     private Instant nextAttemptAt;
     @Version
     private long entityVersion;
+    /** Stream order (V33), assigned by the database on insert. */
+    @Column(name = "seq", insertable = false, updatable = false)
+    private Long seq;
+    /** The project of the event's instance (V33); null outside any instance. */
+    @Column(name = "project_id")
+    private String projectId;
+
+    public Long getSeq() { return seq; }
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String value) { projectId = value; }
 
     public String getId() { return id; }
     public String getAggregateType() { return aggregateType; }

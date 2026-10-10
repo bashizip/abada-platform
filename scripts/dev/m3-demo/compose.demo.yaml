@@ -1,0 +1,20 @@
+# M3 demo overlay: the stub `payments` MCP server for the refund-agent example.
+#
+# The stub shares the agent worker's network namespace, so the worker reaches it
+# on loopback (http://127.0.0.1:8765/mcp), the URL in
+# examples/apl/tool-servers/payments.yaml. The engine accepts plain http only for
+# loopback hosts, and never connects to a tool server itself.
+services:
+  abada-agent-worker:
+    environment:
+      ABADA_AGENT_ALLOWED_TOOLS: payments
+
+  payments-mcp:
+    image: python:3.12-alpine
+    profiles: [agent]
+    command: ["python", "-u", "/stub_mcp.py"]
+    volumes:
+      - ./scripts/dev/m3-demo/stub_mcp.py:/stub_mcp.py:ro
+    network_mode: "service:abada-agent-worker"
+    depends_on:
+      - abada-agent-worker

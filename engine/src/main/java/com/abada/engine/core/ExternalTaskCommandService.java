@@ -41,6 +41,10 @@ public class ExternalTaskCommandService {
     private final WorkerCapabilityService workerCapabilities;
     private final ProjectAccessService access;
     private final EntityManager entityManager;
+    private final com.abada.engine.core.agent.AgentStepService agentSteps;
+    private final com.abada.engine.persistence.repository.AgentStepRepository agentStepRepository;
+    private final com.abada.engine.llm.ModelPriceService prices;
+    private final com.abada.engine.observability.EngineMetrics metrics;
 
     /** Rate-limit waits allowed before one counts as a failed attempt, so waiting stays bounded. */
     private final int maxDeferrals;
@@ -52,7 +56,15 @@ public class ExternalTaskCommandService {
             WorkerCapabilityService workerCapabilities, ProjectAccessService access, EntityManager entityManager,
             @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferrals:12}") int maxDeferrals,
             @org.springframework.beans.factory.annotation.Value("${abada.agent.max-deferral-delay:PT15M}")
-            java.time.Duration maxDeferralDelay) {
+            java.time.Duration maxDeferralDelay,
+            com.abada.engine.core.agent.AgentStepService agentSteps,
+            com.abada.engine.persistence.repository.AgentStepRepository agentStepRepository,
+            com.abada.engine.llm.ModelPriceService prices,
+            com.abada.engine.observability.EngineMetrics metrics) {
+        this.agentSteps = agentSteps;
+        this.agentStepRepository = agentStepRepository;
+        this.prices = prices;
+        this.metrics = metrics;
         this.maxDeferrals = maxDeferrals;
         this.maxDeferralDelay = maxDeferralDelay;
         this.repository = repository;
@@ -86,12 +98,30 @@ public class ExternalTaskCommandService {
 
                 ProcessInstance instance = requireInstance(task);
                 var serviceTask = instance.getDefinition().getServiceTask(task.getActivityId());
+                AgentWorkDescriptor work = serviceTask == null ? null : serviceTask.agentWork();
+                var journal = work == null ? null : agentSteps.prepareLock(task);
+                if (journal != null && journal.blocked()) {
+                    // A write with an unknown outcome stopped this task; a person decides, not a worker.
+                    acquired = true;
+                    continue;
+                }
                 history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(),
                         lockDetails(task, request.workerId(), topic, serviceTask));
-                AgentWorkDescriptor work = serviceTask == null ? null : serviceTask.agentWork();
                 if (work != null && task.getModelOverride() != null) {
                     // An operator retried this task on another model; the definition is unchanged.
                     work = work.withModel(task.getModelOverride());
+                }
+                if (work != null && !work.tools().isEmpty()) {
+                    work = work.withToolBindings(engine.toolBindings(instance, task.getActivityId()));
+                }
+                if (work != null && !instance.getDefinition().getDelegations(task.getActivityId()).isEmpty()) {
+                    work = work.withDelegates(engine.delegates(instance, task.getActivityId()));
+                }
+                if (work != null) {
+                    List<String> models = new ArrayList<>();
+                    if (work.model() != null) models.add(work.model());
+                    models.addAll(work.fallbackModels());
+                    work = work.withPrices(prices.currentPrices(models));
                 }
                 Map<String, Object> payload = work != null
                         ? AgentInputs.resolve(work, instance.getVariables())
@@ -100,7 +130,9 @@ public class ExternalTaskCommandService {
                         task.getProcessInstanceId(), task.getActivityId(), task.getRetries(),
                         task.getLockExpirationTime(), task.getTraceParent(), "1",
                         work,
-                        instance.getProjectId()));
+                        instance.getProjectId(), work == null ? null : task.getAttempt(),
+                        journal == null ? null : journal.steps(),
+                        journal == null ? null : journal.priorWrites()));
                 acquired = true;
                 if (locked.size() >= request.effectiveMaxTasks()) break;
             }
@@ -181,9 +213,15 @@ public class ExternalTaskCommandService {
             defer(task, failure, current);
             return;
         }
-        // A deferral past the cap is an ordinary failed attempt.
-        Integer retries = failure.isDeferred() ? Integer.valueOf(Math.max(0, current - 1)) : failure.retries();
+        // A deferral past the cap is an ordinary failed attempt; a coded failure is final.
+        Integer retries = failure.isFinal() ? Integer.valueOf(0)
+                : failure.isDeferred() ? Integer.valueOf(Math.max(0, current - 1)) : failure.retries();
         task.setRetries(retries);
+        // A counted failure that will run again starts the next attempt (a fresh conversation),
+        // unless a write is still STARTED: the same attempt resumes so the write is never sent twice.
+        if ((retries == null || retries > 0) && !agentStepRepository.hasOpenWrite(task.getId(), task.getAttempt())) {
+            task.setAttempt(task.getAttempt() + 1);
+        }
         if (retries != null && retries == 0) {
             task.setStatus(ExternalTaskEntity.Status.FAILED);
             task.setLockExpirationTime(null);
@@ -200,7 +238,7 @@ public class ExternalTaskCommandService {
                 failedDetails(task, failure));
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
-            exhausted(task, failure.errorMessage());
+            exhausted(task, failure.errorMessage(), failure.isFinal() ? failure.errorCode().strip() : null);
         }
     }
 
@@ -244,9 +282,9 @@ public class ExternalTaskCommandService {
      * incident opens. A routed task is retired (CANCELLED) so it never shows
      * as retryable failed work.
      */
-    private void exhausted(ExternalTaskEntity task, String message) {
+    private void exhausted(ExternalTaskEntity task, String message, String errorCode) {
         String routedTo = engine.workFailed(task.getProcessInstanceId(), task.getActivityId(), task.getTokenId(),
-                message);
+                message, errorCode);
         if (routedTo != null) {
             task.setAgentOutcome(AplParser.OUTCOME_ERROR);
             task.setStatus(ExternalTaskEntity.Status.CANCELLED);
@@ -360,9 +398,28 @@ public class ExternalTaskCommandService {
         String resultVariable = work.resultVariable() == null || work.resultVariable().isBlank()
                 ? activityId + "_result" : work.resultVariable();
         AgentOutputValidator.Verdict verdict = AgentOutputValidator.validate(work, resultVariable, variables);
+        List<com.abada.engine.core.model.AgentRouteMeta> routes = instance.getDefinition().getAgentRoutes(activityId);
+        com.abada.engine.core.model.AgentRouteMeta chosen = null;
+        if (verdict.ok() && !routes.isEmpty()) {
+            // The contract already limits route to the declared names; the engine still checks, then asks when.
+            Object name = verdict.value() instanceof Map<?, ?> value
+                    ? value.get(com.abada.engine.core.model.AgentRouteMeta.RESULT_PROPERTY) : null;
+            chosen = routes.stream().filter(route -> route.name().equals(name)).findFirst().orElse(null);
+            if (chosen == null) {
+                verdict = new AgentOutputValidator.Verdict(AplParser.OUTCOME_INVALID_OUTPUT, verdict.value(),
+                        verdict.confidence(), "route '" + name + "' is not one this step declares");
+            } else if (chosen.when() != null && !routeAllowed(chosen, instance, resultVariable, verdict.value(),
+                    activityId)) {
+                verdict = new AgentOutputValidator.Verdict(AplParser.OUTCOME_INVALID_OUTPUT, verdict.value(),
+                        verdict.confidence(), "route '" + chosen.name() + "' was vetoed by its when");
+                chosen = null;
+            }
+        }
         boolean routed = !instance.getDefinition().boundariesOf(activityId).isEmpty();
-        BoundaryMeta outcomeBoundary = verdict.ok() ? null : instance.getDefinition()
-                .boundaryFor(activityId, BoundaryMeta.Kind.valueOf(verdict.outcome()), null);
+        BoundaryMeta outcomeBoundary = chosen != null
+                ? instance.getDefinition().boundaryFor(activityId, BoundaryMeta.Kind.ROUTE, chosen.name())
+                : verdict.ok() ? null : instance.getDefinition()
+                        .boundaryFor(activityId, BoundaryMeta.Kind.valueOf(verdict.outcome()), null);
         boolean hasRoute = verdict.ok() || outcomeBoundary != null;
         task.setAgentOutcome(verdict.outcome());
         persistAgentMetadata(task, agent);
@@ -382,6 +439,12 @@ public class ExternalTaskCommandService {
                         ? null : variables.get(resultVariable)));
             }
             if (routed) merged.put(AplParser.outcomeVariable(activityId), verdict.outcome());
+            if (!routes.isEmpty()) {
+                // The route taken; cleared when the agent left another way, so an earlier pass never lingers.
+                String routeVariable = AplParser.routeVariable(activityId);
+                if (chosen != null) merged.put(routeVariable, chosen.name());
+                else if (instance.getVariables().containsKey(routeVariable)) merged.put(routeVariable, null);
+            }
             task.setStatus(ExternalTaskEntity.Status.COMPLETED);
             task.setLockExpirationTime(null);
             repository.save(task);
@@ -390,6 +453,14 @@ public class ExternalTaskCommandService {
             } else {
                 engine.takeBoundary(task.getProcessInstanceId(), activityId, task.getTokenId(), outcomeBoundary,
                         merged, Map.of("externalTaskId", task.getId()));
+            }
+            if (chosen != null) {
+                Map<String, Object> taken = new LinkedHashMap<>();
+                taken.put("externalTaskId", task.getId());
+                taken.put("route", chosen.name());
+                taken.put("routedTo", chosen.target());
+                if (verdict.confidence() != null) taken.put("confidence", verdict.confidence());
+                history.record("ROUTE_TAKEN", requireInstance(task), activityId, taken);
             }
             Map<String, Object> details = new LinkedHashMap<>(completedDetails(task, agent));
             details.put("agentOutcome", verdict.outcome());
@@ -423,7 +494,23 @@ public class ExternalTaskCommandService {
         history.record("EXTERNAL_TASK_OUTPUT_REJECTED", requireInstance(task), activityId, details);
         if (task.getStatus() == ExternalTaskEntity.Status.FAILED) {
             recordExternalTaskFact(task, false);
-            exhausted(task, task.getExceptionMessage());
+            exhausted(task, task.getExceptionMessage(), null);
+        }
+    }
+
+    /**
+     * A route's CEL {@code when}, over the instance variables and the agent's
+     * result. An expression that cannot be evaluated fails the completion
+     * loudly instead of guessing.
+     */
+    private static boolean routeAllowed(com.abada.engine.core.model.AgentRouteMeta route, ProcessInstance instance,
+            String resultVariable, Object result, String activityId) {
+        Map<String, Object> scope = new java.util.HashMap<>(instance.getVariables());
+        scope.put(resultVariable, result);
+        try {
+            return com.abada.engine.expression.WorkflowExpressions.compile(route.when()).test(scope);
+        } catch (com.abada.engine.expression.ExpressionEvaluationException exception) {
+            throw exception.atNode(activityId);
         }
     }
 
@@ -506,6 +593,32 @@ public class ExternalTaskCommandService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Could not serialize agent attempt metadata", exception);
         }
+        priceReportedTokens(task, agent);
+    }
+
+    /**
+     * Prices the tokens an attempt reported, for workers that do not journal
+     * their model calls; summed over the task's attempts. An attempt that
+     * journaled MODEL_CALL steps is priced from those steps instead, so it is
+     * never counted twice.
+     */
+    private void priceReportedTokens(ExternalTaskEntity task, AgentAttemptMetadata agent) {
+        if (agent.promptTokens() == null && agent.completionTokens() == null) return;
+        boolean journaled = agentStepRepository.findByExternalTaskIdAndAttemptOrderBySequenceAsc(task.getId(),
+                        task.getAttempt()).stream()
+                .anyMatch(step -> step.getKind() == com.abada.engine.persistence.entity.AgentStepEntity.Kind.MODEL_CALL);
+        if (journaled) return;
+        task.addAttemptTokens(agent.promptTokens(), agent.completionTokens());
+        com.abada.engine.llm.ModelPriceService.Cost cost = prices.cost(agent.model(), agent.promptTokens(),
+                agent.completionTokens(), Instant.now());
+        if (cost.unpriced()) {
+            task.setAttemptCostUnpriced(true);
+            return;
+        }
+        if (cost.usd() == null) return;
+        task.setAttemptCostUsd(task.getAttemptCostUsd() == null ? cost.usd() : task.getAttemptCostUsd().add(cost.usd()));
+        ProcessInstance instance = engine.getProcessInstanceById(task.getProcessInstanceId());
+        metrics.recordAgentCost(instance == null ? null : instance.getDefinition().getId(), agent.model(), cost.usd());
     }
 
     /** Terminal fact for the analyzed signal; skips legacy rows without a known start. */

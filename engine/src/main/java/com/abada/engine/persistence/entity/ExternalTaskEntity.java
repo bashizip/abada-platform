@@ -72,9 +72,41 @@ public class ExternalTaskEntity {
     @Column(name = "deferrals", nullable = false)
     private int deferrals;
 
+    /**
+     * The attempt this task is on (V28): a counted failure or an operator retry
+     * starts the next one; a lost lease or a deferral resumes the same one.
+     */
+    @Column(name = "attempt", nullable = false)
+    private int attempt = 1;
+
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;
+
+    /** Cost of the tokens this attempt reported in its metadata (V30); see {@link #attemptCostUnpriced}. */
+    @Column(name = "attempt_cost_usd", precision = 18, scale = 8)
+    private java.math.BigDecimal attemptCostUsd;
+    @Column(name = "attempt_cost_unpriced", nullable = false)
+    private boolean attemptCostUnpriced;
+    @Column(name = "attempt_prompt_tokens", nullable = false)
+    private long attemptPromptTokens;
+    @Column(name = "attempt_completion_tokens", nullable = false)
+    private long attemptCompletionTokens;
+
+    public long getAttemptPromptTokens() { return attemptPromptTokens; }
+    public long getAttemptCompletionTokens() { return attemptCompletionTokens; }
+    public void addAttemptTokens(Integer prompt, Integer completion) {
+        attemptPromptTokens += prompt == null ? 0 : prompt;
+        attemptCompletionTokens += completion == null ? 0 : completion;
+    }
+
+    public java.math.BigDecimal getAttemptCostUsd() { return attemptCostUsd; }
+    public void setAttemptCostUsd(java.math.BigDecimal value) { this.attemptCostUsd = value; }
+    public boolean isAttemptCostUnpriced() { return attemptCostUnpriced; }
+    public void setAttemptCostUnpriced(boolean value) { this.attemptCostUnpriced = value; }
+
+    public int getAttempt() { return attempt; }
+    public void setAttempt(int value) { this.attempt = value; }
 
     public enum Status {
         OPEN,
@@ -82,6 +114,10 @@ public class ExternalTaskEntity {
         COMPLETED,
         FAILED,
         BPMN_ERROR,
+        /** An agent proposed an approval_required tool call: no lease, not acquirable until a person decides. */
+        AWAITING_APPROVAL,
+        /** The agent delegated to a child process: no lease, not acquirable until the child ends (E20b). */
+        AWAITING_CHILD,
         /** Retired without a result: an on_timeout boundary fired or the instance ended. */
         CANCELLED
     }

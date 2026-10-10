@@ -65,6 +65,9 @@ final class AplVariables {
             } else if (!names.add(name)) {
                 errors.add(error(pointer + "/name", "metadata.variables declares '" + name + "' more than once"));
             }
+            if (variable.has("sensitive") && !variable.path("sensitive").isBoolean()) {
+                errors.add(error(pointer + "/sensitive", "metadata.variables[" + index + "].sensitive must be true or false"));
+            }
             JsonNode type = variable.path("type");
             if (!type.isMissingNode() && !TYPES.contains(type.asText())) {
                 errors.add(error(pointer + "/type", "metadata.variables[" + index + "].type must be one of "
@@ -72,6 +75,17 @@ final class AplVariables {
             }
         }
         return errors;
+    }
+
+    /** Variables declared {@code sensitive: true}: masked in redacted agent evidence. */
+    static Set<String> sensitiveNames(JsonNode root) {
+        Set<String> names = new LinkedHashSet<>();
+        root.path("metadata").path("variables").forEach(variable -> {
+            if (variable.path("name").isTextual() && variable.path("sensitive").asBoolean(false)) {
+                names.add(variable.path("name").asText());
+            }
+        });
+        return names;
     }
 
     static Set<String> declaredNames(JsonNode root) {
@@ -126,6 +140,18 @@ final class AplVariables {
                 }
             });
         }
+        definition.getAllAgentRoutes().forEach((nodeId, routes) -> {
+            // A route's when reads the agent's own result besides what earlier steps wrote.
+            String result = nodes.containsKey(nodeId)
+                    ? nodes.get(nodeId).path("result_variable").asText(nodeId + "_result") : nodeId + "_result";
+            for (var route : routes) {
+                if (route.when() == null || route.when().isBlank()) continue;
+                Set<String> reads = new HashSet<>(identifiers(route.when()));
+                reads.remove(result);
+                check(nodeId, reads, "route '" + route.name() + "' when", declared, nodes, predecessors,
+                        pointerById, reported, warnings);
+            }
+        });
         return warnings;
     }
 
@@ -178,6 +204,7 @@ final class AplVariables {
                 written.add(AplParser.outcomeVariable(nodeId));
                 written.add(AplParser.errorCodeVariable(nodeId));
                 written.add(AplParser.rawOutputVariable(nodeId));
+                if (node.path("routes").isObject()) written.add(AplParser.routeVariable(nodeId));
             }
             case "engine-task" -> {
                 // Written when a boundary (on_error, on_timeout) is declared and fires.
@@ -190,7 +217,13 @@ final class AplVariables {
                 written.add(AplParser.errorCodeVariable(nodeId));
                 written.add(AplParser.commentVariable(nodeId));
             }
-            case "decision-table" -> node.path("rules").forEach(rule -> {
+            case "call-process" -> {
+                // The mapped outputs on completion, or a boundary (on_error, on_timeout) that fired.
+                node.path("outputs").fieldNames().forEachRemaining(written::add);
+                written.add(AplParser.outcomeVariable(nodeId));
+                written.add(AplParser.errorCodeVariable(nodeId));
+            }
+                        case "decision-table" -> node.path("rules").forEach(rule -> {
                 rule.path("then").fieldNames().forEachRemaining(written::add);
                 rule.path("otherwise").path("then").fieldNames().forEachRemaining(written::add);
             });

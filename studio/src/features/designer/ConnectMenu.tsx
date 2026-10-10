@@ -61,7 +61,7 @@ export const ConnectMenu: React.FC<ConnectMenuProps> = ({ source, target, x, y, 
       </p>
       {pending === null && routesFor(source).map((route) => (
         <button
-          key={route.kind === 'outcome' ? `outcome:${route.name}` : route.kind}
+          key={route.kind === 'outcome' || route.kind === 'route' ? `${route.kind}:${route.name}` : route.kind}
           role="menuitem"
           onClick={() => choose(route)}
           className="block w-full rounded-lg px-2 py-1.5 text-left text-xs text-[#EAE3D9] hover:bg-[#3A322E]"

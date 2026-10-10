@@ -170,6 +170,21 @@ public class EngineMetrics {
     }
 
     // Process Metrics Methods
+    /**
+     * Engine-computed agent cost, {@code abada_agent_cost_usd_total}, tagged by
+     * process key and model only (low cardinality). Unpriced calls add nothing.
+     */
+    public void recordAgentCost(String processKey, String model, java.math.BigDecimal usd) {
+        if (usd == null || usd.signum() <= 0) return;
+        Counter.builder("abada.agent.cost.usd")
+                .description("Agent model cost computed by the engine from token counts and model prices")
+                .baseUnit("usd")
+                .tag("process_key", processKey == null ? "unknown" : processKey)
+                .tag("model", model == null ? "unknown" : model)
+                .register(meterRegistry)
+                .increment(usd.doubleValue());
+    }
+
     public void recordProcessStarted(String processDefinitionId) {
         // Record global and per-process metrics
         processInstancesStarted.increment();

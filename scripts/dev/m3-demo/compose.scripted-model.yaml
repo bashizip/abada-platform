@@ -1,0 +1,19 @@
+# Optional: replace the model with the scripted one (stub_llm.py), for offline,
+# reproducible runs. An AI provider configured in Studio takes precedence over
+# these worker settings; point it at http://scripted-model:8000/v1 instead.
+services:
+  scripted-model:
+    image: python:3.12-alpine
+    profiles: [agent]
+    command: ["python", "-u", "/stub_llm.py"]
+    volumes:
+      - ./scripts/dev/m3-demo/stub_llm.py:/stub_llm.py:ro
+    networks:
+      - edge
+
+  abada-agent-worker:
+    environment:
+      ABADA_AGENT_LLM_BASE_URL: http://scripted-model:8000/v1
+      ABADA_AGENT_LLM_API_KEY: demo-not-a-secret
+      ABADA_AGENT_OPENAI_BASE_URL: http://scripted-model:8000/v1
+      ABADA_AGENT_OPENAI_API_KEY: demo-not-a-secret

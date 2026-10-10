@@ -20,7 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class AplContractController {
     public static final MediaType SCHEMA_JSON = MediaType.parseMediaType("application/schema+json");
 
-    public record AplValidationRequest(String source) {}
+    /** {@code projectId} (optional) also resolves tool references against that project's tool servers. */
+    public record AplValidationRequest(String source, String projectId) {}
     public record AplValidationIssue(String code, String severity, String message, String path,
                                      String elementId, String suggestedResolution) {
         static AplValidationIssue from(BpmnValidationIssue issue) {
@@ -53,7 +54,7 @@ public class AplContractController {
         if (request == null || request.source() == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST, "source is required");
         }
-        var result = contract.validate(request.source());
+        var result = contract.validate(request.source(), request.projectId());
         return new AplValidationResponse(result.valid(), result.processKey(),
                 result.issues().stream().map(AplValidationIssue::from).toList());
     }

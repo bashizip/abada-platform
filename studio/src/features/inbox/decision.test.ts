@@ -17,4 +17,10 @@ describe('review decisions', () => {
       ['priority'])).toEqual({ outcome: 'reject', comment: 'Add the warranty', variables: { priority: 'high' } });
     expect(decisionPayload(approve, '')).toEqual({ outcome: 'approve' });
   });
+
+  it('decides a tool approval with the comment alone: no form, no variables', () => {
+    expect(decisionError(reject, '')).toBe('A comment is required to reject.');
+    expect(decisionPayload(reject, ' Already refunded ', {}, [])).toEqual({ outcome: 'reject',
+      comment: 'Already refunded' });
+  });
 });

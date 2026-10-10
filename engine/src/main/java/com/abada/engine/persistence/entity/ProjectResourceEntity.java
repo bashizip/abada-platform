@@ -13,7 +13,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "project_resources")
 public class ProjectResourceEntity {
-    public enum Kind { FORM, RESOURCE }
+    /** TOOL_SERVER: an MCP server and its tool policies (tool-server-v1.schema.json). */
+    public enum Kind { FORM, RESOURCE, TOOL_SERVER }
 
     @Id
     private String id = UUID.randomUUID().toString();
