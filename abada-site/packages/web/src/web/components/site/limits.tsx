@@ -9,11 +9,13 @@ const READY = [
   "OIDC sign-in and backend role-based permissions",
   "APL processes: AI agents, rules, decision tables, human tasks",
   "BPMN import (documented subset)",
+  "Enforced SLAs and bounded rework loops",
+  "Tool-using agents with human-approved writes",
+  "Governed child processes and agent delegation",
 ];
 
 const NOT_YET = [
-  "Enforced SLAs and bounded rework loops (1.1.0-rc.1)",
-  "Tool-using agents with approved writes (1.1.0-rc.2)",
+  "Improvement proposals replayed on real cases (1.1.0)",
   "Public-cloud certification and independent security review",
   "Full BPMN 2.0 coverage",
 ];

@@ -48,13 +48,12 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
   <Card title="Agents act under policy" icon="puzzle">
     Agents call the tools of a governed MCP tool server: reads run freely,
     writes are journaled before they run, and an approval-required call waits
-    for a person. A crash never repeats a write blindly. On `dev` for
-    `1.1.0-rc.2`.
+    for a person. A crash never repeats a write blindly. New in `1.1.0-rc.2`.
   </Card>
   <Card title="Processes compose" icon="random">
     A step can call another process, and an agent can delegate a sub-case to
     one, with only declared outputs coming back and lineage linking every
-    child. On `dev` for `1.1.0-rc.2`.
+    child. New in `1.1.0-rc.2`.
   </Card>
   <Card title="Optimization is governed" icon="document">
     The Insight Engine turns terminal facts into validated APL proposals that
@@ -78,7 +77,7 @@ audit:
   errors, timeouts and weak AI answers, wait for a human decision with a
   required comment, escalate when late, and fall back to another model when a
   provider is rate-limited.
-- **Agents that act** (on `dev`, `1.1.0-rc.2`). Agents use tools from a
+- **Agents that act.** Agents use tools from a
   project's MCP tool servers, under read, write or approval-required policies;
   a person approves each risky call with its exact arguments; turns, tokens and
   spend are bounded; a routing agent chooses among declared routes, and an
@@ -114,18 +113,15 @@ audit:
 
 These guides describe the current `dev` tree.
 
-- **`1.1.0-rc.1`** is the current evaluation release candidate (milestone
-  M2, real process shapes): one APL contract served by the engine, durable
-  execution tokens, bounded loops, error and timeout routes, enforced service
-  levels, model fallback, review outcomes with a required comment, incidents
-  you can retry from Studio, and Studio editing for all of them. See the
-  [release notes](https://github.com/bashizip/abada-platform/blob/dev/docs/release-notes/1.1.0-rc.1-release-notes.md).
-- **On `dev`, for `1.1.0-rc.2`** (milestone M3, agents that act): tool
-  servers and tool policies, tool approvals, the step journal and crash-safe
-  writes, agent limits, evidence and cost, routing agents, call-process and
-  agent delegation, live instance updates and the step inspector. These are
-  implemented and tested on `dev` and marked as such in this guide until the
-  release candidate is published.
+- **`1.1.0-rc.2`** is the current evaluation release candidate (milestone
+  M3, agents that act): tool servers and tool policies, tool approvals, the
+  step journal and crash-safe writes, agent limits, evidence and cost, routing
+  agents, call-process and agent delegation, live instance updates and the
+  step inspector. See the
+  [release notes](https://github.com/bashizip/abada-platform/blob/dev/docs/release-notes/1.1.0-rc.2-release-notes.md).
+- **`1.1.0-rc.1`** (milestone M2, real process shapes): bounded loops, error
+  and timeout routes, enforced service levels, model fallback, review outcomes
+  with a required comment and incidents you can retry from Studio.
 - **`1.0.0-rc.8`** remains available. PostgreSQL is the source of truth, API v1
   and worker protocol v1 are frozen, and native APL and the BPMN subset are
   certified runtime surfaces.

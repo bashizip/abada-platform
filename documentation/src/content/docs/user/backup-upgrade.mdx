@@ -48,6 +48,22 @@ Never edit a released Flyway migration or downgrade a database without a
 release-specific rollback procedure. Image rollback alone cannot undo a schema
 migration.
 
+## Upgrading to 1.1.0-rc.2
+
+Upgrade the engine, Studio and the Agent Worker together. Flyway applies seven
+additive migrations, `V27` to `V33`: tool servers and credentials, the agent
+step journal, call-process lineage, model prices and evidence, tool approvals,
+delegation and the event stream.
+
+| Before you upgrade | Why |
+| --- | --- |
+| Set `ABADA_ENCRYPTION_KEY` and keep it with your backups | Tool credentials and journaled payloads are encrypted with it |
+| Set `ABADA_AGENT_ALLOWED_TOOLS` on the worker | Agents call only the tool servers the operator allows |
+| Add model prices in **Settings → Model Prices** | A step with `budget_usd` fails closed for an unpriced model |
+
+**Going back to 1.1.0-rc.1** requires restoring the backup you took before the
+upgrade. Details: `docs/operations/upgrading.md` in the repository.
+
 ## Upgrading to 1.1.0-rc.1
 
 Upgrade the engine and the Agent Worker together. Flyway applies four
