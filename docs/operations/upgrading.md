@@ -61,6 +61,38 @@ built on an earlier SDK cannot read agent tasks whose nodes declare
   Jobs that failed before the upgrade stay in the failed-jobs list and are
   retried as before.
 
+### Upgrading to 1.1.0-rc.2 (V27–V33, agents that act)
+
+V27 to V33 add tables and nullable or defaulted columns only; no existing row
+is rewritten:
+
+| Migration | Adds |
+| --- | --- |
+| V27 | `TOOL_SERVER` project resources, `tool_credentials`, `process_definitions.tool_bindings` |
+| V28 | `agent_steps` (the step journal), `external_tasks.attempt` |
+| V29 | Call-process lineage on `process_instances`, `process_definitions.call_targets`, `jobs.related_instance_id` |
+| V30 | `model_prices`; cost, evidence and retention columns on `agent_steps` |
+| V31 | `tasks.kind` and `tasks.agent_step_id` (tool approvals), `agent_steps.decided_at` |
+| V32 | `agent_steps.child_instance_id` (delegation) |
+| V33 | `outbox_events.seq` and `project_id` (the project event stream) |
+
+Upgrade the engine, Studio and the agent worker together. Before the upgrade:
+
+- Make sure `ABADA_ENCRYPTION_KEY` (base64, 32 bytes) is set; the server
+  profile generates it on first `up server`. Tool credentials and journaled
+  step payloads are encrypted with it; without it a public development key is
+  used, which is not a secret. Keep the key with the database backup: payloads
+  cannot be read without it.
+- Agent nodes that bind tools need `ABADA_AGENT_ALLOWED_TOOLS` on the worker,
+  the project's tool server resources, and model prices in **Settings → Model
+  Prices** when they declare `budget_usd`.
+- A tool name without a server (`web_search`) still deploys with an
+  `ABADA-APL-TOOL-001` warning and is passed as an advisory name; it becomes an
+  error at 1.1.0.
+
+Events written before V33 have no sequence number and are not replayed by the
+project event stream; webhook delivery is unchanged.
+
 Process definitions are immutable after deployment. Redeploying changed BPMN
 under the same process key creates a new version. New instances use the latest
 version, while existing instances retain their original deployment ID.
@@ -78,3 +110,8 @@ with open incidents before rolling back. After V26, also cancel pending
 timeout and SLA jobs and mark retired external tasks finished, as the
 1.1.0-rc.1 release notes show, so rc.8 never fires them as timers. Rolling back further, or past a
 release whose notes do not state this, requires the pre-upgrade backup.
+
+Rolling back from 1.1.0-rc.2 to 1.1.0-rc.1 requires the pre-upgrade backup.
+The V27–V33 objects are additive, but rc.1 does not know tool server
+resources, tool approval tasks, call-process steps or delegated children, and
+an in-place rollback with those in use is not tested.
