@@ -3,6 +3,7 @@ import { Sparkles, Loader2, CheckCircle2, XCircle, Brain } from 'lucide-react';
 import { InsightAPI, InsightProposalSummary, InsightProposalDetail } from '@/api/insight';
 import { ReplayPanel } from './ReplayPanel';
 import { useToast } from '@/components/ToastContext';
+import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
 
 interface InsightPanelProps {
   projectId?: string;
@@ -32,9 +33,10 @@ export const InsightPanel: React.FC<InsightPanelProps> = ({ projectId }) => {
     }
   }, [projectId, showToast]);
 
+  const aiProvidersVersion = useAiProvidersVersion();
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, aiProvidersVersion]);
 
   const handleReview = async (proposalId: number, approved: boolean) => {
     try {

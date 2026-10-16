@@ -54,6 +54,17 @@ abada:
     environment: ${ABADA_ENVIRONMENT:${spring.profiles.active:default}}
     otlp:
       endpoint: ${ABADA_TELEMETRY_OTLP_ENDPOINT:}
+  ai:
+    # Each configured provider's own model list, read with its key once a day;
+    # the models it lists are allowed for agent nodes beside agent.allowed-models.
+    model-discovery:
+      enabled: ${ABADA_MODEL_DISCOVERY_ENABLED:true}
+    # Suggested prices from a public model catalog, read once a day (a GET with no
+    # data from this installation); an administrator's price always wins. Off:
+    # the snapshot shipped with the release prices what it knows.
+    price-catalog:
+      enabled: ${ABADA_PRICE_CATALOG_ENABLED:true}
+      url: ${ABADA_PRICE_CATALOG_URL:https://openrouter.ai/api/v1/models}
   agent:
     allowed-models: ${ABADA_AGENT_ALLOWED_MODELS:gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash,gpt-5-mini}
   workers:

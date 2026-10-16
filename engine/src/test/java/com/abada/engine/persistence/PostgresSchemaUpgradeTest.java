@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("38");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("39");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,18 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V39: live provider model lists, the public price catalog and refresh leases.
+            for (String[] column : new String[][] {{"model_catalog_prices", "model_key"},
+                    {"model_catalog_prices", "source"}, {"model_catalog_prices", "effective_from"},
+                    {"ai_provider_models", "models"}, {"ai_provider_models", "last_error"},
+                    {"ai_refresh_state", "claimed_until"}, {"ai_refresh_state", "item_count"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "model_catalog_prices", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_model_catalog_prices_key", "uk_model_catalog_price");
             }
             // V38: the items of a for-each node.
             for (String column : new String[] {"parent_instance_id", "parent_token_id", "item_index", "state",

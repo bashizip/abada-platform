@@ -35,14 +35,67 @@ public class AiProviderService {
     private final AiProviderRepository repository;
     private final AiProviderRegistry registry;
     private final AesEncryption encryption;
-    private final OpenAiCompatibleLlmClient llmClient;
+    private final AiProviderGateway gateway;
+    private org.springframework.beans.factory.ObjectProvider<AiModelDiscoveryService> discoveryProvider;
 
     public AiProviderService(AiProviderRepository repository, AiProviderRegistry registry, AesEncryption encryption,
-            OpenAiCompatibleLlmClient llmClient) {
+            AiProviderGateway gateway) {
         this.repository = repository;
         this.registry = registry;
         this.encryption = encryption;
-        this.llmClient = llmClient;
+        this.gateway = gateway;
+    }
+
+    private org.springframework.transaction.support.TransactionTemplate transactions;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setTransactionManager(org.springframework.transaction.PlatformTransactionManager transactionManager) {
+        this.transactions = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDiscovery(org.springframework.beans.factory.ObjectProvider<AiModelDiscoveryService> discovery) {
+        this.discoveryProvider = discovery;
+    }
+
+    /**
+     * Saves a provider only after a live call proves it works. When the request
+     * changes what a call uses (key, base URL, default model or type) and a key is
+     * available, the provider is tested with the values it would have once saved;
+     * a failure saves nothing and returns {@code AI_PROVIDER_TEST_FAILED} with the
+     * provider's reason. A provider with no key anywhere is saved untested (it is
+     * not used until it has one), and so is one being disabled. The test and the
+     * model list that follows run outside any transaction.
+     */
+    public AiProviderDTO saveVerified(String id, AiProviderRequest request) {
+        if (id == null || !ID.matcher(id).matches()) {
+            throw invalid("Provider id must be lowercase letters, digits and dashes (max 64)");
+        }
+        if (request.baseUrl() != null) validateBaseUrl(request.baseUrl());
+        if (needsVerification(request)) {
+            AiConnectionTestResult result = test(id, new AiConnectionTestRequest(request.providerType(),
+                    request.baseUrl(), request.apiKey(), request.defaultModel()));
+            // NOT_CONFIGURED means nothing could be called (no key, URL or model yet):
+            // the provider is not usable either way, and save() reports what is missing.
+            if (!result.success() && !"NOT_CONFIGURED".equals(result.status())) {
+                throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.AI_PROVIDER_TEST_FAILED,
+                        "The provider did not answer a test call, so nothing was saved: " + result.message());
+            }
+        }
+        // save() is transactional; this call does not go through the proxy, so open the transaction here.
+        AiProviderDTO saved = transactions == null ? save(id, request)
+                : transactions.execute(status -> save(id, request));
+        AiModelDiscoveryService discovery = discoveryProvider == null ? null : discoveryProvider.getIfAvailable();
+        if (discovery != null && saved.configured()) discovery.refresh(id, true);
+        return saved;
+    }
+
+    private static boolean needsVerification(AiProviderRequest request) {
+        if (Boolean.FALSE.equals(request.enabled())) return false;
+        return request.apiKey() != null && !request.apiKey().isBlank()
+                || request.baseUrl() != null
+                || request.defaultModel() != null && !request.defaultModel().isBlank()
+                || request.providerType() != null;
     }
 
     /** Saved Studio providers and environment-only providers, keys reduced to hints. */
@@ -179,7 +232,7 @@ public class AiProviderService {
                 baseUrl, key, List.of(), model, TEST_TIMEOUT.toMillis(), ResolvedAiProvider.Source.STUDIO, false, "");
         long start = System.currentTimeMillis();
         try {
-            llmClient.completeWith(probe, model, "You are a system liveness probe.", "Reply with READY", TEST_TIMEOUT);
+            gateway.probe(probe, model, TEST_TIMEOUT);
             return new AiConnectionTestResult(true, "READY", System.currentTimeMillis() - start, model,
                     "Connection successful");
         } catch (Exception exception) {

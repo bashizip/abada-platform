@@ -1475,6 +1475,16 @@ public class AbadaEngine {
      * must not change the semantics of running instances (runtime invariant
      * "definitions are immutable once deployed").
      */
+    /** Agent nodes may also use the models the configured providers list. */
+    @Autowired(required = false)
+    void setDiscoveredAgentModels(
+            org.springframework.beans.factory.ObjectProvider<com.abada.engine.llm.AiModelDiscoveryService> discovered) {
+        aplParser.withDiscoveredAgentModels(() -> {
+            com.abada.engine.llm.AiModelDiscoveryService service = discovered.getIfAvailable();
+            return service == null ? Set.of() : service.get();
+        });
+    }
+
     private static final AplParser definitionReloadParser = new AplParser("", false);
 
     private ParsedProcessDefinition cacheDefinition(ProcessDefinitionEntity entity) {

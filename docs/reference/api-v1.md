@@ -206,6 +206,14 @@ Policy: `PUT .../insight/policies/{key}` accepts `replayRequired` and
 `replayMinCases`; an approval that the policy refuses returns `409` with code
 `REPLAY_REQUIRED`. See [Insight loop](insight-loop.md#replay-before-approval).
 
+AI providers (1.1.1): saving a provider makes a live test call first; when it
+fails, `PUT /v1/ai-providers/{id}` and `PUT /v1/insight/config/ai` return `422`
+with code `AI_PROVIDER_TEST_FAILED` and save nothing. Provider model lists
+(`GET /v1/ai-providers/models`, `POST /v1/ai-providers/{id}/models/refresh`)
+and price sources (`GET /v1/model-prices/effective`, `GET /v1/model-prices/catalog`,
+`POST /v1/model-prices/catalog/refresh`) are additive. See
+[AI providers](ai-providers.md).
+
 ## Project event stream
 
 `GET /api/v1/projects/{projectId}/events/stream` streams the project's

@@ -256,6 +256,9 @@ above) before a process using it can start. This makes the
 "cost control" claim local: an operator can restrict which model ids any
 workflow may invoke without changing workflow definitions. Models that are
 not on the list fail fast at deployment time instead of at first execution.
+Models a configured provider lists for its key are allowed as well (see
+[AI providers](ai-providers.md#models-read-from-each-provider)); set
+`ABADA_MODEL_DISCOVERY_ENABLED=false` to keep the list strict.
 The same check applies to every entry of `fallback_models`, and to a model an
 operator picks when retrying failed agent work.
 

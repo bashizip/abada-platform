@@ -22,16 +22,32 @@ import org.springframework.web.bind.annotation.RestController;
  * Studio Settings &rarr; AI Providers. Keys are write-only: responses carry a
  * hint ({@code ****abcd}) and never the key. Saved providers take precedence
  * over environment ({@code ABADA_LLM_*}) providers of the same id and serve
- * agent tasks, Insight and APL authoring alike.
+ * agent tasks, Insight and APL authoring alike. A provider is saved only after
+ * a live test call succeeds ({@code 422 AI_PROVIDER_TEST_FAILED} otherwise).
  */
 @RestController
 @RequestMapping("/v1/ai-providers")
 public class AiProviderController {
 
     private final AiProviderService providers;
+    private final com.abada.engine.llm.AiModelDiscoveryService discovery;
 
-    public AiProviderController(AiProviderService providers) {
+    public AiProviderController(AiProviderService providers,
+            com.abada.engine.llm.AiModelDiscoveryService discovery) {
         this.providers = providers;
+        this.discovery = discovery;
+    }
+
+    /** The models each active provider lists for its key, and when they were read. */
+    @GetMapping("/models")
+    public List<com.abada.engine.llm.AiModelDiscoveryService.ProviderModels> models() {
+        return discovery.list();
+    }
+
+    /** Reads a provider's model list now. */
+    @PostMapping("/{id}/models/refresh")
+    public com.abada.engine.llm.AiModelDiscoveryService.ProviderModels refreshModels(@PathVariable String id) {
+        return discovery.refresh(id, true);
     }
 
     @GetMapping
@@ -47,7 +63,7 @@ public class AiProviderController {
 
     @PutMapping("/{id}")
     public AiProviderDTO save(@PathVariable String id, @RequestBody AiProviderRequest request) {
-        return providers.save(id, request);
+        return providers.saveVerified(id, request);
     }
 
     @DeleteMapping("/{id}")

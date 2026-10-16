@@ -3,9 +3,9 @@
  * release-gate report (docs/development/*gate-report*) when a candidate is
  * published; never hand-edit numbers in components.
  */
-export const RELEASE_VERSION = "1.1.0";
+export const RELEASE_VERSION = "1.1.1";
 export const RELEASE_LABEL = "Evaluation release";
 /** Tests in the recorded release gate for RELEASE_VERSION, or null when not recorded. */
-export const RELEASE_GATE_TESTS: number | null = 739;
+export const RELEASE_GATE_TESTS: number | null = 768;
 /** Latest Flyway schema in RELEASE_VERSION; upgrades from V1 to it are tested in the gate. */
-export const RELEASE_SCHEMA_VERSION = "V38";
+export const RELEASE_SCHEMA_VERSION = "V39";

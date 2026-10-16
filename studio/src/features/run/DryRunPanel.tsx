@@ -7,6 +7,7 @@ import { cleanEdgeLabel } from '@/lib/layout/edgeGeometry';
 import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib/agentModels';
 import { AiProvidersAPI } from '@/api/aiProviders';
 import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
+import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
 
 type PauseState =
   | { kind: 'agent'; node: WorkflowNode; edges: WorkflowEdge[] }
@@ -57,6 +58,12 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
   }, [workflow.id]);
 
   useEffect(() => () => { runId.current += 1; }, []);
+
+  // A provider was configured elsewhere in Studio: the warning may no longer be true.
+  const aiProvidersVersion = useAiProvidersVersion();
+  useEffect(() => {
+    if (aiProvidersVersion > 0) setPayloadError((current) => (current?.includes('AI provider') ? null : current));
+  }, [aiProvidersVersion]);
 
   if (!isOpen) return null;
 

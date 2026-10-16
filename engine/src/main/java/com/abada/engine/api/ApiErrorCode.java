@@ -19,5 +19,7 @@ public enum ApiErrorCode {
     WORK_RETIRED,
     /** The proposal's policy requires a finished replay of its current source before it can be approved (E15). */
     REPLAY_REQUIRED,
+    /** An AI provider was not saved: a live call with its key, URL and model failed; {@code message} says why. */
+    AI_PROVIDER_TEST_FAILED,
     INTERNAL_ERROR
 }

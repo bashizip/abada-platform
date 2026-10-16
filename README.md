@@ -27,7 +27,9 @@ is allowed to change.
 </p>
 
 - **Sovereign.** No vendor cloud, no licence server, telemetry off by default; the running
-  platform never contacts us. Models can run inside your network. The Linux/macOS installer
+  platform never contacts us. It reaches only what you configure or enable: your model
+  providers, your tool servers, your identity provider and a public model price catalog
+  (daily, switchable off). Models can run inside your network. The Linux/macOS installer
   sends one anonymous report when it finishes, which you can switch off
   ([what it sends](https://docs.abadaplatform.com/user/privacy/)).
 - **Open.** AGPL-3.0, with no enterprise edition. The worker SDK is Apache-2.0.
@@ -207,9 +209,14 @@ only through an engine command that validates it — see
 
 ## Status
 
-The current release is **`1.1.0`**, an evaluation release
-([release notes](docs/release-notes/1.1.0-release-notes.md),
-[gate report](docs/development/1.1-gate-report-2026-10-14.md)): governed improvement. The
+The current release is **`1.1.1`**, an evaluation release
+([release notes](docs/release-notes/1.1.1-release-notes.md),
+[gate report](docs/development/1.1.1-gate-report-2026-10-16.md)): live AI providers. A key is
+tested before it is saved, each provider's models are read from the provider (so a new model
+works the day it is published), prices come from a public catalog when you have not set
+one, and Studio updates everywhere as soon as a provider works. It also fixes a 500 on a
+user's first sign-in and an installer that stopped before its final instructions.
+`1.1.0` ([release notes](docs/release-notes/1.1.0-release-notes.md)) brought governed improvement. The
 Insight loop notices that people keep overruling an agent, proposes a small change, shows what
 that change would have done on recorded cases before anyone approves it (a policy can require
 it), and one click returns to the previous version; a `for-each` step runs a governed child per

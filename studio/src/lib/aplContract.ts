@@ -53,6 +53,13 @@ export const loadAplContract = (): Promise<AplContract | null> => {
   return loading;
 };
 
+/** Reads the contract again, e.g. after a provider's models were discovered and the allowed models grew. */
+export const reloadAplContract = (): Promise<AplContract | null> => {
+  contract = null;
+  loading = null;
+  return loadAplContract();
+};
+
 export const setAplContract = (value: AplContract | null): AplContract | null => {
   contract = value;
   listeners.forEach((listener) => listener());

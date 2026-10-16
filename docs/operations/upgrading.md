@@ -93,6 +93,18 @@ Upgrade the engine, Studio and the agent worker together. Before the upgrade:
 Events written before V33 have no sequence number and are not replayed by the
 project event stream; webhook delivery is unchanged.
 
+### Upgrading to 1.1.1 (V39, live AI providers)
+
+V39 adds three tables and changes no existing row: `model_catalog_prices`
+(prices read from the public catalog or the release snapshot, insert-only),
+`ai_provider_models` (each provider's model list) and `ai_refresh_state`
+(leases so one replica refreshes at a time). On first start the engine imports
+the release price snapshot, then reads the catalog and each provider's model
+list within the hour. Air-gapped installations set
+`ABADA_PRICE_CATALOG_ENABLED=false` (the snapshot still applies) and, if the
+providers are unreachable for listing, `ABADA_MODEL_DISCOVERY_ENABLED=false`.
+Rolling back to 1.1.0 is an image change only; 1.1.0 ignores the V39 tables.
+
 ### Upgrading to 1.1.0 (V34–V38, governed improvement)
 
 V34 to V38 add tables and nullable or defaulted columns only; no existing row
