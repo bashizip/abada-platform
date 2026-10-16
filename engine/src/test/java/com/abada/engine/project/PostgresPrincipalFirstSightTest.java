@@ -1,11 +1,13 @@
 package com.abada.engine.project;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import com.abada.engine.AbadaEngineApplication;
 import com.abada.engine.persistence.entity.PrincipalEntity;
 import com.abada.engine.persistence.repository.PrincipalRepository;
 import com.abada.engine.util.DatabaseTestHelper;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -91,8 +93,9 @@ class PostgresPrincipalFirstSightTest {
 
             assertThat(again.getId()).isEqualTo(first.getId());
             assertThat(again.getUsername()).isEqualTo("bob.renamed");
-            assertThat(again.getFirstSeenAt()).isEqualTo(first.getFirstSeenAt());
-            assertThat(again.getLastSeenAt()).isAfterOrEqualTo(first.getLastSeenAt());
+            // PostgreSQL keeps microseconds; the JVM clock may carry nanoseconds.
+            assertThat(again.getFirstSeenAt()).isCloseTo(first.getFirstSeenAt(), within(1, ChronoUnit.MILLIS));
+            assertThat(again.getLastSeenAt()).isAfterOrEqualTo(first.getLastSeenAt().truncatedTo(ChronoUnit.MILLIS));
         }
     }
 
