@@ -2,6 +2,8 @@ package com.abada.engine.llm;
 
 import com.abada.engine.persistence.entity.AiRefreshStateEntity;
 import com.abada.engine.persistence.repository.AiRefreshStateRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -22,6 +24,8 @@ public class AiRefreshLeases {
 
     private final AiRefreshStateRepository states;
     private final TransactionTemplate transactions;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public AiRefreshLeases(AiRefreshStateRepository states, PlatformTransactionManager transactionManager) {
         this.states = states;
@@ -37,11 +41,16 @@ public class AiRefreshLeases {
         try {
             return Boolean.TRUE.equals(transactions.execute(status -> {
                 Instant now = Instant.now();
-                AiRefreshStateEntity state = states.lockById(id).orElseGet(() -> {
-                    AiRefreshStateEntity created = new AiRefreshStateEntity();
-                    created.setId(id);
-                    return states.saveAndFlush(created);
-                });
+                AiRefreshStateEntity state = states.lockById(id).orElse(null);
+                if (state == null) {
+                    // persist, never save(): save() merges, and a merge onto a row another
+                    // replica just committed would overwrite its claim. A concurrent first
+                    // claim fails here on the primary key and is reported as not claimed.
+                    state = new AiRefreshStateEntity();
+                    state.setId(id);
+                    entityManager.persist(state);
+                    entityManager.flush();
+                }
                 if (state.getClaimedUntil() != null && state.getClaimedUntil().isAfter(now)) return false;
                 boolean stale = state.getRefreshedAt() == null || state.getRefreshedAt().plus(staleAfter).isBefore(now);
                 if (!force && !stale) return false;
@@ -49,7 +58,7 @@ public class AiRefreshLeases {
                 states.save(state);
                 return true;
             }));
-        } catch (DataIntegrityViolationException createdByAnotherReplica) {
+        } catch (DataIntegrityViolationException | jakarta.persistence.PersistenceException createdByAnotherReplica) {
             return false;
         }
     }
