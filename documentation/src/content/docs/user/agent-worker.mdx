@@ -39,7 +39,11 @@ engine, and registers the worker's global `abada:agent` capability. Use
 Before real agent tasks can complete, add a model provider and its key in
 **Studio → Settings → AI Providers**, and pick the **Default model** at the top
 (used by Insight, authoring and new agent nodes). Each provider shows where its
-key comes from: saved in Studio, or from the server's environment. Providers: Google Gemini, OpenAI, Anthropic,
+key comes from: saved in Studio, or from the server's environment. **Test & save**
+makes one short call first and saves nothing if the provider does not answer.
+Each provider then lists the models its key can use (read again once a day);
+those models are offered in the designer and allowed for agent nodes, so a new
+model works the day the provider publishes it. Providers: Google Gemini, OpenAI, Anthropic,
 DeepSeek, OpenRouter or any OpenAI-compatible gateway. Keys are stored
 encrypted in the database and never shown again; the worker receives them
 from the engine, so nothing in the worker's configuration changes. The same
@@ -87,8 +91,10 @@ exist and how dangerous they are; the engine enforces both.
   node bound the loop; reaching one ends the step through `on_error` with
   `AGENT_BUDGET_EXHAUSTED`. Only model calls that answered count as turns, so
   a provider outage does not spend them. Cost is computed by the engine from the token
-  counts and the prices in **Settings → Model Prices** (USD per million tokens,
-  effective-dated); a budget fails closed for an unpriced model.
+  counts and the price in effect (USD per million tokens, effective-dated): your
+  price in **Settings → Model Prices**, else the public model catalog the engine
+  reads daily, else the snapshot shipped with the release. A budget fails closed
+  for a model no source prices.
 
 See [Tutorial: an agent that acts](/user/tutorial-agent-that-acts/) for all of
 this on one process.

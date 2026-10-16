@@ -873,6 +873,23 @@ class AplParserTest {
     }
 
     @Test
+    void aModelAConfiguredProviderListsIsAllowedBesideTheOperatorList() {
+        java.util.Set<String> discovered = new java.util.HashSet<>();
+        AplParser live = new AplParser(AplParser.DEFAULT_ALLOWED_AGENT_MODELS)
+                .withDiscoveredAgentModels(() -> discovered);
+        assertThatThrownBy(() -> live.parseDetailed(agentFlow("      fallback_models: [brand-new-model]\n")))
+                .isInstanceOf(BpmnValidationException.class).hasMessageContaining("nor listed by a configured provider");
+
+        discovered.add("brand-new-model");
+        assertThat(live.parseDetailed(agentFlow("      fallback_models: [brand-new-model]\n")).definition()
+                .getServiceTasks().get("classify").agentWork().fallbackModels()).containsExactly("brand-new-model");
+        assertThat(live.allowedAgentModels()).contains("brand-new-model", "gemini-3.6-flash");
+
+        AplParser open = new AplParser("").withDiscoveredAgentModels(() -> java.util.Set.of("x"));
+        assertThat(open.allowedAgentModels()).as("an operator who disabled the check keeps it disabled").isEmpty();
+    }
+
+    @Test
     void fallbackModelsAreCheckedAgainstTheAllowListAtDeployment() {
         ParsedProcessDefinition definition = parser.parseDetailed(agentFlow(
                 "      fallback_models: [gemini-3.7-flash, gpt-5-mini]\n")).definition();

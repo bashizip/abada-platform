@@ -29,15 +29,38 @@ public class ModelPriceController {
 
     private final ModelPriceService prices;
     private final IdempotencyService idempotency;
+    private final com.abada.engine.llm.ModelCatalogService catalog;
 
-    public ModelPriceController(ModelPriceService prices, IdempotencyService idempotency) {
+    public ModelPriceController(ModelPriceService prices, IdempotencyService idempotency,
+            com.abada.engine.llm.ModelCatalogService catalog) {
         this.prices = prices;
         this.idempotency = idempotency;
+        this.catalog = catalog;
     }
 
     @GetMapping
     public List<PriceView> list() {
         return prices.list();
+    }
+
+    /** The price each model has now and where it comes from: ADMIN, CATALOG or NONE. */
+    @GetMapping("/effective")
+    public List<ModelPriceService.EffectivePrice> effective(
+            @org.springframework.web.bind.annotation.RequestParam(name = "model", required = false)
+            List<String> models) {
+        return prices.effective(models == null ? List.of() : models);
+    }
+
+    /** The public price catalog: whether it is on, where it is read from and the last refresh. */
+    @GetMapping("/catalog")
+    public com.abada.engine.llm.ModelCatalogService.CatalogStatus catalogStatus() {
+        return catalog.status();
+    }
+
+    /** Reads the public price catalog now. */
+    @PostMapping("/catalog/refresh")
+    public com.abada.engine.llm.ModelCatalogService.CatalogStatus refreshCatalog() {
+        return catalog.refresh(true);
     }
 
     @PostMapping

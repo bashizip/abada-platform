@@ -56,6 +56,14 @@ export interface AiConnectionTestResult {
   message: string;
 }
 
+/** The models a provider's own model list returned for its key, and when it was read. */
+export interface ProviderModels {
+  providerId: string;
+  models: string[];
+  refreshedAt: string | null;
+  lastError: string | null;
+}
+
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   try {
     const body = await res.json();
@@ -93,6 +101,23 @@ export class AiProvidersAPI {
       body: JSON.stringify(request),
     });
     if (!res.ok) throw new Error(await errorMessage(res, 'Failed to save AI provider'));
+    return res.json();
+  }
+
+  /** What each active provider lists (any signed-in user may ask). */
+  static async models(): Promise<ProviderModels[]> {
+    const res = await authenticatedFetch(`${this.BASE_URL}/models`, { headers: this.HEADERS });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to load provider models'));
+    return res.json();
+  }
+
+  /** Reads a provider's model list now. */
+  static async refreshModels(id: string): Promise<ProviderModels> {
+    const res = await authenticatedFetch(`${this.BASE_URL}/${encodeURIComponent(id)}/models/refresh`, {
+      method: 'POST',
+      headers: this.HEADERS,
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to refresh provider models'));
     return res.json();
   }
 

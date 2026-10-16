@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Braces, Lightbulb, Rocket, RotateCcw, X } from 'lucide-react';
 import { WorkflowFile } from '@/types';
+import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
 
 interface DeployDialogProps {
   workflow: WorkflowFile;
@@ -27,6 +28,11 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
     setPayloadText(JSON.stringify(defaultPayload, null, 2));
     setError(null);
   }, [defaultPayload, isOpen, workflow.id]);
+
+  const aiProvidersVersion = useAiProvidersVersion();
+  useEffect(() => {
+    if (aiProvidersVersion > 0) setError((current) => (current?.includes('AI provider') ? null : current));
+  }, [aiProvidersVersion]);
 
   if (!isOpen) return null;
 

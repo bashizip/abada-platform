@@ -47,6 +47,69 @@ Anthropic is reached through its OpenAI SDK compatibility endpoint. OpenRouter
 requests carry the `HTTP-Referer`/`X-Title` headers when
 `ABADA_LLM_OPENROUTER_ENABLED` is true (default).
 
+## Saving a provider: tested first
+
+A provider is saved only after it answers. When a save changes what a call
+uses (the key, base URL, default model or provider type), the engine first
+makes one short chat completion with the values the provider would have once
+saved, outside any transaction. If the provider does not answer, nothing is
+saved and `PUT /v1/ai-providers/{id}` (and `PUT /v1/insight/config/ai`) return
+`422` with code `AI_PROVIDER_TEST_FAILED` and the provider's reason (invalid
+key, unknown model, quota...). A key in the reason is masked. Two saves skip
+the test: disabling a provider, and saving one that has no key anywhere yet
+(it is not used until it has one). Studio's button reads **Test & save**.
+
+## Models: read from each provider
+
+After a successful save, once a day and on demand
+(`POST /v1/ai-providers/{id}/models/refresh`), the engine reads each active
+provider's own model list (`GET {baseUrl}/models` with its key; Anthropic also
+receives `x-api-key` and `anthropic-version`). Ids are kept without a
+`models/` prefix; embedding, audio, image, moderation and search models are
+left out. `GET /v1/ai-providers/models` returns, per provider, the models, when
+they were read and the last error. A failed read keeps the last good list.
+
+A model a provider lists, **and that routes to that provider** under the rules
+below, is allowed for agent nodes, fallback models and model retries in
+addition to `ABADA_AGENT_ALLOWED_MODELS`; the served APL schema
+(`GET /v1/apl/schema`) lists both. A new model is therefore usable the day its
+provider publishes it, with no Abada release. An operator who wants a strict
+list sets `ABADA_MODEL_DISCOVERY_ENABLED=false` (the allow-list alone then
+applies); an empty `ABADA_AGENT_ALLOWED_MODELS` still disables the check.
+Replicas take turns through a short lease (`ai_refresh_state`), so one engine
+reads a given list at a time.
+
+## Prices: your price, else the public catalog
+
+Agent cost is computed by the engine from token counts and the price in effect
+at the time of the call (see [runtime semantics](runtime-semantics.md)).
+Prices come, in this order, from:
+
+1. **Your price** (`POST /v1/model-prices`), for the provider that serves the
+   model, else for any provider. It always wins.
+2. **The public catalog**: by default OpenRouter's model list
+   (`ABADA_PRICE_CATALOG_URL`, default `https://openrouter.ai/api/v1/models`),
+   read once a day with a plain `GET` that carries nothing from this
+   installation. It lists per-token prices for the models of Google, OpenAI,
+   Anthropic, DeepSeek and others. A changed price becomes a new row in
+   `model_catalog_prices` from the time it was read; rows are never edited, so
+   a cost already computed never moves. A model id matches a catalog id by its
+   bare name (`gemini-3.8-flash` matches `google/gemini-3.8-flash`; dots and
+   dashes, `:variants` and date suffixes are ignored), preferring the model's
+   own vendor.
+3. **The release snapshot**: the catalog as read when the release was built
+   (`llm/model-price-snapshot.json`, 2026-10-16 for `1.1.1`), imported once,
+   so prices exist offline or with the catalog off
+   (`ABADA_PRICE_CATALOG_ENABLED=false`).
+
+A model no source knows stays **unpriced**, never free. Catalog prices are
+the ones the catalog publishes; they usually match the provider's list price
+but are not read from the provider's own pricing page, so set your price when
+you have a negotiated or different rate. `GET /v1/model-prices/effective?model=...`
+returns each model's price with its source (`ADMIN`, `CATALOG` or `NONE`);
+`GET /v1/model-prices/catalog` returns the catalog state and
+`POST /v1/model-prices/catalog/refresh` reads it now.
+
 ## Routing
 
 An agent node's `model` goes to the enabled, configured provider whose model
@@ -70,10 +133,15 @@ and `GET /v1/ai-providers/status` reports `insightFallback: true` with the
 | Endpoint | Guard | Purpose |
 | --- | --- | --- |
 | `GET /v1/ai-providers` | insight read roles | Providers with hint, source and configured flag |
-| `PUT /v1/ai-providers/{id}` | `insight:configure` or admin | Create/update; a blank `apiKey` keeps the stored key |
+| `PUT /v1/ai-providers/{id}` | `insight:configure` or admin | Create/update after a live test (`422 AI_PROVIDER_TEST_FAILED` otherwise); a blank `apiKey` keeps the stored key |
 | `DELETE /v1/ai-providers/{id}` | `insight:configure` or admin | Remove a Studio provider (the environment one applies again) |
 | `POST /v1/ai-providers/{id}/test` | `insight:configure` or admin | Live test, optionally with an unsaved key |
 | `GET /v1/ai-providers/status?model=...` | any signed-in user | Which models have no provider |
+| `GET /v1/ai-providers/models` | any signed-in user | Models each active provider lists, read time, last error |
+| `POST /v1/ai-providers/{id}/models/refresh` | `insight:configure` or admin | Read a provider's model list now |
+| `GET /v1/model-prices/effective?model=...` | any signed-in user | Price in effect per model and its source |
+| `GET /v1/model-prices/catalog` | any signed-in user | Public catalog state |
+| `POST /v1/model-prices/catalog/refresh` | `insight:configure` or admin | Read the public catalog now |
 | `GET /v1/workers/me/ai-credentials` | worker principals registered for `abada:agent` only | Resolved keys for the agent worker |
 | `GET/PUT /v1/insight/config/ai`, `GET /v1/insight/config/llm` | as before | rc.7 compatibility views of the Insight provider |
 

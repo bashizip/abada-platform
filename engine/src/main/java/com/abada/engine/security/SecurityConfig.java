@@ -114,10 +114,11 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.PUT, "/v1/insight/config/ai")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
-                .requestMatchers(HttpMethod.GET, "/v1/model-prices").authenticated()
+                .requestMatchers(HttpMethod.GET, "/v1/model-prices", "/v1/model-prices/effective",
+                        "/v1/model-prices/catalog").authenticated()
                 .requestMatchers("/v1/model-prices/**", "/v1/model-prices")
                         .hasAnyAuthority("SCOPE_insight:configure", AbadaRoles.ADMIN)
-                .requestMatchers(HttpMethod.GET, "/v1/ai-providers/status").authenticated()
+                .requestMatchers(HttpMethod.GET, "/v1/ai-providers/status", "/v1/ai-providers/models").authenticated()
                 .requestMatchers(HttpMethod.GET, "/v1/ai-providers")
                         .hasAnyAuthority("SCOPE_insight:read", AbadaRoles.INSIGHT_REVIEWER,
                                 AbadaRoles.OPERATOR, AbadaRoles.ADMIN)

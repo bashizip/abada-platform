@@ -4,12 +4,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.abada.engine.core.AbadaEngine;
 import com.abada.engine.core.exception.ProcessEngineException;
+import com.abada.engine.llm.AiProviderGateway;
+import com.abada.engine.persistence.repository.AiProviderModelsRepository;
+import com.abada.engine.persistence.repository.AiRefreshStateRepository;
+import java.util.List;
 import com.abada.engine.persistence.repository.AiProviderRepository;
 import com.abada.engine.util.DatabaseTestHelper;
 import java.io.InputStream;
@@ -23,10 +34,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@TestPropertySource(properties = "abada.ai.model-discovery.enabled=true")
 class AiProviderControllerTest {
     private static final String GEMINI_KEY = "AIza-test-gemini-key-7f3a";
 
@@ -34,11 +48,79 @@ class AiProviderControllerTest {
     @Autowired AiProviderRepository providers;
     @Autowired AbadaEngine engine;
     @Autowired DatabaseTestHelper database;
+    @Autowired AiProviderModelsRepository discoveredModels;
+    @Autowired AiRefreshStateRepository refreshStates;
+    /** No test reaches a real provider: the probe succeeds unless a test says otherwise. */
+    @MockitoBean AiProviderGateway gateway;
 
     @BeforeEach
     @AfterEach
     void clean() {
         providers.deleteAll();
+        discoveredModels.deleteAll();
+        refreshStates.deleteAll();
+    }
+
+    @Test
+    void aProviderWhoseTestCallFailsIsNotSaved() throws Exception {
+        doThrow(new IllegalStateException("LLM API authentication failed: Invalid or expired API key (HTTP 401)"))
+                .when(gateway).probe(any(), anyString(), any());
+
+        mvc.perform(put("/v1/ai-providers/gemini").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"providerType\":\"gemini\",\"apiKey\":\"" + GEMINI_KEY + "\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("AI_PROVIDER_TEST_FAILED"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("HTTP 401")));
+
+        assertThat(providers.findById("gemini")).isEmpty();
+    }
+
+    @Test
+    void aChangedModelIsTestedWithTheStoredKeyAndRefusedWhenItFails() throws Exception {
+        save("gemini", "{\"providerType\":\"gemini\",\"apiKey\":\"" + GEMINI_KEY + "\"}");
+        doThrow(new IllegalStateException("LLM model or endpoint not found: 'gemini-0' (HTTP 404)"))
+                .when(gateway).probe(any(), org.mockito.ArgumentMatchers.eq("gemini-0"), any());
+
+        mvc.perform(put("/v1/ai-providers/gemini").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"defaultModel\":\"gemini-0\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("AI_PROVIDER_TEST_FAILED"));
+
+        assertThat(providers.findById("gemini").orElseThrow().getDefaultModel()).isNotEqualTo("gemini-0");
+    }
+
+    @Test
+    void disablingAProviderOrSavingOneWithoutAnyKeyNeedsNoTest() throws Exception {
+        doThrow(new IllegalStateException("unreachable")).when(gateway).probe(any(), anyString(), any());
+
+        save("gemini", "{\"providerType\":\"gemini\",\"insightDefault\":true}");
+        mvc.perform(put("/v1/ai-providers/gemini").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":false}"))
+                .andExpect(status().isOk());
+
+        verify(gateway, never()).probe(any(), anyString(), any());
+    }
+
+    @Test
+    void aSavedProviderListsItsModelsAndAgentNodesMayUseThem() throws Exception {
+        when(gateway.listModels(any(), any())).thenReturn(List.of("gemini-3.6-flash", "gemini-9-ultra"));
+
+        save("gemini", "{\"providerType\":\"gemini\",\"apiKey\":\"" + GEMINI_KEY + "\"}");
+
+        mvc.perform(get("/v1/ai-providers/models"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].providerId").value("gemini"))
+                .andExpect(jsonPath("$[0].models[1]").value("gemini-9-ultra"))
+                .andExpect(jsonPath("$[0].refreshedAt").isNotEmpty());
+        mvc.perform(get("/v1/apl/schema"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.$defs.agentModel.enum").value(org.hamcrest.Matchers.hasItem("gemini-9-ultra")));
+
+        when(gateway.listModels(any(), any())).thenThrow(new IllegalStateException("HTTP 503"));
+        mvc.perform(post("/v1/ai-providers/gemini/models/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.models[1]").value("gemini-9-ultra"))
+                .andExpect(jsonPath("$.lastError").value("HTTP 503"));
     }
 
     @Test

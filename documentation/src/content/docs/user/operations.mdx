@@ -65,8 +65,9 @@ the `abada-evidence-reader` role and every read is recorded in the history.
 
 **Agent cost.** The instance bar shows what its agent calls cost and how many
 tokens they used; the telemetry of an agent step lists each call with its
-cost. The engine computes cost from the model prices in **Settings → Model
-Prices**. A call to a model without a price shows **unpriced**: the real cost
+cost. The engine computes cost from the price in effect: yours in **Settings →
+Model Prices**, else the public model catalog's (the tab shows each model's
+source). A call to a model no source prices shows **unpriced**: the real cost
 is higher than the total shown.
 
 ### Called processes

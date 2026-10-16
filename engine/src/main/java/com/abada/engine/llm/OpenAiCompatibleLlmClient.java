@@ -106,6 +106,8 @@ public class OpenAiCompatibleLlmClient {
         if (responseBody == null || responseBody.isBlank()) return "";
         try {
             JsonNode tree = objectMapper.readTree(responseBody);
+            // Gemini's OpenAI-compatible endpoint wraps the error in a one-element array.
+            if (tree.isArray() && tree.size() > 0) tree = tree.get(0);
             JsonNode errorNode = tree.path("error");
             if (!errorNode.isMissingNode()) {
                 String message = errorNode.path("message").asText("");

@@ -55,6 +55,12 @@ logging:
     io.micrometer: WARN
 
 abada:
+  # Tests never reach the public price catalog or a provider's model list.
+  ai:
+    price-catalog:
+      enabled: false
+    model-discovery:
+      enabled: false
   scripts:
     enabled: true
   delegates:

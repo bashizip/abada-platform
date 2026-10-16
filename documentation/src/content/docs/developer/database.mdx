@@ -60,6 +60,7 @@ Newer capabilities are ordinary additive migrations with the same rules:
 | Agent attempt metadata | `agent_metadata` JSON on the external-task row | Same JSON travels in history event details; never prompts, credentials or PII |
 | Project task groups | `project_member_task_groups` (V19) | Candidate groups a member holds in one project |
 | AI providers | `ai_providers` (V22) | Provider keys encrypted with `ABADA_ENCRYPTION_KEY`; served to worker principals only |
+| Provider models, price catalog | `ai_provider_models`, `model_catalog_prices`, `ai_refresh_state` (V39) | Model lists read from each provider; insert-only catalog prices; a lease per background refresh, claimed and finished in their own transactions with the remote call between them |
 | Execution tokens | `process_tokens` and `token_id` on tasks, external tasks, jobs and subscriptions (V23); per-token `loop_counts` (V25) | Joins count token ids; loop counters survive restarts |
 | Incidents | `incidents` (V24) | One open incident stops one token; operators retry or cancel |
 | Boundaries and service levels | `jobs.job_kind`/`boundary_id`, `tasks.due_at`/`escalated_at`, `external_tasks.model_override`/`deferrals` (V26) | Timeout and SLA jobs are acquired with `SKIP LOCKED` like timers |

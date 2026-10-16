@@ -45,7 +45,8 @@ import { useAplValidation } from '@/hooks/useAplValidation';
 import { dropNodeReferences, isOutcomeRouteEdge, removeEdge, setRoute, type Route } from '@/lib/apl/routes';
 import { deriveDefaultPayload } from '@/lib/run/liveRun';
 import { getDefaultAgentModel, initAgentModel } from '@/lib/agentModels';
-import { loadAplContract } from '@/lib/aplContract';
+import { loadAplContract, reloadAplContract } from '@/lib/aplContract';
+import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
 import { isEditableTarget, undoShortcut } from '@/lib/history/shortcuts';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
 import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
@@ -139,11 +140,13 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [undoEdit, redoEdit, isLiveReadOnly, designerMode]);
 
-  // Load the saved AI model and the engine's APL contract on startup
+  // Load the saved AI model and the engine's APL contract on startup, and again
+  // whenever the AI providers change (a new key can bring new allowed models).
+  const aiProvidersVersion = useAiProvidersVersion();
   useEffect(() => {
     void initAgentModel();
-    void loadAplContract();
-  }, []);
+    void (aiProvidersVersion === 0 ? loadAplContract() : reloadAplContract());
+  }, [aiProvidersVersion]);
 
   useEffect(() => {
     if (currentView !== 'designer') setShowLogPanel(false);
