@@ -125,21 +125,29 @@ class PostgresPriceCatalogTest {
             AiRefreshLeases leases = context.getBean(AiRefreshLeases.class);
             context.getBean(AiRefreshStateRepository.class).deleteById(ModelCatalogService.LEASE_ID);
 
-            CountDownLatch start = new CountDownLatch(1);
-            ExecutorService pool = Executors.newFixedThreadPool(6);
-            List<Future<Boolean>> claims = new ArrayList<>();
-            for (int i = 0; i < 6; i++) {
-                Callable<Boolean> claim = () -> {
-                    start.await();
-                    return leases.claim("test-lease", Duration.ofHours(24), false);
-                };
-                claims.add(pool.submit(claim));
+            // Many rounds, each on a lease nobody has seen yet: the first claim also
+            // creates the row, the race CI caught (a merge overwrote another claim).
+            ExecutorService pool = Executors.newFixedThreadPool(16);
+            try {
+                for (int round = 0; round < 60; round++) {
+                    String lease = "test-lease-" + round;
+                    CountDownLatch start = new CountDownLatch(1);
+                    List<Future<Boolean>> claims = new ArrayList<>();
+                    for (int i = 0; i < 16; i++) {
+                        Callable<Boolean> claim = () -> {
+                            start.await();
+                            return leases.claim(lease, Duration.ofHours(24), false);
+                        };
+                        claims.add(pool.submit(claim));
+                    }
+                    start.countDown();
+                    int won = 0;
+                    for (Future<Boolean> claim : claims) if (claim.get(30, TimeUnit.SECONDS)) won++;
+                    assertThat(won).as("exactly one replica claims " + lease).isEqualTo(1);
+                }
+            } finally {
+                pool.shutdownNow();
             }
-            start.countDown();
-            int won = 0;
-            for (Future<Boolean> claim : claims) if (claim.get(30, TimeUnit.SECONDS)) won++;
-            pool.shutdownNow();
-            assertThat(won).as("exactly one replica claims the refresh").isEqualTo(1);
 
             ModelCatalogService.CatalogStatus status = context.getBean(ModelCatalogService.class).refresh(true);
             assertThat(status.status()).isEqualTo("FAILED");
