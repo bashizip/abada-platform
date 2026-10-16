@@ -12,7 +12,7 @@ public record InfoResponse(
                 description = "Short product description",
                 example = "Open-source, self-hosted runtime for governed AI-driven business processes")
         String description,
-        @Schema(description = "Running engine release", example = "1.1.0")
+        @Schema(description = "Running engine release", example = "1.1.1")
         String version,
         Api api,
         Engine engine,
