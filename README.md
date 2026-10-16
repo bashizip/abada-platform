@@ -207,9 +207,11 @@ only through an engine command that validates it — see
 
 ## Status
 
-The current release is **`1.1.0`**, an evaluation release
-([release notes](docs/release-notes/1.1.0-release-notes.md),
-[gate report](docs/development/1.1-gate-report-2026-10-14.md)): governed improvement. The
+The current release is **`1.1.1`**, an evaluation release and a patch of `1.1.0`
+([release notes](docs/release-notes/1.1.1-release-notes.md),
+[gate report](docs/development/1.1.1-gate-report-2026-10-16.md)): it fixes a 500 on a user's
+first sign-in and an installer that stopped before its final instructions under `curl | bash`.
+`1.1.0` ([release notes](docs/release-notes/1.1.0-release-notes.md)) brought governed improvement. The
 Insight loop notices that people keep overruling an agent, proposes a small change, shows what
 that change would have done on recorded cases before anyone approves it (a policy can require
 it), and one click returns to the previous version; a `for-each` step runs a governed child per
