@@ -102,6 +102,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Everything below runs as one block. With `curl ... | bash`, bash reads this
+# script from stdin while it runs; a command that also reads stdin (such as
+# `docker compose exec`) would otherwise swallow the rest of the script, and the
+# installer would stop silently before its final instructions.
+{
+
 # --- preflight ---------------------------------------------------------------
 
 require_cmd curl
@@ -246,7 +252,7 @@ unset GEMINI_KEY
 
 STEP="start"
 info "Starting Abada development stack ..."
-"${INSTALL_DIR}/release/abada-platform" up dev
+"${INSTALL_DIR}/release/abada-platform" up dev </dev/null
 
 ok "Abada ${VERSION} is running."
 echo ""
@@ -258,8 +264,10 @@ echo "  Initialize: alice / alice"
 echo "  HIGH review: bob / bob"
 echo ""
 if [[ "${GEMINI_KEY_SET:-}" != "1" ]]; then
-  echo "  Gemini key: not set — add it in Studio → Settings (stored encrypted)."
-  echo "              Or re-run with ABADA_AGENT_LLM_API_KEY=<key> to bake it in."
+  echo "  Gemini key: not set. Agent steps need a model key: add it in Studio → Settings → AI Providers"
+  echo "              (stored encrypted), or re-run with: curl ... | ABADA_LLM_GEMINI_API_KEY=<key> bash"
 fi
 echo ""
 echo "  Manage: ${INSTALL_DIR}/release/abada-platform {status|logs|down} dev"
+
+}
