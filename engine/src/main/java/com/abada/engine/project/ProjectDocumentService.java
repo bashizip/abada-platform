@@ -47,6 +47,16 @@ public class ProjectDocumentService {
         this.aplParser = new AplParser(allowedAgentModels);
     }
 
+    /** Agent nodes may also use the models the configured providers list. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDiscoveredAgentModels(
+            org.springframework.beans.factory.ObjectProvider<com.abada.engine.llm.AiModelDiscoveryService> discovered) {
+        aplParser.withDiscoveredAgentModels(() -> {
+            com.abada.engine.llm.AiModelDiscoveryService service = discovered.getIfAvailable();
+            return service == null ? java.util.Set.of() : service.get();
+        });
+    }
+
     @Transactional(readOnly = true)
     public Page<ProjectProcessDocumentEntity> list(String projectId, Pageable pageable) {
         access.requireVisible(projectId);

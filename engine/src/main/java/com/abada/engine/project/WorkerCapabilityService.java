@@ -51,6 +51,18 @@ public class WorkerCapabilityService {
         this.allowedModels = allowedModels == null ? List.of() : allowedModels;
     }
 
+    private java.util.function.Supplier<java.util.Set<String>> discoveredModels = java.util.Set::of;
+
+    /** A worker may also register the models the configured providers list. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDiscoveredModels(
+            org.springframework.beans.factory.ObjectProvider<com.abada.engine.llm.AiModelDiscoveryService> discovered) {
+        this.discoveredModels = () -> {
+            com.abada.engine.llm.AiModelDiscoveryService service = discovered.getIfAvailable();
+            return service == null ? java.util.Set.of() : service.get();
+        };
+    }
+
     /**
      * Upserts the calling principal's global capabilities for the requested
      * topics. Only service principals can register as global workers.
@@ -72,7 +84,7 @@ public class WorkerCapabilityService {
         }
         List<String> normalizedModels = normalizeModels(models);
         for (String model : normalizedModels) {
-            if (!allowedModels.contains(model)) {
+            if (!allowedModels.contains(model) && !discoveredModels.get().contains(model)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.INVALID_REQUEST,
                         "Model is not in the engine allow-list: " + model);
             }

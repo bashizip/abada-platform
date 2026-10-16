@@ -26,6 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
  * engine computes from them. Cost is always computed here, from token counts
  * and the price in effect at the time of the call, never taken from a worker.
  * A call with tokens but no price is "unpriced": its cost is unknown, never 0.
+ * An administrator's price wins; without one, the public price catalog (or
+ * the snapshot shipped with the release) prices the call, see
+ * {@link ModelCatalogService}.
  */
 @Service
 public class ModelPriceService {
@@ -51,6 +54,24 @@ public class ModelPriceService {
     private final ModelPriceRepository prices;
     private final AiProviderRegistry providers;
     private final ActivityHistoryService history;
+    private org.springframework.beans.factory.ObjectProvider<ModelCatalogService> catalogProvider;
+
+    private ModelCatalogService catalog() {
+        return catalogProvider == null ? null : catalogProvider.getIfAvailable();
+    }
+
+    /** Fills the gap when no administrator price applies. */
+    @Autowired(required = false)
+    void setCatalog(org.springframework.beans.factory.ObjectProvider<ModelCatalogService> catalog) {
+        this.catalogProvider = catalog;
+    }
+
+    /** Where the price of a model comes from at a time. */
+    public enum PriceSource { ADMIN, CATALOG, NONE }
+
+    /** The price in effect for a model now, and where it comes from. */
+    public record EffectivePrice(String model, BigDecimal inputPerMillion, BigDecimal outputPerMillion,
+            PriceSource source, String catalogModel, String catalogSource, Instant effectiveFrom) {}
 
     public ModelPriceService(ModelPriceRepository prices, @Autowired(required = false) AiProviderRegistry providers,
             ActivityHistoryService history) {
@@ -120,8 +141,41 @@ public class ModelPriceService {
             }
             if (row.getProvider() == null && generic == null) generic = row;
         }
-        return Optional.ofNullable(generic)
-                .map(row -> new ModelPrice(row.getInputPerMillion(), row.getOutputPerMillion()));
+        if (generic != null) return Optional.of(new ModelPrice(generic.getInputPerMillion(),
+                generic.getOutputPerMillion()));
+        ModelCatalogService catalog = catalog();
+        return catalog == null ? Optional.empty() : catalog.priceAt(model.strip(), at);
+    }
+
+    /** The price each model has now, with its source; a model without any price is {@code NONE}. */
+    @Transactional(readOnly = true)
+    public List<EffectivePrice> effective(Collection<String> models) {
+        Instant now = Instant.now();
+        List<EffectivePrice> result = new java.util.ArrayList<>();
+        for (String model : new java.util.LinkedHashSet<>(models)) {
+            if (model == null || model.isBlank()) continue;
+            String id = model.strip();
+            String provider = providers == null ? null
+                    : providers.resolveForModel(id).map(ResolvedAiProvider::id).orElse(null);
+            ModelPriceEntity admin = null;
+            for (ModelPriceEntity row : prices.findByModelOrderByEffectiveFromDesc(id)) {
+                if (row.getEffectiveFrom().isAfter(now)) continue;
+                if (row.getProvider() != null && row.getProvider().equals(provider)) { admin = row; break; }
+                if (row.getProvider() == null && admin == null) admin = row;
+            }
+            if (admin != null) {
+                result.add(new EffectivePrice(id, admin.getInputPerMillion(), admin.getOutputPerMillion(),
+                        PriceSource.ADMIN, null, null, admin.getEffectiveFrom()));
+                continue;
+            }
+            ModelCatalogService catalog = catalog();
+            var entry = catalog == null ? Optional.<com.abada.engine.persistence.entity.ModelCatalogPriceEntity>empty()
+                    : catalog.entryAt(id, now);
+            result.add(entry.map(row -> new EffectivePrice(id, row.getInputPerMillion(), row.getOutputPerMillion(),
+                            PriceSource.CATALOG, row.getModel(), row.getSource(), row.getEffectiveFrom()))
+                    .orElse(new EffectivePrice(id, null, null, PriceSource.NONE, null, null, null)));
+        }
+        return result;
     }
 
     /** The cost of a call with these token counts at {@code at}. */

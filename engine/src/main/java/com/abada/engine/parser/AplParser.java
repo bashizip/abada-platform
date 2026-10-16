@@ -118,10 +118,36 @@ public final class AplParser {
 
     private final Set<String> allowedAgentModels;
     private final boolean enforceDeploymentPolicy;
+    private volatile java.util.function.Supplier<Set<String>> discoveredAgentModels = Set::of;
 
-    /** Agent models this parser accepts; empty when the check is disabled. */
+    /**
+     * Agent models this parser accepts: the operator's allow-list plus the models
+     * the configured providers list (see {@code AiModelDiscoveryService}); empty
+     * when the operator disabled the check.
+     */
     public Set<String> allowedAgentModels() {
-        return allowedAgentModels;
+        if (allowedAgentModels.isEmpty()) return allowedAgentModels;
+        Set<String> discovered = discoveredAgentModels.get();
+        if (discovered == null || discovered.isEmpty()) return allowedAgentModels;
+        Set<String> all = new java.util.TreeSet<>(allowedAgentModels);
+        all.addAll(discovered);
+        return java.util.Collections.unmodifiableSet(all);
+    }
+
+    /** The Spring-managed parser also accepts the models the configured providers list. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDiscoveredAgentModels(
+            org.springframework.beans.factory.ObjectProvider<com.abada.engine.llm.AiModelDiscoveryService> discovered) {
+        withDiscoveredAgentModels(() -> {
+            com.abada.engine.llm.AiModelDiscoveryService service = discovered.getIfAvailable();
+            return service == null ? Set.of() : service.get();
+        });
+    }
+
+    /** Adds the models discovered from the configured providers to the allow-list. */
+    public AplParser withDiscoveredAgentModels(java.util.function.Supplier<Set<String>> discovered) {
+        this.discoveredAgentModels = discovered == null ? Set::of : discovered;
+        return this;
     }
 
     public AplParser() {
@@ -1133,10 +1159,10 @@ public final class AplParser {
         }
         String model = node.path("model").asText(null);
         if (model != null && !model.isBlank() && !allowedAgentModels.isEmpty()
-                && !allowedAgentModels.contains(model.strip())) {
+                && !allowedAgentModels().contains(model.strip())) {
             throw validation("model", "agent node '" + nodeId + "' declares model '" + model.strip()
                     + "' which is not on the allowed model list ("
-                    + String.join(", ", allowedAgentModels) + ")");
+                    + String.join(", ", allowedAgentModels) + ") nor listed by a configured provider");
         }
         List<String> fallbackModels = new ArrayList<>();
         JsonNode rawFallbacks = node.path("fallback_models");
@@ -1150,10 +1176,10 @@ public final class AplParser {
                     throw validation("fallback_models", "agent node '" + nodeId + "' lists model '" + candidate
                             + "' more than once across model and fallback_models");
                 }
-                if (!allowedAgentModels.isEmpty() && !allowedAgentModels.contains(candidate)) {
+                if (!allowedAgentModels.isEmpty() && !allowedAgentModels().contains(candidate)) {
                     throw validation("fallback_models", "agent node '" + nodeId + "' declares fallback model '"
                             + candidate + "' which is not on the allowed model list ("
-                            + String.join(", ", allowedAgentModels) + ")");
+                            + String.join(", ", allowedAgentModels) + ") nor listed by a configured provider");
                 }
                 fallbackModels.add(candidate);
             }

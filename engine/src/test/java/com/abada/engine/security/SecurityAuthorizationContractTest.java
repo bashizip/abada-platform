@@ -60,6 +60,8 @@ class SecurityAuthorizationContractTest {
     @Autowired AiProviderRepository aiProviders;
     @Autowired com.abada.engine.security.AesEncryption encryption;
     @MockitoBean JwtDecoder jwtDecoder;
+    /** Saving a provider makes a live test call; here it always succeeds. */
+    @MockitoBean com.abada.engine.llm.AiProviderGateway aiGateway;
 
     @BeforeEach
     void configureJwtDecoder() {
@@ -408,6 +410,12 @@ class SecurityAuthorizationContractTest {
         mvc.perform(get(prices)).andExpect(status().isUnauthorized());
         mvc.perform(get(prices).header("Authorization", "Bearer tasks")).andExpect(status().isOk());
         assertForbidden(post(prices).contentType(MediaType.APPLICATION_JSON).content(price), "operator");
+        mvc.perform(get(prices + "/effective").param("model", "m").header("Authorization", "Bearer tasks"))
+                .andExpect(status().isOk());
+        mvc.perform(get(prices + "/catalog")).andExpect(status().isUnauthorized());
+        mvc.perform(get(prices + "/catalog").header("Authorization", "Bearer tasks")).andExpect(status().isOk());
+        assertForbidden(post(prices + "/catalog/refresh"), "operator");
+        assertForbidden(post(prices + "/catalog/refresh"), "tasks");
         assertForbidden(post(prices).contentType(MediaType.APPLICATION_JSON).content(price), "insight-reviewer");
         mvc.perform(post(prices).contentType(MediaType.APPLICATION_JSON).content(price)
                         .header("Authorization", "Bearer expired"))
@@ -436,6 +444,13 @@ class SecurityAuthorizationContractTest {
         assertForbidden(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                 .delete("/v1/ai-providers/gemini"), "insight-reader");
         assertForbidden(post("/v1/ai-providers/gemini/test"), "insight-reader");
+        assertForbidden(post("/v1/ai-providers/gemini/models/refresh"), "insight-reader");
+        assertForbidden(post("/v1/ai-providers/gemini/models/refresh"), "operator");
+        mvc.perform(get("/v1/ai-providers/models")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/v1/ai-providers/models").header("Authorization", "Bearer expired"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/v1/ai-providers/models").header("Authorization", "Bearer tasks"))
+                .andExpect(status().isOk());
         assertForbidden(get("/v1/ai-providers"), "tasks");
         mvc.perform(get("/v1/ai-providers").header("Authorization", "Bearer insight-reader"))
                 .andExpect(status().isOk());

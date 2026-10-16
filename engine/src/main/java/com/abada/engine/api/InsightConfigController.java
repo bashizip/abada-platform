@@ -88,7 +88,7 @@ public class InsightConfigController {
         AiProviderType type = AiProviderType.fromId((String) body.get("providerType"))
                 .orElse(AiProviderType.OPENAI_COMPATIBLE);
         Object timeout = body.get("timeoutMs");
-        providers.save(type.id(), new AiProviderRequest(null, type.id(), (String) body.get("baseUrl"),
+        providers.saveVerified(type.id(), new AiProviderRequest(null, type.id(), (String) body.get("baseUrl"),
                 (String) body.get("apiKey"), null, (String) body.get("model"),
                 timeout instanceof Number number ? number.longValue() : null,
                 body.containsKey("enabled") ? Boolean.TRUE.equals(body.get("enabled")) : null, true));
