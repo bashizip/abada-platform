@@ -59,7 +59,7 @@ delegation and the event stream.
 | --- | --- |
 | Set `ABADA_ENCRYPTION_KEY` and keep it with your backups | Tool credentials and journaled payloads are encrypted with it |
 | Set `ABADA_AGENT_ALLOWED_TOOLS` on the worker | Agents call only the tool servers the operator allows |
-| Add model prices in **Settings → Model Prices** | A step with `budget_usd` fails closed for an unpriced model |
+| Check **Settings → Model Prices** (from 1.1.1 the public catalog fills the gaps; add your own price for a negotiated rate) | A step with `budget_usd` fails closed for an unpriced model |
 
 **Going back to 1.1.0-rc.1** requires restoring the backup you took before the
 upgrade. Details: `docs/operations/upgrading.md` in the repository.

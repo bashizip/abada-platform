@@ -1,6 +1,6 @@
 ---
 title: Privacy and the install report
-description: What the running platform sends (nothing to Abada), what the installer reports once, what the download server records, and how to opt out.
+description: What the running platform contacts (only what you configure or enable, never Abada), what the installer reports once, what the download server records, and how to opt out.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -8,10 +8,13 @@ import { Aside } from '@astrojs/starlight/components';
 ## The short version
 
 - **The running platform never contacts Abada.** The Engine, Studio, the Agent
-  Worker and Keycloak talk only to what you configure: your database, your
-  identity provider, your model endpoint and, if you turn it on, your own
-  telemetry collector. [Telemetry](/user/telemetry/) stays off by default and
-  goes only to your collector.
+  Worker and Keycloak talk only to what you configure or enable: your database,
+  your identity provider, your model providers (to answer agent steps and, once
+  a day, to list the models your key can use), your MCP tool servers, the
+  public model price catalog (once a day, on by default) and, if you turn it
+  on, your own telemetry collector. [Telemetry](/user/telemetry/) stays off by
+  default and goes only to your collector. None of these calls carries data
+  from your processes unless it is a model or tool call your process makes.
 - **The Linux and macOS installer sends one anonymous report** when it
   finishes, so we can tell how many installs succeed or fail and where they
   fail. You can switch it off.
@@ -75,6 +78,15 @@ platforms to support. They are stored in Cloudflare, which hosts the download
 server, and are read by the maintainers of the project. Because a record holds
 no name, no address and no city, it cannot be tied to a person afterwards, so a request
 to delete "my" record cannot be matched to one.
+
+## Connections the running platform makes
+
+| Connection | When | What it carries | Turn it off |
+| --- | --- | --- | --- |
+| Your model providers | Each agent step, Insight and authoring call; a test call when a provider is saved; their model list once a day | The prompt and inputs your process declares; for the test, a fixed "Reply with READY"; for the list, only the key | Remove the provider; `ABADA_MODEL_DISCOVERY_ENABLED=false` for the daily list |
+| Your MCP tool servers | Each tool call an agent makes under its policy | The tool arguments | Remove the tool binding |
+| Public price catalog (`openrouter.ai` by default) | Once a day | Nothing: a plain `GET` of the public model list, no key, no identifier | `ABADA_PRICE_CATALOG_ENABLED=false` (the release snapshot then prices what it knows), or point `ABADA_PRICE_CATALOG_URL` at a mirror |
+| Your identity provider, database, telemetry collector | As configured | What each needs | Their own settings |
 
 ## Opt out
 
