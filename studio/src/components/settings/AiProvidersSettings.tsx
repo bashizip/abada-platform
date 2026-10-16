@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Pencil, Plug, Plus, Sparkles, Trash2, XCircle } from 'lucide-react';
-import { AiConnectionTestResult, AiProvider, AiProvidersAPI, AiProvidersStatus } from '@/api/aiProviders';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Pencil, Plug, Plus, RefreshCw, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { AiConnectionTestResult, AiProvider, AiProvidersAPI, AiProvidersStatus, ProviderModels } from '@/api/aiProviders';
+import { notifyAiProvidersChanged } from '@/lib/aiProviderEvents';
 import {
   AI_PROVIDER_PRESETS, describeRouting, isValidProviderId, keyStatusOf, modelsFor, parsePatterns, presetFor,
 } from '@/lib/aiProviders';
@@ -80,13 +81,17 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
   const [defaultId, setDefaultId] = useState('');
   const [defaultModel, setDefaultModel] = useState('');
   const [savingDefault, setSavingDefault] = useState(false);
+  const [discovered, setDiscovered] = useState<Record<string, ProviderModels>>({});
+  const [refreshing, setRefreshing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [list, current] = await Promise.all([AiProvidersAPI.list(), AiProvidersAPI.status()]);
+      const [list, current, models] = await Promise.all([AiProvidersAPI.list(), AiProvidersAPI.status(),
+        AiProvidersAPI.models().catch(() => [] as ProviderModels[])]);
       setProviders(list);
       setStatus(current);
+      setDiscovered(Object.fromEntries(models.map((entry) => [entry.providerId, entry])));
       const chosenId = current.requestedInsightProviderId ?? current.insightProviderId ?? '';
       const chosen = list.find((provider) => provider.id === chosenId);
       setDefaultId(chosenId);
@@ -109,6 +114,24 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
   };
 
   const byId = (id: string | null | undefined) => providers.find((provider) => provider.id === id);
+  /** The provider's own model list when it was read, else the models the engine allows for its prefixes. */
+  const suggestions = (id: string, patterns: string[], fallback: string | null) => {
+    const listed = discovered[id]?.models ?? [];
+    return listed.length > 0 ? listed : modelsFor(patterns, fallback, agentModelOptions());
+  };
+  const refreshModels = async (id: string) => {
+    setRefreshing(id);
+    onError(null);
+    try {
+      const result = await AiProvidersAPI.refreshModels(id);
+      setDiscovered((current) => ({ ...current, [id]: result }));
+      notifyAiProvidersChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Failed to refresh models');
+    } finally {
+      setRefreshing(null);
+    }
+  };
   const effective = byId(status?.insightProviderId);
   const requested = byId(status?.requestedInsightProviderId);
   const chosenForDefault = byId(defaultId);
@@ -127,6 +150,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
         enabled: true,
       });
       await load();
+      notifyAiProvidersChanged();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Failed to save the default model');
     } finally {
@@ -154,6 +178,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
       });
       edit(null);
       await load();
+      notifyAiProvidersChanged();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Failed to save AI provider');
     } finally {
@@ -186,6 +211,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
     try {
       await AiProvidersAPI.remove(provider.id);
       await load();
+      notifyAiProvidersChanged();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Failed to remove AI provider');
     }
@@ -235,7 +261,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
             onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })}
             placeholder={preset.defaultModel ?? 'model id'} className={`${inputClass} font-mono`} />
           <datalist id="ai-provider-draft-models">
-            {modelsFor(parsePatterns(draft.patterns), null, agentModelOptions()).map((model) => <option key={model} value={model} />)}
+            {suggestions(draft.id, parsePatterns(draft.patterns), null).map((model) => <option key={model} value={model} />)}
           </datalist>
         </label>
         <details className="rounded-lg border border-[#3A322E] px-3 py-2 text-[10px] text-[#A89F91]" open={draft.providerType === 'openai-compatible'}>
@@ -274,9 +300,12 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
           </button>
           <button type="button" onClick={() => void save()} disabled={isSaving}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[#2A9D8F]/50 bg-[#2A9D8F]/15 py-2 text-xs font-medium text-[#2A9D8F] disabled:opacity-50">
-            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Save
+            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {isSaving ? 'Testing…' : 'Test & save'}
           </button>
         </div>
+        <p className="text-[10px] leading-relaxed text-[#5A524A]">
+          Saving makes one short call with this key and model; nothing is saved unless the provider answers.
+        </p>
       </div>
     );
   }
@@ -313,7 +342,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
                 aria-label="Default model" placeholder="model id"
                 className="rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 font-mono text-xs text-[#EAE3D9]" />
               <datalist id="ai-default-models">
-                {chosenForDefault && modelsFor(chosenForDefault.modelPatterns, chosenForDefault.defaultModel, agentModelOptions())
+                {chosenForDefault && suggestions(chosenForDefault.id, chosenForDefault.modelPatterns, chosenForDefault.defaultModel)
                   .map((model) => <option key={model} value={model} />)}
               </datalist>
               <button type="button" onClick={() => void saveDefault()} disabled={!defaultChanged || savingDefault}
@@ -368,6 +397,21 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
               Serves {describeRouting(provider.modelPatterns)}
               {provider.defaultModel ? <> · default <span className="font-mono text-[#C9BFAF]">{provider.defaultModel}</span></> : null}
             </p>
+            {provider.configured && (
+              <p className="mt-1 flex items-center gap-1.5 text-[10px] text-[#5A524A]">
+                {discovered[provider.id]?.refreshedAt
+                  ? `${discovered[provider.id].models.length} models available · read ${new Date(discovered[provider.id].refreshedAt!).toLocaleString()}`
+                  : 'Model list not read yet'}
+                {discovered[provider.id]?.lastError && (
+                  <span className="text-[#F4A261]" title={discovered[provider.id].lastError ?? undefined}>· last read failed</span>
+                )}
+                <button type="button" onClick={() => void refreshModels(provider.id)} disabled={refreshing !== null}
+                  aria-label={`Refresh models of ${provider.displayName}`} title="Read the provider's model list now"
+                  className="rounded p-0.5 text-[#A89F91] hover:text-[#EAE3D9] disabled:opacity-40">
+                  {refreshing === provider.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                </button>
+              </p>
+            )}
             {provider.providerType === 'openai-compatible' && provider.baseUrl && (
               <p className="mt-0.5 truncate font-mono text-[10px] text-[#5A524A]" title={provider.baseUrl}>{provider.baseUrl}</p>
             )}

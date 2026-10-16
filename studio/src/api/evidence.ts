@@ -64,11 +64,55 @@ export interface AgentStepPayloads {
   result?: unknown;
 }
 
+/** The price a model has now and where it comes from: your price, the public catalog, or none. */
+export interface EffectivePrice {
+  model: string;
+  inputPerMillion: number | null;
+  outputPerMillion: number | null;
+  source: 'ADMIN' | 'CATALOG' | 'NONE';
+  /** The catalog id that priced it, e.g. `google/gemini-3.8-flash`. */
+  catalogModel: string | null;
+  /** `catalog:openrouter.ai` or the release snapshot, e.g. `snapshot-2026-10-16`. */
+  catalogSource: string | null;
+  effectiveFrom: string | null;
+}
+
+/** The public price catalog the engine reads once a day. */
+export interface PriceCatalogStatus {
+  enabled: boolean;
+  url: string;
+  refreshedAt: string | null;
+  status: 'OK' | 'FAILED' | null;
+  message: string | null;
+  modelCount: number | null;
+  snapshotTaken: string;
+}
+
 const json = { 'Content-Type': 'application/json' };
 
 export class EvidenceAPI {
   static async prices(): Promise<ModelPrice[]> {
     const res = await authenticatedFetch(`${config.apiUrl}/v1/model-prices`);
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  static async effectivePrices(models: string[]): Promise<EffectivePrice[]> {
+    const query = new URLSearchParams();
+    models.forEach((model) => query.append('model', model));
+    const res = await authenticatedFetch(`${config.apiUrl}/v1/model-prices/effective?${query.toString()}`);
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  static async priceCatalog(): Promise<PriceCatalogStatus> {
+    const res = await authenticatedFetch(`${config.apiUrl}/v1/model-prices/catalog`);
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  static async refreshPriceCatalog(): Promise<PriceCatalogStatus> {
+    const res = await authenticatedFetch(`${config.apiUrl}/v1/model-prices/catalog/refresh`, { method: 'POST' });
     if (!res.ok) throw await apiError(res);
     return res.json();
   }

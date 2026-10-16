@@ -4,6 +4,7 @@ import { InsightAPI, InsightLlmConfig, InsightApprovalPolicy } from '@/api/insig
 import { AiProvidersSettings } from '@/components/settings/AiProvidersSettings';
 import { ModelPricesSettings } from '@/components/settings/ModelPricesSettings';
 import { presetFor } from '@/lib/aiProviders';
+import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -38,6 +39,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
       setIsLoading(false);
     }
   }, [definitionKey, projectId]);
+
+  // The Insight tab shows the provider chosen in the AI Providers tab: read it
+  // again when that tab saves something and whenever the Insight tab is opened.
+  const aiProvidersVersion = useAiProvidersVersion();
+  useEffect(() => {
+    if (isOpen && activeTab === 'insight') void loadConfig();
+  }, [isOpen, activeTab, aiProvidersVersion, loadConfig]);
 
   useEffect(() => {
     if (!isOpen) return;
