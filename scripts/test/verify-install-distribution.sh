@@ -29,6 +29,9 @@ cat >"$STAGING_DIR/release/abada-platform" <<'FIXTURE'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >"${ABADA_TEST_MARKER:?}"
+# Like `docker compose exec`, read stdin when asked to: under `curl | bash` that
+# stdin is the rest of the installer itself.
+[[ -z "${ABADA_TEST_READ_STDIN:-}" ]] || cat >/dev/null
 FIXTURE
 chmod +x "$STAGING_DIR/release/abada-platform"
 
@@ -110,6 +113,25 @@ if grep -Fq 'test_gemini_key_1234567890' "$INSTALL_OUTPUT"; then
   echo "Installer exposed the Gemini credential in its output" >&2
   exit 1
 fi
+
+# `curl ... | bash`: the installer is read from stdin while it runs. A command in
+# `up dev` that reads stdin must not swallow the rest of the script, so the final
+# instructions are still printed.
+PIPED_OUTPUT="$TMP_DIR/piped-output"
+PATH="$FAKE_BIN:$PATH" \
+ABADA_TEST_MARKER="$MARKER" \
+ABADA_TEST_REAL_CURL="$REAL_CURL" \
+ABADA_TEST_READ_STDIN=1 \
+ABADA_VERSION="$VERSION" \
+ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
+ABADA_INSTALL_DIR="$TMP_DIR/piped-install" \
+  bash <"$ROOT_DIR/install/install.sh" >"$PIPED_OUTPUT" 2>&1
+[[ "$(cat "$MARKER")" == "up dev" ]] || { echo "piped install did not start the platform" >&2; exit 1; }
+grep -Fq 'HIGH review: bob / bob' "$PIPED_OUTPUT" || {
+  echo "piped install stopped before its final instructions" >&2
+  cat "$PIPED_OUTPUT" >&2
+  exit 1
+}
 
 # Invalid credentials must fail before download without echoing their value.
 INVALID_OUTPUT="$TMP_DIR/invalid-key-output"
