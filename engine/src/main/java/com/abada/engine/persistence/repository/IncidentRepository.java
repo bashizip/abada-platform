@@ -13,4 +13,10 @@ public interface IncidentRepository extends JpaRepository<IncidentEntity, String
     List<IncidentEntity> findByProjectIdOrderByCreatedAtDesc(String projectId, Pageable page);
 
     List<IncidentEntity> findByProjectIdAndResolvedAtIsNullOrderByCreatedAtDesc(String projectId, Pageable page);
+
+    List<IncidentEntity> findByProjectIdAndProcessInstanceIdOrderByCreatedAtDesc(String projectId,
+            String processInstanceId, Pageable page);
+
+    List<IncidentEntity> findByProjectIdAndProcessInstanceIdAndResolvedAtIsNullOrderByCreatedAtDesc(String projectId,
+            String processInstanceId, Pageable page);
 }

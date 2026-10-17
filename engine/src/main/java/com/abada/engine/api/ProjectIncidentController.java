@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Project-scoped runtime incidents, newest first. */
+/** Project-scoped runtime incidents, newest first, optionally of one process instance. */
 @RestController
 @RequestMapping("/v1/projects/{projectId}/incidents")
 public class ProjectIncidentController {
@@ -40,13 +40,21 @@ public class ProjectIncidentController {
     @GetMapping
     public List<IncidentDTO> list(@PathVariable String projectId,
             @RequestParam(defaultValue = "true") boolean open,
+            @RequestParam(required = false) String processInstanceId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         access.require(projectId, Role.VIEWER, Role.OPERATOR, Role.OWNER);
         var pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        var result = open
-                ? incidents.findByProjectIdAndResolvedAtIsNullOrderByCreatedAtDesc(projectId, pageable)
-                : incidents.findByProjectIdOrderByCreatedAtDesc(projectId, pageable);
+        boolean oneInstance = processInstanceId != null && !processInstanceId.isBlank();
+        var result = oneInstance
+                ? open
+                        ? incidents.findByProjectIdAndProcessInstanceIdAndResolvedAtIsNullOrderByCreatedAtDesc(
+                                projectId, processInstanceId, pageable)
+                        : incidents.findByProjectIdAndProcessInstanceIdOrderByCreatedAtDesc(projectId,
+                                processInstanceId, pageable)
+                : open
+                        ? incidents.findByProjectIdAndResolvedAtIsNullOrderByCreatedAtDesc(projectId, pageable)
+                        : incidents.findByProjectIdOrderByCreatedAtDesc(projectId, pageable);
         return result.stream().map(IncidentDTO::from).toList();
     }
 
