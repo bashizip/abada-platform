@@ -61,11 +61,10 @@ public class ProjectOperationsController {
 
     @PatchMapping("/variables")
     public ResponseEntity<Void> patchVariables(@PathVariable String projectId,
-            @PathVariable String instanceId, @RequestBody VariablePatchRequest request,
+            @PathVariable String instanceId, @RequestBody(required = false) VariablePatchRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         requireInstance(projectId, instanceId, true);
-        Map<String, Object> modifications = request.modifications().entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().toObject()));
+        Map<String, Object> modifications = VariablePatches.modifications(request);
         idempotency.execute(idempotencyKey, "project.process.variables.patch",
                 Map.of("projectId", projectId, "instanceId", instanceId, "modifications", modifications), () -> {
                     engine.updateProcessVariables(instanceId, modifications);

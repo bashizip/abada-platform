@@ -82,16 +82,12 @@ public class CockpitController {
     @PatchMapping("/{instanceId}/variables")
     public ResponseEntity<Void> patchProcessVariables(
             @PathVariable String instanceId,
-            @RequestBody VariablePatchRequest request,
+            @RequestBody(required = false) VariablePatchRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
         requireInstance(instanceId);
 
-        // Apply the variable modifications
-        Map<String, Object> modifications = request.modifications().entrySet().stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> entry.getValue().toObject()));
+        Map<String, Object> modifications = VariablePatches.modifications(request);
 
         idempotency.execute(idempotencyKey, "process.variables.patch",
                 Map.of("instanceId", instanceId, "modifications", modifications), () -> {
