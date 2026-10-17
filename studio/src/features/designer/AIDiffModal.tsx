@@ -28,9 +28,9 @@ interface AIDiffModalProps {
 }
 
 const KIND_META: Record<string, { label: string; cls: string }> = {
-  added: { label: 'ADDED', cls: 'text-[#90A955] border-[#90A955]/50 bg-[#90A955]/10' },
-  modified: { label: 'MODIFIED', cls: 'text-[#F4A261] border-[#F4A261]/50 bg-[#F4A261]/10' },
-  removed: { label: 'REMOVED', cls: 'text-[#E76F51] border-[#E76F51]/50 bg-[#E76F51]/10' },
+  added: { label: 'ADDED', cls: 'text-sage-green border-sage-green/50 bg-sage-green/10' },
+  modified: { label: 'MODIFIED', cls: 'text-saffron border-saffron/50 bg-saffron/10' },
+  removed: { label: 'REMOVED', cls: 'text-desert-rose border-desert-rose/50 bg-desert-rose/10' },
 };
 
 type DiffTab = 'graph' | 'yaml';
@@ -149,29 +149,29 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
     proposal.edgeChanges.filter((c) => c.kind === 'removed').length;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#141110]/90 backdrop-blur-sm p-3">
-      <div className="flex-1 min-h-0 flex flex-col bg-[#1A1614] border border-[#3A322E] rounded-2xl shadow-warm-xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex flex-col bg-charcoal-veil/90 backdrop-blur-sm p-3">
+      <div className="flex-1 min-h-0 flex flex-col bg-charcoal border border-hairline rounded-2xl shadow-warm-xl overflow-hidden">
         {/* PR header — title, source trigger, single-word CTAs */}
-        <div className="flex items-center gap-3 px-5 py-3.5 border-b border-[#3A322E] shrink-0">
+        <div className="flex items-center gap-3 px-5 py-3.5 border-b border-hairline shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-[#9D4EDD]/15 border border-[#9D4EDD]/40 flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4 text-[#9D4EDD]" />
+            <div className="w-8 h-8 rounded-lg bg-amethyst/15 border border-amethyst/40 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 text-amethyst" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-[#EAE3D9] tracking-wide truncate">
+                <h2 className="text-sm font-semibold text-linen tracking-wide truncate">
                   {proposal.title}
                 </h2>
-                <span className="text-[10px] font-mono text-[#A89F91] bg-[#25201D] border border-[#3A322E] px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-mono text-sand bg-mocha border border-hairline px-1.5 py-0.5 rounded">
                   {proposal.targetDefinition}
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] flex items-center gap-1 text-[#9D4EDD] font-medium bg-[#9D4EDD]/10 border border-[#9D4EDD]/30 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] flex items-center gap-1 text-amethyst font-medium bg-amethyst/10 border border-amethyst/30 px-1.5 py-0.5 rounded">
                   <GitBranch className="w-3 h-3" />
                   {proposal.source}
                 </span>
-                <span className="text-[10px] text-[#A89F91]">
+                <span className="text-[10px] text-sand">
                   {new Date(proposal.createdAt).toLocaleString()}
                 </span>
               </div>
@@ -183,7 +183,7 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
               type="button"
               onClick={() => void submit('reject')}
               disabled={submitting || !comment.trim()}
-              className="h-9 px-4 rounded-lg border border-[#E76F51]/40 bg-[#1A1614] text-xs font-semibold text-[#E76F51] hover:bg-[#2F2926] transition-all flex items-center gap-1.5"
+              className="h-9 px-4 rounded-lg border border-desert-rose/40 bg-charcoal text-xs font-semibold text-desert-rose hover:bg-mocha-hover transition-all flex items-center gap-1.5"
             >
               <XCircle className="w-3.5 h-3.5" />
               Reject
@@ -192,7 +192,7 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
               type="button"
               onClick={() => void submit('approve')}
               disabled={submitting}
-              className="h-9 px-4 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] text-xs font-semibold transition-all flex items-center gap-1.5"
+              className="h-9 px-4 rounded-lg bg-mineral-teal hover:bg-mineral-teal-bright text-charcoal text-xs font-semibold transition-all flex items-center gap-1.5"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Approve
@@ -201,7 +201,7 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
               type="button"
               onClick={onExit}
               aria-label="Close review"
-              className="ml-1 w-9 h-9 flex items-center justify-center rounded-lg border border-[#3A322E] bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9] hover:bg-[#2F2926] transition-all"
+              className="ml-1 w-9 h-9 flex items-center justify-center rounded-lg border border-hairline bg-charcoal text-sand hover:text-linen hover:bg-mocha-hover transition-all"
             >
               <X className="w-4 h-4" />
             </button>
@@ -210,15 +210,15 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
 
         <div className="flex-1 min-h-0 flex">
           {/* Left: graph diff OR APL YAML diff */}
-          <div className="flex-1 min-w-0 flex flex-col border-r border-[#3A322E]">
+          <div className="flex-1 min-w-0 flex flex-col border-r border-hairline">
             <div className="flex items-center gap-1 px-4 pt-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setTab('graph')}
                 className={`text-[11px] px-3 py-1.5 rounded-lg border transition-all ${
                   tab === 'graph'
-                    ? 'bg-[#25201D] text-[#EAE3D9] border-[#3A322E]'
-                    : 'text-[#A89F91] border-transparent hover:text-[#EAE3D9]'
+                    ? 'bg-mocha text-linen border-hairline'
+                    : 'text-sand border-transparent hover:text-linen'
                 }`}
               >
                 Graph diff
@@ -228,8 +228,8 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
                 onClick={() => setTab('yaml')}
                 className={`text-[11px] px-3 py-1.5 rounded-lg border transition-all ${
                   tab === 'yaml'
-                    ? 'bg-[#25201D] text-[#EAE3D9] border-[#3A322E]'
-                    : 'text-[#A89F91] border-transparent hover:text-[#EAE3D9]'
+                    ? 'bg-mocha text-linen border-hairline'
+                    : 'text-sand border-transparent hover:text-linen'
                 }`}
               >
                 APL YAML diff
@@ -263,40 +263,40 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
               </div>
             ) : (
               <div className="flex-1 min-h-0 mt-2 grid grid-cols-2 gap-3 px-4 pb-4">
-                <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border border-[#3A322E] bg-[#14100D]">
-                  <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#A89F91] border-b border-[#3A322E] bg-[#1A1614]">
+                <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border border-hairline bg-charcoal-ink">
+                  <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-sand border-b border-hairline bg-charcoal">
                     Base definition
                   </div>
-                  <pre className="flex-1 overflow-auto p-3 text-[10px] font-mono leading-relaxed text-[#A89F91] whitespace-pre-wrap">{baseYaml}</pre>
+                  <pre className="flex-1 overflow-auto p-3 text-[10px] font-mono leading-relaxed text-sand whitespace-pre-wrap">{baseYaml}</pre>
                 </div>
-                <div className="flex flex-col min-h-0 overflow-hidden rounded-lg border border-[#9D4EDD]/30 bg-[#14100D]">
-                  <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#9D4EDD] border-b border-[#3A322E] bg-[#25201D] flex items-center justify-between">
+                <div className="flex flex-col min-h-0 overflow-hidden rounded-lg border border-amethyst/30 bg-charcoal-ink">
+                  <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-amethyst border-b border-hairline bg-mocha flex items-center justify-between">
                     <span>Proposed definition</span>
                     <Tags className="w-3 h-3" />
                   </div>
-                  <pre className="flex-1 overflow-auto p-3 text-[10px] font-mono leading-relaxed text-[#EAE3D9] whitespace-pre-wrap">{proposedYaml}</pre>
+                  <pre className="flex-1 overflow-auto p-3 text-[10px] font-mono leading-relaxed text-linen whitespace-pre-wrap">{proposedYaml}</pre>
                 </div>
               </div>
             )}
           </div>
 
           {/* Right: insight diagnostics */}
-          <div className="w-80 shrink-0 flex flex-col min-h-0 bg-[#201B18]">
-            <div className="px-4 py-3 border-b border-[#3A322E] shrink-0">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#EAE3D9] flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#9D4EDD]" />
+          <div className="w-80 shrink-0 flex flex-col min-h-0 bg-mocha-deep">
+            <div className="px-4 py-3 border-b border-hairline shrink-0">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-linen flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amethyst" />
                 Insight Diagnostics
               </h3>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-[#A89F91]">{proposal.rationale}</p>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-sand">{proposal.rationale}</p>
               <div className="mt-2.5 flex flex-wrap gap-1.5 text-[10px]">
                 {addCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full border border-[#90A955]/40 bg-[#90A955]/10 text-[#90A955] font-mono">+{addCount} added</span>
+                  <span className="px-2 py-0.5 rounded-full border border-sage-green/40 bg-sage-green/10 text-sage-green font-mono">+{addCount} added</span>
                 )}
                 {modCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full border border-[#F4A261]/40 bg-[#F4A261]/10 text-[#F4A261] font-mono">~{modCount} modified</span>
+                  <span className="px-2 py-0.5 rounded-full border border-saffron/40 bg-saffron/10 text-saffron font-mono">~{modCount} modified</span>
                 )}
                 {remCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full border border-[#E76F51]/40 bg-[#E76F51]/10 text-[#E76F51] font-mono">-{remCount} removed</span>
+                  <span className="px-2 py-0.5 rounded-full border border-desert-rose/40 bg-desert-rose/10 text-desert-rose font-mono">-{remCount} removed</span>
                 )}
               </div>
             </div>
@@ -304,35 +304,35 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
             <div className="flex-1 overflow-y-auto">
               {annotated.length > 0 && (
                 <div className="px-4 pt-3">
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#A89F91] mb-2">
-                    <Tags className="w-3 h-3 text-[#9D4EDD]" />
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-sand mb-2">
+                    <Tags className="w-3 h-3 text-amethyst" />
                     # OPTIMIZATION comments ({annotated.length})
                   </div>
                 </div>
               )}
               <div className="px-4 pb-4 space-y-2">
                 {proposal.nodeChanges.map((c) => (
-                  <div key={c.nodeId} className="bg-[#1A1614] border border-[#3A322E] rounded-lg p-2.5">
+                  <div key={c.nodeId} className="bg-charcoal border border-hairline rounded-lg p-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono text-[#EAE3D9] truncate">{c.nodeId}</span>
+                      <span className="text-[10px] font-mono text-linen truncate">{c.nodeId}</span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${KIND_META[c.kind].cls}`}>
                         {KIND_META[c.kind].label}
                       </span>
                     </div>
                     {c.annotation && (
-                      <pre className="mt-2 text-[9.5px] font-mono leading-snug whitespace-pre-wrap text-[#9D4EDD] bg-[#25201D] rounded p-2 border border-[#3A322E]">
+                      <pre className="mt-2 text-[9.5px] font-mono leading-snug whitespace-pre-wrap text-amethyst bg-mocha rounded p-2 border border-hairline">
                         {c.annotation}
                       </pre>
                     )}
                   </div>
                 ))}
                 {proposal.edgeChanges.length > 0 && (
-                  <div className="bg-[#1A1614] border border-[#3A322E] rounded-lg p-2.5">
-                    <span className="text-[10px] font-mono text-[#EAE3D9]">edges</span>
+                  <div className="bg-charcoal border border-hairline rounded-lg p-2.5">
+                    <span className="text-[10px] font-mono text-linen">edges</span>
                     <div className="mt-1.5 flex flex-col gap-1">
                       {proposal.edgeChanges.map((e) => (
                         <div key={e.edgeId} className="flex items-center justify-between gap-2">
-                          <span className="text-[9.5px] font-mono text-[#A89F91] truncate">{e.edgeId}</span>
+                          <span className="text-[9.5px] font-mono text-sand truncate">{e.edgeId}</span>
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${KIND_META[e.kind].cls}`}>
                             {KIND_META[e.kind].label}
                           </span>
@@ -344,14 +344,14 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
               </div>
             </div>
 
-            <div className="px-4 py-3 border-t border-[#3A322E] shrink-0">
+            <div className="px-4 py-3 border-t border-hairline shrink-0">
               <textarea
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 placeholder="Review comment (required to reject)"
-                className="w-full mb-2 min-h-16 resize-y rounded-lg border border-[#3A322E] bg-[#14100D] p-2 text-[10px] text-[#EAE3D9] outline-none focus:border-[#2A9D8F]"
+                className="w-full mb-2 min-h-16 resize-y rounded-lg border border-hairline bg-charcoal-ink p-2 text-[10px] text-linen outline-none focus:border-mineral-teal"
               />
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+              <p className="text-[10px] text-sand leading-relaxed">
                 Approving adopts the proposed definition and bumps the semantic version. The canvas is unchanged until you approve.
               </p>
             </div>

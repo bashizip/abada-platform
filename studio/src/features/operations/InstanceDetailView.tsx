@@ -303,13 +303,13 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
 
   return (
     <TooltipProvider delayDuration={0}>
-    <div className="flex h-full w-full flex-col overflow-hidden bg-[#1A1614] text-[#EAE3D9]">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-charcoal text-linen">
       {/* ===== Header bar ===== */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-[#3A322E] bg-[#25201D] px-4 py-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-mocha px-4 py-3">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg border border-[#3A322E] bg-[#1A1614] px-2.5 py-1.5 text-[11px] font-semibold text-[#A89F91] transition-all hover:border-[#4A403A] hover:text-[#EAE3D9]"
+          className="flex items-center gap-1.5 rounded-lg border border-hairline bg-charcoal px-2.5 py-1.5 text-[11px] font-semibold text-sand transition-all hover:border-hairline-strong hover:text-linen"
           title="Back to the instances list (Esc)"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Instances
@@ -317,23 +317,23 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
 
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#9D4EDD]" />
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-amethyst" />
             {label}
           </span>
-          {source && <span className="hidden text-[10px] text-[#A89F91] sm:inline">business key</span>}
+          {source && <span className="hidden text-[10px] text-sand sm:inline">business key</span>}
         </div>
 
         <div className="hidden min-w-0 items-center gap-1.5 lg:flex">
-          <span className="truncate text-xs text-[#A89F91]">
+          <span className="truncate text-xs text-sand">
             {instance.processDefinitionName || instance.processDefinitionId}
           </span>
           {definition && (
-            <span className="rounded border border-[#9D4EDD]/30 bg-[#9D4EDD]/10 px-1.5 py-px text-[10px] font-medium text-[#9D4EDD]">
+            <span className="rounded border border-amethyst/30 bg-amethyst/10 px-1.5 py-px text-[10px] font-medium text-amethyst">
               v{definition.version}
             </span>
           )}
-          <ChevronRight className="h-3 w-3 shrink-0 text-[#A89F91]" />
-          <span className="font-mono text-[10px] text-[#A89F91]">{instance.id.slice(0, 12)}…</span>
+          <ChevronRight className="h-3 w-3 shrink-0 text-sand" />
+          <span className="font-mono text-[10px] text-sand">{instance.id.slice(0, 12)}…</span>
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -341,14 +341,14 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
           {!isTerminal && (
             <span
               className={`rounded-full border px-2 py-0.5 text-[10px] ${live
-                ? 'border-[#2A9D8F]/40 text-[#2A9D8F]' : 'border-[#3A322E] text-[#A89F91]'}`}
+                ? 'border-mineral-teal/40 text-mineral-teal' : 'border-hairline text-sand'}`}
               title={live ? 'Updates arrive from the event stream' : 'The event stream is not available; refreshing every 2 s'}
             >
               {live ? 'Live' : 'Polling'}
             </span>
           )}
-          <span className="flex items-center gap-1.5 rounded-full border border-[#3A322E] bg-[#1A1614] px-2.5 py-1 font-mono text-[11px] tabular-nums text-[#A89F91]" title="Elapsed time">
-            <Clock className="h-3 w-3 text-[#F4A261]" />
+          <span className="flex items-center gap-1.5 rounded-full border border-hairline bg-charcoal px-2.5 py-1 font-mono text-[11px] tabular-nums text-sand" title="Elapsed time">
+            <Clock className="h-3 w-3 text-saffron" />
             {formatDuration(elapsedMs)}
           </span>
 
@@ -356,7 +356,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             <button
               type="button"
               onClick={() => onOpenCanvas(instance)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#3A322E] bg-[#1A1614] text-[#A89F91] transition-all hover:border-[#2A9D8F]/50 hover:text-[#2A9D8F]"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-hairline bg-charcoal text-sand transition-all hover:border-mineral-teal/50 hover:text-mineral-teal"
               title="Open on canvas"
             >
               <Activity className="h-3.5 w-3.5" />
@@ -372,8 +372,8 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               )}
               className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
                 status === 'SUSPENDED'
-                  ? 'border-[#2A9D8F]/40 bg-[#2A9D8F]/10 text-[#2A9D8F] hover:bg-[#2A9D8F]/20'
-                  : 'border-[#F4A261]/40 bg-[#F4A261]/10 text-[#F4A261] hover:bg-[#F4A261]/20'
+                  ? 'border-mineral-teal/40 bg-mineral-teal/10 text-mineral-teal hover:bg-mineral-teal/20'
+                  : 'border-saffron/40 bg-saffron/10 text-saffron hover:bg-saffron/20'
               }`}
               title={status === 'SUSPENDED' ? 'Resume the instance' : 'Pause token advancement'}
             >
@@ -387,7 +387,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             <button
               type="button"
               onClick={() => setConfirmCancel(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-[#E76F51]/40 bg-[#E76F51]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#E76F51] transition-all hover:bg-[#E76F51]/20"
+              className="flex items-center gap-1.5 rounded-lg border border-desert-rose/40 bg-desert-rose/10 px-2.5 py-1.5 text-[11px] font-semibold text-desert-rose transition-all hover:bg-desert-rose/20"
               title="Terminate the instance (audited)"
             >
               <XCircle className="h-3.5 w-3.5" /> Cancel
@@ -397,7 +397,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
           <button
             type="button"
             onClick={exportTrace}
-            className="flex items-center gap-1.5 rounded-lg border border-[#3A322E] bg-[#1A1614] px-2.5 py-1.5 text-[11px] font-semibold text-[#A89F91] transition-all hover:border-[#9D4EDD]/50 hover:text-[#9D4EDD]"
+            className="flex items-center gap-1.5 rounded-lg border border-hairline bg-charcoal px-2.5 py-1.5 text-[11px] font-semibold text-sand transition-all hover:border-amethyst/50 hover:text-amethyst"
             title="Export the full execution trace as JSON"
           >
             <Download className="h-3.5 w-3.5" /> Export
@@ -406,7 +406,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
       </div>
 
       {error && !loading && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-[#E76F51]/30 bg-[#E76F51]/10 px-4 py-2 text-[11px] text-[#E76F51]">
+        <div className="flex shrink-0 items-center gap-2 border-b border-desert-rose/30 bg-desert-rose/10 px-4 py-2 text-[11px] text-desert-rose">
           <AlertTriangle className="h-3.5 w-3.5" /> {error}
           <button type="button" onClick={() => void load(true)} className="ml-auto font-semibold underline-offset-2 hover:underline">
             Retry
@@ -436,8 +436,8 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         {/* Canvas */}
         <div className="relative min-w-0 flex-1">
           {loading && !workflow ? (
-            <div className="flex h-full items-center justify-center gap-2 text-xs text-[#A89F91]">
-              <Loader2 className="h-4 w-4 animate-spin text-[#9D4EDD]" /> Loading execution graph…
+            <div className="flex h-full items-center justify-center gap-2 text-xs text-sand">
+              <Loader2 className="h-4 w-4 animate-spin text-amethyst" /> Loading execution graph…
             </div>
           ) : workflow && stablePath ? (
             <Canvas
@@ -462,20 +462,20 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               readOnly
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-xs text-[#A89F91]">
+            <div className="flex h-full items-center justify-center text-xs text-sand">
               The immutable definition for this instance is unavailable.
             </div>
           )}
 
           {/* Legend */}
           {stablePath && (
-            <div className="pointer-events-none absolute bottom-4 left-4 z-20 flex items-center gap-3 rounded-lg border border-[#3A322E] bg-[#25201D]/95 px-3 py-2 text-[10px] text-[#A89F91] shadow-warm-md">
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#90A955]" /> Completed</span>
-              <span className="flex items-center gap-1.5"><span className="relative flex h-2 w-2"><span className="absolute h-full w-full animate-ping rounded-full bg-[#9D4EDD] opacity-60" /><span className="relative h-2 w-2 rounded-full bg-[#9D4EDD]" /></span> Active</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#E76F51]" /> Failed</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#F4A261]" /> Waiting</span>
-              <span className="flex items-center gap-1.5"><span className="h-0.5 w-5 rounded bg-[#9D4EDD]" /> Taken path</span>
-              <span className="flex items-center gap-1.5"><span className="relative h-2 w-2"><span className="absolute inset-0 rounded-full bg-[#9D4EDD]/40" /><span className="relative h-2 w-2 rounded-full bg-[#EAE3D9]" /></span> Current token</span>
+            <div className="pointer-events-none absolute bottom-4 left-4 z-20 flex items-center gap-3 rounded-lg border border-hairline bg-mocha/95 px-3 py-2 text-[10px] text-sand shadow-warm-md">
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sage-green" /> Completed</span>
+              <span className="flex items-center gap-1.5"><span className="relative flex h-2 w-2"><span className="absolute h-full w-full animate-ping rounded-full bg-amethyst opacity-60" /><span className="relative h-2 w-2 rounded-full bg-amethyst" /></span> Active</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-desert-rose" /> Failed</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-saffron" /> Waiting</span>
+              <span className="flex items-center gap-1.5"><span className="h-0.5 w-5 rounded bg-amethyst" /> Taken path</span>
+              <span className="flex items-center gap-1.5"><span className="relative h-2 w-2"><span className="absolute inset-0 rounded-full bg-amethyst/40" /><span className="relative h-2 w-2 rounded-full bg-linen" /></span> Current token</span>
             </div>
           )}
         </div>
@@ -483,7 +483,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         {/* ===== Inspector ===== */}
         <aside
           style={{ width: panelWidth }}
-          className={`flex flex-col border-l border-[#3A322E] bg-[#25201D] ${
+          className={`flex flex-col border-l border-hairline bg-mocha ${
             pinned ? 'relative shrink-0' : 'absolute inset-y-0 right-0 z-30 shadow-warm-lg'
           }`}
         >
@@ -497,10 +497,10 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             onDoubleClick={() => setPanelWidth(INSPECTOR_PANEL_DEFAULT_WIDTH)}
             title="Drag to resize · double-click to reset"
           >
-            <div className="mx-auto h-full w-px bg-[#3A322E] transition-colors group-hover:bg-[#F4A261]" />
+            <div className="mx-auto h-full w-px bg-hairline transition-colors group-hover:bg-saffron" />
           </div>
           {/* Tabs */}
-          <div className="flex shrink-0 items-center gap-1 border-b border-[#3A322E] bg-[#1A1614]/60 p-1.5">
+          <div className="flex shrink-0 items-center gap-1 border-b border-hairline bg-charcoal/60 p-1.5">
             {([
               { id: 'telemetry', label: 'Telemetry', icon: Bot },
               { id: 'variables', label: 'Variables', icon: Braces },
@@ -512,14 +512,14 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                 onClick={() => setTab(item.id)}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-all ${
                   tab === item.id
-                    ? 'bg-[#25201D] text-[#EAE3D9] border border-[#3A322E]'
-                    : 'text-[#A89F91] hover:text-[#EAE3D9]'
+                    ? 'bg-mocha text-linen border border-hairline'
+                    : 'text-sand hover:text-linen'
                 }`}
               >
                 <item.icon className="h-3.5 w-3.5" />
                 {item.label}
                 {item.id === 'variables' && variables && (
-                  <span className="rounded-full bg-[#9D4EDD]/20 px-1.5 text-[9px] text-[#9D4EDD]">
+                  <span className="rounded-full bg-amethyst/20 px-1.5 text-[9px] text-amethyst">
                     {Object.keys(variables).length}
                   </span>
                 )}
@@ -536,8 +536,8 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                 : 'Pin — dock the inspector beside the canvas'}
               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-all ${
                 pinned
-                  ? 'border-[#2A9D8F]/40 bg-[#2A9D8F]/10 text-[#2A9D8F]'
-                  : 'border-[#3A322E] bg-[#1A1614] text-[#A89F91] hover:border-[#4A403A] hover:text-[#EAE3D9]'
+                  ? 'border-mineral-teal/40 bg-mineral-teal/10 text-mineral-teal'
+                  : 'border-hairline bg-charcoal text-sand hover:border-hairline-strong hover:text-linen'
               }`}
               title={pinned
                 ? 'Unpin — float the inspector over the canvas'
@@ -566,12 +566,12 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                   />
                 ) : (
                   <div className="space-y-3">
-                    <div className="rounded-xl border border-[#3A322E] bg-[#1A1614] p-3">
-                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#A89F91]">
-                        <Activity className="h-3.5 w-3.5 text-[#2A9D8F]" /> Instance overview
+                    <div className="rounded-xl border border-hairline bg-charcoal p-3">
+                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">
+                        <Activity className="h-3.5 w-3.5 text-mineral-teal" /> Instance overview
                       </div>
                       <InfoRow label="Status">
-                        <span className="font-medium text-[#EAE3D9]">{status}</span>
+                        <span className="font-medium text-linen">{status}</span>
                       </InfoRow>
                       <InfoRow label="Current activity">
                         {instance.currentActivityId ? humanize(instance.currentActivityId) : '—'}
@@ -583,9 +583,9 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                       <InfoRow label="History events">{history.length}</InfoRow>
                       <InfoRow label="Incident jobs">{failedJobs.length}</InfoRow>
                     </div>
-                    <p className="rounded-xl border border-dashed border-[#3A322E] bg-[#1A1614] p-3 text-[11px] leading-relaxed text-[#A89F91]">
+                    <p className="rounded-xl border border-dashed border-hairline bg-charcoal p-3 text-[11px] leading-relaxed text-sand">
                       Select a node on the graph to inspect its telemetry, AI attempt metadata and error state.
-                      Use <span className="font-mono text-[#F4A261]">←</span> / <span className="font-mono text-[#F4A261]">→</span> to navigate nodes.
+                      Use <span className="font-mono text-saffron">←</span> / <span className="font-mono text-saffron">→</span> to navigate nodes.
                     </p>
                   </div>
                 )}
@@ -604,19 +604,19 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
       {/* ===== Cancel confirm ===== */}
       {confirmCancel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm" onClick={() => setConfirmCancel(false)}>
-          <div className="w-full max-w-sm rounded-2xl border border-[#3A322E] bg-[#25201D] p-5 shadow-warm-lg" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-[#E76F51]/30 bg-[#E76F51]/10">
-              <AlertTriangle className="h-4 w-4 text-[#E76F51]" />
+          <div className="w-full max-w-sm rounded-2xl border border-hairline bg-mocha p-5 shadow-warm-lg" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-desert-rose/30 bg-desert-rose/10">
+              <AlertTriangle className="h-4 w-4 text-desert-rose" />
             </div>
-            <h3 className="text-sm font-semibold text-[#EAE3D9]">Cancel instance</h3>
-            <p className="mt-1.5 text-xs leading-relaxed text-[#A89F91]">
-              Cancel <span className="font-semibold text-[#EAE3D9]">{label}</span>? This is terminal, audited, and cannot be undone.
+            <h3 className="text-sm font-semibold text-linen">Cancel instance</h3>
+            <p className="mt-1.5 text-xs leading-relaxed text-sand">
+              Cancel <span className="font-semibold text-linen">{label}</span>? This is terminal, audited, and cannot be undone.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setConfirmCancel(false)}
-                className="rounded-lg border border-[#3A322E] px-3 py-1.5 text-xs font-semibold text-[#A89F91] transition-colors hover:border-[#4A403A] hover:text-[#EAE3D9]"
+                className="rounded-lg border border-hairline px-3 py-1.5 text-xs font-semibold text-sand transition-colors hover:border-hairline-strong hover:text-linen"
               >
                 Keep running
               </button>
@@ -626,7 +626,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                   setConfirmCancel(false);
                   void mutate(() => EngineAPI.cancelInstance(instance.id, projectId as string), `Cancelled ${label}`);
                 }}
-                className="rounded-lg bg-[#E76F51] px-3 py-1.5 text-xs font-semibold text-[#1A1614] transition-all hover:bg-[#f0896f] active:scale-95"
+                className="rounded-lg bg-desert-rose px-3 py-1.5 text-xs font-semibold text-charcoal transition-all hover:bg-desert-rose-bright active:scale-95"
               >
                 Cancel instance
               </button>
@@ -638,8 +638,8 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
       {/* ===== Toast ===== */}
       {toast && (
         <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 animate-rise">
-          <div className="flex items-center gap-2 rounded-full border border-[#3A322E] bg-[#25201D] px-4 py-2 text-xs font-medium text-[#EAE3D9] shadow-warm-lg">
-            <CheckCircle2 className="h-3.5 w-3.5 text-[#90A955]" /> {toast}
+          <div className="flex items-center gap-2 rounded-full border border-hairline bg-mocha px-4 py-2 text-xs font-medium text-linen shadow-warm-lg">
+            <CheckCircle2 className="h-3.5 w-3.5 text-sage-green" /> {toast}
           </div>
         </div>
       )}

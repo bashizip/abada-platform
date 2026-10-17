@@ -66,60 +66,60 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   if (!selectedNode) {
     return (
       <TooltipProvider delayDuration={0}>
-        <aside className="w-full min-w-0 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 p-4 space-y-5 overflow-y-auto">
-        <div className="flex items-center space-x-2 text-[#F4A261]">
+        <aside className="w-full min-w-0 bg-mocha border-l border-hairline flex flex-col h-full z-10 p-4 space-y-5 overflow-y-auto">
+        <div className="flex items-center space-x-2 text-saffron">
           <Sliders className="w-4 h-4" />
-          <h2 className="font-bold text-sm text-[#EAE3D9] tracking-wide">Properties Inspector</h2>
+          <h2 className="font-bold text-sm text-linen tracking-wide">Properties Inspector</h2>
         </div>
 
-        <div className="p-4 bg-[#1A1614] rounded-2xl border border-[#3A322E] text-center space-y-2">
-          <Info className="w-6 h-6 text-[#A89F91] mx-auto" />
-          <p className="text-xs text-[#EAE3D9] font-medium">No Node Selected</p>
-          <p className="text-[11px] text-[#A89F91] leading-relaxed">
+        <div className="p-4 bg-charcoal rounded-2xl border border-hairline text-center space-y-2">
+          <Info className="w-6 h-6 text-sand mx-auto" />
+          <p className="text-xs text-linen font-medium">No Node Selected</p>
+          <p className="text-[11px] text-sand leading-relaxed">
             Select a step on the canvas to edit its settings: agent prompts and models, routes, review outcomes, repeat limits or decision rules.
           </p>
         </div>
 
         {/* Workflow Summary Card */}
         <div className="space-y-3">
-          <span className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase block">
+          <span className="text-[11px] font-semibold tracking-wider text-sand uppercase block">
             Process Architecture Stats
           </span>
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="p-3 bg-[#1A1614] rounded-xl border border-[#3A322E]">
-              <span className="text-[10px] text-[#A89F91] block">Total Nodes</span>
-              <span className="text-lg font-bold text-[#EAE3D9]">{nodeCount}</span>
+            <div className="p-3 bg-charcoal rounded-xl border border-hairline">
+              <span className="text-[10px] text-sand block">Total Nodes</span>
+              <span className="text-lg font-bold text-linen">{nodeCount}</span>
             </div>
-            <div className="p-3 bg-[#1A1614] rounded-xl border border-[#9D4EDD]/30 glow-amethyst-subtle">
-              <span className="text-[10px] text-[#9D4EDD] block">AI Agents</span>
-              <span className="text-lg font-bold text-[#9D4EDD]">Active</span>
+            <div className="p-3 bg-charcoal rounded-xl border border-amethyst/30 glow-amethyst-subtle">
+              <span className="text-[10px] text-amethyst block">AI Agents</span>
+              <span className="text-lg font-bold text-amethyst">Active</span>
             </div>
-            <div className="p-3 bg-[#1A1614] rounded-xl border border-[#2A9D8F]/30">
-              <span className="text-[10px] text-[#2A9D8F] block">DMN Rules</span>
-              <span className="text-lg font-bold text-[#2A9D8F]">Bound</span>
+            <div className="p-3 bg-charcoal rounded-xl border border-mineral-teal/30">
+              <span className="text-[10px] text-mineral-teal block">DMN Rules</span>
+              <span className="text-lg font-bold text-mineral-teal">Bound</span>
             </div>
-            <div className="p-3 bg-[#1A1614] rounded-xl border border-[#E76F51]/30">
-              <span className="text-[10px] text-[#E76F51] block">Human SLAs</span>
-              <span className="text-lg font-bold text-[#E76F51]">Active</span>
+            <div className="p-3 bg-charcoal rounded-xl border border-desert-rose/30">
+              <span className="text-[10px] text-desert-rose block">Human SLAs</span>
+              <span className="text-lg font-bold text-desert-rose">Active</span>
             </div>
           </div>
         </div>
 
         {/* Global Process Rules */}
-        <div className="p-3.5 bg-[#1A1614] rounded-xl border border-[#3A322E] space-y-2.5 text-xs">
-          <span className="font-semibold text-[#EAE3D9] block">Execution Policy</span>
-          <div className="flex justify-between text-[#A89F91]">
+        <div className="p-3.5 bg-charcoal rounded-xl border border-hairline space-y-2.5 text-xs">
+          <span className="font-semibold text-linen block">Execution Policy</span>
+          <div className="flex justify-between text-sand">
             <span>Orchestration Mode</span>
-            <span className="text-[#F4A261] font-mono">Serverless</span>
+            <span className="text-saffron font-mono">Serverless</span>
           </div>
-          <div className="flex justify-between text-[#A89F91]">
+          <div className="flex justify-between text-sand">
             <span>Model Engine</span>
-            <span className="text-[#9D4EDD] font-mono">{getDefaultAgentModel()}</span>
+            <span className="text-amethyst font-mono">{getDefaultAgentModel()}</span>
           </div>
-          <div className="flex justify-between text-[#A89F91]">
+          <div className="flex justify-between text-sand">
             <span>Default Fallback</span>
-            <span className="text-[#E76F51]">Escalate to Human</span>
+            <span className="text-desert-rose">Escalate to Human</span>
           </div>
         </div>
       </aside>
@@ -286,32 +286,32 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
   return (
     <TooltipProvider delayDuration={0}>
-    <aside className="w-full min-w-0 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 overflow-y-auto">
+    <aside className="w-full min-w-0 bg-mocha border-l border-hairline flex flex-col h-full z-10 overflow-y-auto">
       {/* Header */}
-      <div className="p-4 border-b border-[#3A322E] bg-[#1A1614]/60 sticky top-0 z-10 backdrop-blur-md flex items-center justify-between">
+      <div className="p-4 border-b border-hairline bg-charcoal/60 sticky top-0 z-10 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          {selectedNode.type === 'agent' && <Bot className="w-4 h-4 text-[#9D4EDD]" />}
-          {selectedNode.type === 'human' && <UserCheck className="w-4 h-4 text-[#E76F51]" />}
-          {selectedNode.type === 'dmn' && <Table className="w-4 h-4 text-[#2A9D8F]" />}
-          {selectedNode.type === 'engine-task' && <Zap className="w-4 h-4 text-[#90A955]" />}
+          {selectedNode.type === 'agent' && <Bot className="w-4 h-4 text-amethyst" />}
+          {selectedNode.type === 'human' && <UserCheck className="w-4 h-4 text-desert-rose" />}
+          {selectedNode.type === 'dmn' && <Table className="w-4 h-4 text-mineral-teal" />}
+          {selectedNode.type === 'engine-task' && <Zap className="w-4 h-4 text-sage-green" />}
           {selectedNode.type === 'gateway' && (selectedNode.subtype === 'event'
-            ? <GitCompare className="w-4 h-4 text-[#F4A261]" />
+            ? <GitCompare className="w-4 h-4 text-saffron" />
             : selectedNode.subtype === 'parallel'
-              ? <GitMerge className="w-4 h-4 text-[#F4A261]" />
-              : <GitFork className="w-4 h-4 text-[#F4A261]" />)}
+              ? <GitMerge className="w-4 h-4 text-saffron" />
+              : <GitFork className="w-4 h-4 text-saffron" />)}
           {selectedNode.type === 'event'
             && (selectedNode.subtype === 'message'
-              ? <Mail className="w-4 h-4 text-[#F4A261]" />
+              ? <Mail className="w-4 h-4 text-saffron" />
               : selectedNode.subtype === 'timer'
-                ? <Clock className="w-4 h-4 text-[#F4A261]" />
+                ? <Clock className="w-4 h-4 text-saffron" />
                 : selectedNode.subtype === 'signal'
-                  ? <Radio className="w-4 h-4 text-[#F4A261]" />
-                  : <Circle className="w-4 h-4 text-[#F4A261]" />)}
-          <h2 className="font-bold text-sm text-[#EAE3D9] tracking-wide capitalize">
+                  ? <Radio className="w-4 h-4 text-saffron" />
+                  : <Circle className="w-4 h-4 text-saffron" />)}
+          <h2 className="font-bold text-sm text-linen tracking-wide capitalize">
             {selectedNode.type} Node Settings
           </h2>
         </div>
-        <span className="text-[10px] font-mono text-[#A89F91] bg-[#1A1614] px-2 py-0.5 rounded border border-[#3A322E]">
+        <span className="text-[10px] font-mono text-sand bg-charcoal px-2 py-0.5 rounded border border-hairline">
           {selectedNode.id}
         </span>
       </div>
@@ -319,45 +319,45 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       <div className="p-4 space-y-6">
         {/* General Details */}
         <div className="space-y-3">
-          <span className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase block">
+          <span className="text-[11px] font-semibold tracking-wider text-sand uppercase block">
             General Properties
           </span>
 
           <div className="space-y-1.5">
-            <label className="text-xs text-[#A89F91] block">Node Title</label>
+            <label className="text-xs text-sand block">Node Title</label>
             <input
               type="text"
               value={selectedNode.title}
               onChange={(e) => handleGeneralChange('title', e.target.value)}
-              className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+              className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-saffron"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs text-[#A89F91] block">Description</label>
+            <label className="text-xs text-sand block">Description</label>
             <textarea
               rows={2}
               value={selectedNode.description}
               onChange={(e) => handleGeneralChange('description', e.target.value)}
-              className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl p-3 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261] resize-none"
+              className="w-full bg-charcoal border border-hairline rounded-xl p-3 text-xs text-linen focus:outline-none focus:border-saffron resize-none"
             />
           </div>
         </div>
 
         {issues.length > 0 && (
-          <div className="space-y-1 rounded-xl border border-[#E76F51]/40 bg-[#E76F51]/10 p-3">
-            <span className="text-[11px] font-semibold text-[#E76F51]">Validation</span>
+          <div className="space-y-1 rounded-xl border border-desert-rose/40 bg-desert-rose/10 p-3">
+            <span className="text-[11px] font-semibold text-desert-rose">Validation</span>
             {issues.map((issue, index) => (
-              <p key={index} className="text-[10px] leading-relaxed text-[#EAE3D9]">
-                <span className="font-mono text-[#E76F51]">{issue.severity === 'ERROR' ? 'error' : 'warning'}</span> {issue.message}
+              <p key={index} className="text-[10px] leading-relaxed text-linen">
+                <span className="font-mono text-desert-rose">{issue.severity === 'ERROR' ? 'error' : 'warning'}</span> {issue.message}
               </p>
             ))}
           </div>
         )}
 
         {loopable && onUpdateWorkflow && (
-          <div className="space-y-2 pt-4 border-t border-[#3A322E]">
-            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block">Loop</span>
+          <div className="space-y-2 pt-4 border-t border-hairline">
+            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block">Loop</span>
             <LoopEditor
               loop={selectedNode.loop}
               problem={loopProblem}
@@ -370,24 +370,24 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
         {/* AI Agent Configuration Panel */}
         {selectedNode.type === 'agent' && selectedNode.agentConfig && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+          <div className="space-y-4 pt-4 border-t border-hairline">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-wider text-[#9D4EDD] uppercase flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold tracking-wider text-amethyst uppercase flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
                 AI Agent Configuration
               </span>
-              <span className="max-w-[50%] truncate text-[10px] bg-[#9D4EDD]/20 text-[#9D4EDD] px-2 py-0.5 rounded-full font-mono" title={currentModel}>
+              <span className="max-w-[50%] truncate text-[10px] bg-amethyst/20 text-amethyst px-2 py-0.5 rounded-full font-mono" title={currentModel}>
                 {currentModel}
               </span>
             </div>
 
             {/* Model Selection */}
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">LLM Engine Model</label>
+              <label className="text-xs text-sand block">LLM Engine Model</label>
               <select
                 value={currentModel}
                 onChange={(e) => handleAgentChange('model', e.target.value)}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-amethyst"
               >
                 {modelOptions.map((model) => (
                   <option key={model} value={model}>
@@ -395,30 +395,30 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </option>
                 ))}
               </select>
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                Mirrored into the node's APL (<span className="font-mono text-[#9D4EDD]">model:</span>). Any model id already in the YAML stays selected and is listed first.
+              <p className="text-[10px] text-sand leading-relaxed">
+                Mirrored into the node's APL (<span className="font-mono text-amethyst">model:</span>). Any model id already in the YAML stays selected and is listed first.
               </p>
             </div>
 
             {/* System Prompt */}
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">System Directive / Prompt</label>
+              <label className="text-xs text-sand block">System Directive / Prompt</label>
               <textarea
                 rows={4}
                 value={selectedNode.agentConfig.systemPrompt}
                 onChange={(e) => handleAgentChange('systemPrompt', e.target.value)}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl p-3 text-xs text-[#EAE3D9] font-mono focus:outline-none focus:border-[#9D4EDD] leading-relaxed"
+                className="w-full bg-charcoal border border-hairline rounded-xl p-3 text-xs text-linen font-mono focus:outline-none focus:border-amethyst leading-relaxed"
               />
             </div>
 
             {/* Confidence Slider */}
-            <div className="space-y-2 p-3 bg-[#1A1614] rounded-xl border border-[#9D4EDD]/30 glow-amethyst-subtle">
+            <div className="space-y-2 p-3 bg-charcoal rounded-xl border border-amethyst/30 glow-amethyst-subtle">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-[#EAE3D9] font-medium flex items-center gap-1">
-                  <ShieldAlert className="w-3.5 h-3.5 text-[#9D4EDD]" />
+                <span className="text-linen font-medium flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amethyst" />
                   Confidence Threshold
                 </span>
-                <span className="font-mono font-bold text-[#9D4EDD]">
+                <span className="font-mono font-bold text-amethyst">
                   {selectedNode.agentConfig.confidenceThreshold}%
                 </span>
               </div>
@@ -428,19 +428,19 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 max={agentBound('confidence_threshold', 'max', 100)}
                 value={selectedNode.agentConfig.confidenceThreshold ?? 0}
                 onChange={(e) => handleAgentChange('confidenceThreshold', Number(e.target.value))}
-                className="w-full accent-[#9D4EDD] bg-[#25201D] h-1.5 rounded-lg cursor-pointer"
+                className="w-full accent-amethyst bg-mocha h-1.5 rounded-lg cursor-pointer"
               />
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+              <p className="text-[10px] text-sand leading-relaxed">
                 {selectedNode.agentConfig.confidenceThreshold
-                  ? <>The engine requires the model to report <code>_confidence</code> of at least <strong className="text-[#9D4EDD]">{selectedNode.agentConfig.confidenceThreshold}%</strong> (declare an output schema). A missing or lower score goes to the low-confidence route below; without a route the attempt is retried and then becomes an incident.</>
+                  ? <>The engine requires the model to report <code>_confidence</code> of at least <strong className="text-amethyst">{selectedNode.agentConfig.confidenceThreshold}%</strong> (declare an output schema). A missing or lower score goes to the low-confidence route below; without a route the attempt is retried and then becomes an incident.</>
                   : <>0% = no confidence gate.</>}
               </p>
             </div>
 
             {/* Routes: the engine-side output contract (T5, T7) and boundaries (E4) */}
-            <div className="space-y-2 p-3 bg-[#1A1614] rounded-xl border border-[#3A322E]">
-              <span className="text-xs text-[#EAE3D9] font-medium block">Routes</span>
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+            <div className="space-y-2 p-3 bg-charcoal rounded-xl border border-hairline">
+              <span className="text-xs text-linen font-medium block">Routes</span>
+              <p className="text-[10px] text-sand leading-relaxed">
                 Where the instance goes when the engine rejects the agent result, when the step fails for good, or
                 when it takes too long. Without a route, a rejected result counts as a failed attempt and a last
                 failure opens an incident.
@@ -468,9 +468,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
             {/* Temperature Slider */}
             <div className="space-y-2">
-              <div className="flex justify-between items-center text-xs text-[#A89F91]">
+              <div className="flex justify-between items-center text-xs text-sand">
                 <span>Temperature (Determinism)</span>
-                <span className="font-mono text-[#EAE3D9]">{selectedNode.agentConfig.temperature}</span>
+                <span className="font-mono text-linen">{selectedNode.agentConfig.temperature}</span>
               </div>
               <input
                 type="range"
@@ -479,14 +479,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 step="0.05"
                 value={selectedNode.agentConfig.temperature}
                 onChange={(e) => handleAgentChange('temperature', Number(e.target.value))}
-                className="w-full accent-[#F4A261] bg-[#1A1614] h-1.5 rounded-lg cursor-pointer"
+                className="w-full accent-saffron bg-charcoal h-1.5 rounded-lg cursor-pointer"
               />
             </div>
 
             {/* Max Tokens & Max Attempts — mirrored into max_tokens / max_attempts */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block">Max Tokens</label>
+                <label className="text-xs text-sand block">Max Tokens</label>
                 <input
                   type="number"
                   min={agentBound('max_tokens', 'min', 1)}
@@ -495,14 +495,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   placeholder="engine default"
                   value={selectedNode.agentConfig.maxTokens ?? ''}
                   onChange={(e) => handleAgentNumber('maxTokens', e.target.value)}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-amethyst"
                 />
-                <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                  APL <span className="font-mono text-[#9D4EDD]">max_tokens:</span> — empty leaves the engine default.
+                <p className="text-[10px] text-sand leading-relaxed">
+                  APL <span className="font-mono text-amethyst">max_tokens:</span> — empty leaves the engine default.
                 </p>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block">Max Attempts</label>
+                <label className="text-xs text-sand block">Max Attempts</label>
                 <input
                   type="number"
                   min={agentBound('max_attempts', 'min', 1)}
@@ -511,10 +511,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   placeholder="engine default"
                   value={selectedNode.agentConfig.maxAttempts ?? ''}
                   onChange={(e) => handleAgentNumber('maxAttempts', e.target.value)}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-amethyst"
                 />
-                <p className="text-[10px] text-[#A89F91] leading-relaxed">
-                  APL <span className="font-mono text-[#9D4EDD]">max_attempts:</span> durable retries before the job fails.
+                <p className="text-[10px] text-sand leading-relaxed">
+                  APL <span className="font-mono text-amethyst">max_attempts:</span> durable retries before the job fails.
                 </p>
               </div>
             </div>
@@ -522,18 +522,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             {/* Profile — read-only badge (abada.agent/v1 is currently the only
                 supported value per the APL node reference) */}
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Worker Profile</label>
-              <div className="flex items-center gap-2 w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs">
-                <span className="font-mono text-[#EAE3D9]">{agentConfig?.profileVersion || 'abada.agent/v1'}</span>
-                <span className="text-[10px] text-[#A89F91] bg-[#9D4EDD]/10 px-1.5 py-0.5 rounded">Default &amp; only supported</span>
+              <label className="text-xs text-sand block">Worker Profile</label>
+              <div className="flex items-center gap-2 w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs">
+                <span className="font-mono text-linen">{agentConfig?.profileVersion || 'abada.agent/v1'}</span>
+                <span className="text-[10px] text-sand bg-amethyst/10 px-1.5 py-0.5 rounded">Default &amp; only supported</span>
               </div>
             </div>
 
             {/* Input Variable Bindings */}
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Prompt Inputs (bindings)</label>
-              <p className="text-[10px] text-[#A89F91]">Named variable expressions (e.g. <span className="font-mono text-[#9D4EDD]">${'{'}{'payload'}{'}'}</span>) bound into the prompt scope.</p>
-              <div className="rounded-lg border border-[#3A322E] divide-y divide-[#3A322E] bg-[#1A1614] overflow-hidden">
+              <label className="text-xs text-sand block">Prompt Inputs (bindings)</label>
+              <p className="text-[10px] text-sand">Named variable expressions (e.g. <span className="font-mono text-amethyst">${'{'}{'payload'}{'}'}</span>) bound into the prompt scope.</p>
+              <div className="rounded-lg border border-hairline divide-y divide-hairline bg-charcoal overflow-hidden">
                 {Object.entries(agentConfig?.inputs || {}).map(([name, expr]) => (
                   <div key={name} className="group flex items-center gap-1.5 px-2 py-1.5">
                     <input
@@ -546,13 +546,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         next[e.target.value] = oldExpr;
                         handleAgentChange('inputs', next);
                       }}
-                      className="w-28 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                      className="w-28 bg-mocha border border-hairline rounded px-2 py-1 text-[11px] font-mono text-linen focus:outline-none focus:border-amethyst"
                     />
                     <input
                       type="text"
                       value={expr}
                       onChange={(e) => handleAgentChange('inputs', { ...agentConfig?.inputs, [name]: e.target.value })}
-                      className="flex-1 min-w-0 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD]"
+                      className="flex-1 min-w-0 bg-mocha border border-hairline rounded px-2 py-1 text-[11px] font-mono text-amethyst focus:outline-none focus:border-amethyst"
                       placeholder='${payload}'
                     />
                     <button
@@ -573,7 +573,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     const next: Record<string, string> = { ...agentConfig?.inputs, input_1: '${payload}' };
                     handleAgentChange('inputs', next);
                   }}
-                  className="w-full text-left text-xs text-[#9D4EDD] hover:text-[#b56ef2] flex items-center gap-1 font-medium px-3 py-2"
+                  className="w-full text-left text-xs text-amethyst hover:text-amethyst-bright flex items-center gap-1 font-medium px-3 py-2"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Add Input Binding</span>
@@ -584,18 +584,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             {/* Result Variable + Output Schema */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block">Result Variable</label>
+                <label className="text-xs text-sand block">Result Variable</label>
                 <input
                   type="text"
                   placeholder={selectedNode.id + '_result'}
                   value={agentConfig?.resultVariable ?? ''}
                   onChange={(e) => handleAgentChange('resultVariable', e.target.value || undefined)}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]"
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-linen focus:outline-none focus:border-amethyst"
                 />
-                <p className="text-[10px] text-[#A89F91]">Where the agent output is written. Empty = engine default.</p>
+                <p className="text-[10px] text-sand">Where the agent output is written. Empty = engine default.</p>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block">Output Schema (JSON)</label>
+                <label className="text-xs text-sand block">Output Schema (JSON)</label>
                 <textarea
                   rows={3}
                   value={JSON.stringify(agentConfig?.outputSchema ?? {}, null, 2)}
@@ -607,17 +607,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       handleAgentChange('outputSchema', undefined);
                     }
                   }}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-[10px] font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD] resize-y"
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-[10px] font-mono text-amethyst focus:outline-none focus:border-amethyst resize-y"
                   placeholder='{"approved": true}'
                 />
-                <p className="text-[10px] text-[#A89F91]">Expected JSON shape; the engine checks every result against it before it is stored.</p>
+                <p className="text-[10px] text-sand">Expected JSON shape; the engine checks every result against it before it is stored.</p>
               </div>
             </div>
 
             {/* Timeout & Retry Backoff */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block">Timeout (ms)</label>
+                <label className="text-xs text-sand block">Timeout (ms)</label>
                 <input
                   type="number"
                   min={agentBound('timeout_ms', 'min', 1)}
@@ -626,12 +626,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   placeholder="60000"
                   value={agentConfig?.timeoutMs ?? ''}
                   onChange={(e) => handleAgentNumber('timeoutMs', e.target.value)}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD]"
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-amethyst focus:outline-none focus:border-amethyst"
                 />
-                <p className="text-[10px] text-[#A89F91]">Worker call timeout. Empty = engine default (60 000).</p>
+                <p className="text-[10px] text-sand">Worker call timeout. Empty = engine default (60 000).</p>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block">Retry Backoff (ms)</label>
+                <label className="text-xs text-sand block">Retry Backoff (ms)</label>
                 <input
                   type="number"
                   min={agentBound('retry_backoff_ms', 'min', 0)}
@@ -640,9 +640,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   placeholder="2000"
                   value={agentConfig?.retryBackoffMs ?? ''}
                   onChange={(e) => handleAgentNumber('retryBackoffMs', e.target.value)}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#9D4EDD] focus:outline-none focus:border-[#9D4EDD]"
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-amethyst focus:outline-none focus:border-amethyst"
                 />
-                <p className="text-[10px] text-[#A89F91]">Pause between durable retries. Empty = engine default (2 000).</p>
+                <p className="text-[10px] text-sand">Pause between durable retries. Empty = engine default (2 000).</p>
               </div>
             </div>
 
@@ -664,21 +664,21 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               onChange={(delegates) => handleAgentChange('delegates', delegates)} />
 
             {/* Live Test Drawer */}
-            <div className="pt-3 border-t border-[#3A322E] space-y-2">
+            <div className="pt-3 border-t border-hairline space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#EAE3D9] block">Agent Execution Contract</span>
-                <span className="text-[10px] text-[#2A9D8F] font-mono">abada.agent/v1</span>
+                <span className="text-xs font-semibold text-linen block">Agent Execution Contract</span>
+                <span className="text-[10px] text-mineral-teal font-mono">abada.agent/v1</span>
               </div>
-              <p className="text-[11px] text-[#A89F91] leading-relaxed bg-[#1A1614] p-2.5 rounded-xl border border-[#3A322E]">
-                Agent execution is bounded by the Engine runtime contract. Live execution runs via external workers (<span className="font-mono text-[#F4A261]">abada-agent-worker</span>) when instances are started on the Engine.
+              <p className="text-[11px] text-sand leading-relaxed bg-charcoal p-2.5 rounded-xl border border-hairline">
+                Agent execution is bounded by the Engine runtime contract. Live execution runs via external workers (<span className="font-mono text-saffron">abada-agent-worker</span>) when instances are started on the Engine.
               </p>
               <UITooltip content="Use 'Dry Run' to mock agent choices locally, or 'Deploy & Start' to run live on the engine with the external agent worker.">
                 <button
                   type="button"
                   disabled
-                  className="w-full py-2 bg-[#9D4EDD]/30 border border-[#9D4EDD]/40 text-[#A89F91] font-semibold text-xs rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-amethyst/30 border border-amethyst/40 text-sand font-semibold text-xs rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  <Bot className="w-3.5 h-3.5 text-[#9D4EDD]" />
+                  <Bot className="w-3.5 h-3.5 text-amethyst" />
                   <span>External Worker Test (Deploy Required)</span>
                 </button>
               </UITooltip>
@@ -690,13 +690,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
         {/* Engine task: the external worker topic and its boundaries */}
         {selectedNode.type === 'engine-task' && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-            <span className="text-[11px] font-semibold tracking-wider text-[#90A955] uppercase block flex items-center gap-1.5">
+          <div className="space-y-4 pt-4 border-t border-hairline">
+            <span className="text-[11px] font-semibold tracking-wider text-sage-green uppercase block flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5" />
               Engine Task
             </span>
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Service topic</label>
+              <label className="text-xs text-sand block">Service topic</label>
               <input
                 type="text"
                 value={selectedNode.engineTaskConfig?.service ?? ''}
@@ -705,7 +705,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   ...selectedNode,
                   engineTaskConfig: { ...selectedNode.engineTaskConfig, service: e.target.value },
                 })}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#90A955]"
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-linen focus:outline-none focus:border-sage-green"
               />
             </div>
             <ErrorRoutesEditor value={selectedNode.engineTaskConfig?.onError} nodes={nodes} excludeId={selectedNode.id}
@@ -716,8 +716,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         )}
 
         {selectedNode.type === 'call-process' && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block">Call process</span>
+          <div className="space-y-4 pt-4 border-t border-hairline">
+            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block">Call process</span>
             <CallProcessEditor config={selectedNode.callProcessConfig ?? { process: '' }}
               onChange={(callProcessConfig) => onUpdateNode({ ...selectedNode, callProcessConfig })} />
             <ErrorRoutesEditor value={selectedNode.callProcessConfig?.onError} nodes={nodes} excludeId={selectedNode.id}
@@ -729,14 +729,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
         {/* Script Configuration (in-transaction server-side script) */}
         {selectedNode.type === 'script' && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-            <span className="text-[11px] font-semibold tracking-wider text-[#2A9D8F] uppercase block flex items-center gap-1.5">
+          <div className="space-y-4 pt-4 border-t border-hairline">
+            <span className="text-[11px] font-semibold tracking-wider text-mineral-teal uppercase block flex items-center gap-1.5">
               <Terminal className="w-3.5 h-3.5" />
               Script Configuration
             </span>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Script Body</label>
+              <label className="text-xs text-sand block">Script Body</label>
               <textarea
                 rows={8}
                 value={selectedNode.scriptConfig?.script || ''}
@@ -747,19 +747,19 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     script: e.target.value,
                   },
                 })}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] font-mono leading-relaxed focus:outline-none focus:border-[#2A9D8F] resize-y"
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen font-mono leading-relaxed focus:outline-none focus:border-mineral-teal resize-y"
                 placeholder="variables.put('result', variables.input * 2);"
               />
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+              <p className="text-[10px] text-sand leading-relaxed">
                 Executed by the engine inside the workflow transaction. All instance
-                variables are bound by name plus the <span className="font-mono text-[#2A9D8F]">variables</span>
+                variables are bound by name plus the <span className="font-mono text-mineral-teal">variables</span>
                 map — the APL form of an embedded Java delegate.
               </p>
             </div>
 
             {/* Script Format */}
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Script Engine</label>
+              <label className="text-xs text-sand block">Script Engine</label>
               <select
                 value={selectedNode.scriptConfig?.format || 'javascript'}
                 onChange={(e) => onUpdateNode({
@@ -769,11 +769,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     format: e.target.value,
                   },
                 })}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#2A9D8F] focus:outline-none focus:border-[#2A9D8F]"
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-mineral-teal focus:outline-none focus:border-mineral-teal"
               >
                 <option value="javascript">JavaScript (ECMAScript)</option>
               </select>
-              <p className="text-[10px] text-[#A89F91]">Engine script engine name — defaults to <span className="font-mono text-[#2A9D8F]">javascript</span>.</p>
+              <p className="text-[10px] text-sand">Engine script engine name — defaults to <span className="font-mono text-mineral-teal">javascript</span>.</p>
             </div>
           </div>
         )}
@@ -782,8 +782,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         {selectedNode.type === 'event'
           && (selectedNode.subtype === 'message' || selectedNode.subtype === 'timer' || selectedNode.subtype === 'signal')
           && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block flex items-center gap-1.5">
+          <div className="space-y-4 pt-4 border-t border-hairline">
+            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block flex items-center gap-1.5">
               {selectedNode.subtype === 'message'
                 ? <Mail className="w-3.5 h-3.5" />
                 : selectedNode.subtype === 'timer'
@@ -797,7 +797,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </span>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">
+              <label className="text-xs text-sand block">
                 {selectedNode.subtype === 'message'
                   ? 'Message Name'
                   : selectedNode.subtype === 'timer'
@@ -813,10 +813,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     definitionRef: e.target.value,
                   },
                 })}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261] font-mono"
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-saffron font-mono"
                 placeholder={selectedNode.subtype === 'timer' ? 'PT1H' : 'MyMessage'}
               />
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+              <p className="text-[10px] text-sand leading-relaxed">
                 {selectedNode.subtype === 'message'
                   ? 'The instance suspends on a durable subscription and resumes when a message with this name is correlated against the correlationKey variable.'
                   : selectedNode.subtype === 'timer'
@@ -829,24 +829,24 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
         {/* Gateway Configuration */}
         {selectedNode.type === 'gateway' && selectedNode.subtype !== 'event' && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-            <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase block">
+          <div className="space-y-4 pt-4 border-t border-hairline">
+            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block">
               Gateway Configuration
             </span>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">Gateway Kind</label>
+              <label className="text-xs text-sand block">Gateway Kind</label>
               <select
                 value={selectedNode.subtype || 'exclusive'}
                 onChange={(e) => handleGeneralChange('subtype', e.target.value)}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-saffron"
               >
                 <option value="exclusive">Exclusive — one matching branch (&gt;1 outgoing edge routes via conditions)</option>
                 <option value="parallel">Parallel — unconditional fork / join</option>
                 <option value="inclusive">Inclusive — every matching branch fires</option>
                 <option value="event">Event — competing catch events, first to fire wins</option>
               </select>
-              <p className="text-[10px] text-[#A89F91] leading-relaxed">
+              <p className="text-[10px] text-sand leading-relaxed">
                 {selectedNode.subtype === 'parallel'
                   ? 'Fork: connect each outgoing edge; the engine runs every branch concurrently. Join: upstream nodes converge back here and it continues along its single outgoing edge.'
                   : selectedNode.subtype === 'inclusive'
@@ -859,37 +859,37 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
         {/* Event Gateway Configuration — inline competing catch events */}
         {isEventGateway && workflow && onUpdateWorkflow && (
-          <div className="space-y-4 pt-4 border-t border-[#3A322E]">
+          <div className="space-y-4 pt-4 border-t border-hairline">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-wider text-[#F4A261] uppercase flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase flex items-center gap-1.5">
                 <GitCompare className="w-3.5 h-3.5" />
                 Competing Events
               </span>
-              <span className="text-[10px] font-mono text-[#A89F91] bg-[#1A1614] px-2 py-0.5 rounded border border-[#3A322E]">
+              <span className="text-[10px] font-mono text-sand bg-charcoal px-2 py-0.5 rounded border border-hairline">
                 {gatewayChildren.length} catch(es)
               </span>
             </div>
 
-            <p className="text-[10px] text-[#A89F91] leading-relaxed">
+            <p className="text-[10px] text-sand leading-relaxed">
               The instance waits on every catch below; the first to fire advances
               and the engine cancels every sibling wait state in the same
               transaction. Each catch needs a name and a successor.
             </p>
 
             {gatewayChildren.length === 0 && (
-              <div className="text-[11px] text-[#A89F91] leading-relaxed p-3 bg-[#1A1614] rounded-xl border border-dashed border-[#3A322E]">
+              <div className="text-[11px] text-sand leading-relaxed p-3 bg-charcoal rounded-xl border border-dashed border-hairline">
                 No competing events yet. Add at least two below (or drag catch events
                 onto the canvas and connect them to this gateway).
               </div>
             )}
 
             {gatewayChildren.map((child) => (
-              <div key={child.id} className="p-3 bg-[#1A1614] rounded-xl border border-[#3A322E] space-y-2">
+              <div key={child.id} className="p-3 bg-charcoal rounded-xl border border-hairline space-y-2">
                 <div className="flex items-center gap-2">
                   <select
                     value={child.subtype}
                     onChange={(e) => handleChildEventKindChange(child.id, e.target.value as 'message' | 'timer' | 'signal')}
-                    className="flex-1 bg-[#1A1614] border border-[#3A322E] rounded-lg px-2 py-1.5 text-[11px] text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+                    className="flex-1 bg-charcoal border border-hairline rounded-lg px-2 py-1.5 text-[11px] text-linen focus:outline-none focus:border-saffron"
                   >
                     <option value="message">Message catch</option>
                     <option value="timer">Timer</option>
@@ -898,7 +898,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <button
                     type="button"
                     onClick={() => handleRemoveChildEvent(child.id)}
-                    className="p-1.5 rounded-lg border border-[#E76F51]/30 text-[#E76F51] hover:bg-[#E76F51]/15 transition-colors shrink-0"
+                    className="p-1.5 rounded-lg border border-desert-rose/30 text-desert-rose hover:bg-desert-rose/15 transition-colors shrink-0"
                     title="Remove this competing event (deletes its canvas node and flows)"
                     aria-label="Remove competing event"
                   >
@@ -906,7 +906,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </button>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#A89F91] block">
+                  <label className="text-[10px] text-sand block">
                     {child.subtype === 'message'
                       ? 'Message Name'
                       : child.subtype === 'timer'
@@ -917,16 +917,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     type="text"
                     value={child.catchEventConfig?.definitionRef || ''}
                     onChange={(e) => handleChildEventDefinitionChange(child.id, e.target.value)}
-                    className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2.5 py-1.5 text-[11px] text-[#EAE3D9] font-mono focus:outline-none focus:border-[#F4A261]"
+                    className="w-full bg-charcoal border border-hairline rounded-lg px-2.5 py-1.5 text-[11px] text-linen font-mono focus:outline-none focus:border-saffron"
                     placeholder={child.subtype === 'timer' ? 'PT1H' : child.subtype === 'message' ? 'MyMessage' : 'MySignal'}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#A89F91] block">Continues To</label>
+                  <label className="text-[10px] text-sand block">Continues To</label>
                   <select
                     value={childNextTarget(child.id) || ''}
                     onChange={(e) => handleChildEventNextChange(child.id, e.target.value)}
-                    className="w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2.5 py-1.5 text-[11px] text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]"
+                    className="w-full bg-charcoal border border-hairline rounded-lg px-2.5 py-1.5 text-[11px] text-linen focus:outline-none focus:border-saffron"
                   >
                     <option value="">— select successor (required) —</option>
                     {gatewayNextOptions.map((n) => (
@@ -943,7 +943,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   key={kind}
                   type="button"
                   onClick={() => handleAddChildEvent(kind)}
-                  className="flex-1 py-1.5 rounded-lg border border-[#F4A261]/30 bg-[#F4A261]/10 text-[11px] font-semibold text-[#F4A261] hover:bg-[#F4A261]/20 transition-colors flex items-center justify-center gap-1"
+                  className="flex-1 py-1.5 rounded-lg border border-saffron/30 bg-saffron/10 text-[11px] font-semibold text-saffron hover:bg-saffron/20 transition-colors flex items-center justify-center gap-1"
                 >
                   {kind === 'message'
                     ? <Mail className="w-3 h-3" />
@@ -957,8 +957,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
             <div className={`p-2.5 rounded-lg border text-[10px] leading-relaxed ${
               gatewayRoutedCount >= 2
-                ? 'border-[#90A955]/30 bg-[#90A955]/10 text-[#90A955]'
-                : 'border-[#E76F51]/30 bg-[#E76F51]/10 text-[#E76F51]'
+                ? 'border-sage-green/30 bg-sage-green/10 text-sage-green'
+                : 'border-desert-rose/30 bg-desert-rose/10 text-desert-rose'
             }`}>
               {gatewayRoutedCount >= 2
                 ? `Ready: ${gatewayChildren.length} competing event(s) with a name and a successor. First to fire wins.`
@@ -969,14 +969,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
         {/* Human Input Configuration */}
          {selectedNode.type === 'human' && humanConfig && (
-           <div className="space-y-4 pt-4 border-t border-[#3A322E]">
-             <span className="text-[11px] font-semibold tracking-wider text-[#E76F51] uppercase block flex items-center gap-1.5">
+           <div className="space-y-4 pt-4 border-t border-hairline">
+             <span className="text-[11px] font-semibold tracking-wider text-desert-rose uppercase block flex items-center gap-1.5">
                <UserCheck className="w-3.5 h-3.5" />
                Human Input
              </span>
 
              <div className="space-y-1.5">
-               <label className="text-xs text-[#A89F91] block">Form</label>
+               <label className="text-xs text-sand block">Form</label>
                <FormPicker
                  projectId={projectId}
                  value={humanConfig.formKey}
@@ -985,9 +985,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
              </div>
 
              <div className="space-y-1.5">
-               <label className="text-xs text-[#A89F91] block">Assignee Groups / Users</label>
-               <p className="text-[10px] text-[#A89F91]">At least one required. These groups may claim the task.</p>
-               <div className="rounded-lg border border-[#3A322E] divide-y divide-[#3A322E] bg-[#1A1614] overflow-hidden">
+               <label className="text-xs text-sand block">Assignee Groups / Users</label>
+               <p className="text-[10px] text-sand">At least one required. These groups may claim the task.</p>
+               <div className="rounded-lg border border-hairline divide-y divide-hairline bg-charcoal overflow-hidden">
                  {humanConfig.assignees.map((assignee, idx) => (
                   <div key={idx} className="group flex items-center gap-1.5 px-2 py-1.5">
                     <input
@@ -999,7 +999,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         assignees[idx] = e.target.value;
                         handleHumanChange('assignees', assignees);
                       }}
-                      className="flex-1 min-w-0 bg-[#25201D] border border-[#3A322E] rounded px-2 py-1 text-[11px] font-mono text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
+                      className="flex-1 min-w-0 bg-mocha border border-hairline rounded px-2 py-1 text-[11px] font-mono text-linen focus:outline-none focus:border-desert-rose"
                     />
                     <button
                       onClick={() => {
@@ -1018,7 +1018,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       const assignees = [...humanConfig.assignees, ''];
                       handleHumanChange('assignees', assignees);
                     }}
-                  className="w-full text-left text-xs text-[#E76F51] hover:text-[#F4A261] flex items-center gap-1 font-medium px-3 py-2"
+                  className="w-full text-left text-xs text-desert-rose hover:text-saffron flex items-center gap-1 font-medium px-3 py-2"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Add Assignee</span>
@@ -1027,7 +1027,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block">SLA (Hours) · escalates the open task when missed</label>
+              <label className="text-xs text-sand block">SLA (Hours) · escalates the open task when missed</label>
               <input
                 type="number"
                 min={0}
@@ -1039,7 +1039,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   onUpdateNode({ ...selectedNode, humanConfig: { ...humanConfig, slaHours,
                     escalateTo: slaHours ? humanConfig.escalateTo : undefined } });
                 }}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]"
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-desert-rose"
               />
             </div>
 

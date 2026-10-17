@@ -53,10 +53,10 @@ export const ConnectMenu: React.FC<ConnectMenuProps> = ({ source, target, x, y, 
       ref={ref}
       role="menu"
       aria-label={`Connect ${source.title} to ${target.title}`}
-      className="absolute z-50 w-56 rounded-xl border border-[#3A322E] bg-[#25201D] p-2 shadow-warm-lg"
+      className="absolute z-50 w-56 rounded-xl border border-hairline bg-mocha p-2 shadow-warm-lg"
       style={{ left: x, top: y }}
     >
-      <p className="px-1 pb-1.5 text-[10px] text-[#A89F91]">
+      <p className="px-1 pb-1.5 text-[10px] text-sand">
         {source.title} → {target.title}
       </p>
       {pending === null && routesFor(source).map((route) => (
@@ -64,7 +64,7 @@ export const ConnectMenu: React.FC<ConnectMenuProps> = ({ source, target, x, y, 
           key={route.kind === 'outcome' || route.kind === 'route' ? `${route.kind}:${route.name}` : route.kind}
           role="menuitem"
           onClick={() => choose(route)}
-          className="block w-full rounded-lg px-2 py-1.5 text-left text-xs text-[#EAE3D9] hover:bg-[#3A322E]"
+          className="block w-full rounded-lg px-2 py-1.5 text-left text-xs text-linen hover:bg-hairline"
         >
           {routeLabel(route)}
         </button>
@@ -77,17 +77,17 @@ export const ConnectMenu: React.FC<ConnectMenuProps> = ({ source, target, x, y, 
             if (!timeoutProblem) onChoose({ kind: 'timeout', after: after.trim().toUpperCase() });
           }}
         >
-          <label className="block text-[10px] text-[#A89F91]" htmlFor="connect-timeout">Time out after (ISO-8601)</label>
+          <label className="block text-[10px] text-sand" htmlFor="connect-timeout">Time out after (ISO-8601)</label>
           <input
             id="connect-timeout"
             autoFocus
             value={after}
             onChange={(event) => setAfter(event.target.value)}
-            className="w-full rounded-lg border border-[#3A322E] bg-[#1A1614] px-2 py-1 font-mono text-xs text-[#EAE3D9] outline-none"
+            className="w-full rounded-lg border border-hairline bg-charcoal px-2 py-1 font-mono text-xs text-linen outline-none"
           />
-          {timeoutProblem && <p className="text-[10px] text-[#E76F51]">{timeoutProblem}</p>}
+          {timeoutProblem && <p className="text-[10px] text-desert-rose">{timeoutProblem}</p>}
           <button type="submit" disabled={!!timeoutProblem}
-            className="w-full rounded-lg bg-[#F4A261] py-1 text-xs font-semibold text-[#1A1614] disabled:opacity-40">
+            className="w-full rounded-lg bg-saffron py-1 text-xs font-semibold text-charcoal disabled:opacity-40">
             Add timeout
           </button>
         </form>
@@ -100,7 +100,7 @@ export const ConnectMenu: React.FC<ConnectMenuProps> = ({ source, target, x, y, 
             if (!codeProblem) onChoose({ kind: 'error', ...(code.trim() ? { code: code.trim() } : {}) });
           }}
         >
-          <label className="block text-[10px] text-[#A89F91]" htmlFor="connect-error-code">
+          <label className="block text-[10px] text-sand" htmlFor="connect-error-code">
             Error code (empty catches every error and the last failed attempt)
           </label>
           <input
@@ -109,11 +109,11 @@ export const ConnectMenu: React.FC<ConnectMenuProps> = ({ source, target, x, y, 
             value={code}
             onChange={(event) => setCode(event.target.value)}
             placeholder="e.g. CUSTOMER_UNKNOWN"
-            className="w-full rounded-lg border border-[#3A322E] bg-[#1A1614] px-2 py-1 font-mono text-xs text-[#EAE3D9] outline-none"
+            className="w-full rounded-lg border border-hairline bg-charcoal px-2 py-1 font-mono text-xs text-linen outline-none"
           />
-          {codeProblem && <p className="text-[10px] text-[#E76F51]">{codeProblem}</p>}
+          {codeProblem && <p className="text-[10px] text-desert-rose">{codeProblem}</p>}
           <button type="submit" disabled={!!codeProblem}
-            className="w-full rounded-lg bg-[#E76F51] py-1 text-xs font-semibold text-[#1A1614] disabled:opacity-40">
+            className="w-full rounded-lg bg-desert-rose py-1 text-xs font-semibold text-charcoal disabled:opacity-40">
             Add error route
           </button>
         </form>

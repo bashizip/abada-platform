@@ -5,6 +5,7 @@ import { useCanvasView } from '../canvasContext';
 import { NODE_ACCENT } from './nodeStyle';
 import { DiffBadge, NodeBadges, NodeHandles, OutsideLabel, StatusBadge } from './NodeChrome';
 import { type CanvasNode, stateOutline } from './nodeState';
+import { palette } from '@/lib/tokens';
 
 const S = GATEWAY_SIZE;
 const C = S / 2;
@@ -61,7 +62,7 @@ export const GatewayNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
           <polygon points={diamond(-6)} fill="none" stroke={outline} strokeWidth="2" strokeLinejoin="round" opacity="0.75"
             className={data.isLiveCurrent ? 'abada-live-outline' : undefined} />
         )}
-        <polygon points={diamond(1)} fill="#25201D" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+        <polygon points={diamond(1)} fill={palette.mocha} stroke={color} strokeWidth="2" strokeLinejoin="round" />
         <GatewayMarker subtype={data.subtype} color={color} />
       </svg>
       <OutsideLabel text={data.title} size={{ width: S, height: S }} direction={direction} />

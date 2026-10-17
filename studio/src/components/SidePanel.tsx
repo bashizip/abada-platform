@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PanelLeftOpen, PanelRightOpen, Pin, PinOff, X } from 'lucide-react';
+import { AnimatePresence, m } from 'motion/react';
 import { type SidePanelBounds, useSidePanelPrefs } from '@/lib/layout/sidePanelPrefs';
+import { slideFrom, useMotionVariants } from '@/lib/motion';
 
 interface SidePanelProps {
   /** Remembers this panel's width and pin state under its own key. */
@@ -21,6 +23,7 @@ export const SidePanel: React.FC<SidePanelProps> = ({ id, side, label, bounds, c
   const { width, setWidth, pinned, setPinned } = useSidePanelPrefs(id, bounds);
   const [open, setOpen] = useState(false);
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+  const overlayVariants = useMotionVariants(slideFrom(side));
 
   useEffect(() => {
     if (pinned || !open) return;
@@ -73,23 +76,23 @@ export const SidePanel: React.FC<SidePanelProps> = ({ id, side, label, bounds, c
         setWidth(width + (towardCanvas ? KEYBOARD_STEP : -KEYBOARD_STEP));
       }}
     >
-      <div className="mx-auto h-full w-px bg-[#3A322E] transition-colors group-hover:bg-[#F4A261] group-focus-visible:bg-[#F4A261]" />
+      <div className="mx-auto h-full w-px bg-hairline transition-colors group-hover:bg-saffron group-focus-visible:bg-saffron" />
     </div>
   );
 
   const pinLabel = pinned ? `Unpin ${label} to give the canvas more room` : `Pin ${label} beside the canvas`;
   const header = (
-    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-[#3A322E] bg-[#1A1614]/80 px-2">
-      <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-[#737D69]">{label}</span>
+    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-hairline bg-charcoal/80 px-2">
+      <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-moss">{label}</span>
       <button type="button" onClick={() => { setPinned(!pinned); setOpen(false); }}
         aria-pressed={pinned} aria-label={pinLabel} title={pinLabel}
         className={`ml-auto flex h-5 w-5 items-center justify-center rounded transition-colors ${pinned
-          ? 'text-[#2A9D8F] hover:bg-[#2F2926]' : 'text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]'}`}>
+          ? 'text-mineral-teal hover:bg-mocha-hover' : 'text-sand hover:bg-mocha-hover hover:text-linen'}`}>
         {pinned ? <Pin className="h-3 w-3" /> : <PinOff className="h-3 w-3" />}
       </button>
       {!pinned && (
         <button type="button" onClick={() => setOpen(false)} aria-label={`Close ${label}`} title={`Close ${label}`}
-          className="flex h-5 w-5 items-center justify-center rounded text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]">
+          className="flex h-5 w-5 items-center justify-center rounded text-sand hover:bg-mocha-hover hover:text-linen">
           <X className="h-3 w-3" />
         </button>
       )}
@@ -114,20 +117,23 @@ export const SidePanel: React.FC<SidePanelProps> = ({ id, side, label, bounds, c
 
   const OpenIcon = side === 'left' ? PanelLeftOpen : PanelRightOpen;
   return (
-    <div data-panel={id} className={`relative z-30 flex h-full w-8 shrink-0 flex-col items-center bg-[#25201D] ${
-      side === 'left' ? 'border-r' : 'border-l'} border-[#3A322E]`}>
+    <div data-panel={id} className={`relative z-30 flex h-full w-8 shrink-0 flex-col items-center bg-mocha ${
+      side === 'left' ? 'border-r' : 'border-l'} border-hairline`}>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
         aria-label={open ? `Close ${label}` : `Open ${label}`} title={open ? `Close ${label}` : `Open ${label}`}
-        className="flex w-full flex-col items-center gap-2 py-2 text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]">
+        className="flex w-full flex-col items-center gap-2 py-2 text-sand hover:bg-mocha-hover hover:text-linen">
         <OpenIcon className="h-4 w-4" />
         <span className="text-[10px] font-semibold uppercase tracking-wider [writing-mode:vertical-rl]">{label}</span>
       </button>
-      {open && (
-        <div style={{ width }} role="dialog" aria-label={label}
-          className={`absolute top-0 flex h-full flex-col shadow-warm-lg ${side === 'left' ? 'left-full' : 'right-full'}`}>
-          {body}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <m.div key="overlay" variants={overlayVariants} initial="initial" animate="enter" exit="exit"
+            style={{ width }} role="dialog" aria-label={label}
+            className={`absolute top-0 flex h-full flex-col shadow-warm-lg ${side === 'left' ? 'left-full' : 'right-full'}`}>
+            {body}
+          </m.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

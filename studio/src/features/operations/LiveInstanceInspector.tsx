@@ -152,7 +152,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
   return (
     <aside
       style={{ width: panelWidth }}
-      className={`flex flex-col border-l border-[#3A322E] bg-[#25201D] text-[#EAE3D9] ${
+      className={`flex flex-col border-l border-hairline bg-mocha text-linen ${
         pinned ? 'shrink-0' : 'absolute inset-y-0 right-0 z-40 shadow-warm-lg'
       }`}
     >
@@ -166,20 +166,20 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
         onDoubleClick={() => onPanelWidthChange(INSPECTOR_PANEL_DEFAULT_WIDTH)}
         title="Drag to resize · double-click to reset"
       >
-        <div className="mx-auto h-full w-px bg-[#3A322E] transition-colors group-hover:bg-[#F4A261]" />
+        <div className="mx-auto h-full w-px bg-hairline transition-colors group-hover:bg-saffron" />
       </div>
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#3A322E] bg-[#1A1614]/70 px-3 py-2.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-hairline bg-charcoal/70 px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Activity className="h-4 w-4 shrink-0 text-[#2A9D8F]" />
+          <Activity className="h-4 w-4 shrink-0 text-mineral-teal" />
           <h2 className="truncate text-sm font-bold tracking-wide">Instance Inspector</h2>
-          {loading && <Loader2 className="h-3 w-3 animate-spin text-[#2A9D8F]" />}
+          {loading && <Loader2 className="h-3 w-3 animate-spin text-mineral-teal" />}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={() => void load()}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9]"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-sand transition-colors hover:bg-mocha-hover hover:text-linen"
             title="Refresh telemetry"
           >
             <RefreshCcw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -187,7 +187,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9]"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-sand transition-colors hover:bg-mocha-hover hover:text-linen"
             title="Close panel"
           >
             <X className="h-4 w-4" />
@@ -196,7 +196,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-[#3A322E] bg-[#1A1614]/60 p-1.5">
+      <div className="flex shrink-0 items-center gap-1 border-b border-hairline bg-charcoal/60 p-1.5">
         {([
           { id: 'telemetry', label: 'Telemetry', icon: Bot },
           { id: 'variables', label: 'Variables', icon: Braces },
@@ -208,19 +208,19 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
             onClick={() => setTab(item.id)}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-all ${
               tab === item.id
-                ? 'border border-[#3A322E] bg-[#25201D] text-[#EAE3D9]'
-                : 'text-[#A89F91] hover:text-[#EAE3D9]'
+                ? 'border border-hairline bg-mocha text-linen'
+                : 'text-sand hover:text-linen'
             }`}
           >
             <item.icon className="h-3.5 w-3.5" />
             {item.label}
             {item.id === 'variables' && variables && (
-              <span className="rounded-full bg-[#9D4EDD]/20 px-1.5 text-[9px] text-[#9D4EDD]">
+              <span className="rounded-full bg-amethyst/20 px-1.5 text-[9px] text-amethyst">
                 {Object.keys(variables).length}
               </span>
             )}
             {item.id === 'audit' && history.length > 0 && (
-              <span className="rounded-full bg-[#2A9D8F]/20 px-1.5 text-[9px] text-[#2A9D8F]">
+              <span className="rounded-full bg-mineral-teal/20 px-1.5 text-[9px] text-mineral-teal">
                 {history.length}
               </span>
             )}
@@ -237,8 +237,8 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
             : 'Pin — dock the inspector beside the canvas'}
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-all ${
             pinned
-              ? 'border-[#2A9D8F]/40 bg-[#2A9D8F]/10 text-[#2A9D8F]'
-              : 'border-[#3A322E] bg-[#1A1614] text-[#A89F91] hover:border-[#4A403A] hover:text-[#EAE3D9]'
+              ? 'border-mineral-teal/40 bg-mineral-teal/10 text-mineral-teal'
+              : 'border-hairline bg-charcoal text-sand hover:border-hairline-strong hover:text-linen'
           }`}
           title={pinned
             ? 'Unpin — float the inspector over the canvas'
@@ -267,9 +267,9 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
               />
             ) : (
               <div className="space-y-3">
-                <div className="rounded-xl border border-[#3A322E] bg-[#1A1614] p-3">
-                  <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#A89F91]">
-                    <Activity className="h-3.5 w-3.5 text-[#2A9D8F]" /> Instance state
+                <div className="rounded-xl border border-hairline bg-charcoal p-3">
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">
+                    <Activity className="h-3.5 w-3.5 text-mineral-teal" /> Instance state
                   </div>
                   <InfoRow label="Status">{statusOf(instance)}</InfoRow>
                   <InfoRow label="Current activity">
@@ -282,7 +282,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
                   <InfoRow label="History events">{history.length}</InfoRow>
                   <InfoRow label="Incident jobs">{jobs.filter((job) => job.processInstanceId === instanceId).length}</InfoRow>
                 </div>
-                <p className="rounded-xl border border-dashed border-[#3A322E] bg-[#1A1614] p-3 text-[11px] leading-relaxed text-[#A89F91]">
+                <p className="rounded-xl border border-dashed border-hairline bg-charcoal p-3 text-[11px] leading-relaxed text-sand">
                   Select a node on the graph to inspect its telemetry, AI attempt metadata and error state.
                   Instance-wide lifecycle details live in the bottom bar.
                 </p>
@@ -299,8 +299,8 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
       {/* Toast */}
       {toast && (
         <div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-full border border-[#3A322E] bg-[#25201D] px-4 py-2 text-xs font-medium text-[#EAE3D9] shadow-warm-lg">
-            <CheckCircle2 className="h-3.5 w-3.5 text-[#90A955]" /> {toast}
+          <div className="flex items-center gap-2 rounded-full border border-hairline bg-mocha px-4 py-2 text-xs font-medium text-linen shadow-warm-lg">
+            <CheckCircle2 className="h-3.5 w-3.5 text-sage-green" /> {toast}
           </div>
         </div>
       )}

@@ -1,23 +1,75 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. Every Studio colour, radius, shadow and elevation is named
+ * here once; Tailwind turns each `--color-*` into utilities (`bg-charcoal`,
+ * `text-sand`, `border-hairline/40`) and plain CSS reads the same variables.
+ * `src/lib/tokens.ts` mirrors the colours for code that needs a literal value
+ * (SVG strokes, React Flow props, alpha suffixes); a test keeps both in step.
+ */
+@theme {
+  /* Surfaces, darkest first. */
+  --color-charcoal-ink: #14100D;
+  --color-charcoal-veil: #141110;
+  --color-charcoal-deep: #14110D;
+  --color-charcoal-well: #151210;
+  --color-charcoal: #1A1614;
+  --color-mocha-deep: #201B18;
+  --color-mocha-strip: #211C19;
+  --color-mocha: #25201D;
+  --color-mocha-hover: #2F2926;
+  /* Lines and dividers. */
+  --color-hairline: #3A322E;
+  --color-hairline-strong: #4A403A;
+  /* Text, brightest first. */
+  --color-linen: #EAE3D9;
+  --color-linen-muted: #C9BFAF;
+  --color-sand: #A89F91;
+  --color-sand-dim: #8A7F74;
+  --color-moss: #737D69;
+  --color-stone: #5A524A;
+  /* Accents and their brighter hover/focus companions. */
+  --color-saffron: #F4A261;
+  --color-saffron-bright: #F5AD73;
+  --color-amethyst: #9D4EDD;
+  --color-amethyst-light: #B06EE6;
+  --color-amethyst-bright: #B56EF2;
+  --color-desert-rose: #E76F51;
+  --color-desert-rose-bright: #F0896F;
+  --color-mineral-teal: #2A9D8F;
+  --color-mineral-teal-bright: #34BDAE;
+  --color-sage-green: #90A955;
+
+  /* Radii: controls, cards, panels and dialogs. */
+  --radius-control: 0.5rem;
+  --radius-card: 0.75rem;
+  --radius-panel: 1rem;
+
+  /* Warm panel shadows. */
+  --shadow-warm-md: 0 6px 20px -2px rgba(0, 0, 0, 0.45);
+  --shadow-warm-lg: 0 12px 36px -4px rgba(0, 0, 0, 0.55), 0 0 1px rgba(244, 162, 97, 0.12);
+
+  /* Motion: mirrors src/lib/motion.ts for CSS transitions. */
+  --duration-fast: 150ms;
+  --duration-base: 240ms;
+  --duration-calm: 700ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasised: cubic-bezier(0.3, 0, 0, 1.2);
+}
+
 @layer base {
   :root {
-    --bg-charcoal: #1A1614;
-    --surface-mocha: #25201D;
-    --surface-mocha-hover: #2F2926;
-    --surface-mocha-border: #3A322E;
-    --saffron: #F4A261;
-    --amethyst: #9D4EDD;
-    --desert-rose: #E76F51;
-    --mineral-teal: #2A9D8F;
-    --sage-green: #90A955;
-    --warm-linen: #EAE3D9;
-    --sand: #A89F91;
+    /* Elevation: stacking order of floating layers, lowest first. */
+    --elevation-panel: 30;
+    --elevation-drawer: 50;
+    --elevation-modal: 60;
+    --elevation-toast: 70;
+    --elevation-tooltip: 100;
   }
 
   body {
-    background-color: #1A1614;
-    color: #EAE3D9;
+    background-color: var(--color-charcoal);
+    color: var(--color-linen);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'Geist', 'Segoe UI', Roboto, sans-serif;
     overflow: hidden;
     user-select: none;
@@ -44,15 +96,6 @@
 
 .glow-amethyst-subtle {
   box-shadow: 0 0 12px rgba(157, 78, 221, 0.25);
-}
-
-/* Subtle warm panel shadows */
-.shadow-warm-lg {
-  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.55), 0 0 1px rgba(244, 162, 97, 0.12);
-}
-
-.shadow-warm-md {
-  box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.45);
 }
 
 /* === Process Instances Dashboard utilities === */
@@ -98,14 +141,14 @@
   height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #1A1614;
+  background: var(--color-charcoal);
 }
 ::-webkit-scrollbar-thumb {
-  background: #3A322E;
+  background: var(--color-hairline);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4A403A;
+  background: var(--color-hairline-strong);
 }
 
 /* React Flow overrrides */
@@ -116,13 +159,13 @@
   box-shadow: none !important;
 }
 .react-flow__controls-button {
-  background: #25201D !important;
-  border-bottom: 1px solid #3A322E !important;
-  color: #A89F91 !important;
+  background: var(--color-mocha) !important;
+  border-bottom: 1px solid var(--color-hairline) !important;
+  color: var(--color-sand) !important;
 }
 .react-flow__controls-button:hover {
-  background: #1A1614 !important;
-  color: #EAE3D9 !important;
+  background: var(--color-charcoal) !important;
+  color: var(--color-linen) !important;
 }
 .react-flow__controls-button svg {
   fill: currentColor !important;
@@ -172,8 +215,8 @@
   height: 10px;
   min-width: 0;
   min-height: 0;
-  background: #1A1614;
-  border: 2px solid #F4A261;
+  background: var(--color-charcoal);
+  border: 2px solid var(--color-saffron);
   opacity: 0;
   transition: opacity 120ms ease-out;
 }

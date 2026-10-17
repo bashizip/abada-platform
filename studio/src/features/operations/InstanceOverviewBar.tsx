@@ -18,8 +18,8 @@ interface InstanceOverviewBarProps {
 
 const Stat: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex min-w-0 flex-col gap-0.5">
-    <span className="text-[9px] font-semibold uppercase tracking-wider text-[#A89F91]/80">{label}</span>
-    <span className="min-w-0 truncate text-[11px] text-[#EAE3D9]">{children}</span>
+    <span className="text-[9px] font-semibold uppercase tracking-wider text-sand/80">{label}</span>
+    <span className="min-w-0 truncate text-[11px] text-linen">{children}</span>
   </div>
 );
 
@@ -35,26 +35,26 @@ export const InstanceOverviewBar: React.FC<InstanceOverviewBarProps> = ({
   const { label, source } = deriveBusinessLabel(instance);
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-t border-[#3A322E] bg-[#25201D] px-4 py-2.5">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-t border-hairline bg-mocha px-4 py-2.5">
       <div className="flex items-center gap-3">
         <StatusBadge instance={instance} />
         <div className="flex min-w-0 items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#9D4EDD]" />
-          <span className="truncate text-xs font-semibold text-[#EAE3D9]">{label}</span>
+          <Sparkles className="h-3.5 w-3.5 shrink-0 text-amethyst" />
+          <span className="truncate text-xs font-semibold text-linen">{label}</span>
           {source && (
-            <span className="shrink-0 rounded border border-[#9D4EDD]/30 bg-[#9D4EDD]/10 px-1.5 py-px text-[9px] font-medium text-[#9D4EDD]">
+            <span className="shrink-0 rounded border border-amethyst/30 bg-amethyst/10 px-1.5 py-px text-[9px] font-medium text-amethyst">
               business key
             </span>
           )}
         </div>
-        <span className="hidden font-mono text-[10px] text-[#A89F91] md:inline">{instance.id}</span>
+        <span className="hidden font-mono text-[10px] text-sand md:inline">{instance.id}</span>
       </div>
 
-      <div className="hidden h-8 w-px bg-[#3A322E] sm:block" />
+      <div className="hidden h-8 w-px bg-hairline sm:block" />
 
       <Stat label="Definition">
         {instance.processDefinitionName || instance.processDefinitionId}
-        {definitionVersion ? <span className="text-[#9D4EDD]"> · v{definitionVersion}</span> : null}
+        {definitionVersion ? <span className="text-amethyst"> · v{definitionVersion}</span> : null}
       </Stat>
 
       <Stat label="Current activity">
@@ -62,7 +62,7 @@ export const InstanceOverviewBar: React.FC<InstanceOverviewBarProps> = ({
       </Stat>
 
       <Stat label="Duration">
-        <span className="flex items-center gap-1 font-mono text-[#F4A261]">
+        <span className="flex items-center gap-1 font-mono text-saffron">
           <Clock className="h-3 w-3" /> {formatDuration(instanceDurationMs(instance))}
         </span>
       </Stat>
@@ -73,7 +73,7 @@ export const InstanceOverviewBar: React.FC<InstanceOverviewBarProps> = ({
 
       <Stat label="Started by">
         <span className="flex items-center gap-1">
-          <User className="h-3 w-3 text-[#A89F91]" /> {instance.startedBy || 'system'}
+          <User className="h-3 w-3 text-sand" /> {instance.startedBy || 'system'}
         </span>
       </Stat>
 
@@ -86,15 +86,15 @@ export const InstanceOverviewBar: React.FC<InstanceOverviewBarProps> = ({
           <span className="font-mono" title={`${instance.agentCost.promptTokens} prompt + ${instance.agentCost.completionTokens} completion tokens`}>
             {formatUsd(instance.agentCost.usd)}
             {instance.agentCost.includesUnpriced && (
-              <span className="ml-1 text-[#F4A261]" title="Some calls use a model without a price; the real cost is higher">+ unpriced</span>
+              <span className="ml-1 text-saffron" title="Some calls use a model without a price; the real cost is higher">+ unpriced</span>
             )}
-            <span className="ml-1 text-[#A89F91]">· {(instance.agentCost.promptTokens + instance.agentCost.completionTokens).toLocaleString()} tokens</span>
+            <span className="ml-1 text-sand">· {(instance.agentCost.promptTokens + instance.agentCost.completionTokens).toLocaleString()} tokens</span>
           </span>
         </Stat>
       )}
 
       <Stat label="Suspended">
-        <span className={instance.suspended ? 'text-[#F4A261]' : 'text-[#90A955]'}>
+        <span className={instance.suspended ? 'text-saffron' : 'text-sage-green'}>
           {instance.suspended ? 'Yes' : 'No'}
         </span>
       </Stat>

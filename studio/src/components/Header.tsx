@@ -66,42 +66,42 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <TooltipProvider delayDuration={0}>
-      <header className="h-14 bg-[#25201D] border-b border-[#3A322E] px-4 flex items-center gap-3 z-20 shrink-0">
+      <header className="h-14 bg-mocha border-b border-hairline px-4 flex items-center gap-3 z-20 shrink-0">
         {/* Brand + clean file identifier (left, never shrinks) */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center gap-2">
             <img src="/abada-app-icon.svg" alt="" className="w-8 h-8 rounded-[7px] glow-amethyst-subtle" />
-            <span className="font-bold text-sm tracking-wide text-[#EAE3D9] hidden lg:inline">
+            <span className="font-bold text-sm tracking-wide text-linen hidden lg:inline">
               ABADA
             </span>
           </div>
 
-          <div className="h-4 w-px bg-[#3A322E]" />
+          <div className="h-4 w-px bg-hairline" />
 
           <button type="button" onClick={onOpenProjects}
-            className="flex items-center gap-1.5 text-xs text-[#A89F91] hover:text-[#F4A261] max-w-[180px]"
+            className="flex items-center gap-1.5 text-xs text-sand hover:text-saffron max-w-[180px]"
             title="New project / Open project">
             <FolderKanban className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">{activeProject?.name || 'Open project'}</span>
           </button>
 
-          <div className="h-4 w-px bg-[#3A322E]" />
+          <div className="h-4 w-px bg-hairline" />
 
           <button
             type="button"
             onClick={onOpenProcessDetails}
-            className="flex items-center gap-1.5 text-xs font-mono text-[#EAE3D9] hover:text-[#F4A261] transition-colors max-w-[240px] truncate"
+            className="flex items-center gap-1.5 text-xs font-mono text-linen hover:text-saffron transition-colors max-w-[240px] truncate"
             title="View process details"
             aria-label="Open process details"
           >
-            <FileText className="w-3.5 h-3.5 text-[#2A9D8F] shrink-0" />
+            <FileText className="w-3.5 h-3.5 text-mineral-teal shrink-0" />
             <span className="truncate">{cleanName(currentWorkflow.name)}</span>
           </button>
         </div>
 
         {/* Global View Navigation (isolated, always centered) */}
         <div className="flex-1 flex items-center justify-center min-w-0">
-          <div className="flex items-center bg-[#1A1614] rounded-xl border border-[#3A322E] p-1 shrink-0">
+          <div className="flex items-center bg-charcoal rounded-xl border border-hairline p-1 shrink-0">
             {(['designer', 'inbox', 'operations', 'insight'] as const).map(view => (
               <button
                 key={view}
@@ -109,8 +109,8 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => onViewChange?.(view)}
                 className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ${
                   currentView === view
-                    ? 'bg-[#25201D] text-[#EAE3D9] border border-[#3A322E]'
-                    : 'text-[#A89F91] hover:text-[#EAE3D9] border border-transparent'
+                    ? 'bg-mocha text-linen border border-hairline'
+                    : 'text-sand hover:text-linen border border-transparent'
                 }`}
               >
                 {view === 'designer' ? 'Canvas'
@@ -126,8 +126,8 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => onViewChange?.('administration')}
                 className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ml-1 ${
                   currentView === 'administration'
-                    ? 'bg-[#25201D] text-[#EAE3D9] border border-[#3A322E]'
-                    : 'text-[#A89F91] hover:text-[#EAE3D9] border border-transparent'
+                    ? 'bg-mocha text-linen border border-hairline'
+                    : 'text-sand hover:text-linen border border-transparent'
                 }`}
               >
                 Admin
@@ -141,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
           {currentView === 'designer' && !readOnlyInstance && (
             <>
               <IconButton
-                icon={<ShieldCheck className="w-4 h-4 text-[#9D4EDD]" />}
+                icon={<ShieldCheck className="w-4 h-4 text-amethyst" />}
                 label="Audit Stream"
                 tooltip="Audit Stream — deploy/run/event log of the active workspace"
                 onClick={onToggleLogPanel}
@@ -149,14 +149,14 @@ export const Header: React.FC<HeaderProps> = ({
               />
 
               <IconButton
-                icon={<Download className="w-4 h-4 text-[#2A9D8F]" />}
+                icon={<Download className="w-4 h-4 text-mineral-teal" />}
                 label="Export APL"
                 tooltip="Export APL — download the canonical abada.io/v1 YAML process document"
                 onClick={onExportJSON}
               />
 
               <IconButton
-                icon={<GitCompare className="w-4 h-4 text-[#9D4EDD]" />}
+                icon={<GitCompare className="w-4 h-4 text-amethyst" />}
                 label="Review AI Optimization"
                 tooltip="Review AI Optimization — inspect, approve or reject the pending governed Insight proposal"
                 onClick={onOpenAiDiff}
@@ -171,12 +171,12 @@ export const Header: React.FC<HeaderProps> = ({
                   disabled={isSimulating}
                   className={`text-xs font-semibold px-4 py-1.5 rounded-xl transition-all flex items-center gap-2 shadow-warm-md ${
                     isSimulating
-                      ? 'bg-[#F4A261]/50 text-[#1A1614] cursor-not-allowed'
-                      : 'bg-[#F4A261] hover:bg-[#f5ad73] text-[#1A1614] active:scale-95'
+                      ? 'bg-saffron/50 text-charcoal cursor-not-allowed'
+                      : 'bg-saffron hover:bg-saffron-bright text-charcoal active:scale-95'
                   }`}
                 >
                   {isSimulating ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Dry Running…</span></>
-                    : <><Play className="w-3.5 h-3.5 fill-[#1A1614]" /><span>Dry Run</span></>}
+                    : <><Play className="w-3.5 h-3.5 fill-charcoal" /><span>Dry Run</span></>}
                 </button>
               </UITooltip>
 
@@ -188,8 +188,8 @@ export const Header: React.FC<HeaderProps> = ({
                   disabled={isDeploying}
                   className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
                     isDeploying
-                      ? 'bg-[#2A9D8F]/50 text-[#1A1614] cursor-not-allowed'
-                      : 'bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] active:scale-95'
+                      ? 'bg-mineral-teal/50 text-charcoal cursor-not-allowed'
+                      : 'bg-mineral-teal hover:bg-mineral-teal-bright text-charcoal active:scale-95'
                   }`}
                 >
                   {isDeploying ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Starting…</span></>
@@ -227,8 +227,8 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all shrink-0 ${
               keycloak.authenticated
-                ? 'text-[#A89F91] border-[#3A322E] bg-[#1A1614]'
-                : 'text-white border-transparent bg-[#9D4EDD] hover:bg-[#b56ef2]'
+                ? 'text-sand border-hairline bg-charcoal'
+                : 'text-white border-transparent bg-amethyst hover:bg-amethyst-bright'
             }`}
           >
             {keycloak.authenticated ? 'Sign Out' : 'Sign In'}

@@ -48,7 +48,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
 
   return (
     <div
-      className={`abada-node abada-task-card relative rounded-xl border bg-[#25201D] shadow-warm-lg ${
+      className={`abada-node abada-task-card relative rounded-xl border bg-mocha shadow-warm-lg ${
         data.isLiveCurrent || (data.isActiveSim && data.type === 'agent') ? 'glow-amethyst' : ''
       }`}
       style={{
@@ -66,7 +66,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
           <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={{ background: `${accent}26` }}>
             <TaskIcon type={data.type} className="h-3.5 w-3.5" />
           </span>
-          <span className={`line-clamp-2 font-semibold text-[#EAE3D9] ${compact ? 'text-[15px] leading-[18px]' : 'text-[12px] leading-[15px]'}`}>
+          <span className={`line-clamp-2 font-semibold text-linen ${compact ? 'text-[15px] leading-[18px]' : 'text-[12px] leading-[15px]'}`}>
             {data.title}
           </span>
         </div>
@@ -82,7 +82,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
         return (
           <span
             key={index}
-            className="pointer-events-none absolute z-20 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[1.5px] bg-[#1A1614]"
+            className="pointer-events-none absolute z-20 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[1.5px] bg-charcoal"
             style={{ left: at.x, top: at.y, borderColor: color }}
             aria-hidden="true"
           >

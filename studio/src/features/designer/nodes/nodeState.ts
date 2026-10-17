@@ -3,6 +3,7 @@ import type { WorkflowNode } from '@/types';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
 import type { EdgeKind } from '@/lib/layout/edgeGeometry';
 import type { LoopProblem } from '@/lib/apl/loopAnalysis';
+import { palette } from '@/lib/tokens';
 
 export type NodeRunStatus = NonNullable<WorkflowNode['status']>;
 
@@ -23,13 +24,13 @@ export type CanvasNodeData = WorkflowNode & Record<string, unknown> & {
 
 export type CanvasNode = Node<CanvasNodeData>;
 
-export const SELECTED_COLOR = '#F4A261';
-export const LIVE_COLOR = '#9D4EDD';
+export const SELECTED_COLOR = palette.saffron;
+export const LIVE_COLOR = palette.amethyst;
 
 export const DIFF_COLORS: Record<DiffChangeKind, string> = {
-  added: '#90A955',
-  modified: '#F4A261',
-  removed: '#E76F51',
+  added: palette.sageGreen,
+  modified: palette.saffron,
+  removed: palette.desertRose,
 };
 
 /**

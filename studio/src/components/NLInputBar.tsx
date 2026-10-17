@@ -40,14 +40,14 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
 
   return (
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 w-full max-w-3xl px-4 pointer-events-none">
-      <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-2.5 shadow-warm-lg pointer-events-auto space-y-2">
+      <div className="bg-mocha border border-hairline rounded-2xl p-2.5 shadow-warm-lg pointer-events-auto space-y-2">
         {error && (
-          <div role="alert" className="flex items-start gap-2 rounded-xl border border-[#E76F51]/40 bg-[#E76F51]/10 px-3 py-2 text-[11px] text-[#EAE3D9]">
-            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#E76F51]" />
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-desert-rose/40 bg-desert-rose/10 px-3 py-2 text-[11px] text-linen">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-desert-rose" />
             <span className="min-w-0 whitespace-pre-line">{error}</span>
             {onDismissError && (
               <button type="button" onClick={onDismissError} aria-label="Dismiss"
-                className="ml-auto shrink-0 text-[#A89F91] hover:text-[#EAE3D9]">
+                className="ml-auto shrink-0 text-sand hover:text-linen">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
@@ -56,7 +56,7 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
 
         {/* Input Bar Form */}
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <div className="pl-2 flex items-center justify-center text-[#9D4EDD]">
+          <div className="pl-2 flex items-center justify-center text-amethyst">
             <Sparkles className="w-5 h-5 animate-pulse" />
           </div>
 
@@ -64,7 +64,7 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value as 'new' | 'refine')}
-              className="bg-[#1A1614] border border-[#3A322E] rounded-lg px-2 py-1 text-xs text-[#EAE3D9] focus:outline-none"
+              className="bg-charcoal border border-hairline rounded-lg px-2 py-1 text-xs text-linen focus:outline-none"
             >
               <option value="new">Create New</option>
               <option value="refine">Refine Process</option>
@@ -77,7 +77,7 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={mode === 'new' ? "Describe a new business process..." : "E.g., 'Add a human approval step after fraud analysis'..."}
-            className="flex-1 bg-transparent border-none text-xs text-[#EAE3D9] placeholder-[#A89F91] focus:outline-none px-2 font-medium"
+            className="flex-1 bg-transparent border-none text-xs text-linen placeholder-sand focus:outline-none px-2 font-medium"
             disabled={isGenerating}
           />
 
@@ -86,8 +86,8 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
             disabled={!prompt.trim() || isGenerating}
             className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
               !prompt.trim() || isGenerating
-                ? 'bg-[#3A322E] text-[#A89F91] cursor-not-allowed'
-                : 'bg-gradient-to-r from-[#9D4EDD] to-[#F4A261] text-white hover:opacity-90 active:scale-95 shadow-warm-md glow-amethyst-subtle'
+                ? 'bg-hairline text-sand cursor-not-allowed'
+                : 'bg-gradient-to-r from-amethyst to-saffron text-white hover:opacity-90 active:scale-95 shadow-warm-md glow-amethyst-subtle'
             }`}
           >
             {isGenerating ? (
@@ -105,9 +105,9 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
         </form>
 
         {/* Quick Suggestion Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 text-[10px] text-[#A89F91] no-scrollbar">
-          <span className="flex items-center gap-1 font-semibold text-[#F4A261] shrink-0">
-            <Lightbulb className="w-3 h-3 text-[#F4A261]" />
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 text-[10px] text-sand no-scrollbar">
+          <span className="flex items-center gap-1 font-semibold text-saffron shrink-0">
+            <Lightbulb className="w-3 h-3 text-saffron" />
             AI Templates:
           </span>
           {samplePrompts.map((s, idx) => (
@@ -115,7 +115,7 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
               key={idx}
               type="button"
               onClick={() => handleSelectSample(s)}
-              className="px-2 py-0.5 rounded-full bg-[#1A1614] hover:bg-[#2F2926] border border-[#3A322E] text-[#EAE3D9] hover:border-[#9D4EDD]/50 transition-all shrink-0 whitespace-nowrap"
+              className="px-2 py-0.5 rounded-full bg-charcoal hover:bg-mocha-hover border border-hairline text-linen hover:border-amethyst/50 transition-all shrink-0 whitespace-nowrap"
             >
               {s.length > 42 ? `${s.slice(0, 42)}...` : s}
             </button>

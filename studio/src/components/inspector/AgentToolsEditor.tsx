@@ -7,7 +7,7 @@ import {
   type CatalogTool, type ToolPolicy,
 } from '@/lib/apl/toolServers';
 
-const FIELD = 'w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2 py-1 text-[11px] text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]';
+const FIELD = 'w-full bg-charcoal border border-hairline rounded-lg px-2 py-1 text-[11px] text-linen focus:outline-none focus:border-amethyst';
 const POLICY_LABEL: Record<ToolPolicy, string> = { read: 'read', write: 'write', approval_required: 'approval required' };
 
 const splitGroups = (value: string) => value.split(',').map((group) => group.trim()).filter(Boolean);
@@ -40,14 +40,14 @@ export const AgentToolsEditor: React.FC<{
 
   return (
     <div className="space-y-1.5">
-      <label className="text-xs text-[#A89F91] block">Tools (from the project's tool servers)</label>
-      {!projectId && <p className="text-[10px] text-[#A89F91]">Open the process in a project to pick its tools.</p>}
-      {error && <p className="text-[10px] text-[#E76F51]">Could not load the tool servers: {error}</p>}
+      <label className="text-xs text-sand block">Tools (from the project's tool servers)</label>
+      {!projectId && <p className="text-[10px] text-sand">Open the process in a project to pick its tools.</p>}
+      {error && <p className="text-[10px] text-desert-rose">Could not load the tool servers: {error}</p>}
       {projectId && catalog && catalog.length === 0 && (
-        <p className="text-[10px] text-[#A89F91]">This project has no tool servers yet. Add a TOOL_SERVER resource in the explorer.</p>
+        <p className="text-[10px] text-sand">This project has no tool servers yet. Add a TOOL_SERVER resource in the explorer.</p>
       )}
       {catalog && catalog.length > 0 && (
-        <div className="rounded-lg border border-[#3A322E] divide-y divide-[#3A322E] bg-[#1A1614]">
+        <div className="rounded-lg border border-hairline divide-y divide-hairline bg-charcoal">
           {catalog.map((tool) => {
             const entry = entryFor(tools, tool.ref);
             const policy = (entry && typeof entry !== 'string' && entry.policy) || tool.policy;
@@ -55,16 +55,16 @@ export const AgentToolsEditor: React.FC<{
             const problem = entry ? toolEntryProblem(entry, tool) : null;
             return (
               <div key={tool.ref} className="space-y-1 px-2 py-1.5">
-                <label className="flex items-center gap-2 text-xs text-[#EAE3D9] cursor-pointer">
+                <label className="flex items-center gap-2 text-xs text-linen cursor-pointer">
                   <input type="checkbox" checked={!!entry} aria-label={`Use ${tool.ref}`}
                     onChange={(event) => onChange(bindTool(tools, tool.ref, event.target.checked))}
-                    className="accent-[#9D4EDD]" />
+                    className="accent-amethyst" />
                   <span className="font-mono">{tool.ref}</span>
-                  <span className="ml-auto rounded border border-[#3A322E] px-1 text-[9px] text-[#A89F91]">
+                  <span className="ml-auto rounded border border-hairline px-1 text-[9px] text-sand">
                     {POLICY_LABEL[tool.policy]}
                   </span>
                 </label>
-                {tool.description && <p className="pl-6 text-[10px] text-[#A89F91]">{tool.description}</p>}
+                {tool.description && <p className="pl-6 text-[10px] text-sand">{tool.description}</p>}
                 {entry && (
                   <div className="space-y-1 pl-6">
                     <select aria-label={`Policy of ${tool.ref}`} value={policy} className={FIELD}
@@ -79,7 +79,7 @@ export const AgentToolsEditor: React.FC<{
                         defaultValue={approvers.join(', ')} key={`${tool.ref}-${approvers.join(',')}`}
                         onBlur={(event) => onChange(setToolPolicy(tools, tool, policy, splitGroups(event.target.value)))} />
                     )}
-                    {problem && <p className="text-[10px] text-[#E76F51]">{problem}</p>}
+                    {problem && <p className="text-[10px] text-desert-rose">{problem}</p>}
                   </div>
                 )}
               </div>
@@ -88,11 +88,11 @@ export const AgentToolsEditor: React.FC<{
         </div>
       )}
       {catalog && strays.map((entry) => (
-        <div key={toolRefOf(entry)} className="flex items-center gap-2 text-[10px] text-[#F4A261]">
+        <div key={toolRefOf(entry)} className="flex items-center gap-2 text-[10px] text-saffron">
           <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
           <span className="font-mono">{toolRefOf(entry)}</span>
-          <span className="text-[#A89F91]">{toolEntryProblem(entry, undefined)}</span>
-          <button type="button" aria-label={`Remove ${toolRefOf(entry)}`} className="ml-auto text-[#A89F91] hover:text-[#E76F51]"
+          <span className="text-sand">{toolEntryProblem(entry, undefined)}</span>
+          <button type="button" aria-label={`Remove ${toolRefOf(entry)}`} className="ml-auto text-sand hover:text-desert-rose"
             onClick={() => onChange(bindTool(tools, toolRefOf(entry), false))}>
             <Trash2 className="h-3 w-3" />
           </button>

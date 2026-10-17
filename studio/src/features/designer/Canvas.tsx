@@ -50,6 +50,7 @@ import { WorkflowNode, WorkflowEdge, EventSubtype, GatewaySubtype } from '@/type
 import { analyzeLoops } from '@/lib/apl/loopAnalysis';
 import type { Route } from '@/lib/apl/routes';
 import { ConnectMenu } from './ConnectMenu';
+import { palette } from '@/lib/tokens';
 
 interface CanvasProps {
   nodes: WorkflowNode[];
@@ -325,7 +326,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
       tabIndex={-1}
       onKeyDown={onKeyDown}
       aria-label="Process diagram"
-      className="flex-1 h-full w-full bg-[#1A1614] relative outline-none"
+      className="flex-1 h-full w-full bg-charcoal relative outline-none"
     >
       <CanvasMarkers prefix={markerPrefix} />
       {pendingConnect && menuAt && (() => {
@@ -362,7 +363,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
             onPaneClick={onPaneClick}
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
-            connectionLineStyle={{ stroke: '#F4A261', strokeWidth: 2 }}
+            connectionLineStyle={{ stroke: palette.saffron, strokeWidth: 2 }}
             deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
@@ -386,8 +387,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
                 nodeStrokeWidth={0}
                 nodeBorderRadius={4}
                 maskColor="rgba(26, 22, 20, 0.72)"
-                bgColor="#25201D"
-                style={{ border: '1px solid #3A322E', borderRadius: 12, overflow: 'hidden' }}
+                bgColor={palette.mocha}
+                style={{ border: `1px solid ${palette.hairline}`, borderRadius: 12, overflow: 'hidden' }}
                 ariaLabel="Diagram overview"
               />
             )}
@@ -416,30 +417,30 @@ const CanvasInner: React.FC<CanvasProps> = ({
 
       {rawNodes.length === 0 && !readOnly && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-          <div className="pointer-events-auto w-[520px] max-w-[calc(100%-3rem)] rounded-2xl border border-[#3A322E] bg-[#25201D]/95 p-6 shadow-warm-lg text-center">
-            <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-[#F4A261]/10 border border-[#F4A261]/30 flex items-center justify-center">
-              <Workflow className="w-5 h-5 text-[#F4A261]" />
+          <div className="pointer-events-auto w-[520px] max-w-[calc(100%-3rem)] rounded-2xl border border-hairline bg-mocha/95 p-6 shadow-warm-lg text-center">
+            <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-saffron/10 border border-saffron/30 flex items-center justify-center">
+              <Workflow className="w-5 h-5 text-saffron" />
             </div>
-            <h2 className="text-sm font-semibold text-[#EAE3D9]">Start with an empty APL process</h2>
-            <p className="text-xs text-[#A89F91] mt-1 mb-5">Choose a visual node, paste canonical YAML, or describe the process in plain language.</p>
+            <h2 className="text-sm font-semibold text-linen">Start with an empty APL process</h2>
+            <p className="text-xs text-sand mt-1 mb-5">Choose a visual node, paste canonical YAML, or describe the process in plain language.</p>
             <div className="grid grid-cols-3 gap-2">
               <button onClick={() => onAddNode('event')}
-                className="rounded-xl border border-[#F4A261]/30 bg-[#F4A261]/10 p-3 text-left hover:border-[#F4A261] transition-colors">
-                <CirclePlay className="w-4 h-4 text-[#F4A261] mb-2" />
+                className="rounded-xl border border-saffron/30 bg-saffron/10 p-3 text-left hover:border-saffron transition-colors">
+                <CirclePlay className="w-4 h-4 text-saffron mb-2" />
                 <span className="block text-xs font-semibold">Start node</span>
-                <span className="block text-[10px] text-[#A89F91] mt-1">Build visually</span>
+                <span className="block text-[10px] text-sand mt-1">Build visually</span>
               </button>
               <button onClick={onOpenAplEditor}
-                className="rounded-xl border border-[#2A9D8F]/30 bg-[#2A9D8F]/10 p-3 text-left hover:border-[#2A9D8F] transition-colors">
-                <Code2 className="w-4 h-4 text-[#2A9D8F] mb-2" />
+                className="rounded-xl border border-mineral-teal/30 bg-mineral-teal/10 p-3 text-left hover:border-mineral-teal transition-colors">
+                <Code2 className="w-4 h-4 text-mineral-teal mb-2" />
                 <span className="block text-xs font-semibold">Paste APL</span>
-                <span className="block text-[10px] text-[#A89F91] mt-1">YAML editor</span>
+                <span className="block text-[10px] text-sand mt-1">YAML editor</span>
               </button>
               <button onClick={onFocusPrompt}
-                className="rounded-xl border border-[#9D4EDD]/30 bg-[#9D4EDD]/10 p-3 text-left hover:border-[#9D4EDD] transition-colors">
-                <Bot className="w-4 h-4 text-[#9D4EDD] mb-2" />
+                className="rounded-xl border border-amethyst/30 bg-amethyst/10 p-3 text-left hover:border-amethyst transition-colors">
+                <Bot className="w-4 h-4 text-amethyst mb-2" />
                 <span className="block text-xs font-semibold">Use prompt</span>
-                <span className="block text-[10px] text-[#A89F91] mt-1">Generate APL</span>
+                <span className="block text-[10px] text-sand mt-1">Generate APL</span>
               </button>
             </div>
           </div>
@@ -454,13 +455,13 @@ const AlignmentGuides: React.FC<{ guides: Alignment }> = ({ guides }) => (
   <ViewportPortal>
     {guides.guideX !== undefined && (
       <div
-        className="pointer-events-none absolute left-0 top-0 border-l border-dashed border-[#F4A261]/70"
+        className="pointer-events-none absolute left-0 top-0 border-l border-dashed border-saffron/70"
         style={{ transform: `translate(${guides.guideX}px, -10000px)`, height: 20000 }}
       />
     )}
     {guides.guideY !== undefined && (
       <div
-        className="pointer-events-none absolute left-0 top-0 border-t border-dashed border-[#F4A261]/70"
+        className="pointer-events-none absolute left-0 top-0 border-t border-dashed border-saffron/70"
         style={{ transform: `translate(-10000px, ${guides.guideY}px)`, width: 20000 }}
       />
     )}
@@ -492,23 +493,23 @@ const LayoutToolbar: React.FC<{
     <div
       role="group"
       aria-label="Edit history and auto layout"
-      className="flex items-center gap-0.5 rounded-xl border border-[#3A322E] bg-[#25201D]/95 p-1 shadow-warm-md"
+      className="flex items-center gap-0.5 rounded-xl border border-hairline bg-mocha/95 p-1 shadow-warm-md"
     >
       {history && (
         <>
           <button type="button" onClick={history.onUndo} disabled={!history.canUndo} title={UNDO_HINT} aria-label="Undo"
-            className="flex items-center rounded-lg px-1.5 py-1 text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#A89F91]">
+            className="flex items-center rounded-lg px-1.5 py-1 text-sand transition-colors hover:bg-mocha-hover hover:text-linen disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-sand">
             <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           <button type="button" onClick={history.onRedo} disabled={!history.canRedo} title={REDO_HINT} aria-label="Redo"
-            className="flex items-center rounded-lg px-1.5 py-1 text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#A89F91]">
+            className="flex items-center rounded-lg px-1.5 py-1 text-sand transition-colors hover:bg-mocha-hover hover:text-linen disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-sand">
             <Redo2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
-          {showLayout && <span className="mx-1 h-4 w-px bg-[#3A322E]" aria-hidden="true" />}
+          {showLayout && <span className="mx-1 h-4 w-px bg-hairline" aria-hidden="true" />}
         </>
       )}
       {showLayout && (
-      <span className="flex w-6 items-center justify-center text-[#A89F91]" aria-hidden="true">
+      <span className="flex w-6 items-center justify-center text-sand" aria-hidden="true">
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Workflow className="h-3.5 w-3.5" />}
       </span>
       )}
@@ -522,8 +523,8 @@ const LayoutToolbar: React.FC<{
           aria-pressed={mode === value}
           className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium transition-colors disabled:cursor-wait ${
             mode === value
-              ? 'bg-[#F4A261]/15 text-[#F4A261]'
-              : 'text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]'
+              ? 'bg-saffron/15 text-saffron'
+              : 'text-sand hover:bg-mocha-hover hover:text-linen'
           }`}
         >
           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -570,7 +571,7 @@ const CanvasControls: React.FC<{
           aria-label="Toggle overview map"
           aria-pressed={showMinimap}
         >
-          <MapIcon className={`w-4 h-4 ${showMinimap ? 'text-[#F4A261]' : ''}`} />
+          <MapIcon className={`w-4 h-4 ${showMinimap ? 'text-saffron' : ''}`} />
         </ControlButton>
         {processKey && (
           <ControlButton
@@ -580,7 +581,7 @@ const CanvasControls: React.FC<{
               : 'Lock Layout — save current positions for running instances'}
             aria-label="Lock Layout"
           >
-            {locked ? <Lock className="w-4 h-4 text-[#2A9D8F]" /> : <Unlock className="w-4 h-4" />}
+            {locked ? <Lock className="w-4 h-4 text-mineral-teal" /> : <Unlock className="w-4 h-4" />}
           </ControlButton>
         )}
         {!readOnly && selectedNodeId && (
@@ -589,7 +590,7 @@ const CanvasControls: React.FC<{
             title="Delete selected node"
             aria-label="Delete selected node"
           >
-            <Trash2 className="w-4 h-4 text-[#E76F51]" />
+            <Trash2 className="w-4 h-4 text-desert-rose" />
           </ControlButton>
         )}
       </Controls>

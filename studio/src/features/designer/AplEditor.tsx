@@ -45,10 +45,10 @@ const parseLocally = (source: string): { document?: APLDocument; error?: string 
 };
 
 const valueToken = (value: string) => {
-  if (/^\s*#/.test(value)) return 'text-[#737D69]';
-  if (/\b(true|false|null)\b/.test(value)) return 'text-[#E76F51]';
-  if (/[-+]?\d+(\.\d+)?/.test(value)) return 'text-[#2A9D8F]';
-  return 'text-[#EAE3D9]';
+  if (/^\s*#/.test(value)) return 'text-moss';
+  if (/\b(true|false|null)\b/.test(value)) return 'text-desert-rose';
+  if (/[-+]?\d+(\.\d+)?/.test(value)) return 'text-mineral-teal';
+  return 'text-linen';
 };
 
 const MIN_FONT_SIZE = 10;
@@ -79,11 +79,11 @@ const HighlightedYaml: React.FC<{
       const keyed = line.match(/^(\s*)([- ]*)([\w.-]+)(\s*:)(.*)$/);
       return (
         <React.Fragment key={`${index}-${line.length}`}>
-          {comment ? <><span>{comment[1]}</span><span className="text-[#737D69]">{comment[2]}</span></>
+          {comment ? <><span>{comment[1]}</span><span className="text-moss">{comment[2]}</span></>
             : keyed ? <>
               <span>{keyed[1]}{keyed[2]}</span>
-              <span className="text-[#F4A261]">{keyed[3]}</span>
-              <span className="text-[#A89F91]">{keyed[4]}</span>
+              <span className="text-saffron">{keyed[3]}</span>
+              <span className="text-sand">{keyed[4]}</span>
               <span className={valueToken(keyed[5])}>{keyed[5]}</span>
             </> : <span className={valueToken(line)}>{line}</span>}
           {'\n'}
@@ -197,36 +197,36 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
   };
 
   return (
-    <section className="flex-1 min-w-0 h-full bg-[#1A1614] flex flex-col" aria-label="APL YAML editor">
-      <div className="h-12 border-b border-[#3A322E] px-4 flex items-center justify-between bg-[#211C19]">
+    <section className="flex-1 min-w-0 h-full bg-charcoal flex flex-col" aria-label="APL YAML editor">
+      <div className="h-12 border-b border-hairline px-4 flex items-center justify-between bg-mocha-strip">
         <div className="flex items-center gap-2">
-          <Code2 className="w-4 h-4 text-[#F4A261]" />
+          <Code2 className="w-4 h-4 text-saffron" />
           <span className="text-xs font-semibold">{workflow.name}</span>
-          <span className="text-[10px] font-mono text-[#2A9D8F] bg-[#2A9D8F]/10 border border-[#2A9D8F]/30 px-1.5 py-0.5 rounded">abada.io/v1</span>
+          <span className="text-[10px] font-mono text-mineral-teal bg-mineral-teal/10 border border-mineral-teal/30 px-1.5 py-0.5 rounded">abada.io/v1</span>
           {candidate && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border text-[#9D4EDD] border-[#9D4EDD]/30 bg-[#9D4EDD]/10">
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border text-amethyst border-amethyst/30 bg-amethyst/10">
               {`${candidate.model || 'LLM'} · ${candidate.attempts} attempt(s)`}
             </span>
           )}
-          {dirty && <span className="text-[10px] text-[#F4A261]">Modified</span>}
+          {dirty && <span className="text-[10px] text-saffron">Modified</span>}
         </div>
         <div className="flex items-center gap-2">
           <div
-            className="flex items-center rounded-lg border border-[#3A322E] bg-[#1A1614]"
+            className="flex items-center rounded-lg border border-hairline bg-charcoal"
             role="group"
             aria-label="Editor font size"
           >
-            <span className="pl-2 text-[#737D69]" aria-hidden="true"><Type className="w-3.5 h-3.5" /></span>
+            <span className="pl-2 text-moss" aria-hidden="true"><Type className="w-3.5 h-3.5" /></span>
             <button
               type="button"
               onClick={() => adjustFontSize(-1)}
               disabled={fontSize === MIN_FONT_SIZE}
               aria-label="Decrease editor font size"
-              className="p-1.5 text-[#A89F91] hover:text-[#EAE3D9] disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-1.5 text-sand hover:text-linen disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Minus className="w-3 h-3" />
             </button>
-            <output className="w-10 text-center font-mono text-[10px] text-[#EAE3D9]" aria-live="polite">
+            <output className="w-10 text-center font-mono text-[10px] text-linen" aria-live="polite">
               {fontSize}px
             </output>
             <button
@@ -234,30 +234,30 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
               onClick={() => adjustFontSize(1)}
               disabled={fontSize === MAX_FONT_SIZE}
               aria-label="Increase editor font size"
-              className="p-1.5 text-[#A89F91] hover:text-[#EAE3D9] disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-1.5 text-sand hover:text-linen disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Plus className="w-3 h-3" />
             </button>
           </div>
           {onDiscard && (
             <button onClick={onDiscard}
-              className="px-2.5 py-1.5 rounded-lg border border-[#3A322E] text-[11px] text-[#A89F91] hover:text-[#E76F51] flex items-center gap-1.5">
+              className="px-2.5 py-1.5 rounded-lg border border-hairline text-[11px] text-sand hover:text-desert-rose flex items-center gap-1.5">
               <X className="w-3 h-3" /> Discard
             </button>
           )}
           <button onClick={() => { setSource(canonicalSource); setError(null); }}
-            className="px-2.5 py-1.5 rounded-lg border border-[#3A322E] text-[11px] text-[#A89F91] hover:text-[#EAE3D9] flex items-center gap-1.5">
+            className="px-2.5 py-1.5 rounded-lg border border-hairline text-[11px] text-sand hover:text-linen flex items-center gap-1.5">
             <RotateCcw className="w-3 h-3" /> Reset
           </button>
           <button onClick={() => { void apply(); }}
-            className="px-3 py-1.5 rounded-lg bg-[#F4A261] text-[#1A1614] text-[11px] font-semibold flex items-center gap-1.5">
+            className="px-3 py-1.5 rounded-lg bg-saffron text-charcoal text-[11px] font-semibold flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" /> Apply to diagram
           </button>
         </div>
       </div>
 
-      <div className="relative flex-1 min-h-0 m-4 rounded-xl border border-[#3A322E] bg-[#151210] overflow-hidden shadow-inner">
-        <div className="absolute left-0 top-0 bottom-0 w-12 bg-[#1C1816] border-r border-[#3A322E] text-right pr-3 pt-4 font-mono text-[#655D55] select-none overflow-hidden">
+      <div className="relative flex-1 min-h-0 m-4 rounded-xl border border-hairline bg-charcoal-well overflow-hidden shadow-inner">
+        <div className="absolute left-0 top-0 bottom-0 w-12 bg-[#1C1816] border-r border-hairline text-right pr-3 pt-4 font-mono text-[#655D55] select-none overflow-hidden">
           <div ref={gutterRef} style={{
             fontSize: Math.max(9, fontSize - 2),
             lineHeight: `${fontSize + 8}px`,
@@ -298,30 +298,30 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
             }}
             spellCheck={false}
             aria-label="APL YAML source"
-            className="absolute inset-0 w-full h-full resize-none overflow-auto whitespace-pre bg-transparent font-mono outline-none text-transparent caret-[#F4A261] selection:bg-[#9D4EDD]/40"
+            className="absolute inset-0 w-full h-full resize-none overflow-auto whitespace-pre bg-transparent font-mono outline-none text-transparent caret-saffron selection:bg-amethyst/40"
             style={{ WebkitTextFillColor: 'transparent', fontSize, lineHeight: `${fontSize + 8}px` }}
           />
         </div>
       </div>
 
       {issues.length > 0 && (
-        <ul className="mx-4 mb-2 max-h-36 overflow-y-auto rounded-xl border border-[#3A322E] bg-[#151210] divide-y divide-[#2A2421]"
+        <ul className="mx-4 mb-2 max-h-36 overflow-y-auto rounded-xl border border-hairline bg-charcoal-well divide-y divide-[#2A2421]"
           aria-label="APL validation issues">
           {issues.map((issue, index) => (
             <li key={`${issue.code}-${issue.path}-${index}`}>
               <button type="button" onClick={() => revealIssue(issue)}
-                className="w-full text-left px-3 py-1.5 flex items-start gap-2 text-[11px] hover:bg-[#211C19]">
+                className="w-full text-left px-3 py-1.5 flex items-start gap-2 text-[11px] hover:bg-mocha-strip">
                 {issue.severity === 'ERROR'
-                  ? <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#E76F51]" aria-label="Error" />
-                  : <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#F4A261]" aria-label="Warning" />}
+                  ? <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-desert-rose" aria-label="Error" />
+                  : <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-saffron" aria-label="Warning" />}
                 <span className="min-w-0">
-                  <span className="text-[#EAE3D9]">{issue.message}</span>
+                  <span className="text-linen">{issue.message}</span>
                   {issue.suggestedResolution && (
-                    <span className="block text-[#737D69]">{issue.suggestedResolution}</span>
+                    <span className="block text-moss">{issue.suggestedResolution}</span>
                   )}
                 </span>
                 {issue.elementId && (
-                  <span className="ml-auto shrink-0 font-mono text-[10px] text-[#A89F91]">{issue.elementId}</span>
+                  <span className="ml-auto shrink-0 font-mono text-[10px] text-sand">{issue.elementId}</span>
                 )}
               </button>
             </li>
@@ -331,27 +331,27 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
 
       {candidate?.warnings.length ? (
         <div role="status" aria-label="Generation warnings"
-          className="border-t border-[#F4A261]/40 bg-[#F4A261]/10 px-4 py-2 text-[11px] text-[#F4A261]">
+          className="border-t border-saffron/40 bg-saffron/10 px-4 py-2 text-[11px] text-saffron">
           <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle className="w-3.5 h-3.5" />Check this candidate against your request before applying
           </p>
-          <ul className="mt-1 list-disc pl-5 text-[#EAE3D9]">
+          <ul className="mt-1 list-disc pl-5 text-linen">
             {candidate.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
           </ul>
         </div>
       ) : null}
 
       {candidate?.summary && (
-        <div aria-label="Proposed change" className="border-t border-[#3A322E] bg-[#211C19] px-4 py-2 text-[11px] text-[#EAE3D9]">
+        <div aria-label="Proposed change" className="border-t border-hairline bg-mocha-strip px-4 py-2 text-[11px] text-linen">
           <p>{candidate.summary}</p>
           {candidate.changes && (
             <ul className="mt-1 flex flex-wrap gap-1.5">
-              {candidate.changes.length === 0 && <li className="text-[#A89F91]">No node changed.</li>}
+              {candidate.changes.length === 0 && <li className="text-sand">No node changed.</li>}
               {candidate.changes.map((change) => (
                 <li key={`${change.kind}-${change.id}`}
                   className={`rounded border px-1.5 py-0.5 font-mono ${change.kind === 'added'
-                    ? 'border-[#2A9D8F]/40 text-[#2A9D8F]' : change.kind === 'removed'
-                      ? 'border-[#E76F51]/40 text-[#E76F51]' : 'border-[#F4A261]/40 text-[#F4A261]'}`}>
+                    ? 'border-mineral-teal/40 text-mineral-teal' : change.kind === 'removed'
+                      ? 'border-desert-rose/40 text-desert-rose' : 'border-saffron/40 text-saffron'}`}>
                   {change.kind} {change.id}
                 </li>
               ))}
@@ -359,14 +359,14 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
           )}
         </div>
       )}
-      <div className="h-10 px-4 border-t border-[#3A322E] flex items-center gap-3 text-[11px]">
-        {error ? <span className="text-[#E76F51] flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{error}</span>
-          : check.state === 'checking' ? <span className="text-[#A89F91] flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Validating with the engine…</span>
-          : check.state === 'done' && errorCount > 0 ? <span className="text-[#E76F51]">{errorCount} error{errorCount === 1 ? '' : 's'} · {issues.length - errorCount} warning{issues.length - errorCount === 1 ? '' : 's'}</span>
-          : check.state === 'done' && issues.length > 0 ? <span className="text-[#F4A261]">Valid with {issues.length} warning{issues.length === 1 ? '' : 's'}; warnings become errors in 1.1.0</span>
-          : check.state === 'done' ? <span className="text-[#90A955] flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" />Valid APL</span>
-          : check.state === 'unavailable' ? <span className="text-[#A89F91]">Engine validation unavailable; the engine checks again on save and deploy.</span>
-          : <span className="text-[#737D69]">Paste or edit canonical APL YAML. Press Ctrl/⌘+S to validate and apply.</span>}
+      <div className="h-10 px-4 border-t border-hairline flex items-center gap-3 text-[11px]">
+        {error ? <span className="text-desert-rose flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{error}</span>
+          : check.state === 'checking' ? <span className="text-sand flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Validating with the engine…</span>
+          : check.state === 'done' && errorCount > 0 ? <span className="text-desert-rose">{errorCount} error{errorCount === 1 ? '' : 's'} · {issues.length - errorCount} warning{issues.length - errorCount === 1 ? '' : 's'}</span>
+          : check.state === 'done' && issues.length > 0 ? <span className="text-saffron">Valid with {issues.length} warning{issues.length === 1 ? '' : 's'}; warnings become errors in 1.1.0</span>
+          : check.state === 'done' ? <span className="text-sage-green flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" />Valid APL</span>
+          : check.state === 'unavailable' ? <span className="text-sand">Engine validation unavailable; the engine checks again on save and deploy.</span>
+          : <span className="text-moss">Paste or edit canonical APL YAML. Press Ctrl/⌘+S to validate and apply.</span>}
       </div>
     </section>
   );

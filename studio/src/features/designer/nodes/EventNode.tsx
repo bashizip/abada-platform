@@ -6,6 +6,7 @@ import { useCanvasView } from '../canvasContext';
 import { eventAccent } from './nodeStyle';
 import { DiffBadge, NodeBadges, NodeHandles, OutsideLabel, StatusBadge } from './NodeChrome';
 import { type CanvasNode, stateOutline } from './nodeState';
+import { palette } from '@/lib/tokens';
 
 const C = EVENT_SIZE / 2;
 
@@ -35,7 +36,7 @@ export const EventNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
           <circle cx={C} cy={C} r={C + 5} fill="none" stroke={outline} strokeWidth="2" opacity="0.75"
             className={data.isLiveCurrent ? 'abada-live-outline' : undefined} />
         )}
-        <circle cx={C} cy={C} r={C - ring / 2} fill="#25201D" stroke={color} strokeWidth={ring} />
+        <circle cx={C} cy={C} r={C - ring / 2} fill={palette.mocha} stroke={color} strokeWidth={ring} />
         {isCatch && <circle cx={C} cy={C} r={C - 5} fill="none" stroke={color} strokeWidth="1.5" />}
       </svg>
       {Icon && (
