@@ -168,6 +168,23 @@ export interface ActivityInstanceDTO {
   executionId: string;
 }
 
+/** The sequence flow a token took, recorded by the engine in a FLOW_TAKEN history event (1.2+). */
+export interface FlowTakenDTO {
+  /** Null only for a loop's on_exhausted route, which has no sequence flow. */
+  id?: string | null;
+  from: string;
+  to: string;
+  tokenId?: string;
+  /** The pass the token started at `to` when it is a loop step. */
+  loopIteration?: number | null;
+  /** The gateway rule that matched. */
+  condition?: string;
+  /** The gateway's else (default) branch was taken. */
+  else?: boolean;
+  /** The route that sent the token: OUTCOME, ROUTE, ERROR, TIMEOUT, LOW_CONFIDENCE, INVALID_OUTPUT, LOOP_EXHAUSTED. */
+  route?: { kind: string; code?: string };
+}
+
 export interface ActivityHistoryDTO {
   id: string;
   processInstanceId: string;
@@ -178,7 +195,12 @@ export interface ActivityHistoryDTO {
   occurredAt: string;
   traceId?: string;
   details: Record<string, unknown>;
+  /** For FLOW_TAKEN events: the flow taken (also in `details.flow`). */
+  flow?: FlowTakenDTO | null;
 }
+
+/** Upper bound of history pages read for one instance (100 events each). */
+const HISTORY_MAX_PAGES = 50;
 
 import { config } from '@/config/runtime';
 import { keycloak } from '@/auth/keycloakClient';
@@ -586,13 +608,26 @@ export class EngineAPI {
     return tree.childActivityInstances || [];
   }
 
+  /**
+   * The instance's whole history, oldest first: every page is read (up to
+   * HISTORY_MAX_PAGES), since the path taken is rebuilt from all of it.
+   */
   static async getInstanceHistory(instanceId: string, projectId: string): Promise<ActivityHistoryDTO[]> {
-    const res = await authenticatedFetch(
-      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/history?size=100`,
-      { headers: this.getHeaders() }
-    );
-    if (!res.ok) throw new Error(`Failed to fetch instance history: ${res.statusText}`);
-    return res.json();
+    const page = async (index: number) => {
+      const res = await authenticatedFetch(
+        `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/history?size=100&page=${index}`,
+        { headers: this.getHeaders() }
+      );
+      if (!res.ok) throw new Error(`Failed to fetch instance history: ${res.statusText}`);
+      return res;
+    };
+    const first = await page(0);
+    const events = await first.json() as ActivityHistoryDTO[];
+    const pages = Math.min(Number(first.headers?.get?.('X-Total-Pages')) || 1, HISTORY_MAX_PAGES);
+    if (pages <= 1) return events;
+    const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, index) =>
+      page(index + 1).then((res) => res.json() as Promise<ActivityHistoryDTO[]>)));
+    return [...events, ...rest.flat()];
   }
 
   static async getDefinitionForInstance(

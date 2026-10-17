@@ -442,6 +442,7 @@ public class AbadaEngine {
             // Root starts only: a child's inputs come from its parent, and replaying the parent replays them.
             startInputs.record(instance, deployment.getDeploymentId(), initialVariables, Instant.now());
         }
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
 
@@ -592,6 +593,7 @@ public class AbadaEngine {
             return;
         }
         List<UserTaskPayload> nextTasks = instance.advance(completedTokenRef);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -944,6 +946,7 @@ public class AbadaEngine {
         parent.putAllVariables(outputs);
         retireTaskJobs(parent, parentTokenId);
         List<UserTaskPayload> nextTasks = parent.advance(parentTokenId);
+        recordFlowsTaken(parent);
         recordDecisionTableAudits(parent);
         recordLoopExhaustions(parent);
         if (parent.isCompleted() && parent.getEndDate() == null) {
@@ -1205,6 +1208,7 @@ public class AbadaEngine {
         instance.putAllVariables(variables);
         retireTaskJobs(instance, tokenId);
         List<UserTaskPayload> nextTasks = instance.advance(tokenId);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -1333,6 +1337,7 @@ public class AbadaEngine {
         // The token leaves its task normally: its timeout and SLA timers must never fire.
         retireTaskJobs(instance, instance.waitingTokenId(tokenRef));
         List<UserTaskPayload> nextTasks = instance.advance(tokenRef);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -1563,6 +1568,7 @@ public class AbadaEngine {
         }
         List<UserTaskPayload> nextTasks = instance.retryIncident(incident.getTokenId());
         incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -1769,6 +1775,7 @@ public class AbadaEngine {
         }
         retireWork(instance, Set.of(token));
         List<UserTaskPayload> nextTasks = instance.leaveViaBoundary(token, boundary);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -2034,6 +2041,11 @@ public class AbadaEngine {
             log.warn("Process instance {}: {} at '{}'; incident opened", instance.getId(), incident.type(),
                     incident.activityId());
         }
+    }
+
+    /** One FLOW_TAKEN history row per sequence flow taken in this command, in the same transaction. */
+    private void recordFlowsTaken(ProcessInstance instance) {
+        historyService.recordFlows(instance, instance.takeFlowsTaken());
     }
 
     private void recordDecisionTableAudits(ProcessInstance instance) {

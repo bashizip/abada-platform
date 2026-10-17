@@ -93,7 +93,9 @@ class PostgresRestartRecoveryTest {
             assertThat(context.getBean(ActivityHistoryRepository.class)
                     .findByProcessInstanceIdOrderByOccurredAtAsc(instance.getId()))
                     .extracting(ActivityHistoryEntity::getEventType)
-                    .containsExactly("PROCESS_STARTED", "TASK_CREATED", "TASK_ASSIGNED");
+                    // The flow into the task was recorded at start; the failed advancement added none.
+                    .containsExactly("PROCESS_STARTED", "FLOW_TAKEN", "TASK_CREATED", "TASK_ASSIGNED");
+            // Flows taken are history facts, never lifecycle events.
             assertThat(context.getBean(OutboxEventRepository.class)
                     .findByAggregateIdOrderByOccurredAt(instance.getId()))
                     .extracting(event -> event.getEventType())
@@ -363,7 +365,8 @@ class PostgresRestartRecoveryTest {
                     .findByProcessInstanceIdOrderByOccurredAtAsc(processInstanceId);
             assertThat(history)
                     .extracting(ActivityHistoryEntity::getEventType)
-                    .containsExactly("PROCESS_STARTED", "TASK_CREATED", "TASK_CLAIMED", "TASK_COMPLETED");
+                    .containsExactly("PROCESS_STARTED", "FLOW_TAKEN", "TASK_CREATED", "TASK_CLAIMED",
+                            "TASK_COMPLETED", "FLOW_TAKEN");
         }
     }
 

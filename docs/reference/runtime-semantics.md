@@ -497,6 +497,31 @@ publisher. Optional comma-separated webhook targets are configured with
 `abada.outbox.webhook-urls`; each POST includes the stable event identifier in
 `X-Abada-Event-Id`. Any non-success response leaves the outbox event retryable.
 
+### The path taken (`FLOW_TAKEN`, since 1.2)
+
+Every sequence flow a token takes is recorded as one `FLOW_TAKEN` history
+event, in the same transaction as the move: a rolled-back command leaves none.
+The event's `activityId` is the node the token left, and
+`details.flow = { id, from, to, tokenId, loopIteration }`, plus:
+
+- `condition`: the rule of an exclusive or inclusive gateway that matched, or
+  `else: true` when its default branch was taken;
+- `route = { kind, code }`: the route that sent the token, for review outcomes
+  (`OUTCOME`), agent routes (`ROUTE`), errors, timeouts, low confidence,
+  invalid output and an exhausted loop (`LOOP_EXHAUSTED`, the only flow with a
+  null `id`);
+- `loopIteration`: the pass the token started at `to` when it is a loop step.
+
+Events of one command carry strictly increasing timestamps, so history read in
+`occurredAt` order replays the path in the order it was taken: sequential hops,
+each parallel branch with its own `tokenId`, each arrival at a join, each loop
+pass. No variable value is recorded, only the condition text of the definition.
+The instance history endpoints expose the same fact typed as `flow`
+(`FlowTakenDto`, additive). `FLOW_TAKEN` is a history fact, not a lifecycle
+event: it is not written to the outbox, so webhooks and stream consumers see no
+extra traffic. Instances started before 1.2 have no `FLOW_TAKEN` for their
+earlier steps; the Studio then labels their diagram path "reconstructed".
+
 ## Definition versions and caches
 
 Redeploying changed BPMN under an existing process key creates an immutable

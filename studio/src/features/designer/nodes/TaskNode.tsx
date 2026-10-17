@@ -6,8 +6,8 @@ import { TASK_HEIGHT, TASK_WIDTH, outcomePortPoint } from '@/lib/layout/nodeGeom
 import { EDGE_COLORS } from '../edgeStyle';
 import { useCanvasView, useCompactZoom } from '../canvasContext';
 import { NODE_ACCENT, NODE_TYPE_LABEL, taskFact } from './nodeStyle';
-import { DiffBadge, NodeBadges, NodeHandles, StatusBadge } from './NodeChrome';
-import { type CanvasNode, stateOutline } from './nodeState';
+import { DiffBadge, NodeBadges, NodeHandles, PathBadges, StatusBadge } from './NodeChrome';
+import { type CanvasNode, pathClass, pathFill, stateOutline, withPathHint } from './nodeState';
 
 const SIZE = { width: TASK_WIDTH, height: TASK_HEIGHT };
 
@@ -44,19 +44,21 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
   const outline = stateOutline(data, selected);
   const fact = taskFact(data);
   const outcomes = data.outcomeKinds ?? [];
-  const tooltip = [NODE_TYPE_LABEL[data.type], data.diffAnnotation || data.description].filter(Boolean).join(' — ');
+  const tooltip = withPathHint(data,
+    [NODE_TYPE_LABEL[data.type], data.diffAnnotation || data.description].filter(Boolean).join(' — '));
 
   return (
     <div
-      className={`abada-node abada-task-card relative rounded-xl border bg-mocha shadow-warm-lg ${
+      className={`abada-node abada-task-card relative rounded-xl border shadow-warm-lg ${
         data.isLiveCurrent || (data.isActiveSim && data.type === 'agent') ? 'glow-amethyst' : ''
-      }`}
+      } ${pathClass(data)}`}
       style={{
         width: TASK_WIDTH,
         height: TASK_HEIGHT,
-        borderColor: outline ?? `${accent}80`,
+        background: pathFill(data, accent),
+        borderColor: outline ?? (data.pathLayer === 'taken' ? accent : `${accent}80`),
         boxShadow: outline ? `0 0 0 2px ${outline}` : undefined,
-        opacity: data.diffKind === 'removed' ? 0.6 : 1,
+        opacity: data.diffKind === 'removed' ? 0.6 : undefined,
       }}
       title={tooltip}
     >
@@ -91,7 +93,8 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
         );
       })}
 
-      <StatusBadge status={data.status} live={data.isLiveCurrent} x={TASK_WIDTH - 2} y={2} />
+      <StatusBadge status={data.status} live={data.isLiveCurrent} now={data.nowState} x={TASK_WIDTH - 2} y={2} />
+      <PathBadges visits={data.visitOrders} childResults={data.childResults} width={TASK_WIDTH} height={TASK_HEIGHT} />
       <DiffBadge kind={data.diffKind} />
       <NodeBadges loopState={data.loopState} maxIterations={data.loop?.maxIterations} issueCount={data.issueCount} />
       <NodeHandles />

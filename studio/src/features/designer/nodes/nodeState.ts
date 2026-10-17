@@ -3,6 +3,7 @@ import type { WorkflowNode } from '@/types';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
 import type { EdgeKind } from '@/lib/layout/edgeGeometry';
 import type { LoopProblem } from '@/lib/apl/loopAnalysis';
+import type { NowState } from '@/lib/run/instancePath';
 import { palette } from '@/lib/tokens';
 
 export type NodeRunStatus = NonNullable<WorkflowNode['status']>;
@@ -20,6 +21,18 @@ export type CanvasNodeData = WorkflowNode & Record<string, unknown> & {
   loopState?: 'bounded' | LoopProblem;
   /** Engine validation issues pointing at this node. */
   issueCount?: number;
+  /** Instance views: the path ran through this node, or never reached it (dimmed unless the full diagram is shown). */
+  pathLayer?: 'taken' | 'unreached';
+  /** Instance views: 1-based visit numbers on the path. */
+  visitOrders?: number[];
+  /** Instance views: where the instance is now. */
+  nowState?: NowState;
+  /** Instance views: branches arrived at a join over those expected. */
+  join?: { arrived: number; expected: number };
+  /** Instance views: results of the children a delegation or for-each started. */
+  childResults?: { ok: number; failed: number };
+  /** Instance views: what the path says about this node, for its tooltip. */
+  pathHint?: string;
 };
 
 export type CanvasNode = Node<CanvasNodeData>;
@@ -38,8 +51,22 @@ export const DIFF_COLORS: Record<DiffChangeKind, string> = {
  * step, diff marking, selection. Null when the node is at rest.
  */
 export function stateOutline(data: CanvasNodeData, selected: boolean): string | null {
+  if (data.nowState === 'incident') return palette.desertRose;
+  if (data.nowState === 'waiting') return palette.saffron;
   if (data.isLiveCurrent || data.isActiveSim) return LIVE_COLOR;
   if (data.diffKind) return DIFF_COLORS[data.diffKind];
   if (selected) return SELECTED_COLOR;
   return null;
 }
+
+/** Class of a node's path layer: a node never reached fades until hovered. */
+export const pathClass = (data: CanvasNodeData): string =>
+  data.pathLayer === 'unreached' ? 'abada-path-unreached' : '';
+
+/** A node on the path is filled with a tint of its own colour; any other keeps the plain card. */
+export const pathFill = (data: CanvasNodeData, accent: string): string =>
+  data.pathLayer === 'taken' ? `color-mix(in srgb, ${accent} 18%, ${palette.mocha})` : palette.mocha;
+
+/** Tooltip text: the node's own description, then what the path says about it. */
+export const withPathHint = (data: CanvasNodeData, base: string | undefined): string | undefined =>
+  [base, data.pathHint].filter(Boolean).join('\n') || undefined;

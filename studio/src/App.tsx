@@ -93,12 +93,12 @@ export default function App() {
     isSimulating, setIsSimulating, simulationLogs, setSimulationLogs,
     showLogPanel, setShowLogPanel, showRunPanel, setShowRunPanel,
     dryRunFingerprint, setDryRunFingerprint, lastDryRunPayload, setLastDryRunPayload,
-    activeSimulationNodeId, setActiveSimulationNodeId
+    activeSimulationNodeId, setActiveSimulationNodeId, dryRunPath, setDryRunPath,
   } = useDryRunSimulation();
 
   const {
     selectedLiveInstance, liveWorkflow, activeLiveNodeIds, liveSelectedNodeId, setLiveSelectedNodeId,
-    executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges, nextPathEdges,
+    executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges, nextPathEdges, instancePath,
     instancesRefreshKey, setInstancesRefreshKey,
     instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance,
     livePanelWidth, setLivePanelWidth, livePanelPinned, setLivePanelPinned,
@@ -672,6 +672,7 @@ export default function App() {
                       activePathEdges={activePathEdges}
                       activeTokenEdges={activeTokenEdges}
                       nextPathEdges={nextPathEdges}
+                      path={instancePath}
                       readOnly
                     />
                     {instancePanelOpen && (
@@ -722,6 +723,8 @@ export default function App() {
                     activeSimulationNodeId={activeSimulationNodeId}
                     executionStatuses={executionStatuses}
                     activeLiveNodeIds={activeLiveNodeIds}
+                    // While the Dry Run panel is open, its path is drawn like an instance's.
+                    path={showRunPanel ? dryRunPath : undefined}
                     readOnly={false}
                     onUndo={undoEdit}
                     onRedo={redoEdit}
@@ -794,10 +797,11 @@ export default function App() {
                 }]);
                 showToast('error', 'Dry Run blocked: ' + message);
               }}
-              onOverlayChange={(statuses, activeNodeId, running) => {
+              onOverlayChange={(statuses, activeNodeId, running, path) => {
                 setExecutionStatuses(statuses);
                 setActiveSimulationNodeId(activeNodeId);
                 setIsSimulating(running);
+                setDryRunPath(path);
               }}
             />}
 
