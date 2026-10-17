@@ -98,4 +98,30 @@ describe('live instance inspector', () => {
     expect(text).toContain('gemini-3.6-flash');
     expect(text).not.toContain('Steps (');
   });
+
+  it('offers to retry a failed job only to members who may (operators and owners)', async () => {
+    engine.getInstanceHistory.mockResolvedValue([]);
+    engine.getJobs.mockResolvedValue([
+      { id: 'job-1234567890ab', processInstanceId: 'inst-1', activityId: 'charge', exceptionMessage: 'provider timeout', retries: 0 },
+    ]);
+    const charging = { ...workflow, nodes: [{ id: 'charge', type: 'engine-task', title: 'Charge', description: '', x: 0, y: 0,
+      engineTaskConfig: { service: 'charge-card' } }] } as unknown as WorkflowFile;
+    const jobProps = { ...props, workflow: charging, selectedNodeId: 'charge' };
+    engine.getInstanceVariables.mockResolvedValue({});
+    evidence.steps.mockResolvedValue([]);
+    engine.retryJob.mockResolvedValue(undefined);
+
+    const viewer = render(<LiveInstanceInspector {...jobProps} />);
+    await settle();
+    expect(viewer.textContent).toContain('provider timeout');
+    expect(buttons(viewer).some((item) => item.textContent?.trim() === 'Retry')).toBe(false);
+
+    const operator = render(<LiveInstanceInspector {...jobProps} canRetryJobs />);
+    await settle();
+    const retry = buttons(operator).find((item) => item.textContent?.trim() === 'Retry');
+    expect(retry).toBeDefined();
+    click(retry!);
+    await settle();
+    expect(engine.retryJob).toHaveBeenCalledWith('proj', 'job-1234567890ab', 1);
+  });
 });

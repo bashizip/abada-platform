@@ -332,7 +332,8 @@ export const NodeTelemetry: React.FC<{
   history: ActivityHistoryDTO[];
   jobs: ProjectJob[];
   variables: Record<string, unknown> | null;
-  onRetry: (job: ProjectJob) => void;
+  /** Requeues a failed job; omitted for members who may not (only operators and owners may, the engine enforces it). */
+  onRetry?: (job: ProjectJob) => void;
   /** Enables the error details dialog (stack traces are project-scoped). */
   projectId?: string;
   /** Journaled agent steps of the instance (summaries: tokens and engine-computed cost). */
@@ -529,14 +530,16 @@ export const NodeTelemetry: React.FC<{
                 )}
               </div>
               {detailsButton({ jobId: job.id, context: { activityTitle: node.title } })}
-              <button
-                type="button"
-                onClick={() => onRetry(job)}
-                className="shrink-0 rounded-lg border border-sage-green/40 bg-sage-green/10 px-2.5 py-1 text-[10px] font-semibold text-sage-green transition-all hover:bg-sage-green/20"
-                title="Requeue this job for execution"
-              >
-                Retry
-              </button>
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={() => onRetry(job)}
+                  className="shrink-0 rounded-lg border border-sage-green/40 bg-sage-green/10 px-2.5 py-1 text-[10px] font-semibold text-sage-green transition-all hover:bg-sage-green/20"
+                  title="Requeue this job for execution"
+                >
+                  Retry
+                </button>
+              )}
             </div>
           ))}
         </div>
