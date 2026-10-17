@@ -263,5 +263,6 @@ public final class ReplayRunner {
         }
         instance.takeParked();
         instance.takeLoopExhaustions();
+        instance.takeFlowsTaken();
     }
 }

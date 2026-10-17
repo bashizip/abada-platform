@@ -34,6 +34,8 @@ public class ProcessInstance {
     private final List<RuntimeIncident> incidents = new ArrayList<>();
     /** Tokens that parked at a task in this command; their boundary and SLA timers start now. */
     private final List<Parked> parked = new ArrayList<>();
+    /** The sequence flows tokens took in this command, in the order they were taken. */
+    private final List<FlowTaken> flowsTaken = new ArrayList<>();
 
     /** A token stopped in the INCIDENT state during advance(); the engine opens the incident. */
     public record RuntimeIncident(String tokenId, String activityId,
@@ -47,6 +49,24 @@ public class ProcessInstance {
 
     /** A token that entered a wait-state task in the current command. */
     public record Parked(String tokenId, String activityId) {}
+
+    /**
+     * A token left {@code from} for {@code to}. {@code flowId} is null only for a
+     * loop's {@code on_exhausted} route, which has no sequence flow.
+     *
+     * @param loopIteration the pass the token started at {@code to} when it is a loop step
+     * @param condition the condition of the gateway rule that matched, when one did
+     * @param otherwise true when a gateway's {@code else} (default) branch was taken
+     * @param routeKind the boundary kind (OUTCOME, ROUTE, ERROR, ...) or LOOP_EXHAUSTED for a route
+     * @param routeCode the outcome, route name or error code of that route
+     */
+    public record FlowTaken(String flowId, String from, String to, String tokenId, Integer loopIteration,
+            String condition, boolean otherwise, String routeKind, String routeCode) {}
+
+    /** How a token reached a step: the flow it took, or the route that sent it there. */
+    private record Via(SequenceFlow flow, String routeKind, String routeCode) {
+        static Via of(SequenceFlow flow) { return flow == null ? null : new Via(flow, null, null); }
+    }
 
     public ProcessInstance(ParsedProcessDefinition definition) {
         this.id = UUID.randomUUID().toString();
@@ -321,7 +341,7 @@ public class ProcessInstance {
         for (ProcessToken token : List.copyOf(tokens)) {
             if (token.state() == ProcessToken.State.WAITING) {
                 token.moveTo(token.activityId(), ProcessToken.State.ACTIVE);
-                queue.add(new Step(token, token.activityId(), null));
+                queue.add(new Step(token, token.activityId(), null, null));
             }
         }
         return run(queue, newUserTasks);
@@ -353,6 +373,8 @@ public class ProcessInstance {
             }
             resumed.moveTo(resumedActivity, ProcessToken.State.CONSUMED);
             mover = parent;
+            recordFlow(parent, parent.activityId(), resumedActivity,
+                    Via.of(flowBetween(parent.activityId(), resumedActivity)), null);
         }
         mover.moveTo(resumedActivity, ProcessToken.State.ACTIVE);
         continueAfter(mover, resumedActivity, queue);
@@ -377,7 +399,7 @@ public class ProcessInstance {
 
     public record EventRace(String winnerTokenId, List<String> loserTokenIds, List<String> loserActivityIds) {}
 
-    private record Step(ProcessToken token, String pointer, String previous) {}
+    private record Step(ProcessToken token, String pointer, String previous, Via via) {}
 
     /**
      * Safety net per token and command. Every loop is bounded by its
@@ -400,6 +422,7 @@ public class ProcessInstance {
         ProcessToken token = step.token();
         String current = step.pointer();
         String previous = step.previous();
+        Via via = step.via();
         int hops = 0;
         while (current != null) {
             if (++hops > MAX_HOPS) {
@@ -410,12 +433,16 @@ public class ProcessInstance {
             current = null;
             LoopMeta loop = definition.getLoop(pointer);
             if (loop != null && !enterLoopStep(token, loop, previous)) {
+                recordFlow(token, previous, pointer, via, null);
                 if (loop.onExhausted() == null) return;
                 previous = pointer;
                 current = loop.onExhausted();
+                via = new Via(null, "LOOP_EXHAUSTED", null);
                 continue;
             }
+            recordFlow(token, previous, pointer, via, loop == null ? null : token.loopCount(loop.headerId()));
             previous = pointer;
+            via = null;
             token.moveTo(pointer, ProcessToken.State.ACTIVE);
 
             ServiceTaskMeta serviceTaskMeta = definition.getServiceTask(pointer);
@@ -455,13 +482,15 @@ public class ProcessInstance {
                     JavaDelegate delegate = (JavaDelegate) Class.forName(serviceTaskMeta.className())
                             .getConstructor().newInstance();
                     delegate.execute(new DelegateExecutionImpl());
-                    current = firstTarget(pointer);
+                    via = Via.of(firstFlow(pointer));
+                    current = via == null ? null : via.flow().getTargetRef();
                 } catch (Exception e) {
                     throw new RuntimeException("Error executing JavaDelegate " + serviceTaskMeta.className(), e);
                 }
             } else if (scriptTaskMeta != null) {
                 executeScript(scriptTaskMeta);
-                current = firstTarget(pointer);
+                via = Via.of(firstFlow(pointer));
+                current = via == null ? null : via.flow().getTargetRef();
             } else if (definition.isDecisionTable(pointer)) {
                 // Deterministic decision-table evaluation inside the workflow
                 // transaction: the table is the law, agents are the advice.
@@ -471,20 +500,21 @@ public class ProcessInstance {
                 decisionAudits.add(new DecisionTableAudit(java.util.UUID.randomUUID().toString(), pointer, table.decisionKey(),
                         result.matchedRuleIndexes(), List.copyOf(result.inputs().keySet()),
                         List.copyOf(result.outputs().keySet())));
-                current = firstTarget(pointer);
+                via = Via.of(firstFlow(pointer));
+                current = via == null ? null : via.flow().getTargetRef();
             } else if (definition.isExclusiveGateway(pointer)) {
                 GatewaySelector selector = new GatewaySelector();
                 GatewayMeta gw = definition.getGateways().get(pointer);
                 List<SequenceFlow> outgoing = definition.getOutgoing(pointer);
                 String chosenFlowId = selector.chooseOutgoing(gw, outgoing, variables);
-                current = outgoing.stream()
+                via = Via.of(outgoing.stream()
                         .filter(f -> Objects.equals(f.getId(), chosenFlowId))
-                        .map(SequenceFlow::getTargetRef)
                         .findFirst()
-                        .orElseThrow(() -> new IllegalStateException("Flow not found: " + chosenFlowId));
+                        .orElseThrow(() -> new IllegalStateException("Flow not found: " + chosenFlowId)));
+                current = via.flow().getTargetRef();
             } else if (definition.isParallelGateway(pointer) && definition.getIncoming(pointer).size() == 1) {
                 fork(token, pointer, definition.getOutgoing(pointer).stream()
-                        .map(SequenceFlow::getTargetRef).toList(), queue);
+                        .filter(flow -> !flow.isBoundary()).toList(), queue);
                 return;
             } else if (definition.isInclusiveGateway(pointer) && definition.getIncoming(pointer).size() == 1) {
                 GatewaySelector selector = new GatewaySelector();
@@ -493,7 +523,7 @@ public class ProcessInstance {
                 List<String> chosenFlowIds = selector.chooseInclusive(gw, outgoing, variables);
                 fork(token, pointer, chosenFlowIds.stream()
                         .map(flowId -> outgoing.stream().filter(f -> f.getId().equals(flowId)).findFirst()
-                                .orElseThrow().getTargetRef())
+                                .orElseThrow())
                         .toList(), queue);
                 return;
             } else if (definition.isEventGateway(pointer)) {
@@ -524,7 +554,8 @@ public class ProcessInstance {
                 end(token, pointer, queue);
                 return;
             } else {
-                current = firstTarget(pointer);
+                via = Via.of(firstFlow(pointer));
+                current = via == null ? null : via.flow().getTargetRef();
             }
             if (current == null) {
                 end(token, pointer, queue);
@@ -594,7 +625,7 @@ public class ProcessInstance {
         }
         token.moveTo(token.activityId(), ProcessToken.State.ACTIVE);
         Deque<Step> queue = new ArrayDeque<>();
-        queue.add(new Step(token, token.activityId(), null));
+        queue.add(new Step(token, token.activityId(), null, null));
         return run(queue, new ArrayList<>());
     }
 
@@ -632,7 +663,11 @@ public class ProcessInstance {
         }
         token.moveTo(boundary.attachedTo(), ProcessToken.State.ACTIVE);
         Deque<Step> queue = new ArrayDeque<>();
-        queue.add(new Step(token, boundary.target(), boundary.attachedTo()));
+        SequenceFlow flow = definition.getOutgoing(boundary.attachedTo()).stream()
+                .filter(candidate -> boundary.id().equals(candidate.getBoundaryId())).findFirst()
+                .orElseGet(() -> flowBetween(boundary.attachedTo(), boundary.target()));
+        queue.add(new Step(token, boundary.target(), boundary.attachedTo(),
+                new Via(flow, boundary.kind().name(), boundary.code())));
         return run(queue, new ArrayList<>());
     }
 
@@ -655,12 +690,13 @@ public class ProcessInstance {
     }
 
     /** The forking token waits; one child token per chosen branch runs in this command. */
-    private void fork(ProcessToken token, String gateway, List<String> targets, Deque<Step> queue) {
+    private void fork(ProcessToken token, String gateway, List<SequenceFlow> flows, Deque<Step> queue) {
         token.moveTo(gateway, ProcessToken.State.FORKED);
-        for (String target : targets) {
+        for (SequenceFlow flow : flows) {
+            String target = flow.getTargetRef();
             ProcessToken child = newToken(target, ProcessToken.State.ACTIVE, token.id(), token.id());
             tokens.add(child);
-            queue.add(new Step(child, target, gateway));
+            queue.add(new Step(child, target, gateway, Via.of(flow)));
         }
         settle(token, queue);
     }
@@ -722,20 +758,49 @@ public class ProcessInstance {
     }
 
     private void continueAfter(ProcessToken token, String activity, Deque<Step> queue) {
-        String next = firstTarget(activity);
+        SequenceFlow next = firstFlow(activity);
         if (next == null) {
             end(token, activity, queue);
         } else {
-            queue.add(new Step(token, next, activity));
+            queue.add(new Step(token, next.getTargetRef(), activity, Via.of(next)));
         }
     }
 
-    /** The normal next step; boundary flows are taken only when their boundary fires. */
-    private String firstTarget(String activity) {
+    /** The normal next flow; boundary flows are taken only when their boundary fires. */
+    private SequenceFlow firstFlow(String activity) {
         for (SequenceFlow flow : definition.getOutgoing(activity)) {
-            if (!flow.isBoundary()) return flow.getTargetRef();
+            if (!flow.isBoundary()) return flow;
         }
         return null;
+    }
+
+    /** The first flow from {@code from} to {@code to}, or null (a loop's on_exhausted route has none). */
+    private SequenceFlow flowBetween(String from, String to) {
+        for (SequenceFlow flow : definition.getOutgoing(from)) {
+            if (to.equals(flow.getTargetRef())) return flow;
+        }
+        return null;
+    }
+
+    /** Notes that {@code token} went from {@code from} to {@code to}; a resumed or retried step has no hop. */
+    private void recordFlow(ProcessToken token, String from, String to, Via via, Integer loopIteration) {
+        if (from == null) return;
+        SequenceFlow flow = via == null || via.flow() == null ? flowBetween(from, to) : via.flow();
+        boolean decided = definition.isExclusiveGateway(from) || definition.isInclusiveGateway(from);
+        String condition = decided && flow != null && flow.getConditionExpression() != null
+                && !flow.isDefault() ? flow.getConditionExpression() : null;
+        GatewayMeta gateway = decided ? definition.getGateways().get(from) : null;
+        boolean otherwise = decided && flow != null && (flow.isDefault()
+                || (gateway != null && flow.getId().equals(gateway.defaultFlowId())));
+        flowsTaken.add(new FlowTaken(flow == null ? null : flow.getId(), from, to, token.id(), loopIteration,
+                condition, otherwise, via == null ? null : via.routeKind(), via == null ? null : via.routeCode()));
+    }
+
+    /** Returns and clears the flows taken during advance(). */
+    public List<FlowTaken> takeFlowsTaken() {
+        List<FlowTaken> snapshot = List.copyOf(flowsTaken);
+        flowsTaken.clear();
+        return snapshot;
     }
 
     private ProcessToken waitingToken(String tokenRef) {
