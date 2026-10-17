@@ -4,6 +4,7 @@ import type { DiffChangeKind } from '@/lib/aiDiff/types';
 import type { EdgeKind } from '@/lib/layout/edgeGeometry';
 import type { LoopProblem } from '@/lib/apl/loopAnalysis';
 import type { NowState } from '@/lib/run/instancePath';
+import type { RetryPhase } from '@/lib/run/retryPhase';
 import { palette } from '@/lib/tokens';
 
 export type NodeRunStatus = NonNullable<WorkflowNode['status']>;
@@ -35,12 +36,24 @@ export type CanvasNodeData = WorkflowNode & Record<string, unknown> & {
   pathHint?: string;
   /** Paced playback: set (to the arrival's sequence number) while this node is the one a revealed step entered. */
   arrivalSeq?: number;
+  /** Instance views: identity of the open incident on this node; a new one pulses once (M5 S4). */
+  incidentSeq?: string;
+  /** Instance views: where a retry of this node is, shown at the playback pace (M5 S4). */
+  retryPhase?: RetryPhase;
 };
 
 export type CanvasNode = Node<CanvasNodeData>;
 
 export const SELECTED_COLOR = palette.saffron;
 export const LIVE_COLOR = palette.amethyst;
+
+/** A retry passing through its phases: reopened, running, done, failed again. */
+export const RETRY_COLORS: Record<RetryPhase, string> = {
+  retrying: palette.saffron,
+  active: palette.amethyst,
+  completed: palette.sageGreen,
+  failed: palette.desertRose,
+};
 
 export const DIFF_COLORS: Record<DiffChangeKind, string> = {
   added: palette.sageGreen,
@@ -49,10 +62,11 @@ export const DIFF_COLORS: Record<DiffChangeKind, string> = {
 };
 
 /**
- * Outline colour for a node's state, in priority order: live position, dry-run
+ * Outline colour for a node's state, in priority order: a retry in progress, live position, dry-run
  * step, diff marking, selection. Null when the node is at rest.
  */
 export function stateOutline(data: CanvasNodeData, selected: boolean): string | null {
+  if (data.retryPhase) return RETRY_COLORS[data.retryPhase];
   if (data.nowState === 'incident') return palette.desertRose;
   if (data.nowState === 'waiting') return palette.saffron;
   if (data.isLiveCurrent || data.isActiveSim) return LIVE_COLOR;

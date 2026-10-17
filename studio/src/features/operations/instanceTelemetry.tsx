@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AgentStepInspector } from '@/features/operations/AgentStepInspector';
 import {
   Activity,
@@ -235,8 +235,16 @@ export const VariablesTab: React.FC<{ variables: Record<string, unknown> | null 
 /* Audit trail                                                         */
 /* ------------------------------------------------------------------ */
 
-export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ history: allEvents }) => {
+export const AuditTimeline: React.FC<{
+  history: ActivityHistoryDTO[];
+  /** An entry to bring into view and mark (e.g. the retry an incident card resolved). */
+  highlightId?: string | null;
+}> = ({ history: allEvents, highlightId }) => {
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
+  const highlighted = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    highlighted.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [highlightId]);
   // Each flow taken is a path fact drawn on the canvas; listing them all here would bury the audit events.
   const history = allEvents.filter((event) => event.eventType !== 'FLOW_TAKEN');
 
@@ -254,7 +262,12 @@ export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ his
         const route = event.eventType === 'BOUNDARY_TAKEN' ? boundarySummary(details) : undefined;
         const expanded = expandedEvent === event.id;
         return (
-          <li key={event.id} className="relative pb-3">
+          <li
+            key={event.id}
+            ref={event.id === highlightId ? highlighted : undefined}
+            className={`relative pb-3 ${event.id === highlightId ? 'rounded-md ring-1 ring-saffron/60' : ''}`}
+            aria-current={event.id === highlightId ? 'true' : undefined}
+          >
             <span className={`absolute -left-[21px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-hairline bg-charcoal ${TONE_TEXT[meta.tone]}`}>
               <Icon className="h-2.5 w-2.5" />
             </span>

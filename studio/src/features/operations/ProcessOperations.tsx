@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import {
   EngineAPI,
+  IncidentDTO,
   ProcessDefinitionDTO,
   ProcessInstanceDTO,
 } from '@/api/engine';
@@ -120,7 +121,9 @@ export const ProcessOperations: React.FC<{
   canRollBack?: boolean;
   onOpenInstance?: (instance: ProcessInstanceDTO) => void;
   onOpenDetail?: (instance: ProcessInstanceDTO) => void;
-}> = ({ projectId, canRetryIncidents = false, canRollBack = false, onOpenInstance, onOpenDetail }) => {
+  /** Opens an incident's instance focused on its step (M5 S4). */
+  onOpenIncident?: (incident: IncidentDTO) => void;
+}> = ({ projectId, canRetryIncidents = false, canRollBack = false, onOpenInstance, onOpenDetail, onOpenIncident }) => {
   const [instances, setInstances] = useState<ProcessInstanceDTO[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -441,6 +444,7 @@ export const ProcessOperations: React.FC<{
         projectId={projectId}
         canRetry={canRetryIncidents}
         onCountChange={setOpenIncidents}
+        onOpenIncident={onOpenIncident}
         onRetried={(incident) => {
           setToast(`Retried ${humanize(incident.activityId)}`);
           if (projectId) {

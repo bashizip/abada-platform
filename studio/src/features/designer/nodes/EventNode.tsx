@@ -4,7 +4,7 @@ import { Clock, Mail, Radio } from 'lucide-react';
 import { EVENT_SIZE } from '@/lib/layout/nodeGeometry';
 import { useCanvasView } from '../canvasContext';
 import { eventAccent } from './nodeStyle';
-import { ArrivalPulse, DiffBadge, NodeBadges, NodeHandles, OutsideLabel, PathBadges, StatusBadge } from './NodeChrome';
+import { ArrivalPulse, DiffBadge, IncidentPulse, NodeBadges, NodeHandles, OutsideLabel, PathBadges, StatusBadge } from './NodeChrome';
 import { type CanvasNode, pathClass, pathFill, stateOutline, withPathHint } from './nodeState';
 
 const C = EVENT_SIZE / 2;
@@ -44,8 +44,9 @@ export const EventNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
         <Icon className="absolute h-4 w-4" style={{ left: C - 8, top: C - 8, color }} aria-hidden="true" />
       )}
       <OutsideLabel text={data.title} size={size} direction={direction} />
-      <StatusBadge status={data.status} live={data.isLiveCurrent} now={data.nowState} x={EVENT_SIZE - 4} y={4} />
+      <StatusBadge status={data.status} live={data.isLiveCurrent} now={data.nowState} retry={data.retryPhase} x={EVENT_SIZE - 4} y={4} />
       <ArrivalPulse seq={data.arrivalSeq} shape="circle" />
+      <IncidentPulse seq={data.incidentSeq} shape="circle" />
       <PathBadges visits={data.visitOrders} width={EVENT_SIZE} height={EVENT_SIZE} />
       <DiffBadge kind={data.diffKind} />
       <NodeBadges loopState={data.loopState} maxIterations={data.loop?.maxIterations} issueCount={data.issueCount} />
