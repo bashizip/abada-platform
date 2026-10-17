@@ -372,6 +372,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           source: aplNode.id,
           target,
           label: r.if ? `if ${r.if}` : 'else',
+          // The rule's expression is carried verbatim so the round trip keeps
+          // bare CEL (`risk == "low"`) as well as `${…}` conditions.
+          ...(r.if ? { condition: r.if } : {}),
         });
       });
     } else if (aplNode.type === 'event-gateway') {
