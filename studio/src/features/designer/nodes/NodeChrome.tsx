@@ -122,6 +122,26 @@ const STATUS_BADGES: Record<Exclude<NodeRunStatus, 'idle'>, { label: string; col
   running: { label: 'Running', color: palette.amethyst, icon: <Loader2 className="h-3 w-3 animate-spin text-linen" /> },
 };
 
+/**
+ * Paced playback (M5 S3): the node a revealed step entered pulses once in the
+ * path colour, then rests. Keyed by the arrival so a loop re-entry pulses again.
+ */
+export const ArrivalPulse: React.FC<{ seq?: number; shape: 'rect' | 'circle' | 'diamond' }> = ({ seq, shape }) => {
+  if (!seq) return null;
+  return (
+    <span key={seq} className="abada-arrive-node pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+      <span
+        className={`absolute inset-0 border-2 ${shape === 'rect' ? 'rounded-xl' : shape === 'circle' ? 'rounded-full' : ''}`}
+        style={{
+          borderColor: EDGE_PATH_COLOR,
+          // A diamond is a square turned a quarter: its corners touch the shape's box.
+          transform: shape === 'diamond' ? 'rotate(45deg) scale(0.7071)' : undefined,
+        }}
+      />
+    </span>
+  );
+};
+
 /** AI-diff marking above the node. */
 export const DiffBadge: React.FC<{ kind?: DiffChangeKind | null }> = ({ kind }) => {
   if (!kind) return null;

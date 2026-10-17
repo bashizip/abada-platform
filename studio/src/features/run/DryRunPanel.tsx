@@ -9,6 +9,8 @@ import { AiProvidersAPI } from '@/api/aiProviders';
 import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
 import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
 import { buildPathView, type PathView } from '@/lib/run/instancePath';
+import { PACE_DWELL_MS, usePlaybackPace } from '@/lib/run/playbackPace';
+import { PlaybackControl } from '@/components/PlaybackControl';
 
 type PauseState =
   | { kind: 'agent'; node: WorkflowNode; edges: WorkflowEdge[] }
@@ -70,6 +72,11 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
   useEffect(() => {
     if (aiProvidersVersion > 0) setPayloadError((current) => (current?.includes('AI provider') ? null : current));
   }, [aiProvidersVersion]);
+
+  // The run advances at the user's playback pace (M5 S3), so a simulation is watchable like a live instance.
+  const [pace, setPace] = usePlaybackPace();
+  const paceRef = useRef(pace);
+  useEffect(() => { paceRef.current = pace; }, [pace]);
 
   if (!isOpen) return null;
 
@@ -189,7 +196,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
       statuses.current[nodeId] = 'running';
       emit(nodeId);
       setMessages((items) => [...items, `Token entered ${node.title}.`]);
-      await sleep(450);
+      await sleep(PACE_DWELL_MS[paceRef.current]);
       if (currentRun !== runId.current) return;
 
       // on_exhausted is only taken when the loop limit is reached (above).
@@ -269,6 +276,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
           <FlaskConical className="w-4 h-4 text-[#F4A261]" />
           <div><strong className="text-xs">Dry Run</strong><p className="text-[10px] text-[#A89F91]">Local · mocked · non-persistent</p></div>
         </div>
+        <PlaybackControl pace={pace} onPaceChange={setPace} className="ml-auto mr-2" />
         <button onClick={() => { cancel(); onClose(); }} aria-label="Close Dry Run"><X className="w-4 h-4" /></button>
       </div>
 

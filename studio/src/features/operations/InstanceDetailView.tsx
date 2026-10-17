@@ -30,6 +30,8 @@ import {
 } from '@/api/engine';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { useInstanceEvents } from '@/hooks/useInstanceEvents';
+import { useInstancePlayback } from '@/hooks/useInstancePlayback';
+import { PlaybackControl } from '@/components/PlaybackControl';
 import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
@@ -207,10 +209,13 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   }, [onBack, workflow, selectedNodeId]);
 
   /* ---- Derived overlay + path ---- */
+  // The canvas plays the instance back one flow at a time (M5 S3); the panels keep the real facts.
+  const playback = useInstancePlayback(workflow, instance, activities, history, incidentNodeIds);
+  const frame = playback.frame;
   const path = useMemo(() => {
-    if (!workflow) return null;
-    return deriveInstancePath(workflow, instance, activities, history, { incidentNodeIds });
-  }, [workflow, instance, activities, history, incidentNodeIds]);
+    if (!workflow || !frame) return null;
+    return deriveInstancePath(workflow, frame.instance, frame.activities, frame.history, { incidentNodeIds });
+  }, [workflow, frame, incidentNodeIds]);
 
   /**
    * Content-stable projection of the path: polls return new object identities
@@ -344,6 +349,10 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {!isTerminal && (
+            <PlaybackControl pace={playback.pace} onPaceChange={playback.setPace} lag={playback.lag}
+              onJumpToNow={playback.jumpToNow} />
+          )}
           <StatusBadge instance={instance} />
           {!isTerminal && (
             <span
@@ -468,6 +477,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               activeTokenEdges={instance.suspended || isTerminal ? undefined : stablePath.tokenEdgeIds}
               nextPathEdges={instance.suspended || isTerminal ? undefined : stablePath.nextEdgeIds}
               path={stablePath.path}
+              animateArrivals={playback.pace !== 'instant'}
               readOnly
             />
           ) : (

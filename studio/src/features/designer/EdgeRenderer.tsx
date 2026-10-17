@@ -52,6 +52,8 @@ export type AbadaEdgeData = {
   pathLayer?: 'taken' | 'unreached';
   /** Instance views: times the path took this edge (a loop's back-edge shows ×N). */
   takenCount?: number;
+  /** Paced playback: set (to the arrival's sequence number) while a revealed step just took this edge. */
+  arrivalSeq?: number;
 };
 
 type AbadaEdgeType = Edge<AbadaEdgeData, 'abadaEdge'>;
@@ -130,6 +132,7 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
   const hasToken = data?.hasToken;
   const strokeColor = EDGE_COLORS[variant];
   const taken = variant === 'path';
+  const arriving = taken && !!data?.arrivalSeq;
   const unreached = variant === 'unreached';
   const strokeWidth = taken ? PATH_STROKE.taken.width : unreached ? PATH_STROKE.unreached.width
     : variant === 'default' || variant === 'error' || variant === 'warn' ? 1.75 : 2.5;
@@ -168,6 +171,9 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
         </g>
       )}
       <BaseEdge
+        // A revealed step draws the stroke once from source to target (M5 S3); the key replays it on a loop.
+        key={arriving ? `arrive-${data?.arrivalSeq}` : 'edge'}
+        pathLength={arriving ? 1 : undefined}
         path={edgePath}
         markerEnd={markerEnd}
         style={{
@@ -179,7 +185,7 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
           transition: 'opacity 150ms ease-out',
         }}
         // The path stays solid; the token dot shows the arrival.
-        className={isFlowing && !taken ? 'animate-flow-dash' : ''}
+        className={arriving ? 'abada-arrive-edge' : isFlowing && !taken ? 'animate-flow-dash' : ''}
       />
       {fullLabel && (
         <path d={edgePath} fill="none" stroke="transparent" strokeWidth="14">
