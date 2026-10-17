@@ -310,6 +310,23 @@ fake clock; scroll-lock behaviour; node ↔ entry highlight. No sensitive values
 audit entries render the same redacted fields as today (`AGENTS.md`, evidence
 over claims).
 
+**As built.** One entry per pass of a token through a node (from the flow
+that entered it to the flow that left it), plus the facts about the instance
+as a whole; built in the Studio from recorded facts only
+(`STUDIO/lib/run/auditTrail.ts`). Synchronous nodes record nothing but their
+flows, so this is where they appear. The engine writes a command's flows
+before its other facts, so the trail shows the visible playback prefix
+extended to the next step: a task created at a node arrives with the step
+that entered it. Agent entries show `promptVersion` from the agent-step
+journal when the worker reports one (the first-party worker does not), else
+`#` and 8 characters of the prompt hash. Human entries show the outcome and
+the comment length, never the comment. Decision-table entries show the
+matched rule numbers; S7 adds the rule itself. Deploy & Start now opens the
+instance view and plays the new run from its first fact (a second bounded
+exception to "the state at opening is shown at once"; urgent facts still
+catch up). Rows only append, so `domAnimation` suffices (+4.0 kB gzip). The
+designer's live view keeps the static `AuditTimeline`.
+
 ---
 
 ## S6 — Operations redesign

@@ -57,10 +57,19 @@ touched. The same layers appear during a **Dry Run** in the designer.
   hash and worker. When a fallback model answered, **Fallback for** names the
   model it replaced.
 - **Variables** — the current process variables.
-- **Audit Trail** — every event in order, with its actor: process started,
-  jobs locked and completed by workers, tasks claimed and completed, and the
-  route a step took (`outcome reject → draft`, `timeout → triage`). Click an
-  event for its details.
+- **Audit Trail** — open by default, beside the canvas. It tells the run step
+  by step: one entry each time a token passes through a step, with who acted
+  (the engine, an agent with its model and prompt version, a person, or a
+  worker), what happened, when, how long the step waited, and where the token
+  went next (`→ Draft (outcome reject)`, `→ Triage (timeout)`). An agent entry
+  opens on its model and tool calls; a decision-table entry names the rules
+  that matched; a person's entry gives the outcome and whether they commented
+  (the comment itself stays in the process variables). Click an entry for the
+  facts the engine recorded. Point at an entry to ring its step on the canvas;
+  click a step on the canvas to see only its entries. While the instance runs,
+  entries arrive with the canvas: a step's entry appears when the step lights
+  up. The trail follows them while you are at the bottom; scroll up and it
+  stays put, with a **new entries** button to come back.
 
 ![A completed instance: the taken path, including the way back to Draft, and the audit trail](../../../assets/screens/tutorial/22-instance-history.webp)
 
@@ -92,7 +101,9 @@ One exception: a [retry](#on-the-diagram) plays out in full first, so you see it
 happen even when the retried step ends the instance. The header status
 changes at once; the canvas follows within a few steps.
 When you open an instance, it shows the current state at once. Only steps
-that happen while you watch are paced. With reduced motion turned on in your
+that happen while you watch are paced. An instance you start with **Deploy &
+Start** is different: its page opens right away and plays the run from the
+first step, even the steps the engine finished before the page loaded. With reduced motion turned on in your
 system, steps still appear one at a time, with fades instead of movement.
 
 **Agent steps.** For an agent step, the telemetry tab lists every model call,
