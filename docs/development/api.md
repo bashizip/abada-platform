@@ -679,6 +679,11 @@ Patches (modifies) variables for a specific process instance.
 
 - **Success Response** (`200 OK`): Empty response
 - **Error Response** (`404 Not Found`): Process instance not found
+- **Error Response** (`400 INVALID_REQUEST`): No body, no or empty `modifications`, a blank
+  variable name, or a variable without a `value`. Nothing is changed.
+
+The project-scoped `PATCH /v1/projects/{projectId}/instances/{instanceId}/variables`
+(project operators and owners) takes the same body and returns the same errors.
 
 **Use Case**: When a process is stuck due to incorrect variable values, operators can use Orun's "Data Surgery" feature to fix the state and unblock execution.
 

@@ -40,6 +40,8 @@ interface LiveInstanceInspectorProps {
   onPinnedChange: (pinned: boolean) => void;
   /** Opens a child instance an agent delegated to (its step links to it). */
   onOpenInstance?: (instanceId: string) => void;
+  /** Project OPERATOR or OWNER: may retry a failed job (the engine enforces it too). */
+  canRetryJobs?: boolean;
 }
 
 /**
@@ -60,6 +62,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
   pinned,
   onPinnedChange,
   onOpenInstance,
+  canRetryJobs = false,
 }) => {
   const [tab, setTab] = useState<InspectorTab>('telemetry');
   const [history, setHistory] = useState<ActivityHistoryDTO[]>([]);
@@ -259,7 +262,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
                 history={history}
                 jobs={jobs}
                 variables={variables}
-                onRetry={retryJob}
+                onRetry={canRetryJobs ? retryJob : undefined}
                 projectId={projectId}
                 agentSteps={agentSteps}
                 instanceId={instanceId}

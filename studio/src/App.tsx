@@ -694,6 +694,7 @@ export default function App() {
                         onPanelWidthChange={setLivePanelWidth}
                         pinned={livePanelPinned}
                         onPinnedChange={setLivePanelPinned}
+                        canRetryJobs={canRetryIncidents(activeProject?.currentUserRoles)}
                         onOpenInstance={(id) => {
                           void EngineAPI.getInstance(id, activeProject?.id)
                             .then((child) => openLiveInstance(child)).catch(() => undefined);
