@@ -16,7 +16,7 @@ An entry becomes certified only when its roadmap evidence is checked. The
 table distinguishes an implemented/configuration-valid profile from a
 release-certified one so documentation never broadens the current guarantee.
 
-`1.1.1` (a patch of `1.1.0`) is published as an evaluation release with the
+`1.1.2` (an installer fix on `1.1.1`) is published as an evaluation release with the
 executable Compose configuration, preflight, archive and
 PostgreSQL/Testcontainers evidence. It does not claim a completed public-cloud
 production certification. Public TLS, external-OIDC reference-host testing,

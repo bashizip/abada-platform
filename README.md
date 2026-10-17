@@ -209,8 +209,10 @@ only through an engine command that validates it — see
 
 ## Status
 
-The current release is **`1.1.1`**, an evaluation release
-([release notes](docs/release-notes/1.1.1-release-notes.md),
+The current release is **`1.1.2`**, an evaluation release
+([release notes](docs/release-notes/1.1.2-release-notes.md)): re-running the one-line
+installer now updates an existing installation to the new release. It ships the
+`1.1.1` features ([release notes](docs/release-notes/1.1.1-release-notes.md),
 [gate report](docs/development/1.1.1-gate-report-2026-10-16.md)): live AI providers. A key is
 tested before it is saved, each provider's models are read from the provider (so a new model
 works the day it is published), prices come from a public catalog when you have not set
