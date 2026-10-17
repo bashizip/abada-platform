@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { AlertCircle, CheckCircle, Info, X, AlertTriangle } from 'lucide-react';
 import type { Emphasis, SoundName } from 'cuelume';
+import { AnimatePresence, m } from 'motion/react';
 import { playCue } from '@/lib/sound';
+import { toast as toastVariants, useMotionVariants } from '@/lib/motion';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';
 
@@ -34,6 +36,7 @@ const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const variants = useMotionVariants(toastVariants);
 
   const showToast = useCallback((type: ToastType, title: string, message?: string, options?: ToastOptions) => {
     playCue(TOAST_CUES[type], { emphasis: options?.emphasis ?? 'subtle' });
@@ -52,10 +55,15 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     <ToastContext.Provider value={{ showToast, removeToast }}>
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        <AnimatePresence initial={false}>
         {toasts.map((toast) => (
-          <div
+          <m.div
             key={toast.id}
-            className={`pointer-events-auto flex items-start gap-3 rounded-xl border p-3.5 shadow-xl transition-all duration-300 ${
+            variants={variants}
+            initial="initial"
+            animate="enter"
+            exit="exit"
+            className={`pointer-events-auto flex items-start gap-3 rounded-xl border p-3.5 shadow-xl ${
               toast.type === 'error'
                 ? 'border-desert-rose/50 bg-[#2B1B18] text-linen'
                 : toast.type === 'success'
@@ -84,8 +92,9 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             >
               <X className="h-4 w-4" />
             </button>
-          </div>
+          </m.div>
         ))}
+        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

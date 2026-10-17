@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FolderOpen, Plus, Search, Shield, Users, X } from 'lucide-react';
 import { Principal, Project, ProjectAPI, ProjectMember, ProjectRole } from '@/api/projects';
+import { MotionBackdrop, MotionPanel } from '@/components/ui';
 
 const ROLES: ProjectRole[] = ['OWNER', 'MAINTAINER', 'OPERATOR', 'REVIEWER', 'VIEWER'];
 
@@ -77,8 +78,8 @@ export const ProjectDialog: React.FC<ProjectDialogProps> = ({
   const canManage = !!activeProject?.currentUserRoles.some((role) => role === 'OWNER');
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#0F0C0A]/80 backdrop-blur-sm flex items-center justify-center p-6">
-      <section className="w-full max-w-3xl max-h-[82vh] overflow-hidden rounded-2xl border border-hairline bg-mocha shadow-2xl">
+    <MotionBackdrop className="fixed inset-0 z-[100] bg-[#0F0C0A]/80 backdrop-blur-sm flex items-center justify-center p-6">
+      <MotionPanel className="w-full max-w-3xl max-h-[82vh] overflow-hidden rounded-2xl border border-hairline bg-mocha shadow-2xl">
         <header className="h-14 px-5 flex items-center justify-between border-b border-hairline">
           <div>
             <h2 className="text-sm font-semibold text-linen">Project workspace</h2>
@@ -132,7 +133,7 @@ export const ProjectDialog: React.FC<ProjectDialogProps> = ({
             </>}
           </div>}
         </div>
-      </section>
-    </div>
+      </MotionPanel>
+    </MotionBackdrop>
   );
 };

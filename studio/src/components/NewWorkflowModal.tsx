@@ -5,6 +5,7 @@ import { WorkflowFile } from '@/types';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
+import { MotionBackdrop, MotionPanel } from '@/components/ui';
 
 type CreateMode = 'empty' | 'bpmn' | 'apl';
 
@@ -149,8 +150,8 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-mocha border border-hairline rounded-2xl w-full max-w-lg p-5 shadow-warm-lg space-y-4 animate-in zoom-in-95">
+    <MotionBackdrop className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <MotionPanel className="bg-mocha border border-hairline rounded-2xl w-full max-w-lg p-5 shadow-warm-lg space-y-4 animate-in zoom-in-95">
         <div className="flex items-center justify-between border-b border-hairline pb-3">
           <div className="flex items-center gap-2 text-saffron">
             <FileText className="w-5 h-5" />
@@ -257,7 +258,7 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
             {busy ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : 'Create Process'}
           </button>
         </div>
-      </div>
-    </div>
+      </MotionPanel>
+    </MotionBackdrop>
   );
 };

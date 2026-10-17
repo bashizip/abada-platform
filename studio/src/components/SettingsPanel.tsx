@@ -5,6 +5,7 @@ import { AiProvidersSettings } from '@/components/settings/AiProvidersSettings';
 import { ModelPricesSettings } from '@/components/settings/ModelPricesSettings';
 import { presetFor } from '@/lib/aiProviders';
 import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
+import { MotionBackdrop, MotionPanel } from '@/components/ui';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -91,14 +92,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
   ];
 
   return (
-    <div
+    <MotionBackdrop
       className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal-deep/85 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Settings"
     >
-      <div
+      <MotionPanel
         className="w-full max-w-xl rounded-2xl border border-hairline bg-charcoal shadow-warm-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -271,7 +272,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose, d
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </MotionPanel>
+    </MotionBackdrop>
   );
 };

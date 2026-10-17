@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { X, FileCode, Layers, GitBranch, Clock, Cpu } from 'lucide-react';
 import { WorkflowFile, getFileFormatLabel, getRuntimeStatusTag } from '@/types';
+import { MotionBackdrop, MotionPanel } from '@/components/ui';
 
 interface ProcessDetailsModalProps {
   workflow: WorkflowFile;
@@ -42,14 +43,14 @@ export const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
   );
 
   return (
-    <div
+    <MotionBackdrop
       className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal-deep/85 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Process Details"
     >
-      <div
+      <MotionPanel
         className="w-full max-w-md rounded-2xl border border-hairline bg-charcoal shadow-warm-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -114,7 +115,7 @@ export const ProcessDetailsModal: React.FC<ProcessDetailsModalProps> = ({
             {cleanName(workflow.name)}&nbsp;— durable instance state, transactional outbox delivery.
           </p>
         </div>
-      </div>
-    </div>
+      </MotionPanel>
+    </MotionBackdrop>
   );
 };

@@ -18,6 +18,8 @@ import { ProjectAdmin } from '@/features/admin/ProjectAdmin';
 import { AdministrationView } from '@/features/admin/AdministrationView';
 import { InsightPanel } from '@/features/insight/InsightPanel';
 import { Activity } from 'lucide-react';
+import { AnimatePresence, m } from 'motion/react';
+import { page } from '@/lib/motion';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
 import { InstanceOverviewBar } from '@/features/operations/InstanceOverviewBar';
 import { LiveInstanceInspector } from '@/features/operations/LiveInstanceInspector';
@@ -558,7 +560,8 @@ export default function App() {
         onOpenProjects={() => setShowProjects(true)}
         readOnlyInstance={isLiveReadOnly}
       />
-      <div className="flex flex-1 overflow-hidden relative">
+      <m.div key={currentView} variants={page} initial="initial" animate="enter"
+        className="flex flex-1 overflow-hidden relative">
         {currentView === 'instance' && detailInstance ? (
           <InstanceDetailView
             key={detailInstance.id}
@@ -827,20 +830,25 @@ export default function App() {
         )}
           </>
         )}
-      </div>
+      </m.div>
 
-      <NewWorkflowModal
+      <AnimatePresence>
+      {isNewModalOpen && <NewWorkflowModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
         onCreateWorkflow={handleCreateNewWorkflow}
         projectId={activeProject?.id}
-      />
+      />}
+      </AnimatePresence>
 
-      <ProjectDialog isOpen={showProjects} projects={projects} activeProject={activeProject}
+      <AnimatePresence>
+      {showProjects && <ProjectDialog isOpen={showProjects} projects={projects} activeProject={activeProject}
         onClose={() => setShowProjects(false)} onOpen={(project) => void openProject(project)}
-        onCreated={(project) => { setProjects((items) => [project, ...items]); void openProject(project); }} />
+        onCreated={(project) => { setProjects((items) => [project, ...items]); void openProject(project); }} />}
+      </AnimatePresence>
 
-      <DeployDialog
+      <AnimatePresence>
+      {showDeployDialog && <DeployDialog
         workflow={currentWorkflow}
         isOpen={showDeployDialog}
         isDeploying={isDeploying}
@@ -855,20 +863,25 @@ export default function App() {
         examples={currentWorkflow.processKey === STARTER_PROCESS_KEY ? LEAD_TRIAGE_EXAMPLES : undefined}
         onGenerateInsightEvidence={currentWorkflow.processKey === STARTER_PROCESS_KEY ? handleGenerateInsightEvidence : undefined}
         insightEvidenceRunning={insightEvidenceRunning}
-      />
+      />}
+      </AnimatePresence>
 
-      <ProcessDetailsModal
+      <AnimatePresence>
+      {showProcessDetails && <ProcessDetailsModal
         workflow={currentWorkflow}
         isOpen={showProcessDetails}
         onClose={() => setShowProcessDetails(false)}
-      />
+      />}
+      </AnimatePresence>
 
-      <SettingsPanel
+      <AnimatePresence>
+      {showSettings && <SettingsPanel
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         definitionKey={currentWorkflow.processKey || currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}
         projectId={activeProject?.id}
-      />
+      />}
+      </AnimatePresence>
 
       {diffSnapshot && (
         <AIDiffModal
@@ -879,6 +892,7 @@ export default function App() {
           onExit={handleExitAiDiff}
         />
       )}
+      <AnimatePresence>
       {insightDialog && (
         <InsightReviewDialog
           state={insightDialog.state}
@@ -887,6 +901,7 @@ export default function App() {
           onClose={() => setInsightDialog(null)}
         />
       )}
+      </AnimatePresence>
         </>
       )}
     </div>

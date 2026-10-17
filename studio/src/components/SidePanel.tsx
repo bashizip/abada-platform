@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PanelLeftOpen, PanelRightOpen, Pin, PinOff, X } from 'lucide-react';
+import { AnimatePresence, m } from 'motion/react';
 import { type SidePanelBounds, useSidePanelPrefs } from '@/lib/layout/sidePanelPrefs';
+import { slideFrom, useMotionVariants } from '@/lib/motion';
 
 interface SidePanelProps {
   /** Remembers this panel's width and pin state under its own key. */
@@ -21,6 +23,7 @@ export const SidePanel: React.FC<SidePanelProps> = ({ id, side, label, bounds, c
   const { width, setWidth, pinned, setPinned } = useSidePanelPrefs(id, bounds);
   const [open, setOpen] = useState(false);
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+  const overlayVariants = useMotionVariants(slideFrom(side));
 
   useEffect(() => {
     if (pinned || !open) return;
@@ -122,12 +125,15 @@ export const SidePanel: React.FC<SidePanelProps> = ({ id, side, label, bounds, c
         <OpenIcon className="h-4 w-4" />
         <span className="text-[10px] font-semibold uppercase tracking-wider [writing-mode:vertical-rl]">{label}</span>
       </button>
-      {open && (
-        <div style={{ width }} role="dialog" aria-label={label}
-          className={`absolute top-0 flex h-full flex-col shadow-warm-lg ${side === 'left' ? 'left-full' : 'right-full'}`}>
-          {body}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <m.div key="overlay" variants={overlayVariants} initial="initial" animate="enter" exit="exit"
+            style={{ width }} role="dialog" aria-label={label}
+            className={`absolute top-0 flex h-full flex-col shadow-warm-lg ${side === 'left' ? 'left-full' : 'right-full'}`}>
+            {body}
+          </m.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
