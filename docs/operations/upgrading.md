@@ -93,6 +93,17 @@ Upgrade the engine, Studio and the agent worker together. Before the upgrade:
 Events written before V33 have no sequence number and are not replayed by the
 project event stream; webhook delivery is unchanged.
 
+### Updating with the one-line installer (1.1.2 and later)
+
+Run the installer again from the directory that holds the installation (or
+with the same `ABADA_INSTALL_DIR`). From 1.1.2 it updates in place: it saves
+the current `.env.dev` as `.env.dev.backup-<date>`, sets the image tags of the
+release it installs, adds settings the release introduced, keeps every other
+setting, and says which version it updates from. Installers up to 1.1.1 kept
+an existing `.env.dev` untouched and so started the image tags it pinned:
+after an update with them, set the four `ABADA_*_IMAGE` lines to the new
+version and run `./release/abada-platform up dev`.
+
 ### Upgrading to 1.1.1 (V39, live AI providers)
 
 V39 adds three tables and changes no existing row: `model_catalog_prices`
