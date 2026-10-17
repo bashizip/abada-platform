@@ -30,7 +30,26 @@ time range, or search by instance id, process or node.
 
 ## One instance
 
-Open an instance to see the path it took on the canvas and three tabs:
+Open an instance to see the path it took on the canvas and three tabs.
+
+The canvas draws three layers, told apart by shape as well as colour:
+
+- **Path taken** — thick solid edges on top of the diagram and filled nodes,
+  each with its step number (`2`; `2 ×3` when it ran three times; hover for
+  every step, "2, 5, 8"). A decision's taken branch reads `✓ score >= 750`; a
+  join shows how many branches arrived (`2/2`); a delegation or for-each shows
+  its child results (`3 ✓ · 1 ✗`).
+- **Where it is now** — a glowing ring where a token runs, amber with a person
+  where a human task waits, red with a warning sign at an incident, a filled end
+  marker where it finished.
+- **Not reached** — faded, thin dashed edges. Hover a faded step to read it and
+  why it was not reached ("the else branch was taken at Check score"); **Full
+  diagram** in the legend turns the fading off.
+
+Since 1.2 the engine records every flow a token takes, so the path is a fact,
+including parallel branches and loops. An instance started before 1.2 shows
+**Path reconstructed** in the legend: its path is inferred from the steps it
+touched. The same layers appear during a **Dry Run** in the designer.
 
 - **Telemetry** — for the selected step: its configuration and, for an agent,
   each attempt: model and provider, attempt number, latency, confidence

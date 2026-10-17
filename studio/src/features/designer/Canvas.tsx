@@ -51,6 +51,8 @@ import { analyzeLoops } from '@/lib/apl/loopAnalysis';
 import type { Route } from '@/lib/apl/routes';
 import { ConnectMenu } from './ConnectMenu';
 import { palette } from '@/lib/tokens';
+import type { PathView } from '@/lib/run/instancePath';
+import { PathLegend } from './PathLegend';
 
 interface CanvasProps {
   nodes: WorkflowNode[];
@@ -90,6 +92,12 @@ interface CanvasProps {
    * with the animated flow dash (no token dot), mirroring the dry run.
    */
   nextPathEdges?: string[];
+  /**
+   * Instance views: the path taken, where the instance is now and what it
+   * never reached. Draws the three path layers and the legend; the untaken
+   * part of the diagram fades unless "Show full diagram" is on.
+   */
+  path?: PathView;
   readOnly?: boolean;
   /** Document undo/redo (editable canvases only). */
   onUndo?: () => void;
@@ -141,6 +149,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
   activePathEdges = [],
   activeTokenEdges = [],
   nextPathEdges = [],
+  path,
   readOnly = false,
   onUndo,
   onRedo,
@@ -174,34 +183,56 @@ const CanvasInner: React.FC<CanvasProps> = ({
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const slots = useMemo(() => outcomeSlots(rawEdges), [rawEdges]);
   const lanes = useMemo(() => parallelLanes(rawEdges), [rawEdges]);
+  const [showFullDiagram, setShowFullDiagram] = useState(false);
 
   const reactFlowNodes: Node[] = useMemo(() =>
-    layout.displayNodes.map((node) => toCanvasNode(node, {
-      status: executionStatuses[node.id] || 'idle',
-      isActiveSim: activeSimulationNodeId === node.id,
-      isLiveCurrent: activeLiveNodeIds.includes(node.id),
-      outcomeKinds: outcomeKinds.get(node.id),
-      // A loop step shows its bound; a cycle into a step without a usable one is flagged.
-      loopState: loops.targets.has(node.id) ? loops.targets.get(node.id) ?? 'bounded'
-        : node.loop ? 'bounded' : undefined,
-      issueCount: issueCounts?.get(node.id),
-      selected: selectedNodeId === node.id,
-    })),
+    layout.displayNodes.map((node) => {
+      const visits = path?.visits[node.id];
+      const now = path?.now[node.id];
+      return toCanvasNode(node, {
+        status: executionStatuses[node.id] || 'idle',
+        isActiveSim: activeSimulationNodeId === node.id,
+        // On an instance path only a running token glows; waiting and incidents have their own ring.
+        isLiveCurrent: activeLiveNodeIds.includes(node.id) && (!path || !now || now === 'running'),
+        outcomeKinds: outcomeKinds.get(node.id),
+        // A loop step shows its bound; a cycle into a step without a usable one is flagged.
+        // Instance views show what ran instead of authoring badges.
+        loopState: path ? undefined : loops.targets.has(node.id) ? loops.targets.get(node.id) ?? 'bounded'
+          : node.loop ? 'bounded' : undefined,
+        issueCount: path ? undefined : issueCounts?.get(node.id),
+        ...(path ? {
+          pathLayer: visits || now ? 'taken' : showFullDiagram ? undefined : 'unreached',
+          visitOrders: visits,
+          nowState: now,
+          join: path.joins[node.id],
+          childResults: path.children[node.id],
+          pathHint: nodePathHint(path, node.id),
+        } : {}),
+        selected: selectedNodeId === node.id,
+      });
+    }),
   [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
-    loops, issueCounts]);
+    loops, issueCounts, path, showFullDiagram]);
 
   const reactFlowEdges: Edge<AbadaEdgeData>[] = useMemo(() =>
     rawEdges.map(edge => {
       const hasToken = activeTokenEdges.includes(edge.id);
       const isNext = nextPathEdges.includes(edge.id);
       const incident = !!selectedNodeId && (edge.source === selectedNodeId || edge.target === selectedNodeId);
+      const takenCount = path?.edgeCounts[edge.id];
+      const pathLayer = !path ? undefined : takenCount ? 'taken' as const
+        : showFullDiagram ? undefined : 'unreached' as const;
       return {
         id: edge.id,
         source: edge.source,
         target: edge.target,
         type: 'abadaEdge',
         selected: selectedEdgeId === edge.id,
+        // The path is drawn above every other edge.
+        zIndex: pathLayer === 'taken' ? 1 : 0,
         data: {
+          pathLayer,
+          takenCount,
           label: edge.label,
           kind: edgeKindOf(edge),
           outcomeSlot: slots.get(edge.id),
@@ -215,7 +246,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
           isDimmed: !readOnly && !!selectedNodeId && !incident,
         },
       };
-    }), [rawEdges, slots, lanes, selectedNodeId, selectedEdgeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges]);
+    }), [rawEdges, slots, lanes, selectedNodeId, selectedEdgeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges, path, showFullDiagram]);
 
   /**
    * A connection from a task asks what it means (next, error, timeout, an
@@ -401,6 +432,14 @@ const CanvasInner: React.FC<CanvasProps> = ({
                 history={!readOnly && onUndo && onRedo ? { onUndo, onRedo, canUndo, canRedo } : undefined}
               />
             )}
+            {path && (
+              <PathLegend
+                source={path.source}
+                showFullDiagram={showFullDiagram}
+                onToggleFullDiagram={() => setShowFullDiagram((value) => !value)}
+                raised={showMinimap && rawNodes.length > 0}
+              />
+            )}
             <CanvasControls
               nodes={rawNodes}
               selectedNodeId={selectedNodeId}
@@ -449,6 +488,21 @@ const CanvasInner: React.FC<CanvasProps> = ({
     </div>
   );
 };
+
+/** What the path says about a node, for its tooltip. */
+function nodePathHint(path: PathView, nodeId: string): string | undefined {
+  const visits = path.visits[nodeId];
+  if (!visits) return path.now[nodeId] === 'incident' ? 'Incident — the instance stopped here' : path.notReached[nodeId];
+  const parts = [visits.length > 1 ? `Ran ${visits.length} times — steps ${visits.join(', ')}` : `Step ${visits[0]} of the path`];
+  const decided = path.decided[nodeId];
+  if (decided?.length) parts.push(`Took ${decided.join(' and ')}`);
+  const now = path.now[nodeId];
+  if (now === 'running') parts.push('Running now');
+  if (now === 'waiting') parts.push('Waiting for a person');
+  if (now === 'incident') parts.push('Incident — the instance stopped here');
+  if (now === 'ended') parts.push('Finished here');
+  return parts.join(' · ');
+}
 
 /** Guide lines (flow space) for the centre line a dragged node will snap to. */
 const AlignmentGuides: React.FC<{ guides: Alignment }> = ({ guides }) => (

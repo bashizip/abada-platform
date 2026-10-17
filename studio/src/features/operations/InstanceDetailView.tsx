@@ -23,6 +23,7 @@ import {
   ActivityHistoryDTO,
   ActivityInstanceDTO,
   EngineAPI,
+  IncidentDTO,
   ProcessDefinitionDTO,
   ProcessInstanceDTO,
   ProjectJob,
@@ -84,6 +85,12 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   const [workflow, setWorkflow] = useState<WorkflowFile | null>(null);
   const [definition, setDefinition] = useState<ProcessDefinitionDTO | null>(null);
   const [activities, setActivities] = useState<ActivityInstanceDTO[]>([]);
+  /** Nodes with an open incident, from the incidents panel: marked on the diagram. */
+  const [incidentNodeIds, setIncidentNodeIds] = useState<string[]>([]);
+  const onIncidentsChange = useCallback((incidents: IncidentDTO[]) => {
+    const ids = [...new Set(incidents.map((incident) => incident.activityId))].sort();
+    setIncidentNodeIds((current) => (current.join('|') === ids.join('|') ? current : ids));
+  }, []);
   const [history, setHistory] = useState<ActivityHistoryDTO[]>([]);
   const [variables, setVariables] = useState<Record<string, unknown> | null>(null);
   const [jobs, setJobs] = useState<ProjectJob[]>([]);
@@ -202,8 +209,8 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   /* ---- Derived overlay + path ---- */
   const path = useMemo(() => {
     if (!workflow) return null;
-    return deriveInstancePath(workflow, instance, activities, history);
-  }, [workflow, instance, activities, history]);
+    return deriveInstancePath(workflow, instance, activities, history, { incidentNodeIds });
+  }, [workflow, instance, activities, history, incidentNodeIds]);
 
   /**
    * Content-stable projection of the path: polls return new object identities
@@ -421,6 +428,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         canRetry={canRetryIncidents}
         modelFor={workflow ? (incident) => agentStepModel(workflow, incident.activityId, history) : undefined}
         hideWhenEmpty
+        onIncidentsChange={onIncidentsChange}
         onRetried={(incident) => {
           setToast(`Retried ${humanize(incident.activityId)}`);
           void load(false);
@@ -459,6 +467,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               activePathEdges={stablePath.activePathEdgeIds}
               activeTokenEdges={instance.suspended || isTerminal ? undefined : stablePath.tokenEdgeIds}
               nextPathEdges={instance.suspended || isTerminal ? undefined : stablePath.nextEdgeIds}
+              path={stablePath.path}
               readOnly
             />
           ) : (
@@ -467,17 +476,6 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             </div>
           )}
 
-          {/* Legend */}
-          {stablePath && (
-            <div className="pointer-events-none absolute bottom-4 left-4 z-20 flex items-center gap-3 rounded-lg border border-hairline bg-mocha/95 px-3 py-2 text-[10px] text-sand shadow-warm-md">
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sage-green" /> Completed</span>
-              <span className="flex items-center gap-1.5"><span className="relative flex h-2 w-2"><span className="absolute h-full w-full animate-ping rounded-full bg-amethyst opacity-60" /><span className="relative h-2 w-2 rounded-full bg-amethyst" /></span> Active</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-desert-rose" /> Failed</span>
-              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-saffron" /> Waiting</span>
-              <span className="flex items-center gap-1.5"><span className="h-0.5 w-5 rounded bg-amethyst" /> Taken path</span>
-              <span className="flex items-center gap-1.5"><span className="relative h-2 w-2"><span className="absolute inset-0 rounded-full bg-amethyst/40" /><span className="relative h-2 w-2 rounded-full bg-linen" /></span> Current token</span>
-            </div>
-          )}
         </div>
 
         {/* ===== Inspector ===== */}

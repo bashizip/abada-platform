@@ -235,8 +235,10 @@ export const VariablesTab: React.FC<{ variables: Record<string, unknown> | null 
 /* Audit trail                                                         */
 /* ------------------------------------------------------------------ */
 
-export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ history }) => {
+export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ history: allEvents }) => {
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
+  // Each flow taken is a path fact drawn on the canvas; listing them all here would bury the audit events.
+  const history = allEvents.filter((event) => event.eventType !== 'FLOW_TAKEN');
 
   if (history.length === 0) {
     return <p className="p-4 text-[11px] text-sand">No audit events recorded yet.</p>;

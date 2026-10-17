@@ -206,6 +206,21 @@
 }
 
 /*
+ * Instance path layers (M5 S2). A node the path never reached recedes: faded,
+ * desaturated, no shadow. Hovering it brings it back so it can be read.
+ */
+.abada-path-unreached {
+  opacity: 0.3;
+  filter: saturate(0.15);
+  box-shadow: none !important;
+  transition: opacity 150ms ease-out, filter 150ms ease-out;
+}
+.abada-path-unreached:hover {
+  opacity: 1;
+  filter: none;
+}
+
+/*
  * Connection handles are an editing affordance, not part of the diagram: they
  * stay invisible (edges still anchor on them) and only appear on node hover
  * while the canvas is editable, so no edge ever appears to start with a dot.

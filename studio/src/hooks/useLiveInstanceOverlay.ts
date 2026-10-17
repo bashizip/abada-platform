@@ -4,6 +4,7 @@ import { Project } from '@/api/projects';
 import { WorkflowFile, SimulationLog } from '@/types';
 import { deriveLiveExecutionOverlay, NodeRunStatus } from '@/lib/run/liveRun';
 import { deriveInstancePath } from '@/lib/run/instanceDetail';
+import type { PathView } from '@/lib/run/instancePath';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { useInstanceEvents } from '@/hooks/useInstanceEvents';
@@ -32,6 +33,7 @@ export function useLiveInstanceOverlay(
   const [activePathEdges, setActivePathEdges] = useState<string[]>([]);
   const [activeTokenEdges, setActiveTokenEdges] = useState<string[]>([]);
   const [nextPathEdges, setNextPathEdges] = useState<string[]>([]);
+  const [instancePath, setInstancePath] = useState<PathView | undefined>(undefined);
   const [instancesRefreshKey, setInstancesRefreshKey] = useState(0);
   const [instancePanelOpen, setInstancePanelOpen] = useState(true);
   const [detailInstance, setDetailInstance] = useState<ProcessInstanceDTO | null>(null);
@@ -61,6 +63,7 @@ export function useLiveInstanceOverlay(
     if (stablePathRef.current === serialized) return;
     stablePathRef.current = serialized;
     setActivePathEdges(path.activePathEdgeIds);
+    setInstancePath(path.path);
     const isTerminal = TERMINAL_STATUSES.includes(
       (instance.status || '').toUpperCase(),
     );
@@ -78,6 +81,7 @@ export function useLiveInstanceOverlay(
     setActivePathEdges([]);
     setActiveTokenEdges([]);
     setNextPathEdges([]);
+    setInstancePath(undefined);
     stablePathRef.current = null;
     setInstancePanelOpen(false);
     setDetailInstance(instance);
@@ -93,6 +97,7 @@ export function useLiveInstanceOverlay(
     setDesignerMode('diagram');
     setShowRunPanel(false);
     setInstancePanelOpen(true);
+    setInstancePath(undefined);
     stablePathRef.current = null;
 
     try {
@@ -179,6 +184,7 @@ export function useLiveInstanceOverlay(
     setActivePathEdges([]);
     setActiveTokenEdges([]);
     setNextPathEdges([]);
+    setInstancePath(undefined);
     stablePathRef.current = null;
   }, []);
 
@@ -192,6 +198,7 @@ export function useLiveInstanceOverlay(
     activePathEdges,
     activeTokenEdges,
     nextPathEdges,
+    instancePath,
     setExecutionStatuses,
     instancesRefreshKey,
     setInstancesRefreshKey,

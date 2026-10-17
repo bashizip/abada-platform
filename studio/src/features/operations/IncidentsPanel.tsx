@@ -27,6 +27,8 @@ interface IncidentsPanelProps {
   /** Renders nothing while there is no open incident. */
   hideWhenEmpty?: boolean;
   onCountChange?: (count: number) => void;
+  /** The open incidents shown, whenever they change (e.g. to mark them on the diagram). */
+  onIncidentsChange?: (incidents: IncidentDTO[]) => void;
   onRetried?: (incident: IncidentDTO) => void;
 }
 
@@ -42,6 +44,7 @@ export const IncidentsPanel: React.FC<IncidentsPanelProps> = ({
   modelFor,
   hideWhenEmpty = false,
   onCountChange,
+  onIncidentsChange,
   onRetried,
 }) => {
   const [incidents, setIncidents] = useState<IncidentDTO[]>([]);
@@ -76,6 +79,7 @@ export const IncidentsPanel: React.FC<IncidentsPanelProps> = ({
   }, [projectId, refresh]);
 
   useEffect(() => { onCountChange?.(incidents.length); }, [incidents.length, onCountChange]);
+  useEffect(() => { onIncidentsChange?.(incidents); }, [incidents, onIncidentsChange]);
 
   /* Failed work an operator could rerun on another model: learn whether its step is an agent step. */
   useEffect(() => {
