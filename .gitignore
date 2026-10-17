@@ -68,6 +68,8 @@ documentation/dist/
 documentation/.astro/
 documentation/.vercel/
 release/dist/
+# A local install made by running the public installer from the repository root
+/abada-platform/
 .env.dev
 .env.prod
 
