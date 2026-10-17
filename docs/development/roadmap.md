@@ -1,11 +1,12 @@
-# Abada roadmap — 1.0.0-rc.6 → 1.1.0
+# Abada roadmap — 1.0.0-rc.6 → 1.2.0
 
 This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `roadmap-to-1.1.0-rc.md`, `abada-studio-execution-plan.md` and
 `saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
-Last reviewed: 2026-09-27. Horizon: 12 weeks, 2026-09-28 → 2026-12-18.
+Last reviewed: 2026-10-17. Horizon: 2026-09-28 → 2026-11-27. M1–M4 shipped early
+(1.1.0 on 2026-10-14); M5 is the Studio-experience iteration.
 
 ## Product definition
 
@@ -31,6 +32,7 @@ telcos, public sector) that must run on their own infrastructure.
 | M2 Real process shapes | 10-19 → 11-06 | 1.1.0-rc.1 | Rework loop (agent drafts → human rejects with comment → agent revises → approve) survives an engine kill mid-loop |
 | M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible; a triage agent delegates a sub-case to a governed child process, the parent resumes with its result and the lineage is visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
+| M5 Studio experience | 10-19 → 11-27 | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
 
 ## M1 — Truth and safety
 
@@ -94,6 +96,27 @@ Full specifications: [`m4-task-specs.md`](m4-task-specs.md). Released as `1.1.0`
 - [x] E18 Site: `/investors` page and a claims register checked by the build; demo-video script (the recording and the Astro migration are not done)
 - [x] E19 1.1.0 gate report, upgrade notes, pilot runbook: [release notes](../release-notes/1.1.0-release-notes.md), [upgrade section](../operations/upgrading.md), [pilot runbook](../operations/pilot-runbook.md), [gate report](1.1-gate-report-2026-10-14.md); published 2026-10-14
 
+## M5 — Studio experience
+
+Full specifications: [`m5-task-specs.md`](m5-task-specs.md). Pacing is a
+presentation concern: the engine keeps executing at full speed and the Studio
+plays the event stream back at a human pace, always showing how far behind it is.
+
+- [ ] S1 Motion foundation and design tokens (shared durations/easings on `motion`, reduced-motion, no more repeated hex colours)
+- [ ] S2 The path taken, at a glance: engine records the flow each token took; on the diagram the path is dense, numbered and drawn on top, decisions show the matched branch, unreached nodes fade (hover to explore, toggle to show all)
+- [ ] S3 Paced playback of running instances and Dry Run (calm / brisk / instant, lag badge, *Jump to now*; incidents and terminal states never held back)
+- [ ] S4 Incident on the node: highlighted failing node, Retry / Retry on another model in a card anchored to it, the retry shown step by step
+- [ ] S5 Live audit trail open from the start of the instance, entries appearing one by one in sync with the canvas
+- [ ] S6 Operations redesign (design mock first; KPIs, live list, canvas-centred instance view, split of the 900-line files)
+- [ ] S7 Decision-table properties in the properties panel (mount the existing `DmnRuleInspector`, live validation, matched rule in Operations)
+- [ ] S8 Form designer: compact controls whose density adapts to the form size; a large editor panel; sections, columns and steps; richer field types; validation and `visible_when` enforced by the engine
+- [ ] S9 File upload in human tasks: PostgreSQL storage (Flyway `V40`), references in variables, attach in the completion transaction, RBAC and audit
+- [ ] S10 Administration audit trail: append-only `admin_audit_events` (Flyway `V41`) written in the mutation's transaction, denied attempts included, no secrets; filterable table with live updates and CSV export
+- [ ] S11 Execution variables and JSON everywhere: same small font for keys and values, collapsible tree with search for many/nested variables, JSON view; one highlighted `JsonViewer` replaces every raw JSON block
+- [ ] S12 NL authoring workspace: pinnable/collapsible NL bar; on submit a large dialog to refine the draft with a live diagram, YAML and diff, then apply to the Studio as one undoable change
+- [ ] S13 Documentation: Studio version on every page, "New" sidebar badges driven by `since:` frontmatter, user-friendly release notes and a *What's new* entry
+- [ ] S14 User guide, screenshots, 1.2.0 release notes and gate report
+
 ## Parallel track — design partners
 
 | By end of | Goal |
@@ -113,6 +136,7 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 | M2 | E6 polish | E2, E3 |
 | M3 | E13, E12 SSE (keep polling), then agent-proposed delegation in E20 (keep plain call-process) | E9, E10 |
 | M4 | E21, E17, E18 Astro migration | E14, E15 |
+| M5 | S8 `steps` and `visible_when`, S6 keyboard and KPIs needing new endpoints, S13 in-Studio "What's new" card | S2, S3, S4, S5, S9, S10 |
 
 ## Deferred (1.2 or later)
 
