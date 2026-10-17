@@ -11,6 +11,7 @@ import {
   urgentHistoryFact,
   urgentStateKey,
 } from '@/lib/run/historyPlayback';
+import { retryFactIds } from '@/lib/run/retryPhase';
 
 export interface InstanceFrame {
   /** The facts the canvas draws: the real ones, or those of the replayed moment while lagging. */
@@ -39,11 +40,16 @@ export function useInstancePlayback(
     const key = order.stepKeyOf.get(previous.id);
     return !!key && key === order.stepKeyOf.get(next.id);
   }, [order]);
+  // A retry is watched phase by phase (M5 S4): each of its facts is a step, seen even when the instance ends right after.
+  const retryFacts = useMemo(() => retryFactIds(order.ordered), [order]);
+  const isStep = useCallback((event: ActivityHistoryDTO) => isFlowStep(event) || retryFacts.has(event.id), [retryFacts]);
+  const holdsCatchUp = useCallback((event: ActivityHistoryDTO) => retryFacts.has(event.id), [retryFacts]);
   const { visible, lag, jumpToNow, pace, setPace } = usePacedPlayback(order.ordered, {
     id: historyFactId,
-    isStep: isFlowStep,
+    isStep,
     sameStep,
     isUrgent,
+    holdsCatchUp,
     urgentKey: urgentStateKey(instance, incidentNodeIds),
     resetKey: instance?.id,
   });
