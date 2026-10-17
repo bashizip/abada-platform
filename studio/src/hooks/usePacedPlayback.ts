@@ -24,6 +24,12 @@ export interface PacedPlaybackOptions<T> {
    * names, so it never holds an urgent state back for long.
    */
   holdsCatchUp?: (fact: T) => boolean;
+  /**
+   * Plays the facts present at opening too, from the first one, instead of
+   * showing them at once (an instance the user just started, M5 S5). Urgent
+   * facts still catch up.
+   */
+  fromStart?: boolean;
   /** Overrides the user's pace preference (tests). */
   pace?: PlaybackPace;
 }
@@ -80,7 +86,7 @@ function nextCut(ends: number[], shown: number, length: number): number {
  * catches up to them. `instant` shows every fact as it arrives.
  */
 export function usePacedPlayback<T>(facts: T[], options: PacedPlaybackOptions<T>): PacedPlayback<T> {
-  const { id, isStep, sameStep, isUrgent, urgentKey, resetKey, holdsCatchUp } = options;
+  const { id, isStep, sameStep, isUrgent, urgentKey, resetKey, holdsCatchUp, fromStart } = options;
   const [preferredPace, setPace] = usePlaybackPace();
   const pace = options.pace ?? preferredPace;
   const dwell = PACE_DWELL_MS[pace];
@@ -104,7 +110,7 @@ export function usePacedPlayback<T>(facts: T[], options: PacedPlaybackOptions<T>
   let next = state;
   if (next.key !== resetKey) next = { key: resetKey, shown: null, urgentKey: undefined };
   if (next.shown === null) {
-    if (length > 0) next = { ...next, shown: length, urgentKey };
+    if (length > 0) next = { ...next, shown: fromStart && pace !== 'instant' ? 0 : length, urgentKey };
   } else {
     const held = (from: number) => !!holdsCatchUp && unique.slice(from).some(holdsCatchUp);
     if (urgentKey !== next.urgentKey) {

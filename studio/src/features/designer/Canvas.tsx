@@ -110,6 +110,8 @@ interface CanvasProps {
   incidentPulses?: Record<string, string>;
   /** Instance views: phase of a retry in progress per node, shown at the playback pace (M5 S4). */
   retryPhases?: Record<string, RetryPhase>;
+  /** Instance views: the node the audit-trail entry under the pointer is about (M5 S5). */
+  highlightNodeId?: string | null;
   /**
    * Brings a node into view. A new `key` pans (and zooms in if needed) to the
    * node, unless the user moved the canvas in the last few seconds.
@@ -172,6 +174,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
   animateArrivals = false,
   incidentPulses,
   retryPhases,
+  highlightNodeId,
   focus,
   nodeOverlay,
   readOnly = false,
@@ -236,12 +239,13 @@ const CanvasInner: React.FC<CanvasProps> = ({
           arrivalSeq: arrivals.nodes.has(node.id) ? arrivals.seq : undefined,
           incidentSeq: incidentPulses?.[node.id],
           retryPhase: retryPhases?.[node.id],
+          trailHighlight: highlightNodeId === node.id,
         } : {}),
         selected: selectedNodeId === node.id,
       });
     }),
   [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
-    loops, issueCounts, path, showFullDiagram, arrivals, incidentPulses, retryPhases]);
+    loops, issueCounts, path, showFullDiagram, arrivals, incidentPulses, retryPhases, highlightNodeId]);
 
   const reactFlowEdges: Edge<AbadaEdgeData>[] = useMemo(() =>
     rawEdges.map(edge => {

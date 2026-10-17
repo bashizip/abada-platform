@@ -21,6 +21,19 @@ export interface InstanceFrame {
 }
 
 /**
+ * The facts the audit trail shows (M5 S5): the visible prefix, plus the facts
+ * recorded after its last step up to the next step. The engine writes a
+ * command's flows before its other facts (the work completed at the node left,
+ * the task created at the node entered), so these belong with the step already
+ * on screen, not with the next one. Still a prefix of the real facts.
+ */
+export function trailPrefix<T>(ordered: readonly T[], visibleCount: number, isStep: (fact: T) => boolean): T[] {
+  let end = Math.min(visibleCount, ordered.length);
+  while (end < ordered.length && !isStep(ordered[end])) end += 1;
+  return ordered.slice(0, end);
+}
+
+/**
  * Paced playback of a live instance (M5 S3): the canvas follows the instance
  * one flow at a time. While the playback is behind, the frame is where the
  * tokens were at the replayed moment (never ahead of it); caught up, it is
@@ -32,7 +45,8 @@ export function useInstancePlayback(
   activities: ActivityInstanceDTO[],
   history: ActivityHistoryDTO[],
   incidentNodeIds: string[] = [],
-): Omit<PacedPlayback<ActivityHistoryDTO>, 'visible'> & { frame: InstanceFrame | null } {
+  options: { fromStart?: boolean } = {},
+): Omit<PacedPlayback<ActivityHistoryDTO>, 'visible'> & { frame: InstanceFrame | null; trail: ActivityHistoryDTO[] } {
   const me = getUserFromToken(keycloak.tokenParsed)?.username;
   const isUrgent = useMemo(() => urgentHistoryFact(me), [me]);
   const order = useMemo(() => playbackOrder(history), [history]);
@@ -52,6 +66,7 @@ export function useInstancePlayback(
     holdsCatchUp,
     urgentKey: urgentStateKey(instance, incidentNodeIds),
     resetKey: instance?.id,
+    fromStart: options.fromStart,
   });
   const frame = useMemo<InstanceFrame | null>(() => {
     if (!instance) return null;
@@ -59,5 +74,9 @@ export function useInstancePlayback(
     if (!workflow || lag === 0) return { instance, activities, history: order.ordered };
     return { ...instanceAtPrefix(workflow, instance, visible), history: visible };
   }, [workflow, instance, activities, order, visible, lag]);
-  return { frame, lag, jumpToNow, pace, setPace };
+  const trail = useMemo(
+    () => (lag === 0 ? order.ordered : trailPrefix(order.ordered, visible.length, isStep)),
+    [lag, order, visible, isStep],
+  );
+  return { frame, trail, lag, jumpToNow, pace, setPace };
 }

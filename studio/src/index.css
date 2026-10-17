@@ -277,6 +277,15 @@
   }
 }
 
+/* The node an audit-trail entry is about, while the user points at the entry (M5 S5). A fade only. */
+.abada-trail-highlight {
+  animation: abadaTrailHighlight var(--duration-fast) var(--ease-standard) both;
+}
+@keyframes abadaTrailHighlight {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /*
  * Connection handles are an editing affordance, not part of the diagram: they
  * stay invisible (edges still anchor on them) and only appear on node hover

@@ -6,7 +6,7 @@ import { TASK_HEIGHT, TASK_WIDTH, outcomePortPoint } from '@/lib/layout/nodeGeom
 import { EDGE_COLORS } from '../edgeStyle';
 import { useCanvasView, useCompactZoom } from '../canvasContext';
 import { NODE_ACCENT, NODE_TYPE_LABEL, taskFact } from './nodeStyle';
-import { ArrivalPulse, DiffBadge, IncidentPulse, NodeBadges, NodeHandles, PathBadges, StatusBadge } from './NodeChrome';
+import { ArrivalPulse, DiffBadge, IncidentPulse, TrailHighlight, NodeBadges, NodeHandles, PathBadges, StatusBadge } from './NodeChrome';
 import { type CanvasNode, pathClass, pathFill, stateOutline, withPathHint } from './nodeState';
 
 const SIZE = { width: TASK_WIDTH, height: TASK_HEIGHT };
@@ -96,6 +96,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
       <StatusBadge status={data.status} live={data.isLiveCurrent} now={data.nowState} retry={data.retryPhase} x={TASK_WIDTH - 2} y={2} />
       <ArrivalPulse seq={data.arrivalSeq} shape="rect" />
       <IncidentPulse seq={data.incidentSeq} shape="rect" />
+      <TrailHighlight on={data.trailHighlight} shape="rect" />
       <PathBadges visits={data.visitOrders} childResults={data.childResults} width={TASK_WIDTH} height={TASK_HEIGHT} />
       <DiffBadge kind={data.diffKind} />
       <NodeBadges loopState={data.loopState} maxIterations={data.loop?.maxIterations} issueCount={data.issueCount} />

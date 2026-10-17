@@ -101,7 +101,7 @@ export default function App() {
     selectedLiveInstance, liveWorkflow, activeLiveNodeIds, liveSelectedNodeId, setLiveSelectedNodeId,
     executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges, nextPathEdges, instancePath, playback,
     instancesRefreshKey, setInstancesRefreshKey,
-    instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance, detailFocusNodeId,
+    instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance, detailFocusNodeId, detailStartedId,
     livePanelWidth, setLivePanelWidth, livePanelPinned, setLivePanelPinned,
     openLiveInstance, openInstanceDetail, clearLiveInstanceState
   } = useLiveInstanceOverlay(activeProject, workflows, setSidebarTab, setDesignerMode, setShowRunPanel, setCurrentView, setSimulationLogs);
@@ -431,7 +431,8 @@ export default function App() {
       showToast(warningCount > 0 ? 'warning' : 'success', warningCount > 0
         ? `Deployed and started with ${warningCount} APL warning${warningCount === 1 ? '' : 's'}; see the log panel.`
         : 'Successfully deployed workflow and started process instance.', undefined, { emphasis: 'strong' });
-      await openLiveInstance(instance);
+      // The instance view, with the audit trail open, plays the new run from its first step (M5 S5).
+      openInstanceDetail(instance, undefined, { justStarted: true });
     } catch (err: any) {
       setSimulationLogs(prev => [...prev, { id: `deploy-${Date.now()}-err`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'Deploy & Start Error', nodeType: 'event', status: 'error', message: `Deploy & Start failed: ${err.message}` }]);
       showToast('error', err.message || 'Deployment failed');
@@ -571,6 +572,7 @@ export default function App() {
             canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
             initialInstance={detailInstance}
             initialFocusNodeId={detailFocusNodeId}
+            playFromStart={detailStartedId === detailInstance.id}
             onBack={() => {
               setDetailInstance(null);
               setCurrentView('operations');
