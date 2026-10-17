@@ -20,10 +20,10 @@ export const UITooltip: React.FC<{
       <Tooltip.Content
         side={side}
         sideOffset={sideOffset}
-        className="z-[100] select-none rounded-md border border-[#3A322E] bg-[#1A1614] px-2.5 py-1.5 text-[11px] leading-snug text-[#EAE3D9] shadow-warm-lg max-w-[280px]"
+        className="z-[100] select-none rounded-md border border-hairline bg-charcoal px-2.5 py-1.5 text-[11px] leading-snug text-linen shadow-warm-lg max-w-[280px]"
       >
         {content}
-        <Tooltip.Arrow className="fill-[#1A1614]" />
+        <Tooltip.Arrow className="fill-charcoal" />
       </Tooltip.Content>
     </Tooltip.Portal>
   </Tooltip.Root>
@@ -65,10 +65,10 @@ export const IconButton: React.FC<IconButtonProps> = ({
       disabled={disabled}
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all ${
         active
-          ? 'border-[#9D4EDD]/50 bg-[#9D4EDD]/20 text-[#EAE3D9]'
+          ? 'border-amethyst/50 bg-amethyst/20 text-linen'
           : danger
-            ? 'border-[#E76F51]/40 text-[#E76F51] hover:bg-[#2F2926]'
-            : 'border-[#3A322E] bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9] hover:bg-[#2F2926]'
+            ? 'border-desert-rose/40 text-desert-rose hover:bg-mocha-hover'
+            : 'border-hairline bg-charcoal text-sand hover:text-linen hover:bg-mocha-hover'
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${className}`}
     >
       {icon}
@@ -111,21 +111,21 @@ export const Dialog: React.FC<{
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         onClick={(event) => event.stopPropagation()}
-        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-[#3A322E] bg-[#25201D] shadow-warm-xl ${size === 'lg' ? 'max-w-3xl' : 'max-w-md'}`}
+        className={`flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl border border-hairline bg-mocha shadow-warm-xl ${size === 'lg' ? 'max-w-3xl' : 'max-w-md'}`}
       >
-        <div className="flex items-start gap-3 border-b border-[#3A322E] px-5 py-4">
+        <div className="flex items-start gap-3 border-b border-hairline px-5 py-4">
           {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold text-[#EAE3D9]">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-[11px] text-[#A89F91]">{subtitle}</p>}
+            <h2 className="text-sm font-semibold text-linen">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-[11px] text-sand">{subtitle}</p>}
           </div>
           <button ref={closeButton} type="button" onClick={onClose} aria-label="Close"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#3A322E] text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]">
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-hairline text-sand hover:bg-mocha-hover hover:text-linen">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-[#3A322E] px-5 py-3">{footer}</div>}
+        {footer && <div className="flex justify-end gap-2 border-t border-hairline px-5 py-3">{footer}</div>}
       </div>
     </div>
   );

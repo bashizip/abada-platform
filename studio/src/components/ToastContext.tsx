@@ -57,30 +57,30 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             key={toast.id}
             className={`pointer-events-auto flex items-start gap-3 rounded-xl border p-3.5 shadow-xl transition-all duration-300 ${
               toast.type === 'error'
-                ? 'border-[#E76F51]/50 bg-[#2B1B18] text-[#EAE3D9]'
+                ? 'border-desert-rose/50 bg-[#2B1B18] text-linen'
                 : toast.type === 'success'
-                ? 'border-[#2A9D8F]/50 bg-[#162724] text-[#EAE3D9]'
+                ? 'border-mineral-teal/50 bg-[#162724] text-linen'
                 : toast.type === 'warning'
-                ? 'border-[#F4A261]/50 bg-[#29221B] text-[#EAE3D9]'
-                : 'border-[#3A322E] bg-[#25201D] text-[#EAE3D9]'
+                ? 'border-saffron/50 bg-[#29221B] text-linen'
+                : 'border-hairline bg-mocha text-linen'
             }`}
           >
             <div className="mt-0.5 shrink-0">
-              {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-[#E76F51]" />}
-              {toast.type === 'success' && <CheckCircle className="h-5 w-5 text-[#2A9D8F]" />}
-              {toast.type === 'warning' && <AlertTriangle className="h-5 w-5 text-[#F4A261]" />}
-              {toast.type === 'info' && <Info className="h-5 w-5 text-[#2A9D8F]" />}
+              {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-desert-rose" />}
+              {toast.type === 'success' && <CheckCircle className="h-5 w-5 text-mineral-teal" />}
+              {toast.type === 'warning' && <AlertTriangle className="h-5 w-5 text-saffron" />}
+              {toast.type === 'info' && <Info className="h-5 w-5 text-mineral-teal" />}
             </div>
             <div className="flex-1 min-w-0">
               <h4 className="text-xs font-semibold">{toast.title}</h4>
-              {toast.message && <p className="text-[11px] text-[#A89F91] mt-0.5 leading-snug">{toast.message}</p>}
+              {toast.message && <p className="text-[11px] text-sand mt-0.5 leading-snug">{toast.message}</p>}
             </div>
             <button
               type="button"
               data-cuelume-close
               data-cuelume-emphasis="subtle"
               onClick={() => removeToast(toast.id)}
-              className="text-[#A89F91] hover:text-[#EAE3D9] transition-colors p-0.5"
+              className="text-sand hover:text-linen transition-colors p-0.5"
             >
               <X className="h-4 w-4" />
             </button>

@@ -1,22 +1,23 @@
 import type { NodeType, WorkflowNode } from '@/types';
+import { palette } from '@/lib/tokens';
 
 /** Accent colour per node type (the Studio palette). */
 export const NODE_ACCENT: Record<NodeType, string> = {
-  agent: '#9D4EDD',
-  human: '#E76F51',
-  dmn: '#2A9D8F',
-  'engine-task': '#90A955',
-  'call-process': '#F4A261',
-  script: '#2A9D8F',
-  gateway: '#F4A261',
-  event: '#F4A261',
+  agent: palette.amethyst,
+  human: palette.desertRose,
+  dmn: palette.mineralTeal,
+  'engine-task': palette.sageGreen,
+  'call-process': palette.saffron,
+  script: palette.mineralTeal,
+  gateway: palette.saffron,
+  event: palette.saffron,
 };
 
 /** Start events read green, end events red, everything in between saffron. */
 export function eventAccent(subtype: WorkflowNode['subtype']): string {
-  if (subtype === 'start') return '#90A955';
-  if (subtype === 'end') return '#E76F51';
-  return '#F4A261';
+  if (subtype === 'start') return palette.sageGreen;
+  if (subtype === 'end') return palette.desertRose;
+  return palette.saffron;
 }
 
 export const NODE_TYPE_LABEL: Record<NodeType, string> = {

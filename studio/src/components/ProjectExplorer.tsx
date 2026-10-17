@@ -335,24 +335,24 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     return (
       <div key={node.id} className="group">
         <div
-          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-[#2F2926] cursor-pointer ${
-            isSystemRoot ? 'bg-[#1A1614]/50 border border-[#3A322E]/60 text-[#EAE3D9]' : 'text-[#EAE3D9]'}`}
+          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-mocha-hover cursor-pointer ${
+            isSystemRoot ? 'bg-charcoal/50 border border-hairline/60 text-linen' : 'text-linen'}`}
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => toggleFolder(node.id)}
         >
-          <ChevronRight className={`w-3.5 h-3.5 text-[#A89F91] shrink-0 transition-transform duration-200 ease-out ${expanded.has(node.id) ? 'rotate-90' : ''}`} />
-          <Folder className={`w-4 h-4 shrink-0 ${expanded.has(node.id) ? 'text-[#F4A261]' : 'text-[#A89F91]'}`} />
+          <ChevronRight className={`w-3.5 h-3.5 text-sand shrink-0 transition-transform duration-200 ease-out ${expanded.has(node.id) ? 'rotate-90' : ''}`} />
+          <Folder className={`w-4 h-4 shrink-0 ${expanded.has(node.id) ? 'text-saffron' : 'text-sand'}`} />
           <span className="text-xs font-medium truncate flex-1">{node.name}</span>
           {isSystemRoot && (
             <span title="System folder — locked, cannot be renamed, moved or deleted">
-              <Lock className="w-3 h-3 text-[#E76F51]/70 shrink-0" />
+              <Lock className="w-3 h-3 text-desert-rose/70 shrink-0" />
             </span>
           )}
           <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
             {domainOf(node.path) === 'processes' ? (
               <button title="New process" disabled={busy}
                 onClick={(event) => { event.stopPropagation(); onNewWorkflow(); }}
-                className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#F4A261]">
+                className="p-1 rounded hover:bg-charcoal text-sand hover:text-saffron">
                 <Plus className="w-3 h-3" />
               </button>
             ) : (
@@ -361,30 +361,30 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                   folderId: node.id, name: '', kind: domainOf(node.path) === 'forms' ? 'FORM' : 'RESOURCE',
                   contentType: domainOf(node.path) === 'forms' ? 'application/json' : 'application/octet-stream',
                   contentBase64: '' }); }}
-                className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#2A9D8F]">
+                className="p-1 rounded hover:bg-charcoal text-sand hover:text-mineral-teal">
                 <Plus className="w-3 h-3" />
               </button>
             )}
             <button title="New subfolder" disabled={busy}
               onClick={(event) => { event.stopPropagation(); setCreatingFolderIn(node.id); setNewFolderValue(''); }}
-              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#F4A261]">
+              className="p-1 rounded hover:bg-charcoal text-sand hover:text-saffron">
               <FolderPlus className="w-3 h-3" />
             </button>
             {!isSystemRoot && (
               <>
                 <button title="Rename" disabled={busy}
                   onClick={(event) => { event.stopPropagation(); startRename('folder', node.id, node.name); }}
-                  className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+                  className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
                   <Pencil className="w-3 h-3" />
                 </button>
                 <button title="Move" disabled={busy}
                   onClick={(event) => { event.stopPropagation(); setMoving({ kind: 'folder', id: node.id, revision: node.revision, display: node.path }); }}
-                  className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+                  className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
                   <FolderInput className="w-3 h-3" />
                 </button>
                 <button title="Delete folder" disabled={busy}
                   onClick={(event) => { event.stopPropagation(); deleteFolder(node); }}
-                  className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#E76F51]">
+                  className="p-1 rounded hover:bg-charcoal text-sand hover:text-desert-rose">
                   <Trash2 className="w-3 h-3" />
                 </button>
               </>
@@ -397,9 +397,9 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           <input autoFocus value={renameValue}
             onChange={(event) => setRenameValue(event.target.value)}
             onKeyDown={(event) => { if (event.key === 'Escape') setRenaming(null); }}
-            className="flex-1 min-w-0 bg-[#1A1614] border border-[#3A322E] rounded px-2 py-1 text-xs text-[#EAE3D9]" />
-          <button type="submit" className="p-1 text-[#90A955]"><Check className="w-3.5 h-3.5" /></button>
-          <button type="button" onClick={() => setRenaming(null)} className="p-1 text-[#A89F91]"><X className="w-3.5 h-3.5" /></button>
+            className="flex-1 min-w-0 bg-charcoal border border-hairline rounded px-2 py-1 text-xs text-linen" />
+          <button type="submit" className="p-1 text-sage-green"><Check className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={() => setRenaming(null)} className="p-1 text-sand"><X className="w-3.5 h-3.5" /></button>
         </form>
       )}
       <div
@@ -410,13 +410,13 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           {creatingFolderIn === node.id && (
             <form className="flex items-center gap-1 px-2 py-1" style={{ paddingLeft: 20 + depth * 14 }}
               onSubmit={(event) => { event.preventDefault(); createFolder(node.id); }}>
-              <Folder className="w-3.5 h-3.5 text-[#A89F91] shrink-0" />
+              <Folder className="w-3.5 h-3.5 text-sand shrink-0" />
               <input autoFocus value={newFolderValue} placeholder="Folder name"
                 onChange={(event) => setNewFolderValue(event.target.value)}
                 onKeyDown={(event) => { if (event.key === 'Escape') { setCreatingFolderIn(null); setNewFolderValue(''); } }}
-                className="flex-1 min-w-0 bg-[#1A1614] border border-[#3A322E] rounded px-2 py-1 text-xs text-[#EAE3D9]" />
-              <button type="submit" className="p-1 text-[#90A955]"><Check className="w-3.5 h-3.5" /></button>
-              <button type="button" onClick={() => { setCreatingFolderIn(null); setNewFolderValue(''); }} className="p-1 text-[#A89F91]"><X className="w-3.5 h-3.5" /></button>
+                className="flex-1 min-w-0 bg-charcoal border border-hairline rounded px-2 py-1 text-xs text-linen" />
+              <button type="submit" className="p-1 text-sage-green"><Check className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={() => { setCreatingFolderIn(null); setNewFolderValue(''); }} className="p-1 text-sand"><X className="w-3.5 h-3.5" /></button>
             </form>
           )}
           {node.children.map((child) => renderRow(child, depth + 1))}
@@ -431,27 +431,27 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     return (
       <div key={node.id} className="group">
         <div
-          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-[#EAE3D9] ${
-            active ? 'bg-[#1A1614] border border-[#F4A261]/40' : 'hover:bg-[#2F2926] border border-transparent'}`}
+          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-linen ${
+            active ? 'bg-charcoal border border-saffron/40' : 'hover:bg-mocha-hover border border-transparent'}`}
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => openDocument(node)}
         >
-          <FileText className={`w-4 h-4 shrink-0 ${active ? 'text-[#F4A261]' : 'text-[#A89F91]'}`} />
+          <FileText className={`w-4 h-4 shrink-0 ${active ? 'text-saffron' : 'text-sand'}`} />
           <span className="text-xs truncate flex-1">{node.name}</span>
           <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
             <button title="Rename" disabled={busy}
               onClick={(event) => { event.stopPropagation(); startRename('document', node.id, node.name); }}
-              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+              className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
               <Pencil className="w-3 h-3" />
             </button>
             <button title="Move to folder" disabled={busy}
               onClick={(event) => { event.stopPropagation(); setMoving({ kind: 'document', id: node.id, revision: node.revision, display: node.path }); }}
-              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+              className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
               <FolderInput className="w-3 h-3" />
             </button>
             <button title="Archive" disabled={busy}
               onClick={(event) => { event.stopPropagation(); archiveDocument(node); }}
-              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#E76F51]">
+              className="p-1 rounded hover:bg-charcoal text-sand hover:text-desert-rose">
               <Archive className="w-3 h-3" />
             </button>
           </span>
@@ -462,9 +462,9 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
             <input autoFocus value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Escape') setRenaming(null); }}
-              className="flex-1 min-w-0 bg-[#1A1614] border border-[#3A322E] rounded px-2 py-1 text-xs text-[#EAE3D9]" />
-            <button type="submit" className="p-1 text-[#90A955]"><Check className="w-3.5 h-3.5" /></button>
-            <button type="button" onClick={() => setRenaming(null)} className="p-1 text-[#A89F91]"><X className="w-3.5 h-3.5" /></button>
+              className="flex-1 min-w-0 bg-charcoal border border-hairline rounded px-2 py-1 text-xs text-linen" />
+            <button type="submit" className="p-1 text-sage-green"><Check className="w-3.5 h-3.5" /></button>
+            <button type="button" onClick={() => setRenaming(null)} className="p-1 text-sand"><X className="w-3.5 h-3.5" /></button>
           </form>
         )}
       </div>
@@ -477,21 +477,21 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     return (
       <div key={node.id} className="group">
         <div
-          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[#2F2926] text-[#EAE3D9] border border-transparent"
+          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-mocha-hover text-linen border border-transparent"
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => void openPreview(node)}
         >
-          <Icon className={`w-4 h-4 shrink-0 ${kind === 'FORM' ? 'text-[#2A9D8F]' : kind === 'TOOL_SERVER' ? 'text-[#F4A261]' : 'text-[#9D4EDD]'}`} />
+          <Icon className={`w-4 h-4 shrink-0 ${kind === 'FORM' ? 'text-mineral-teal' : kind === 'TOOL_SERVER' ? 'text-saffron' : 'text-amethyst'}`} />
           <span className="text-xs truncate flex-1">{node.name}</span>
           <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
             <button title="Rename" disabled={busy}
               onClick={(event) => { event.stopPropagation(); startRename('resource', node.id, node.name); }}
-              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+              className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
               <Pencil className="w-3 h-3" />
             </button>
             <button title="Move to folder" disabled={busy}
               onClick={(event) => { event.stopPropagation(); setMoving({ kind: 'resource', id: node.id, revision: node.revision, display: node.path, resourceKind: kind }); }}
-              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+              className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
               <FolderInput className="w-3 h-3" />
             </button>
             <button title="Delete" disabled={busy}
@@ -503,7 +503,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                   await refetch();
                 }, 'File deletion failed');
               }}
-              className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#E76F51]">
+              className="p-1 rounded hover:bg-charcoal text-sand hover:text-desert-rose">
               <Trash2 className="w-3 h-3" />
             </button>
           </span>
@@ -514,9 +514,9 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
             <input autoFocus value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Escape') setRenaming(null); }}
-              className="flex-1 min-w-0 bg-[#1A1614] border border-[#3A322E] rounded px-2 py-1 text-xs text-[#EAE3D9]" />
-            <button type="submit" className="p-1 text-[#90A955]"><Check className="w-3.5 h-3.5" /></button>
-            <button type="button" onClick={() => setRenaming(null)} className="p-1 text-[#A89F91]"><X className="w-3.5 h-3.5" /></button>
+              className="flex-1 min-w-0 bg-charcoal border border-hairline rounded px-2 py-1 text-xs text-linen" />
+            <button type="submit" className="p-1 text-sage-green"><Check className="w-3.5 h-3.5" /></button>
+            <button type="button" onClick={() => setRenaming(null)} className="p-1 text-sand"><X className="w-3.5 h-3.5" /></button>
           </form>
         )}
       </div>
@@ -533,14 +533,14 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     if (!moving) return null;
     return (
       <div className="fixed inset-0 z-40 bg-black/60 flex items-start justify-center pt-28" onClick={() => setMoving(null)}>
-        <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl w-80 p-4 shadow-warm-lg space-y-2"
+        <div className="bg-mocha border border-hairline rounded-2xl w-80 p-4 shadow-warm-lg space-y-2"
           onClick={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#EAE3D9]">Move &quot;{moving.display}&quot; to</span>
-            <button onClick={() => setMoving(null)} className="text-[#A89F91] hover:text-[#EAE3D9]"><X className="w-4 h-4" /></button>
+            <span className="text-xs font-semibold text-linen">Move &quot;{moving.display}&quot; to</span>
+            <button onClick={() => setMoving(null)} className="text-sand hover:text-linen"><X className="w-4 h-4" /></button>
           </div>
           {moveTargets.length === 0 && (
-            <p className="text-[11px] text-[#A89F91] px-2 py-1.5">
+            <p className="text-[11px] text-sand px-2 py-1.5">
               No valid folder here — items stay within their system root.
             </p>
           )}
@@ -550,10 +550,10 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
               <button key={entry.folder.id}
                 disabled={busy || excluded.has(entry.folder.id)}
                 onClick={() => commitMove(entry.folder.id)}
-                className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-[#A89F91] hover:bg-[#1A1614] disabled:opacity-40 flex items-center gap-1.5"
+                className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-sand hover:bg-charcoal disabled:opacity-40 flex items-center gap-1.5"
                 style={{ paddingLeft: 8 + depth * 12 }}
               >
-                <Folder className="w-3.5 h-3.5 text-[#F4A261]" />
+                <Folder className="w-3.5 h-3.5 text-saffron" />
                 {entry.path}
               </button>
             );
@@ -605,37 +605,37 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
       preview.contentType.includes('xml') || preview.contentType.includes('csv');
     return (
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl w-full max-w-2xl p-5 shadow-warm-lg flex flex-col max-h-[85vh] space-y-3">
-          <div className="flex items-center justify-between border-b border-[#3A322E] pb-3">
+        <div className="bg-mocha border border-hairline rounded-2xl w-full max-w-2xl p-5 shadow-warm-lg flex flex-col max-h-[85vh] space-y-3">
+          <div className="flex items-center justify-between border-b border-hairline pb-3">
             <div className="flex items-center gap-2 min-w-0">
-              <FileJson className="w-4 h-4 text-[#2A9D8F] shrink-0" />
-              <h2 className="text-sm font-bold text-[#EAE3D9] truncate">{preview.name}</h2>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1A1614] border border-[#3A322E] text-[#A89F91]">
+              <FileJson className="w-4 h-4 text-mineral-teal shrink-0" />
+              <h2 className="text-sm font-bold text-linen truncate">{preview.name}</h2>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-charcoal border border-hairline text-sand">
                 {preview.kind}
               </span>
             </div>
-            <button onClick={() => setPreview(null)} className="text-[#A89F91] hover:text-[#EAE3D9]">
+            <button onClick={() => setPreview(null)} className="text-sand hover:text-linen">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex items-center gap-3 text-[10px] text-[#A89F91] font-mono">
+          <div className="flex items-center gap-3 text-[10px] text-sand font-mono">
             <span>{preview.contentType || 'unknown'}</span>
             <span>{preview.sizeBytes} bytes</span>
             <span>sha256 {preview.sha256.slice(0, 12)}…</span>
           </div>
-          <div className="flex-1 overflow-auto bg-[#1A1614] rounded-xl border border-[#3A322E] p-3">
+          <div className="flex-1 overflow-auto bg-charcoal rounded-xl border border-hairline p-3">
             {isText ? (
               <pre className="text-[11px] text-[#A8D8B9] whitespace-pre-wrap break-all font-mono max-h-96 overflow-auto">
                 {base64ToText(preview.contentBase64)}
               </pre>
             ) : (
-              <div className="text-xs text-[#A89F91] text-center py-8">
+              <div className="text-xs text-sand text-center py-8">
                 Binary file — use Download to save it locally.
               </div>
             )}
           </div>
           <div className="flex items-center justify-between pt-2">
-            <label className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[#1A1614] hover:bg-[#2F2926] text-[#A89F91] border border-[#3A322E] cursor-pointer">
+            <label className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-charcoal hover:bg-mocha-hover text-sand border border-hairline cursor-pointer">
               <FileUp className="w-3.5 h-3.5" />
               Replace Content
               <input type="file" className="hidden"
@@ -646,12 +646,12 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
             </label>
             <div className="flex gap-2">
               <button onClick={() => downloadPreview(preview)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#1A1614] hover:bg-[#2F2926] text-[#A89F91] border border-[#3A322E]">
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-charcoal hover:bg-mocha-hover text-sand border border-hairline">
                 <Download className="w-3.5 h-3.5" />
                 Download
               </button>
               <button onClick={() => setPreview(null)}
-                className="px-3 py-2 rounded-xl text-xs font-semibold bg-[#F4A261] hover:bg-[#f5ad73] text-[#1A1614]">
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-saffron hover:bg-saffron-bright text-charcoal">
                 Close
               </button>
             </div>
@@ -670,32 +670,32 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     const targetDomain = targetPath ? domainOf(targetPath) : 'other';
     return (
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl w-full max-w-md p-5 shadow-warm-lg space-y-4">
-          <div className="flex items-center justify-between border-b border-[#3A322E] pb-3">
-            <div className="flex items-center gap-2 text-[#2A9D8F]">
+        <div className="bg-mocha border border-hairline rounded-2xl w-full max-w-md p-5 shadow-warm-lg space-y-4">
+          <div className="flex items-center justify-between border-b border-hairline pb-3">
+            <div className="flex items-center gap-2 text-mineral-teal">
               <FileUp className="w-5 h-5" />
-              <h2 className="font-bold text-sm text-[#EAE3D9]">Import File{targetPath ? ` into ${targetPath}/` : ''}</h2>
+              <h2 className="font-bold text-sm text-linen">Import File{targetPath ? ` into ${targetPath}/` : ''}</h2>
             </div>
-            <button onClick={() => setNewResource(null)} className="text-[#A89F91] hover:text-[#EAE3D9]">
+            <button onClick={() => setNewResource(null)} className="text-sand hover:text-linen">
               <X className="w-4 h-4" />
             </button>
           </div>
           {targetDomain === 'forms' && (
-            <p className="text-[10px] text-[#2A9D8F] bg-[#2A9D8F]/10 border border-[#2A9D8F]/30 rounded-lg px-3 py-2">
+            <p className="text-[10px] text-mineral-teal bg-mineral-teal/10 border border-mineral-teal/30 rounded-lg px-3 py-2">
               forms/ only accepts FORM JSON files — the name is forced to *.json.
             </p>
           )}
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block font-medium">File Name</label>
+              <label className="text-xs text-sand block font-medium">File Name</label>
               <input value={newResource.name}
                 onChange={(event) => setNewResource({ ...newResource, name: event.target.value })}
                 placeholder={targetDomain === 'forms' ? 'e.g. clearing_form.json' : 'e.g. clearing_form_schema.json'}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]" />
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2.5 text-xs text-linen focus:outline-none focus:border-mineral-teal" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block font-medium">Kind</label>
+                <label className="text-xs text-sand block font-medium">Kind</label>
                 <select value={newResource.kind}
                   disabled={targetDomain === 'forms'}
                   onChange={(event) => {
@@ -703,19 +703,19 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                     setNewResource({ ...newResource, kind,
                       contentType: kind === 'TOOL_SERVER' ? 'application/yaml' : newResource.contentType });
                   }}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] disabled:opacity-50">
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2.5 text-xs text-linen disabled:opacity-50">
                   <option value="FORM">FORM</option>
                   <option value="RESOURCE">RESOURCE</option>
                   <option value="TOOL_SERVER">TOOL_SERVER (MCP)</option>
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-[#A89F91] block font-medium">Content Type</label>
+                <label className="text-xs text-sand block font-medium">Content Type</label>
                 <input value={newResource.contentType}
                   disabled={targetDomain === 'forms'}
                   onChange={(event) => setNewResource({ ...newResource, contentType: event.target.value })}
                   list="content-type-presets"
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F] disabled:opacity-50" />
+                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2.5 text-xs text-linen focus:outline-none focus:border-mineral-teal disabled:opacity-50" />
                 <datalist id="content-type-presets">
                   <option value="application/json" />
                   <option value="application/yaml" />
@@ -726,8 +726,8 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block font-medium">File Content</label>
-              <label className="flex items-center justify-center gap-2 px-3 py-6 rounded-xl bg-[#1A1614] border border-dashed border-[#3A322E] text-[11px] text-[#A89F91] cursor-pointer hover:border-[#2A9D8F]">
+              <label className="text-xs text-sand block font-medium">File Content</label>
+              <label className="flex items-center justify-center gap-2 px-3 py-6 rounded-xl bg-charcoal border border-dashed border-hairline text-[11px] text-sand cursor-pointer hover:border-mineral-teal">
                 <FileUp className="w-4 h-4" />
                 {newResource.contentBase64 ? 'Selected — choose another file to replace' : 'Click to select a file'}
                 <input type="file" className="hidden"
@@ -745,7 +745,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                   }} />
               </label>
               {newResource.contentBase64 && (
-                <p className="text-[10px] text-[#90A955] font-mono">
+                <p className="text-[10px] text-sage-green font-mono">
                   {Math.round(newResource.contentBase64.length * 0.75)} bytes staged
                 </p>
               )}
@@ -753,11 +753,11 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setNewResource(null)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#1A1614] hover:bg-[#2F2926] text-[#A89F91] border border-[#3A322E]">
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-charcoal hover:bg-mocha-hover text-sand border border-hairline">
               Cancel
             </button>
             <button onClick={submitNewResource} disabled={busy}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#2A9D8F] hover:bg-[#34bdae] text-[#101816] disabled:opacity-50">
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-mineral-teal hover:bg-mineral-teal-bright text-[#101816] disabled:opacity-50">
               {busy ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : 'Import File'}
             </button>
           </div>
@@ -769,44 +769,44 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold tracking-wider text-[#A89F91] uppercase">
+        <span className="text-[11px] font-semibold tracking-wider text-sand uppercase">
           Project
         </span>
         <div className="flex items-center gap-0.5">
           <button title="New Process" disabled={busy}
             onClick={onNewWorkflow}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+            className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
             <Plus className="w-3.5 h-3.5" />
           </button>
           <button title="Refresh Project Files" disabled={busy}
             onClick={() => void refetch()}
-            className="p-1 rounded hover:bg-[#1A1614] text-[#A89F91] hover:text-[#EAE3D9]">
+            className="p-1 rounded hover:bg-charcoal text-sand hover:text-linen">
             <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
       {actionError && (
-        <div className="text-[11px] text-[#E76F51] bg-[#E76F51]/10 border border-[#E76F51]/30 rounded-lg px-3 py-2">
+        <div className="text-[11px] text-desert-rose bg-desert-rose/10 border border-desert-rose/30 rounded-lg px-3 py-2">
           {actionError}
         </div>
       )}
       {loadError && !actionError && (
-        <div className="text-[11px] text-[#E76F51] bg-[#E76F51]/10 border border-[#E76F51]/30 rounded-lg px-3 py-2">
+        <div className="text-[11px] text-desert-rose bg-desert-rose/10 border border-desert-rose/30 rounded-lg px-3 py-2">
           {loadError}
         </div>
       )}
 
       {tree === null && !loadError && (
-        <div className="text-xs text-[#A89F91] text-center py-4 flex items-center justify-center gap-2">
+        <div className="text-xs text-sand text-center py-4 flex items-center justify-center gap-2">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           Loading project files…
         </div>
       )}
 
       {tree !== null && tree.length === 0 && !loadError && (
-        <div className="text-xs text-[#A89F91] text-center p-4 bg-[#1A1614] rounded-xl border border-[#3A322E]">
-          <FolderTree className="w-4 h-4 mx-auto mb-1.5 text-[#A89F91]" />
+        <div className="text-xs text-sand text-center p-4 bg-charcoal rounded-xl border border-hairline">
+          <FolderTree className="w-4 h-4 mx-auto mb-1.5 text-sand" />
           No files yet. Import into the system folders or create a new process file.
         </div>
       )}
@@ -818,8 +818,8 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
       )}
 
       {drafts.length > 0 && (
-        <div className="pt-2 border-t border-[#3A322E] mt-2">
-          <span className="text-[10px] font-semibold tracking-wider text-[#A89F91]/80 uppercase block mb-1.5">
+        <div className="pt-2 border-t border-hairline mt-2">
+          <span className="text-[10px] font-semibold tracking-wider text-sand/80 uppercase block mb-1.5">
             Unsaved Drafts
           </span>
           <div className="space-y-1">
@@ -828,11 +828,11 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                 onClick={() => onSelectWorkflow(draft.id)}
                 className={`w-full text-left p-2 rounded-lg border flex items-center gap-2 ${
                   draft.id === activeWorkflowId
-                    ? 'bg-[#1A1614] border-[#F4A261]/40'
-                    : 'bg-[#25201D] hover:bg-[#2F2926] border-[#3A322E]'}`}
+                    ? 'bg-charcoal border-saffron/40'
+                    : 'bg-mocha hover:bg-mocha-hover border-hairline'}`}
               >
-                <span className="w-2 h-2 rounded-full bg-[#E76F51] shrink-0" />
-                <FileText className="w-3.5 h-3.5 text-[#A89F91] shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-desert-rose shrink-0" />
+                <FileText className="w-3.5 h-3.5 text-sand shrink-0" />
                 <span className="text-xs truncate">{draft.name}</span>
               </button>
             ))}

@@ -10,6 +10,7 @@ import {
   type Size,
 } from '@/lib/layout/nodeGeometry';
 import { DIFF_COLORS, LIVE_COLOR, type NodeRunStatus } from './nodeState';
+import { palette } from '@/lib/tokens';
 
 /**
  * One connection handle per side, all of type `source`: a flow rendering
@@ -36,9 +37,9 @@ export const StatusBadge: React.FC<{ status?: NodeRunStatus; live?: boolean; x: 
       style={{ left: x, top: y }}
       title={badge?.label ?? 'Current live activity'}
     >
-      {live && <span className="absolute h-full w-full rounded-full bg-[#9D4EDD]/50 animate-ping" />}
+      {live && <span className="absolute h-full w-full rounded-full bg-amethyst/50 animate-ping" />}
       <span
-        className="relative flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-[#1A1614]"
+        className="relative flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-charcoal"
         style={{ background: badge?.color ?? LIVE_COLOR }}
       >
         {badge?.icon}
@@ -48,10 +49,10 @@ export const StatusBadge: React.FC<{ status?: NodeRunStatus; live?: boolean; x: 
 };
 
 const STATUS_BADGES: Record<Exclude<NodeRunStatus, 'idle'>, { label: string; color: string; icon: React.ReactNode }> = {
-  completed: { label: 'Completed', color: '#90A955', icon: <CheckCircle2 className="h-3 w-3 text-[#1A1614]" /> },
-  failed: { label: 'Failed', color: '#E76F51', icon: <XCircle className="h-3 w-3 text-[#1A1614]" /> },
-  waiting: { label: 'Waiting', color: '#F4A261', icon: <Clock className="h-3 w-3 text-[#1A1614]" /> },
-  running: { label: 'Running', color: '#9D4EDD', icon: <Loader2 className="h-3 w-3 animate-spin text-[#EAE3D9]" /> },
+  completed: { label: 'Completed', color: palette.sageGreen, icon: <CheckCircle2 className="h-3 w-3 text-charcoal" /> },
+  failed: { label: 'Failed', color: palette.desertRose, icon: <XCircle className="h-3 w-3 text-charcoal" /> },
+  waiting: { label: 'Waiting', color: palette.saffron, icon: <Clock className="h-3 w-3 text-charcoal" /> },
+  running: { label: 'Running', color: palette.amethyst, icon: <Loader2 className="h-3 w-3 animate-spin text-linen" /> },
 };
 
 /** AI-diff marking above the node. */
@@ -60,7 +61,7 @@ export const DiffBadge: React.FC<{ kind?: DiffChangeKind | null }> = ({ kind }) 
   const color = DIFF_COLORS[kind];
   return (
     <span
-      className="pointer-events-none absolute -top-3 left-3 z-30 rounded-full border bg-[#1A1614] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+      className="pointer-events-none absolute -top-3 left-3 z-30 rounded-full border bg-charcoal px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
       style={{ color, borderColor: `${color}80` }}
     >
       {kind}
@@ -79,7 +80,7 @@ export const OutsideLabel: React.FC<{ text: string; size: Size; direction: FlowD
     : { top: size.height + OUTSIDE_LABEL_GAP, left: size.width / 2, transform: 'translateX(-50%)', width: OUTSIDE_LABEL_MAX_WIDTH, textAlign: 'center' };
   return (
     <span
-      className="pointer-events-none absolute line-clamp-2 text-[11px] font-medium leading-[14px] text-[#EAE3D9]"
+      className="pointer-events-none absolute line-clamp-2 text-[11px] font-medium leading-[14px] text-linen"
       style={style}
     >
       {text}
@@ -104,8 +105,8 @@ export const NodeBadges: React.FC<{
         <span
           className="rounded-full border px-1.5 text-[9px] font-semibold leading-4"
           style={loopState === 'bounded'
-            ? { borderColor: '#F4A261', color: '#F4A261', background: '#1A1614' }
-            : { borderColor: '#E76F51', color: '#1A1614', background: '#E76F51' }}
+            ? { borderColor: palette.saffron, color: palette.saffron, background: palette.charcoal }
+            : { borderColor: palette.desertRose, color: palette.charcoal, background: palette.desertRose }}
           title={loopState === 'bounded' ? `Repeats at most ${maxIterations} times` : 'Cycle without a usable repeat limit'}
         >
           ↻ {loopState === 'bounded' ? maxIterations : '!'}
@@ -113,7 +114,7 @@ export const NodeBadges: React.FC<{
       )}
       {!!issueCount && (
         <span
-          className="rounded-full border border-[#E76F51] bg-[#1A1614] px-1.5 text-[9px] font-semibold leading-4 text-[#E76F51]"
+          className="rounded-full border border-desert-rose bg-charcoal px-1.5 text-[9px] font-semibold leading-4 text-desert-rose"
           title={`${issueCount} validation issue${issueCount > 1 ? 's' : ''}`}
         >
           ⚠ {issueCount}

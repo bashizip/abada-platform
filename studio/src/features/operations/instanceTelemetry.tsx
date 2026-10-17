@@ -35,12 +35,12 @@ import { formatDuration, humanize, unwrapVariable } from '@/lib/run/instanceForm
 /* ------------------------------------------------------------------ */
 
 export const TONE_TEXT: Record<string, string> = {
-  success: 'text-[#90A955]',
-  failure: 'text-[#E76F51]',
-  running: 'text-[#9D4EDD]',
-  warning: 'text-[#F4A261]',
-  info: 'text-[#A89F91]',
-  external: 'text-[#2A9D8F]',
+  success: 'text-sage-green',
+  failure: 'text-desert-rose',
+  running: 'text-amethyst',
+  warning: 'text-saffron',
+  info: 'text-sand',
+  external: 'text-mineral-teal',
 };
 
 export const EVENT_ICON: Record<string, React.ElementType> = {
@@ -75,22 +75,22 @@ export const EVENT_ICON: Record<string, React.ElementType> = {
 export const isPrimitive = (value: unknown): boolean => value === null || typeof value !== 'object';
 
 const VariableValue: React.FC<{ value: unknown }> = ({ value }) => {
-  if (value === null) return <span className="text-[#A89F91] italic">null</span>;
+  if (value === null) return <span className="text-sand italic">null</span>;
   if (typeof value === 'boolean' || typeof value === 'number') {
-    return <span className="text-[#F4A261]">{String(value)}</span>;
+    return <span className="text-saffron">{String(value)}</span>;
   }
-  return <span className="text-[#EAE3D9]">{String(value)}</span>;
+  return <span className="text-linen">{String(value)}</span>;
 };
 
 export const VariableTree: React.FC<{ data: unknown }> = ({ data }) => {
   if (isPrimitive(data)) return <VariableValue value={data} />;
   if (Array.isArray(data)) {
-    if (data.length === 0) return <span className="text-[#A89F91] italic">[]</span>;
+    if (data.length === 0) return <span className="text-sand italic">[]</span>;
     return (
-      <div className="mt-0.5 space-y-1 border-l border-[#3A322E] pl-2.5">
+      <div className="mt-0.5 space-y-1 border-l border-hairline pl-2.5">
         {data.map((item, index) => (
           <div key={index} className="flex gap-1.5">
-            <span className="shrink-0 font-mono text-[10px] text-[#A89F91]/70">[{index}]</span>
+            <span className="shrink-0 font-mono text-[10px] text-sand/70">[{index}]</span>
             <VariableTree data={item} />
           </div>
         ))}
@@ -98,14 +98,14 @@ export const VariableTree: React.FC<{ data: unknown }> = ({ data }) => {
     );
   }
   const entries = Object.entries(data as Record<string, unknown>);
-  if (entries.length === 0) return <span className="text-[#A89F91] italic">{'{ }'}</span>;
+  if (entries.length === 0) return <span className="text-sand italic">{'{ }'}</span>;
   return (
-    <div className="mt-0.5 space-y-1.5 border-l border-[#3A322E] pl-2.5">
+    <div className="mt-0.5 space-y-1.5 border-l border-hairline pl-2.5">
       {entries.map(([key, value]) => (
         <div key={key} className="flex flex-col gap-0.5">
           <div className="flex gap-1.5">
-            <span className="shrink-0 font-mono text-[11px] text-[#F4A261]">{key}</span>
-            <span className="text-[#A89F91]">:</span>
+            <span className="shrink-0 font-mono text-[11px] text-saffron">{key}</span>
+            <span className="text-sand">:</span>
             <span className="min-w-0 break-words">
               {isPrimitive(value) ? <VariableValue value={value} /> : null}
             </span>
@@ -119,8 +119,8 @@ export const VariableTree: React.FC<{ data: unknown }> = ({ data }) => {
 
 export const InfoRow: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex items-start justify-between gap-3 py-1.5">
-    <span className="shrink-0 text-[11px] text-[#A89F91]">{label}</span>
-    <span className="min-w-0 break-words text-right text-[11px] text-[#EAE3D9]">{children}</span>
+    <span className="shrink-0 text-[11px] text-sand">{label}</span>
+    <span className="min-w-0 break-words text-right text-[11px] text-linen">{children}</span>
   </div>
 );
 
@@ -132,38 +132,38 @@ export const ConfidenceGauge: React.FC<{ achieved: number; threshold: number | u
   const passed = threshold === undefined || achieved >= threshold;
   const clamped = Math.min(100, Math.max(0, achieved));
   const thresholdClamped = threshold === undefined ? null : Math.min(100, Math.max(0, threshold));
-  const barColor = passed ? 'bg-[#90A955]' : 'bg-[#E76F51]';
+  const barColor = passed ? 'bg-sage-green' : 'bg-desert-rose';
   return (
-    <div className="mt-2 rounded-xl border border-[#3A322E] bg-[#25201D]/60 p-3">
+    <div className="mt-2 rounded-xl border border-hairline bg-mocha/60 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#A89F91]">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-sand">
           Achieved confidence
         </span>
-        <span className={`font-mono text-[11px] font-semibold tabular-nums ${passed ? 'text-[#90A955]' : 'text-[#E76F51]'}`}>
+        <span className={`font-mono text-[11px] font-semibold tabular-nums ${passed ? 'text-sage-green' : 'text-desert-rose'}`}>
           {achieved.toFixed(1)}%
-          {threshold !== undefined && <span className="text-[#A89F91]"> / {threshold}%</span>}
+          {threshold !== undefined && <span className="text-sand"> / {threshold}%</span>}
         </span>
       </div>
-      <div className="relative h-2 w-full overflow-hidden rounded-full bg-[#1A1614]">
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-charcoal">
         <div
           className={`h-full rounded-full transition-all ${barColor}`}
           style={{ width: `${clamped}%` }}
         />
         {thresholdClamped !== null && (
           <div
-            className="absolute inset-y-0 w-0.5 bg-[#EAE3D9]/80"
+            className="absolute inset-y-0 w-0.5 bg-linen/80"
             style={{ left: `${thresholdClamped}%` }}
             title={`APL threshold: ${threshold}%`}
           />
         )}
       </div>
-      <div className="mt-1 flex justify-between text-[9px] text-[#A89F91]">
+      <div className="mt-1 flex justify-between text-[9px] text-sand">
         <span>0%</span>
         {thresholdClamped !== null && <span className="font-mono">threshold {threshold}%</span>}
         <span>100%</span>
       </div>
       {!passed && (
-        <p className="mt-1.5 flex items-center gap-1 text-[10px] text-[#E76F51]">
+        <p className="mt-1.5 flex items-center gap-1 text-[10px] text-desert-rose">
           <AlertTriangle className="h-3 w-3" /> Below the APL threshold — this attempt would be rejected.
         </p>
       )}
@@ -205,22 +205,22 @@ export const VariablesTab: React.FC<{ variables: Record<string, unknown> | null 
   return (
     <div className="p-4">
       <div className="relative mb-3">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#A89F91]" />
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-sand" />
         <input
           type="text"
           value={variableSearch}
           onChange={(event) => setVariableSearch(event.target.value)}
           placeholder="Search variables…"
-          className="w-full rounded-lg border border-[#3A322E] bg-[#1A1614] py-1.5 pl-8 pr-3 text-[11px] text-[#EAE3D9] placeholder-[#A89F91] outline-none transition-all focus:border-[#F4A261]"
+          className="w-full rounded-lg border border-hairline bg-charcoal py-1.5 pl-8 pr-3 text-[11px] text-linen placeholder-sand outline-none transition-all focus:border-saffron"
         />
       </div>
-      <div className="rounded-xl border border-[#3A322E] bg-[#1A1614] p-3">
+      <div className="rounded-xl border border-hairline bg-charcoal p-3">
         {variables === null ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-[11px] text-[#A89F91]">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#2A9D8F]" /> Reading variables…
+          <div className="flex items-center justify-center gap-2 py-6 text-[11px] text-sand">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-mineral-teal" /> Reading variables…
           </div>
         ) : Object.keys(filteredVariables ?? {}).length === 0 ? (
-          <p className="text-[11px] text-[#A89F91]">
+          <p className="text-[11px] text-sand">
             {variableSearch ? 'No variables match the search.' : 'No variables available.'}
           </p>
         ) : (
@@ -239,11 +239,11 @@ export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ his
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
 
   if (history.length === 0) {
-    return <p className="p-4 text-[11px] text-[#A89F91]">No audit events recorded yet.</p>;
+    return <p className="p-4 text-[11px] text-sand">No audit events recorded yet.</p>;
   }
 
   return (
-    <ol className="relative space-y-1 border-l border-[#3A322E] pl-4 p-4">
+    <ol className="relative space-y-1 border-l border-hairline pl-4 p-4">
       {history.map((event) => {
         const meta = eventMeta(event.eventType);
         const Icon = EVENT_ICON[event.eventType] ?? Activity;
@@ -253,30 +253,30 @@ export const AuditTimeline: React.FC<{ history: ActivityHistoryDTO[] }> = ({ his
         const expanded = expandedEvent === event.id;
         return (
           <li key={event.id} className="relative pb-3">
-            <span className={`absolute -left-[21px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-[#3A322E] bg-[#1A1614] ${TONE_TEXT[meta.tone]}`}>
+            <span className={`absolute -left-[21px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-hairline bg-charcoal ${TONE_TEXT[meta.tone]}`}>
               <Icon className="h-2.5 w-2.5" />
             </span>
             <button
               type="button"
               onClick={() => setExpandedEvent(expanded ? null : event.id)}
-              className="w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-[#2F2926]/60"
+              className="w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-mocha-hover/60"
             >
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[11px] font-semibold text-[#EAE3D9]">{meta.label}</span>
-                <span className="shrink-0 font-mono text-[10px] text-[#A89F91]">
+                <span className="text-[11px] font-semibold text-linen">{meta.label}</span>
+                <span className="shrink-0 font-mono text-[10px] text-sand">
                   {new Date(event.occurredAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
               </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#A89F91]">
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-sand">
                 {event.activityId && <span className="font-mono">{humanize(event.activityId)}</span>}
-                {workerId && <span className="font-mono text-[#2A9D8F]">worker {workerId}</span>}
-                {route && <span className="font-mono text-[#F4A261]">{route}</span>}
+                {workerId && <span className="font-mono text-mineral-teal">worker {workerId}</span>}
+                {route && <span className="font-mono text-saffron">{route}</span>}
                 {event.actor && <span>by {event.actor}</span>}
-                {event.traceId && <span className="font-mono text-[#A89F91]/70">trace {event.traceId.slice(0, 10)}</span>}
+                {event.traceId && <span className="font-mono text-sand/70">trace {event.traceId.slice(0, 10)}</span>}
               </div>
             </button>
             {expanded && (
-              <pre className="mt-1 overflow-x-auto rounded-lg border border-[#3A322E] bg-[#1A1614] p-2 font-mono text-[10px] leading-relaxed text-[#C9BFAF]">
+              <pre className="mt-1 overflow-x-auto rounded-lg border border-hairline bg-charcoal p-2 font-mono text-[10px] leading-relaxed text-linen-muted">
                 {JSON.stringify(details, null, 2)}
               </pre>
             )}
@@ -296,17 +296,17 @@ export const failedJobsFor = (activityId: string, jobs: ProjectJob[]): ProjectJo
 
 export const NodeIcon: React.FC<{ type: WorkflowFile['nodes'][number]['type']; subtype?: string }> = ({ type, subtype }) => {
   switch (type) {
-    case 'agent': return <Bot className="h-4 w-4 text-[#9D4EDD]" />;
-    case 'engine-task': return <Zap className="h-4 w-4 text-[#90A955]" />;
-    case 'call-process': return <Workflow className="h-4 w-4 text-[#F4A261]" />;
-    case 'script': return <Code2 className="h-4 w-4 text-[#2A9D8F]" />;
-    case 'human': return <UserCheck className="h-4 w-4 text-[#E76F51]" />;
-    case 'dmn': return <Table className="h-4 w-4 text-[#2A9D8F]" />;
+    case 'agent': return <Bot className="h-4 w-4 text-amethyst" />;
+    case 'engine-task': return <Zap className="h-4 w-4 text-sage-green" />;
+    case 'call-process': return <Workflow className="h-4 w-4 text-saffron" />;
+    case 'script': return <Code2 className="h-4 w-4 text-mineral-teal" />;
+    case 'human': return <UserCheck className="h-4 w-4 text-desert-rose" />;
+    case 'dmn': return <Table className="h-4 w-4 text-mineral-teal" />;
     case 'gateway': return subtype === 'parallel'
-      ? <GitMerge className="h-4 w-4 text-[#F4A261]" />
-      : <GitFork className="h-4 w-4 text-[#F4A261]" />;
-    case 'event': return <Circle className="h-4 w-4 text-[#F4A261]" />;
-    default: return <Code2 className="h-4 w-4 text-[#F4A261]" />;
+      ? <GitMerge className="h-4 w-4 text-saffron" />
+      : <GitFork className="h-4 w-4 text-saffron" />;
+    case 'event': return <Circle className="h-4 w-4 text-saffron" />;
+    default: return <Code2 className="h-4 w-4 text-saffron" />;
   }
 };
 
@@ -329,7 +329,7 @@ export const NodeTelemetry: React.FC<{
   const [openFailure, setOpenFailure] = useState<{ jobId: string; context: FailureContext } | null>(null);
   const node = workflow.nodes.find((item) => item.id === nodeId);
   const telemetry = aggregateNodeTelemetry(history, nodeId, jobs);
-  if (!node) return <p className="text-[11px] text-[#A89F91]">Unknown node.</p>;
+  if (!node) return <p className="text-[11px] text-sand">Unknown node.</p>;
 
   const nodeEvents = history.filter((event) => event.activityId === nodeId);
   const failures = nodeEvents
@@ -341,7 +341,7 @@ export const NodeTelemetry: React.FC<{
       <button
         type="button"
         onClick={() => setOpenFailure(failure)}
-        className="shrink-0 rounded-lg border border-[#E76F51]/40 bg-[#E76F51]/10 px-2 py-0.5 text-[10px] font-semibold text-[#E76F51] transition-all hover:bg-[#E76F51]/20"
+        className="shrink-0 rounded-lg border border-desert-rose/40 bg-desert-rose/10 px-2 py-0.5 text-[10px] font-semibold text-desert-rose transition-all hover:bg-desert-rose/20"
         title="Show the error message and full stack trace"
       >
         {label}
@@ -352,15 +352,15 @@ export const NodeTelemetry: React.FC<{
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="rounded-lg border border-[#3A322E] bg-[#1A1614] p-1.5">
+          <span className="rounded-lg border border-hairline bg-charcoal p-1.5">
             <NodeIcon type={node.type} subtype={node.subtype} />
           </span>
           <div className="min-w-0">
-            <div className="truncate text-xs font-semibold text-[#EAE3D9]">{node.title}</div>
-            <div className="font-mono text-[10px] text-[#A89F91]">{node.id}</div>
+            <div className="truncate text-xs font-semibold text-linen">{node.title}</div>
+            <div className="font-mono text-[10px] text-sand">{node.id}</div>
           </div>
         </div>
-        <span className="shrink-0 rounded-full border border-[#3A322E] bg-[#1A1614] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#A89F91]">
+        <span className="shrink-0 rounded-full border border-hairline bg-charcoal px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-sand">
           {node.type}
         </span>
       </div>
@@ -368,14 +368,14 @@ export const NodeTelemetry: React.FC<{
       {/* AI agent telemetry */}
       {node.type === 'agent' && (
         <div className="space-y-3">
-          <div className="rounded-xl border border-[#9D4EDD]/30 bg-[#1A1614] p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9D4EDD]">
+          <div className="rounded-xl border border-amethyst/30 bg-charcoal p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amethyst">
               <Bot className="h-3.5 w-3.5" /> Agent configuration
             </div>
             {node.agentConfig && (
               <>
                 <InfoRow label="Model">
-                  <span className="font-mono text-[#9D4EDD]">{node.agentConfig.model}</span>
+                  <span className="font-mono text-amethyst">{node.agentConfig.model}</span>
                 </InfoRow>
                 <InfoRow label="Confidence threshold">{node.agentConfig.confidenceThreshold ? `${node.agentConfig.confidenceThreshold}%` : 'none'}</InfoRow>
                 <InfoRow label="Temperature">{node.agentConfig.temperature}</InfoRow>
@@ -394,8 +394,8 @@ export const NodeTelemetry: React.FC<{
           </div>
 
           {telemetry.agent && (
-            <div className="rounded-xl border border-[#2A9D8F]/30 bg-[#1A1614] p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#2A9D8F]">
+            <div className="rounded-xl border border-mineral-teal/30 bg-charcoal p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-mineral-teal">
                 <Activity className="h-3.5 w-3.5" /> Attempt telemetry
               </div>
               {telemetry.agent.confidence !== undefined && (
@@ -407,7 +407,7 @@ export const NodeTelemetry: React.FC<{
               )}
               {telemetry.agent.model && <InfoRow label="Executed model"><span className="font-mono">{telemetry.agent.model}</span></InfoRow>}
               {telemetry.agent.requestedModel && telemetry.agent.requestedModel !== telemetry.agent.model && (
-                <InfoRow label="Fallback for"><span className="font-mono text-[#F4A261]">{telemetry.agent.requestedModel}</span></InfoRow>
+                <InfoRow label="Fallback for"><span className="font-mono text-saffron">{telemetry.agent.requestedModel}</span></InfoRow>
               )}
               {telemetry.agent.provider && <InfoRow label="Provider">{telemetry.agent.provider}</InfoRow>}
               {telemetry.agent.attempt !== undefined && <InfoRow label="Attempt">{telemetry.agent.attempt}</InfoRow>}
@@ -416,19 +416,19 @@ export const NodeTelemetry: React.FC<{
               {telemetry.agent.errorType && (
                 <InfoRow label="Error type">
                   <span className="flex items-center justify-end gap-2">
-                    <span className="text-[#E76F51]">{telemetry.agent.errorType}</span>
+                    <span className="text-desert-rose">{telemetry.agent.errorType}</span>
                     {detailsButton(latestFailure)}
                   </span>
                 </InfoRow>
               )}
               {telemetry.agent.errorType && telemetry.errorMessage && (
-                <div className="mt-1.5 rounded-lg border border-[#E76F51]/30 bg-[#E76F51]/10 p-2 text-[10px] leading-relaxed text-[#E76F51]">
+                <div className="mt-1.5 rounded-lg border border-desert-rose/30 bg-desert-rose/10 p-2 text-[10px] leading-relaxed text-desert-rose">
                   {telemetry.errorMessage}
                 </div>
               )}
               {telemetry.agent.outcome && (
                 <InfoRow label="Output contract">
-                  <span className={telemetry.agent.outcome === 'OK' ? 'text-[#2A9D8F]' : 'text-[#E76F51]'}>
+                  <span className={telemetry.agent.outcome === 'OK' ? 'text-mineral-teal' : 'text-desert-rose'}>
                     {telemetry.agent.outcome}
                   </span>
                 </InfoRow>
@@ -445,7 +445,7 @@ export const NodeTelemetry: React.FC<{
             </div>
           )}
 
-          <p className="rounded-xl border border-dashed border-[#3A322E] bg-[#1A1614] p-3 text-[10px] leading-relaxed text-[#A89F91]">
+          <p className="rounded-xl border border-dashed border-hairline bg-charcoal p-3 text-[10px] leading-relaxed text-sand">
             Each attempt keeps its metadata (model, tools, token counts, prompt hash). Journaled step payloads are kept encrypted as the project's evidence policy allows (redacted by default) and open to evidence readers only, each read recorded. The APL-declared prompt is in the definition source.
           </p>
         </div>
@@ -455,8 +455,8 @@ export const NodeTelemetry: React.FC<{
       {node.type === 'human' && (
         <div className="space-y-3">
           {node.humanConfig && (
-            <div className="rounded-xl border border-[#E76F51]/30 bg-[#1A1614] p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#E76F51]">
+            <div className="rounded-xl border border-desert-rose/30 bg-charcoal p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-desert-rose">
                 <UserCheck className="h-3.5 w-3.5" /> Human task
               </div>
               <InfoRow label="Assignees">{node.humanConfig.assignees.join(', ')}</InfoRow>
@@ -466,7 +466,7 @@ export const NodeTelemetry: React.FC<{
             </div>
           )}
           {nodeEvents.length === 0 && (
-            <p className="text-[11px] text-[#A89F91]">No task events recorded for this node yet.</p>
+            <p className="text-[11px] text-sand">No task events recorded for this node yet.</p>
           )}
         </div>
       )}
@@ -474,8 +474,8 @@ export const NodeTelemetry: React.FC<{
       {/* Script step */}
       {node.type === 'script' && (
         <div className="space-y-3">
-          <div className="rounded-xl border border-[#2A9D8F]/30 bg-[#1A1614] p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#2A9D8F]">
+          <div className="rounded-xl border border-mineral-teal/30 bg-charcoal p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-mineral-teal">
               <Code2 className="h-3.5 w-3.5" /> Script step
             </div>
             <InfoRow label="Format"><span className="font-mono">{node.scriptConfig?.format ?? 'javascript'}</span></InfoRow>
@@ -489,26 +489,26 @@ export const NodeTelemetry: React.FC<{
       {/* Engine task */}
       {node.type === 'engine-task' && (
         <div className="space-y-3">
-          <div className="rounded-xl border border-[#90A955]/30 bg-[#1A1614] p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#90A955]">
+          <div className="rounded-xl border border-sage-green/30 bg-charcoal p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-sage-green">
               <Zap className="h-3.5 w-3.5" /> External job
             </div>
             <InfoRow label="Topic"><span className="font-mono">{node.engineTaskConfig?.service ?? '—'}</span></InfoRow>
             {telemetry.workerIds.length > 0 && <InfoRow label="Workers">{telemetry.workerIds.join(', ')}</InfoRow>}
             <InfoRow label="Retries left">{telemetry.retries}</InfoRow>
             {telemetry.errorMessage && (
-              <div className="mt-2 rounded-lg border border-[#E76F51]/30 bg-[#E76F51]/10 p-2 text-[10px] text-[#E76F51]">
+              <div className="mt-2 rounded-lg border border-desert-rose/30 bg-desert-rose/10 p-2 text-[10px] text-desert-rose">
                 {telemetry.errorMessage}
               </div>
             )}
           </div>
 
           {failedJobsFor(nodeId, jobs).map((job) => (
-            <div key={job.id} className="flex items-center justify-between gap-2 rounded-xl border border-[#E76F51]/30 bg-[#1A1614] p-3">
+            <div key={job.id} className="flex items-center justify-between gap-2 rounded-xl border border-desert-rose/30 bg-charcoal p-3">
               <div className="min-w-0">
-                <div className="font-mono text-[10px] text-[#A89F91]">{job.id.slice(0, 12)}…</div>
+                <div className="font-mono text-[10px] text-sand">{job.id.slice(0, 12)}…</div>
                 {job.exceptionMessage && (
-                  <div className="mt-0.5 truncate text-[10px] text-[#E76F51]" title={job.exceptionMessage}>
+                  <div className="mt-0.5 truncate text-[10px] text-desert-rose" title={job.exceptionMessage}>
                     {job.exceptionMessage}
                   </div>
                 )}
@@ -517,7 +517,7 @@ export const NodeTelemetry: React.FC<{
               <button
                 type="button"
                 onClick={() => onRetry(job)}
-                className="shrink-0 rounded-lg border border-[#90A955]/40 bg-[#90A955]/10 px-2.5 py-1 text-[10px] font-semibold text-[#90A955] transition-all hover:bg-[#90A955]/20"
+                className="shrink-0 rounded-lg border border-sage-green/40 bg-sage-green/10 px-2.5 py-1 text-[10px] font-semibold text-sage-green transition-all hover:bg-sage-green/20"
                 title="Requeue this job for execution"
               >
                 Retry
@@ -531,8 +531,8 @@ export const NodeTelemetry: React.FC<{
       {node.type === 'dmn' && (
         <div className="space-y-3">
           {node.dmnConfig && (
-            <div className="rounded-xl border border-[#2A9D8F]/30 bg-[#1A1614] p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#2A9D8F]">
+            <div className="rounded-xl border border-mineral-teal/30 bg-charcoal p-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-mineral-teal">
                 <Table className="h-3.5 w-3.5" /> Decision table
               </div>
               <InfoRow label="Decision key"><span className="font-mono">{node.dmnConfig.decisionKey}</span></InfoRow>
@@ -541,8 +541,8 @@ export const NodeTelemetry: React.FC<{
             </div>
           )}
           {variables && node.dmnConfig && (
-            <div className="rounded-xl border border-[#3A322E] bg-[#1A1614] p-3">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#A89F91]">Applied outputs</div>
+            <div className="rounded-xl border border-hairline bg-charcoal p-3">
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">Applied outputs</div>
               {node.dmnConfig.outputs.map((output) => {
                 const unwrapped = unwrapVariable(variables);
                 const value = unwrapped && typeof unwrapped === 'object'
@@ -562,12 +562,12 @@ export const NodeTelemetry: React.FC<{
       {/* Gateway / event / default */}
       {(node.type === 'gateway' || node.type === 'event') && (
         <div className="space-y-3">
-          <div className="rounded-xl border border-[#3A322E] bg-[#1A1614] p-3">
+          <div className="rounded-xl border border-hairline bg-charcoal p-3">
             <InfoRow label="Description">{node.description}</InfoRow>
             {node.type === 'gateway' && node.subtype && <InfoRow label="Kind">{node.subtype}</InfoRow>}
           </div>
           {nodeEvents.length === 0 && (
-            <p className="text-[11px] text-[#A89F91]">No execution events recorded for this node.</p>
+            <p className="text-[11px] text-sand">No execution events recorded for this node.</p>
           )}
         </div>
       )}
@@ -575,7 +575,7 @@ export const NodeTelemetry: React.FC<{
       {/* Events for this node */}
       {nodeEvents.length > 0 && (
         <div>
-          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#A89F91]">Events</div>
+          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">Events</div>
           <div className="space-y-1">
             {nodeEvents.map((event) => {
               const meta = eventMeta(event.eventType);
@@ -588,22 +588,22 @@ export const NodeTelemetry: React.FC<{
                     type="button"
                     onClick={() => setOpenFailure(failure)}
                     title="Show the error message and full stack trace"
-                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#E76F51]/30 bg-[#1A1614] px-2.5 py-1.5 text-left transition-colors hover:bg-[#E76F51]/10"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-desert-rose/30 bg-charcoal px-2.5 py-1.5 text-left transition-colors hover:bg-desert-rose/10"
                   >
                     <span className={`text-[10px] font-semibold ${TONE_TEXT[meta.tone]}`}>
                       {meta.label}{failure.context.errorType ? ` · ${failure.context.errorType}` : ''}
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className="text-[10px] text-[#E76F51] underline decoration-dotted">Details</span>
-                      <span className="font-mono text-[10px] text-[#A89F91]">{time}</span>
+                      <span className="text-[10px] text-desert-rose underline decoration-dotted">Details</span>
+                      <span className="font-mono text-[10px] text-sand">{time}</span>
                     </span>
                   </button>
                 );
               }
               return (
-                <div key={event.id} className="flex items-center justify-between gap-2 rounded-lg border border-[#3A322E] bg-[#1A1614] px-2.5 py-1.5">
+                <div key={event.id} className="flex items-center justify-between gap-2 rounded-lg border border-hairline bg-charcoal px-2.5 py-1.5">
                   <span className={`text-[10px] font-semibold ${TONE_TEXT[meta.tone]}`}>{meta.label}</span>
-                  <span className="font-mono text-[10px] text-[#A89F91]">{time}</span>
+                  <span className="font-mono text-[10px] text-sand">{time}</span>
                 </div>
               );
             })}

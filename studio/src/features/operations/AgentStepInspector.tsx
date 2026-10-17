@@ -17,13 +17,13 @@ const KIND: Record<AgentStepEvidence['kind'], { label: string; icon: React.React
 };
 
 const STATE_TONE: Record<string, string> = {
-  COMPLETED: 'text-[#2A9D8F]',
-  FAILED: 'text-[#E76F51]',
-  OUTCOME_UNKNOWN: 'text-[#1A1614] bg-[#E76F51] px-1 rounded',
-  PROPOSED: 'text-[#F4A261]',
-  APPROVED: 'text-[#2A9D8F]',
-  REJECTED: 'text-[#E76F51]',
-  STARTED: 'text-[#9D4EDD]',
+  COMPLETED: 'text-mineral-teal',
+  FAILED: 'text-desert-rose',
+  OUTCOME_UNKNOWN: 'text-charcoal bg-desert-rose px-1 rounded',
+  PROPOSED: 'text-saffron',
+  APPROVED: 'text-mineral-teal',
+  REJECTED: 'text-desert-rose',
+  STARTED: 'text-amethyst',
 };
 
 const policyLabel = (policy?: string) => (policy === 'approval_required' ? 'approval required'
@@ -63,12 +63,12 @@ export const AgentStepInspector: React.FC<AgentStepInspectorProps> = ({ steps, p
   };
 
   return (
-    <div className="mt-2 rounded-lg border border-[#3A322E] bg-[#14110D] p-2" aria-label="Agent steps">
-      <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-[#A89F91]">
+    <div className="mt-2 rounded-lg border border-hairline bg-charcoal-deep p-2" aria-label="Agent steps">
+      <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-sand">
         <span>Steps ({steps.length})</span>
         <span className="font-mono normal-case">
           {total.tokens.toLocaleString()} tokens · {formatUsd(total.usd)}
-          {total.unpriced && <span className="ml-1 text-[#F4A261]">+ unpriced</span>}
+          {total.unpriced && <span className="ml-1 text-saffron">+ unpriced</span>}
         </span>
       </div>
       {attempts.map((attempt) => {
@@ -77,7 +77,7 @@ export const AgentStepInspector: React.FC<AgentStepInspectorProps> = ({ steps, p
         const subtotal = stepTotals(ofAttempt);
         return (
           <div key={attempt} className="mt-1">
-            <div className="flex items-center justify-between text-[10px] text-[#A89F91]">
+            <div className="flex items-center justify-between text-[10px] text-sand">
               <span>Attempt {attempt}</span>
               <span className="font-mono">{formatUsd(subtotal.usd)}{subtotal.unpriced ? ' + unpriced' : ''}</span>
             </div>
@@ -86,33 +86,33 @@ export const AgentStepInspector: React.FC<AgentStepInspectorProps> = ({ steps, p
                 const kind = KIND[step.kind] ?? KIND.TOOL_CALL;
                 const policy = policyLabel(step.policy);
                 return (
-                  <li key={step.id} className="rounded border border-transparent hover:border-[#3A322E]">
+                  <li key={step.id} className="rounded border border-transparent hover:border-hairline">
                     <button type="button" onClick={() => void showPayloads(step)}
-                      className="flex w-full items-center gap-2 px-1 py-0.5 text-left text-[#EAE3D9]"
+                      className="flex w-full items-center gap-2 px-1 py-0.5 text-left text-linen"
                       aria-expanded={open === step.id} aria-label={`Step ${step.attempt}.${step.sequence}`}>
-                      <span className="font-mono text-[10px] text-[#A89F91]">{step.attempt}.{step.sequence}</span>
-                      <span className="flex items-center gap-1 text-[10px] text-[#A89F91]">{kind.icon}{kind.label}</span>
+                      <span className="font-mono text-[10px] text-sand">{step.attempt}.{step.sequence}</span>
+                      <span className="flex items-center gap-1 text-[10px] text-sand">{kind.icon}{kind.label}</span>
                       <span className="truncate">{step.kind === 'MODEL_CALL' ? step.model ?? 'model' : step.toolRef}</span>
-                      {policy && <span className="rounded border border-[#3A322E] px-1 text-[9px] text-[#A89F91]">{policy}</span>}
-                      <span className={`text-[10px] ${STATE_TONE[step.state] ?? 'text-[#A89F91]'}`}>
+                      {policy && <span className="rounded border border-hairline px-1 text-[9px] text-sand">{policy}</span>}
+                      <span className={`text-[10px] ${STATE_TONE[step.state] ?? 'text-sand'}`}>
                         {step.state === 'OUTCOME_UNKNOWN' && <AlertTriangle className="mr-0.5 inline h-3 w-3" aria-hidden />}
                         {step.state.toLowerCase().replace('_', ' ')}
                       </span>
                       <span className="ml-auto font-mono text-[10px]">
                         {step.promptTokens !== undefined && step.promptTokens !== null
                           ? `${(step.promptTokens ?? 0) + (step.completionTokens ?? 0)} tok ` : ''}
-                        {step.costUnpriced ? <span className="text-[#F4A261]">unpriced</span>
+                        {step.costUnpriced ? <span className="text-saffron">unpriced</span>
                           : step.costUsd !== undefined && step.costUsd !== null ? formatUsd(step.costUsd) : ''}
                       </span>
                     </button>
                     {(step.resolvedBy || step.childInstanceId) && (
-                      <div className="flex flex-wrap gap-2 px-6 text-[10px] text-[#A89F91]">
+                      <div className="flex flex-wrap gap-2 px-6 text-[10px] text-sand">
                         {step.resolvedBy && (
                           <span>{step.state === 'REJECTED' ? 'rejected' : 'approved'} by {step.resolvedBy}
                             {step.decidedAt ? ` at ${time(step.decidedAt)}` : ''}</span>
                         )}
                         {step.childInstanceId && (onOpenInstance ? (
-                          <button type="button" className="underline hover:text-[#EAE3D9]"
+                          <button type="button" className="underline hover:text-linen"
                             onClick={() => onOpenInstance(step.childInstanceId!)}>
                             child {step.childInstanceId.slice(0, 8)}
                           </button>
@@ -120,13 +120,13 @@ export const AgentStepInspector: React.FC<AgentStepInspectorProps> = ({ steps, p
                       </div>
                     )}
                     {open === step.id && (
-                      <div className="mx-1 mb-1 rounded bg-[#1A1614] p-2 text-[10px]">
+                      <div className="mx-1 mb-1 rounded bg-charcoal p-2 text-[10px]">
                         {denied ? (
-                          <p className="flex items-center gap-1 text-[#F4A261]"><Lock className="h-3 w-3" aria-hidden />{denied}</p>
+                          <p className="flex items-center gap-1 text-saffron"><Lock className="h-3 w-3" aria-hidden />{denied}</p>
                         ) : payloads[step.id] ? (
                           <PayloadView payloads={payloads[step.id]} />
                         ) : (
-                          <p className="text-[#A89F91]">Loading payloads…</p>
+                          <p className="text-sand">Loading payloads…</p>
                         )}
                       </div>
                     )}
@@ -143,15 +143,15 @@ export const AgentStepInspector: React.FC<AgentStepInspectorProps> = ({ steps, p
 
 const PayloadView: React.FC<{ payloads: AgentStepPayloads }> = ({ payloads }) => {
   if (payloads.payloadMode === 'none') {
-    return <p className="text-[#A89F91]">This project keeps no payloads (evidence policy: none).</p>;
+    return <p className="text-sand">This project keeps no payloads (evidence policy: none).</p>;
   }
   return (
     <div className="space-y-1">
-      {payloads.payloadMode === 'redacted' && <p className="text-[#A89F91]">Sensitive values are redacted.</p>}
+      {payloads.payloadMode === 'redacted' && <p className="text-sand">Sensitive values are redacted.</p>}
       {(['request', 'result'] as const).map((part) => (
         <div key={part}>
-          <p className="uppercase tracking-wider text-[#A89F91]">{part}</p>
-          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-[#EAE3D9]">
+          <p className="uppercase tracking-wider text-sand">{part}</p>
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-linen">
             {payloads[part] === undefined || payloads[part] === null ? '—' : JSON.stringify(payloads[part], null, 2)}
           </pre>
         </div>

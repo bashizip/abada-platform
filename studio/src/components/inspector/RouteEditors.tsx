@@ -4,10 +4,10 @@ import type { AgentRoute, LoopConfig, OnErrorRoute, OnTimeoutRoute, ReviewOutcom
 import { agentRoutesProblem, OUTCOME_NAME, outcomesProblem, timeoutError } from '@/lib/apl/routes';
 import { loopProblemMessage, type LoopProblem } from '@/lib/apl/loopAnalysis';
 
-const FIELD = 'w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2 py-1.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#E76F51]';
+const FIELD = 'w-full bg-charcoal border border-hairline rounded-lg px-2 py-1.5 text-xs text-linen focus:outline-none focus:border-desert-rose';
 const SELECT = `${FIELD} font-mono`;
-const LABEL = 'text-[10px] text-[#A89F91] block';
-const ERROR = 'text-[10px] text-[#E76F51]';
+const LABEL = 'text-[10px] text-sand block';
+const ERROR = 'text-[10px] text-desert-rose';
 
 /** Targets a route can point at: every other node, by title. */
 export const TargetOptions: React.FC<{ nodes: WorkflowNode[]; excludeId: string }> = ({ nodes, excludeId }) => (
@@ -89,17 +89,17 @@ export const ErrorRoutesEditor: React.FC<{
       <label className={LABEL}>Error routes (on_error) — a reported error, or the last failed attempt</label>
       {coded.map((rule) => (
         <div key={rule.code} className="flex items-center gap-2">
-          <span className="w-24 shrink-0 truncate font-mono text-[10px] text-[#EAE3D9]" title={rule.code}>{rule.code}</span>
+          <span className="w-24 shrink-0 truncate font-mono text-[10px] text-linen" title={rule.code}>{rule.code}</span>
           <select aria-label={`Route for error ${rule.code}`} value={rule.then} onChange={(event) => onSetRule(rule.code, event.target.value || null)} className={SELECT}>
             <TargetOptions nodes={nodes} excludeId={excludeId} />
           </select>
-          <button onClick={() => onSetRule(rule.code, null)} aria-label={`Remove route for ${rule.code}`} className="text-[#A89F91] hover:text-[#E76F51]">
+          <button onClick={() => onSetRule(rule.code, null)} aria-label={`Remove route for ${rule.code}`} className="text-sand hover:text-desert-rose">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}
       <div className="flex items-center gap-2">
-        <span className="w-24 shrink-0 text-[10px] text-[#A89F91]">any other error</span>
+        <span className="w-24 shrink-0 text-[10px] text-sand">any other error</span>
         <select aria-label="Route for any error" value={catchAll?.then ?? ''} onChange={(event) => onSetRule(undefined, event.target.value || null)} className={SELECT}>
           <option value="">— incident —</option>
           <TargetOptions nodes={nodes} excludeId={excludeId} />
@@ -143,7 +143,7 @@ export const OutcomesEditor: React.FC<{
           approve: { next: nextTarget ?? '' },
           reject: { next: '', comment: 'required' },
         })}
-        className="flex items-center gap-1 text-[11px] text-[#F4A261] hover:underline"
+        className="flex items-center gap-1 text-[11px] text-saffron hover:underline"
       >
         <Plus className="h-3 w-3" /> Ask for a decision (approve / reject)
       </button>
@@ -165,7 +165,7 @@ export const OutcomesEditor: React.FC<{
     <div className="space-y-1.5">
       <label className={LABEL}>Review outcomes — the reviewer picks one; each has its own next step</label>
       {entries.map(([name, outcome]) => (
-        <div key={name} className="space-y-1 rounded-lg border border-[#3A322E] p-2">
+        <div key={name} className="space-y-1 rounded-lg border border-hairline p-2">
           <div className="flex items-center gap-2">
             <input
               aria-label={`Outcome ${name} name`}
@@ -177,11 +177,11 @@ export const OutcomesEditor: React.FC<{
               <option value="">— choose —</option>
               <TargetOptions nodes={nodes} excludeId={excludeId} />
             </select>
-            <button onClick={() => remove(name)} aria-label={`Remove outcome ${name}`} className="text-[#A89F91] hover:text-[#E76F51]">
+            <button onClick={() => remove(name)} aria-label={`Remove outcome ${name}`} className="text-sand hover:text-desert-rose">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
-          <label className="flex items-center gap-1.5 text-[10px] text-[#A89F91]">
+          <label className="flex items-center gap-1.5 text-[10px] text-sand">
             <input
               type="checkbox"
               checked={outcome.comment === 'required'}
@@ -198,7 +198,7 @@ export const OutcomesEditor: React.FC<{
           <button
             disabled={!OUTCOME_NAME.test(draftName) || !!outcomes[draftName]}
             onClick={() => { onChange({ ...outcomes, [draftName]: { next: '' } }); setDraftName(''); }}
-            className="shrink-0 rounded-lg border border-[#3A322E] px-2 text-[11px] text-[#EAE3D9] disabled:opacity-40"
+            className="shrink-0 rounded-lg border border-hairline px-2 text-[11px] text-linen disabled:opacity-40"
           >
             Add
           </button>
@@ -229,7 +229,7 @@ export const AgentRoutesEditor: React.FC<{
           continue: { next: nextTarget ?? '', description: 'The request can be handled as planned' },
           escalate: { next: '', description: 'Anything unclear or outside policy' },
         })}
-        className="flex items-center gap-1 text-[11px] text-[#F4A261] hover:underline"
+        className="flex items-center gap-1 text-[11px] text-saffron hover:underline"
       >
         <Plus className="h-3 w-3" /> Let the agent choose the next step
       </button>
@@ -251,7 +251,7 @@ export const AgentRoutesEditor: React.FC<{
     <div className="space-y-1.5">
       <label className={LABEL}>Routes — the agent picks one by its description; the engine checks it</label>
       {entries.map(([name, route]) => (
-        <div key={name} className="space-y-1 rounded-lg border border-[#3A322E] p-2">
+        <div key={name} className="space-y-1 rounded-lg border border-hairline p-2">
           <div className="flex items-center gap-2">
             <input
               aria-label={`Route ${name} name`}
@@ -263,7 +263,7 @@ export const AgentRoutesEditor: React.FC<{
               <option value="">— choose —</option>
               <TargetOptions nodes={nodes} excludeId={excludeId} />
             </select>
-            <button onClick={() => remove(name)} aria-label={`Remove route ${name}`} className="text-[#A89F91] hover:text-[#E76F51]">
+            <button onClick={() => remove(name)} aria-label={`Remove route ${name}`} className="text-sand hover:text-desert-rose">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -291,7 +291,7 @@ export const AgentRoutesEditor: React.FC<{
           <button
             disabled={!OUTCOME_NAME.test(draftName) || !!routes[draftName]}
             onClick={() => { onChange({ ...routes, [draftName]: { next: '', description: '' } }); setDraftName(''); }}
-            className="shrink-0 rounded-lg border border-[#3A322E] px-2 text-[11px] text-[#EAE3D9] disabled:opacity-40"
+            className="shrink-0 rounded-lg border border-hairline px-2 text-[11px] text-linen disabled:opacity-40"
           >
             Add
           </button>
@@ -322,7 +322,7 @@ export const LoopEditor: React.FC<{
           {problem === 'unbounded' && <p className={ERROR}>{loopProblemMessage(problem)}</p>}
           <button
             onClick={() => onChange({ maxIterations: 3 })}
-            className={`flex items-center gap-1 text-[11px] ${problem === 'unbounded' ? 'font-semibold text-[#E76F51]' : 'text-[#F4A261]'} hover:underline`}
+            className={`flex items-center gap-1 text-[11px] ${problem === 'unbounded' ? 'font-semibold text-desert-rose' : 'text-saffron'} hover:underline`}
           >
             <Plus className="h-3 w-3" /> Add loop bound
           </button>
@@ -350,7 +350,7 @@ export const LoopEditor: React.FC<{
               <option value="">— open an incident —</option>
               <TargetOptions nodes={nodes} excludeId={excludeId} />
             </select>
-            <button onClick={() => onChange(undefined)} aria-label="Remove loop bound" className="text-[#A89F91] hover:text-[#E76F51]">
+            <button onClick={() => onChange(undefined)} aria-label="Remove loop bound" className="text-sand hover:text-desert-rose">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -374,10 +374,10 @@ export const OrderedPickList: React.FC<{
     <div className="space-y-1">
       <label className={LABEL}>{label}</label>
       {value.map((item, index) => (
-        <div key={item} className="flex items-center gap-2 text-[11px] font-mono text-[#EAE3D9]">
-          <span className="w-4 text-[#A89F91]">{index + 1}.</span>
+        <div key={item} className="flex items-center gap-2 text-[11px] font-mono text-linen">
+          <span className="w-4 text-sand">{index + 1}.</span>
           <span className="flex-1 truncate">{item}</span>
-          <button onClick={() => onChange(value.filter((candidate) => candidate !== item))} aria-label={`Remove ${item}`} className="text-[#A89F91] hover:text-[#E76F51]">
+          <button onClick={() => onChange(value.filter((candidate) => candidate !== item))} aria-label={`Remove ${item}`} className="text-sand hover:text-desert-rose">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -406,7 +406,7 @@ export const NameListEditor: React.FC<{
       <label className={LABEL}>{label}</label>
       <div className="flex flex-wrap gap-1">
         {value.map((item) => (
-          <span key={item} className="flex items-center gap-1 rounded-full border border-[#3A322E] px-2 py-0.5 text-[10px] text-[#EAE3D9]">
+          <span key={item} className="flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5 text-[10px] text-linen">
             {item}
             <button onClick={() => onChange(value.filter((candidate) => candidate !== item))} aria-label={`Remove ${item}`} disabled={disabled}>×</button>
           </span>
@@ -419,7 +419,7 @@ export const NameListEditor: React.FC<{
       }}>
         <input aria-label={`Add to ${label}`} disabled={disabled} placeholder={placeholder} value={draft}
           onChange={(event) => setDraft(event.target.value.trim())} className={FIELD} />
-        <button type="submit" disabled={disabled || !draft} className="shrink-0 rounded-lg border border-[#3A322E] px-2 text-[11px] text-[#EAE3D9] disabled:opacity-40">
+        <button type="submit" disabled={disabled || !draft} className="shrink-0 rounded-lg border border-hairline px-2 text-[11px] text-linen disabled:opacity-40">
           Add
         </button>
       </form>

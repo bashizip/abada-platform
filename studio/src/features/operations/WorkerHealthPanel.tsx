@@ -17,9 +17,9 @@ const timeAgo = (iso: string | null | undefined): string => {
 };
 
 const STATUS_META = {
-  ONLINE: { label: 'Online', dot: 'bg-[#90A955]', chip: 'border-[#90A955]/40 bg-[#90A955]/10 text-[#90A955]' },
-  OFFLINE: { label: 'Offline', dot: 'bg-[#A89F91]', chip: 'border-[#3A322E] bg-[#1A1614] text-[#A89F91]' },
-  ERROR: { label: 'Error', dot: 'bg-[#E76F51]', chip: 'border-[#E76F51]/50 bg-[#E76F51]/10 text-[#E76F51]' },
+  ONLINE: { label: 'Online', dot: 'bg-sage-green', chip: 'border-sage-green/40 bg-sage-green/10 text-sage-green' },
+  OFFLINE: { label: 'Offline', dot: 'bg-sand', chip: 'border-hairline bg-charcoal text-sand' },
+  ERROR: { label: 'Error', dot: 'bg-desert-rose', chip: 'border-desert-rose/50 bg-desert-rose/10 text-desert-rose' },
 } as const;
 
 /**
@@ -63,7 +63,7 @@ export const WorkerHealthPanel: React.FC<{ projectId?: string }> = ({ projectId 
   const offline = rows.filter((row) => row.status === 'OFFLINE');
 
   return (
-    <div className="shrink-0 border-b border-[#3A322E] bg-[#25201D]">
+    <div className="shrink-0 border-b border-hairline bg-mocha">
       <button
         type="button"
         onClick={() => setCollapsed((value) => !value)}
@@ -71,39 +71,39 @@ export const WorkerHealthPanel: React.FC<{ projectId?: string }> = ({ projectId 
         title={collapsed ? 'Expand agent workers panel' : 'Collapse agent workers panel'}
       >
         <span className="flex items-center gap-2.5">
-          <RadioTower className={`h-3.5 w-3.5 ${failing.length > 0 ? 'text-[#E76F51]' : 'text-[#2A9D8F]'}`} />
-          <span className="text-[11px] font-semibold tracking-wide text-[#EAE3D9]">AGENT WORKERS</span>
+          <RadioTower className={`h-3.5 w-3.5 ${failing.length > 0 ? 'text-desert-rose' : 'text-mineral-teal'}`} />
+          <span className="text-[11px] font-semibold tracking-wide text-linen">AGENT WORKERS</span>
           {!loading && (
-            <span className="flex items-center gap-2 text-[10px] text-[#A89F91]">
+            <span className="flex items-center gap-2 text-[10px] text-sand">
               {failing.length > 0 && (
-                <span className="flex items-center gap-1 font-semibold text-[#E76F51]">
+                <span className="flex items-center gap-1 font-semibold text-desert-rose">
                   <AlertTriangle className="h-3 w-3" /> {failing.length} error
                 </span>
               )}
               {failing.length === 0 && online.length > 0 && (
-                <span className="flex items-center gap-1 font-semibold text-[#90A955]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#90A955]" /> {online.length} online
+                <span className="flex items-center gap-1 font-semibold text-sage-green">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sage-green" /> {online.length} online
                 </span>
               )}
               {failing.length === 0 && online.length === 0 && rows.length > 0 && (
-                <span className="font-semibold text-[#A89F91]">{offline.length} offline</span>
+                <span className="font-semibold text-sand">{offline.length} offline</span>
               )}
               {rows.length === 0 && !error && <span>no workers yet</span>}
             </span>
           )}
         </span>
-        {collapsed ? <ChevronRight className="h-3.5 w-3.5 text-[#A89F91]" /> : <ChevronDown className="h-3.5 w-3.5 text-[#A89F91]" />}
+        {collapsed ? <ChevronRight className="h-3.5 w-3.5 text-sand" /> : <ChevronDown className="h-3.5 w-3.5 text-sand" />}
       </button>
 
       {!collapsed && (
         <div className="space-y-2 px-6 pb-3">
           {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-[#E76F51]/40 bg-[#E76F51]/10 px-3 py-2 text-[11px] text-[#E76F51]">
+            <div className="flex items-center gap-2 rounded-lg border border-desert-rose/40 bg-desert-rose/10 px-3 py-2 text-[11px] text-desert-rose">
               <AlertTriangle className="h-3.5 w-3.5" /> Worker health unavailable: {error}
             </div>
           )}
           {rows.length === 0 && !error && (
-            <div className="flex items-center gap-2 rounded-lg border border-[#3A322E] bg-[#1A1614] px-3 py-2 text-[11px] text-[#A89F91]">
+            <div className="flex items-center gap-2 rounded-lg border border-hairline bg-charcoal px-3 py-2 text-[11px] text-sand">
               <Bot className="h-3.5 w-3.5" />
               No bound or attempted workers in this project. Bind a service principal to a project topic to monitor it here.
             </div>
@@ -113,12 +113,12 @@ export const WorkerHealthPanel: React.FC<{ projectId?: string }> = ({ projectId 
             return (
               <div
                 key={`${row.principalId}-${row.topic}`}
-                className={`flex items-center gap-3 rounded-lg border bg-[#1A1614] px-3 py-2 ${
+                className={`flex items-center gap-3 rounded-lg border bg-charcoal px-3 py-2 ${
                   row.status === 'ERROR'
-                    ? 'border-[#E76F51]/40'
+                    ? 'border-desert-rose/40'
                     : row.status === 'ONLINE'
-                      ? 'border-[#90A955]/30'
-                      : 'border-[#3A322E]'
+                      ? 'border-sage-green/30'
+                      : 'border-hairline'
                 }`}
               >
                 <span className={`h-2 w-2 shrink-0 rounded-full ${meta.dot} ${row.status === 'ONLINE' ? 'animate-pulse' : ''}`} />
@@ -126,30 +126,30 @@ export const WorkerHealthPanel: React.FC<{ projectId?: string }> = ({ projectId 
                   {meta.label}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 text-[11px] font-semibold text-[#EAE3D9]">
+                  <p className="flex items-center gap-2 text-[11px] font-semibold text-linen">
                     <span className="truncate">{row.principalUsername}</span>
                     {!row.bound && (
-                      <span className="shrink-0 rounded border border-[#F4A261]/40 bg-[#F4A261]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#F4A261]">
+                      <span className="shrink-0 rounded border border-saffron/40 bg-saffron/10 px-1.5 py-0.5 text-[9px] font-bold text-saffron">
                         NOT BOUND
                       </span>
                     )}
-                    <span className="shrink-0 rounded-full border border-[#3A322E] bg-[#25201D] px-2 py-0.5 font-mono text-[10px] text-[#A89F91]">
+                    <span className="shrink-0 rounded-full border border-hairline bg-mocha px-2 py-0.5 font-mono text-[10px] text-sand">
                       {row.topic}
                     </span>
                   </p>
                   {row.status === 'ERROR' && row.lastErrorMessage && (
-                    <p className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[#E76F51]" title={row.lastErrorMessage}>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-[10px] text-desert-rose" title={row.lastErrorMessage}>
                       <span className="truncate">{row.lastErrorMessage}</span>
-                      <span className="shrink-0 text-[#A89F91]">· {timeAgo(row.lastErrorAt)}</span>
+                      <span className="shrink-0 text-sand">· {timeAgo(row.lastErrorAt)}</span>
                       {row.consecutiveFailures > 1 && (
-                        <span className="shrink-0 rounded border border-[#E76F51]/40 bg-[#E76F51]/10 px-1 py-0.5 text-[9px] font-bold">
+                        <span className="shrink-0 rounded border border-desert-rose/40 bg-desert-rose/10 px-1 py-0.5 text-[9px] font-bold">
                           {row.consecutiveFailures}×
                         </span>
                       )}
                     </p>
                   )}
                   {row.status !== 'ERROR' && (
-                    <p className="mt-0.5 text-[10px] text-[#A89F91]">
+                    <p className="mt-0.5 text-[10px] text-sand">
                       {row.status === 'ONLINE' ? 'Heartbeat ' : 'Last heartbeat '}
                       {timeAgo(row.lastSeenAt)}
                       {row.lastWorkerId ? ` · ${row.lastWorkerId}` : ''}

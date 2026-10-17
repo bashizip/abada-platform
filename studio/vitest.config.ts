@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // The design-token test reads index.css as text (`?raw`); keep it intact.
+    css: { include: [/src\/index\.css/] },
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     coverage: {
       reporter: ['text', 'json', 'html'],

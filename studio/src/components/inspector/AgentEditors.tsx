@@ -5,9 +5,9 @@ import {
   callProcessProblem, delegatesProblem, limitsProblem, type AgentLimits,
 } from '@/lib/apl/agentFields';
 
-const FIELD = 'w-full bg-[#1A1614] border border-[#3A322E] rounded-lg px-2 py-1 text-[11px] text-[#EAE3D9] focus:outline-none focus:border-[#9D4EDD]';
-const LABEL = 'text-[10px] text-[#A89F91] block';
-const ERROR = 'text-[10px] text-[#E76F51]';
+const FIELD = 'w-full bg-charcoal border border-hairline rounded-lg px-2 py-1 text-[11px] text-linen focus:outline-none focus:border-amethyst';
+const LABEL = 'text-[10px] text-sand block';
+const ERROR = 'text-[10px] text-desert-rose';
 const PROCESS_KEY = /^[a-z][a-z0-9_-]{0,127}$/;
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -54,11 +54,11 @@ export const DelegatesEditor: React.FC<{
     <div className="space-y-1.5">
       <label className={LABEL}>Delegates — processes the agent may start; only their outputs come back</label>
       {delegates.map((delegate, index) => (
-        <div key={delegate.process + index} className="space-y-1 rounded-lg border border-[#3A322E] p-2">
+        <div key={delegate.process + index} className="space-y-1 rounded-lg border border-hairline p-2">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-[#EAE3D9]">delegate:{delegate.process}</span>
+            <span className="font-mono text-[11px] text-linen">delegate:{delegate.process}</span>
             <button type="button" aria-label={`Remove delegate ${delegate.process}`} onClick={() => remove(index)}
-              className="ml-auto text-[#A89F91] hover:text-[#E76F51]"><Trash2 className="h-3.5 w-3.5" /></button>
+              className="ml-auto text-sand hover:text-desert-rose"><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
           <input aria-label={`Outputs of ${delegate.process}`} className={`${FIELD} font-mono`} placeholder="payout_id, status"
             defaultValue={(delegate.outputs ?? []).join(', ')}
@@ -66,7 +66,7 @@ export const DelegatesEditor: React.FC<{
           <input aria-label={`Description of ${delegate.process}`} className={FIELD} placeholder="What the process does"
             value={delegate.description ?? ''} maxLength={500}
             onChange={(event) => update(index, { description: event.target.value || undefined })} />
-          <label className="flex items-center gap-1.5 text-[10px] text-[#A89F91]">
+          <label className="flex items-center gap-1.5 text-[10px] text-sand">
             <input type="checkbox" checked={delegate.approval === 'required'}
               onChange={(event) => update(index, event.target.checked
                 ? { approval: 'required' } : { approval: undefined, approvers: undefined })} />
@@ -85,7 +85,7 @@ export const DelegatesEditor: React.FC<{
             onChange={(event) => setDraft(event.target.value.trim())} className={`${FIELD} font-mono`} />
           <button type="button" disabled={!PROCESS_KEY.test(draft) || delegates.some((d) => d.process === draft)}
             onClick={() => { onChange([...delegates, { process: draft, outputs: [] }]); setDraft(''); }}
-            className="shrink-0 rounded-lg border border-[#3A322E] px-2 text-[11px] text-[#EAE3D9] disabled:opacity-40">
+            className="shrink-0 rounded-lg border border-hairline px-2 text-[11px] text-linen disabled:opacity-40">
             <Plus className="inline h-3 w-3" /> Add
           </button>
         </div>
@@ -112,11 +112,11 @@ const PairsEditor: React.FC<{
       <label className={LABEL}>{label}</label>
       {entries.map(([name, expression]) => (
         <div key={name} className="flex items-center gap-1.5">
-          <span className="w-28 truncate font-mono text-[11px] text-[#EAE3D9]">{name}</span>
-          <span className="text-[10px] text-[#A89F91]">{arrow}</span>
+          <span className="w-28 truncate font-mono text-[11px] text-linen">{name}</span>
+          <span className="text-[10px] text-sand">{arrow}</span>
           <input aria-label={`${label} ${name}`} className={`${FIELD} font-mono`} value={expression}
             onChange={(event) => onChange({ ...pairs, [name]: event.target.value })} />
-          <button type="button" aria-label={`Remove ${name}`} className="text-[#A89F91] hover:text-[#E76F51]"
+          <button type="button" aria-label={`Remove ${name}`} className="text-sand hover:text-desert-rose"
             onClick={() => onChange(Object.fromEntries(entries.filter(([other]) => other !== name)))}>
             <Trash2 className="h-3 w-3" />
           </button>
@@ -125,12 +125,12 @@ const PairsEditor: React.FC<{
       <div className="flex items-center gap-1.5">
         <input aria-label={`New ${label} name`} placeholder={keyPlaceholder} value={key}
           onChange={(event) => setKey(event.target.value.trim())} className={`${FIELD} w-28 font-mono`} />
-        <span className="text-[10px] text-[#A89F91]">{arrow}</span>
+        <span className="text-[10px] text-sand">{arrow}</span>
         <input aria-label={`New ${label} value`} placeholder={valuePlaceholder} value={value}
           onChange={(event) => setValue(event.target.value)} className={`${FIELD} font-mono`} />
         <button type="button" disabled={!VARIABLE.test(key) || !value.trim() || key in pairs}
           onClick={() => { onChange({ ...pairs, [key]: value.trim() }); setKey(''); setValue(''); }}
-          className="shrink-0 rounded-lg border border-[#3A322E] px-2 text-[11px] text-[#EAE3D9] disabled:opacity-40">Add</button>
+          className="shrink-0 rounded-lg border border-hairline px-2 text-[11px] text-linen disabled:opacity-40">Add</button>
       </div>
     </div>
   );
