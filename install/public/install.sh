@@ -214,8 +214,15 @@ STEP="configure"
 # Materialize the safe development template and inject only the local provider
 # configuration. The resulting file is intentionally untracked and mode 0600.
 ENV_FILE="${INSTALL_DIR}/.env.dev"
+ENV_BACKUP=""
 if [[ ! -f "$ENV_FILE" ]]; then
   cp "${INSTALL_DIR}/release/.env.dev.example" "$ENV_FILE"
+else
+  # Re-running the installer updates an existing installation: keep a copy of
+  # the settings before anything changes.
+  ENV_BACKUP="${ENV_FILE}.backup-$(date +%Y%m%d-%H%M%S)"
+  cp -p "$ENV_FILE" "$ENV_BACKUP"
+  chmod 600 "$ENV_BACKUP"
 fi
 set_env_value() {
   local key="$1" value="$2" temporary line updated=false
@@ -236,6 +243,24 @@ set_env_value() {
   fi
   mv "$temporary" "$ENV_FILE"
 }
+if [[ -n "$ENV_BACKUP" ]]; then
+  # The release decides which images run: an installation from an earlier
+  # release keeps its settings but must not keep that release's image tags,
+  # or the update would silently start the old version. Settings this
+  # release added are appended with their defaults; nothing else changes.
+  PREVIOUS_ENGINE="$(sed -n 's/^ABADA_ENGINE_IMAGE=.*:\([^:]*\)$/\1/p' "$ENV_FILE" | head -n 1)"
+  info "Updating the existing installation in ${INSTALL_DIR} from ${PREVIOUS_ENGINE:-an unknown version} to ${VERSION}."
+  info "Your settings are kept; the previous file is saved as ${ENV_BACKUP}."
+  while IFS= read -r template_line || [[ -n "$template_line" ]]; do
+    case "$template_line" in ''|'#'*) continue ;; esac
+    template_key="${template_line%%=*}"
+    if [[ "$template_key" == *_IMAGE ]]; then
+      set_env_value "$template_key" "${template_line#*=}"
+    elif ! grep -q "^${template_key}=" "$ENV_FILE"; then
+      printf '%s\n' "$template_line" >>"$ENV_FILE"
+    fi
+  done <"${INSTALL_DIR}/release/.env.dev.example"
+fi
 if [[ -n "$GEMINI_KEY" ]]; then
   # One key, read by the engine for agents, Insight and authoring.
   set_env_value ABADA_LLM_GEMINI_API_KEY "$GEMINI_KEY"
