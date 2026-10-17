@@ -19,7 +19,10 @@ REAL_CURL="$(command -v curl)"
 
 mkdir -p "$PUBLIC_DIR" "$STAGING_DIR/release" "$FAKE_BIN"
 printf '%s\n' "$VERSION" >"$PUBLIC_DIR/latest"
-printf '%s\n' 'ABADA_LLM_GEMINI_API_KEY=' \
+printf '%s\n' "ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:${VERSION}" \
+  "ABADA_STUDIO_IMAGE=ghcr.io/bashizip/abada-studio:${VERSION}" \
+  'POSTGRES_PASSWORD=abada' 'ABADA_NEW_SETTING=default-value' \
+  'ABADA_LLM_GEMINI_API_KEY=' \
   'ABADA_LLM_API_KEY=' 'ABADA_LLM_BASE_URL=' 'ABADA_LLM_MODEL=gemini-3.6-flash' \
   'ABADA_INSIGHT_ENABLED=false' 'ABADA_INSIGHT_LLM_TIMEOUT_MS=90000' \
   'ABADA_STARTER_WORKFLOW_ENABLED=true' \
@@ -132,6 +135,38 @@ grep -Fq 'HIGH review: bob / bob' "$PIPED_OUTPUT" || {
   cat "$PIPED_OUTPUT" >&2
   exit 1
 }
+
+# Re-running the installer over an earlier installation updates it: the
+# release's image tags replace the old ones (an old .env.dev must not start the
+# old version), the operator's settings stay, new settings are added, and the
+# previous file is kept as a backup.
+UPGRADE_DIR="$TMP_DIR/upgrade-install"
+mkdir -p "$UPGRADE_DIR"
+printf '%s\n' 'ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:1.0.0-rc.3' \
+  'ABADA_STUDIO_IMAGE=ghcr.io/bashizip/abada-studio:1.0.0-rc.3' \
+  'POSTGRES_PASSWORD=operator-chosen' 'ABADA_OPERATOR_ONLY=kept' >"$UPGRADE_DIR/.env.dev"
+chmod 600 "$UPGRADE_DIR/.env.dev"
+PATH="$FAKE_BIN:$PATH" \
+ABADA_TEST_MARKER="$MARKER" \
+ABADA_TEST_REAL_CURL="$REAL_CURL" \
+ABADA_VERSION="$VERSION" \
+ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
+ABADA_INSTALL_DIR="$UPGRADE_DIR" \
+  bash <"$ROOT_DIR/install/install.sh" >"$TMP_DIR/upgrade-output" 2>&1
+upgraded() { awk -F= -v key="$1" '$1 == key { print substr($0, length(key) + 2) }' "$UPGRADE_DIR/.env.dev"; }
+[[ "$(upgraded ABADA_ENGINE_IMAGE)" == "ghcr.io/bashizip/abada-engine:${VERSION}" ]] || {
+  echo "an update must run the installed release's engine image, not the old one" >&2; cat "$UPGRADE_DIR/.env.dev" >&2; exit 1; }
+[[ "$(upgraded ABADA_STUDIO_IMAGE)" == "ghcr.io/bashizip/abada-studio:${VERSION}" ]] || {
+  echo "an update must run the installed release's Studio image" >&2; exit 1; }
+[[ "$(upgraded POSTGRES_PASSWORD)" == "operator-chosen" ]] || { echo "an update must keep the operator's settings" >&2; exit 1; }
+[[ "$(upgraded ABADA_OPERATOR_ONLY)" == "kept" ]] || { echo "an update must keep settings the template does not know" >&2; exit 1; }
+[[ "$(upgraded ABADA_NEW_SETTING)" == "default-value" ]] || { echo "an update must add settings the release introduced" >&2; exit 1; }
+[[ "$(grep -c '^POSTGRES_PASSWORD=' "$UPGRADE_DIR/.env.dev")" == "1" ]] || { echo "an update must not duplicate settings" >&2; exit 1; }
+ls "$UPGRADE_DIR"/.env.dev.backup-* >/dev/null 2>&1 || { echo "an update must keep the previous settings file" >&2; exit 1; }
+grep -q 'ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:1.0.0-rc.3' "$UPGRADE_DIR"/.env.dev.backup-* || {
+  echo "the backup must hold the previous settings" >&2; exit 1; }
+grep -Fq "from 1.0.0-rc.3 to ${VERSION}" "$TMP_DIR/upgrade-output" || {
+  echo "the installer must say it updates an existing installation" >&2; cat "$TMP_DIR/upgrade-output" >&2; exit 1; }
 
 # Invalid credentials must fail before download without echoing their value.
 INVALID_OUTPUT="$TMP_DIR/invalid-key-output"
