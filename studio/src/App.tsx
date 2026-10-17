@@ -41,6 +41,7 @@ import { useToast } from '@/components/ToastContext';
 import { playCue } from '@/lib/sound';
 import { useProjectWorkspace } from '@/hooks/useProjectWorkspace';
 import { useLiveInstanceOverlay } from '@/hooks/useLiveInstanceOverlay';
+import { PlaybackControl } from '@/components/PlaybackControl';
 import { useDryRunSimulation } from '@/hooks/useDryRunSimulation';
 import { useAplAuthoringState } from '@/hooks/useAplAuthoringState';
 import { useAplValidation } from '@/hooks/useAplValidation';
@@ -98,7 +99,7 @@ export default function App() {
 
   const {
     selectedLiveInstance, liveWorkflow, activeLiveNodeIds, liveSelectedNodeId, setLiveSelectedNodeId,
-    executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges, nextPathEdges, instancePath,
+    executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges, nextPathEdges, instancePath, playback,
     instancesRefreshKey, setInstancesRefreshKey,
     instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance,
     livePanelWidth, setLivePanelWidth, livePanelPinned, setLivePanelPinned,
@@ -633,6 +634,10 @@ export default function App() {
                 <span className="font-mono text-[10px] text-[#A89F91]">{(selectedLiveInstance.id || '').slice(0, 8)}</span>
                 <span className="text-[10px] text-[#2A9D8F]">{selectedLiveInstance.status}</span>
                 <span className="text-[10px] text-[#737D69]">Read-only</span>
+                {!['COMPLETED', 'FAILED', 'CANCELLED'].includes((selectedLiveInstance.status || '').toUpperCase()) && (
+                  <PlaybackControl pace={playback.pace} onPaceChange={playback.setPace} lag={playback.lag}
+                    onJumpToNow={playback.jumpToNow} className="ml-1" />
+                )}
               </div>
             )}
 
@@ -673,6 +678,7 @@ export default function App() {
                       activeTokenEdges={activeTokenEdges}
                       nextPathEdges={nextPathEdges}
                       path={instancePath}
+                      animateArrivals={playback.pace !== 'instant'}
                       readOnly
                     />
                     {instancePanelOpen && (
@@ -725,6 +731,7 @@ export default function App() {
                     activeLiveNodeIds={activeLiveNodeIds}
                     // While the Dry Run panel is open, its path is drawn like an instance's.
                     path={showRunPanel ? dryRunPath : undefined}
+                    animateArrivals={showRunPanel && playback.pace !== 'instant'}
                     readOnly={false}
                     onUndo={undoEdit}
                     onRedo={redoEdit}

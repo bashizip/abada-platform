@@ -33,6 +33,8 @@ export type CanvasNodeData = WorkflowNode & Record<string, unknown> & {
   childResults?: { ok: number; failed: number };
   /** Instance views: what the path says about this node, for its tooltip. */
   pathHint?: string;
+  /** Paced playback: set (to the arrival's sequence number) while this node is the one a revealed step entered. */
+  arrivalSeq?: number;
 };
 
 export type CanvasNode = Node<CanvasNodeData>;

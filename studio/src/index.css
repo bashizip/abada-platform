@@ -221,6 +221,48 @@
 }
 
 /*
+ * Paced playback (M5 S3): each revealed step plays once. The taken edge draws
+ * its stroke from source to target (the path has pathLength=1), the node it
+ * enters pulses once, then both rest in the path style.
+ */
+@keyframes abadaArriveEdge {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+.abada-arrive-edge {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: abadaArriveEdge 400ms var(--ease-standard) both;
+}
+@keyframes abadaArriveNode {
+  0% { opacity: 0; transform: scale(1); }
+  25% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+/* Starts as the edge draw ends, so the eye follows the token into the node. */
+.abada-arrive-node {
+  animation: abadaArriveNode 400ms var(--ease-standard) 250ms both;
+}
+@keyframes abadaArriveFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes abadaArriveFadeOut {
+  0% { opacity: 0; }
+  25% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .abada-arrive-edge {
+    stroke-dasharray: none;
+    animation: abadaArriveFade var(--duration-base) linear both;
+  }
+  .abada-arrive-node {
+    animation: abadaArriveFadeOut var(--duration-calm) linear both;
+  }
+}
+
+/*
  * Connection handles are an editing affordance, not part of the diagram: they
  * stay invisible (edges still anchor on them) and only appear on node hover
  * while the canvas is editable, so no edge ever appears to start with a dot.

@@ -74,6 +74,24 @@ stream and refreshes as soon as something happens; the header shows **Live**.
 When the stream is not available (a proxy that cuts long requests, for
 example) it shows **Polling** and refreshes every two seconds instead.
 
+**Watching it run.** The engine runs at full speed, often several steps in one
+command, but the canvas shows them one at a time so you can follow along. Each
+taken edge draws itself once and the step it enters pulses once. Then both
+settle into the path style. The branches of a parallel split move together.
+The pace control in the header sets how long each step stays on screen:
+**Calm** (0.7 s, the default), **Brisk** (0.25 s) or **Instant** (every step
+as it happens, the pre-1.2 behaviour). Your choice is kept in this browser and
+also applies to the designer's live view and to **Dry Run**.
+
+While the canvas is replaying, the header says so (**replaying — 3 steps
+behind**). Click **Jump to now** to see the current state. The replay only
+shows states the instance actually passed through, in order, never ahead of
+them. Three things are never held back: an incident, the end of the instance,
+and a task assigned to you. When one happens, the canvas jumps straight to it.
+When you open an instance, it shows the current state at once. Only steps
+that happen while you watch are paced. With reduced motion turned on in your
+system, steps still appear one at a time, with fades instead of movement.
+
 **Agent steps.** For an agent step, the telemetry tab lists every model call,
 tool call and delegation in order, attempt by attempt: the tool's policy
 (read, write, approval required), the state (a write whose outcome is unknown

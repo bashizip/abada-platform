@@ -52,6 +52,7 @@ import type { Route } from '@/lib/apl/routes';
 import { ConnectMenu } from './ConnectMenu';
 import { palette } from '@/lib/tokens';
 import type { PathView } from '@/lib/run/instancePath';
+import { usePathArrivals } from './pathArrivals';
 import { PathLegend } from './PathLegend';
 
 interface CanvasProps {
@@ -98,6 +99,8 @@ interface CanvasProps {
    * part of the diagram fades unless "Show full diagram" is on.
    */
   path?: PathView;
+  /** Paced playback (M5 S3): each step the path adds draws its edge and pulses its node once. */
+  animateArrivals?: boolean;
   readOnly?: boolean;
   /** Document undo/redo (editable canvases only). */
   onUndo?: () => void;
@@ -150,6 +153,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
   activeTokenEdges = [],
   nextPathEdges = [],
   path,
+  animateArrivals = false,
   readOnly = false,
   onUndo,
   onRedo,
@@ -184,6 +188,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
   const slots = useMemo(() => outcomeSlots(rawEdges), [rawEdges]);
   const lanes = useMemo(() => parallelLanes(rawEdges), [rawEdges]);
   const [showFullDiagram, setShowFullDiagram] = useState(false);
+  const arrivals = usePathArrivals(path, animateArrivals);
 
   const reactFlowNodes: Node[] = useMemo(() =>
     layout.displayNodes.map((node) => {
@@ -207,12 +212,13 @@ const CanvasInner: React.FC<CanvasProps> = ({
           join: path.joins[node.id],
           childResults: path.children[node.id],
           pathHint: nodePathHint(path, node.id),
+          arrivalSeq: arrivals.nodes.has(node.id) ? arrivals.seq : undefined,
         } : {}),
         selected: selectedNodeId === node.id,
       });
     }),
   [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
-    loops, issueCounts, path, showFullDiagram]);
+    loops, issueCounts, path, showFullDiagram, arrivals]);
 
   const reactFlowEdges: Edge<AbadaEdgeData>[] = useMemo(() =>
     rawEdges.map(edge => {
@@ -233,6 +239,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
         data: {
           pathLayer,
           takenCount,
+          arrivalSeq: arrivals.edges.has(edge.id) ? arrivals.seq : undefined,
           label: edge.label,
           kind: edgeKindOf(edge),
           outcomeSlot: slots.get(edge.id),
@@ -246,7 +253,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
           isDimmed: !readOnly && !!selectedNodeId && !incident,
         },
       };
-    }), [rawEdges, slots, lanes, selectedNodeId, selectedEdgeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges, path, showFullDiagram]);
+    }), [rawEdges, slots, lanes, selectedNodeId, selectedEdgeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges, path, showFullDiagram, arrivals]);
 
   /**
    * A connection from a task asks what it means (next, error, timeout, an

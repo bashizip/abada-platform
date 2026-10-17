@@ -3,7 +3,7 @@ import type { NodeProps } from '@xyflow/react';
 import { GATEWAY_SIZE } from '@/lib/layout/nodeGeometry';
 import { useCanvasView } from '../canvasContext';
 import { NODE_ACCENT } from './nodeStyle';
-import { DiffBadge, NodeBadges, NodeHandles, OutsideLabel, PathBadges, StatusBadge } from './NodeChrome';
+import { ArrivalPulse, DiffBadge, NodeBadges, NodeHandles, OutsideLabel, PathBadges, StatusBadge } from './NodeChrome';
 import { type CanvasNode, pathClass, pathFill, stateOutline, withPathHint } from './nodeState';
 
 const S = GATEWAY_SIZE;
@@ -66,6 +66,7 @@ export const GatewayNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
       </svg>
       <OutsideLabel text={data.title} size={{ width: S, height: S }} direction={direction} />
       <StatusBadge status={data.status} live={data.isLiveCurrent} now={data.nowState} x={S - 8} y={8} />
+      <ArrivalPulse seq={data.arrivalSeq} shape="diamond" />
       <PathBadges visits={data.visitOrders} join={data.join} width={S} height={S} />
       <DiffBadge kind={data.diffKind} />
       <NodeBadges loopState={data.loopState} maxIterations={data.loop?.maxIterations} issueCount={data.issueCount} />
