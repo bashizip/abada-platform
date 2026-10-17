@@ -38,6 +38,8 @@ export function useLiveInstanceOverlay(
   const [instancesRefreshKey, setInstancesRefreshKey] = useState(0);
   const [instancePanelOpen, setInstancePanelOpen] = useState(true);
   const [detailInstance, setDetailInstance] = useState<ProcessInstanceDTO | null>(null);
+  /** Step the instance view opens focused on (an incident's node, M5 S4). */
+  const [detailFocusNodeId, setDetailFocusNodeId] = useState<string | undefined>(undefined);
 
   const {
     panelWidth: livePanelWidth,
@@ -46,7 +48,7 @@ export function useLiveInstanceOverlay(
     setPinned: setLivePanelPinned,
   } = useInspectorPanelPrefs();
 
-  const openInstanceDetail = useCallback((instance: ProcessInstanceDTO) => {
+  const openInstanceDetail = useCallback((instance: ProcessInstanceDTO, focusNodeId?: string) => {
     setSelectedLiveInstance(null);
     setLiveWorkflow(null);
     setLiveSelectedNodeId(null);
@@ -54,6 +56,7 @@ export function useLiveInstanceOverlay(
     setFacts(NO_FACTS);
     setInstancePanelOpen(false);
     setDetailInstance(instance);
+    setDetailFocusNodeId(focusNodeId);
     setCurrentView('instance');
   }, [setCurrentView]);
 
@@ -186,6 +189,7 @@ export function useLiveInstanceOverlay(
     instancePanelOpen,
     setInstancePanelOpen,
     detailInstance,
+    detailFocusNodeId,
     setDetailInstance,
     livePanelWidth,
     setLivePanelWidth,

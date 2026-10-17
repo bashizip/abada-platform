@@ -176,3 +176,50 @@ describe('stepEnds', () => {
       .toEqual([1, 4, 5]);
   });
 });
+
+describe('usePacedPlayback holding a retry (M5 S4)', () => {
+  interface Held { id: string; kind: 'flow' | 'retry' | 'incident' }
+  let held: PacedPlayback<Held>;
+  const HeldProbe: React.FC<{ facts: Held[]; urgentKey?: string }> = ({ facts, urgentKey }) => {
+    held = usePacedPlayback(facts, {
+      id: (fact) => fact.id,
+      isStep: (fact) => fact.kind !== 'incident',
+      isUrgent: (fact) => fact.kind === 'incident',
+      holdsCatchUp: (fact) => fact.kind === 'retry',
+      urgentKey,
+      pace: 'calm',
+    });
+    return null;
+  };
+  const showHeld = (facts: Held[], urgentKey?: string) => act(() => { root.render(<HeldProbe facts={facts} urgentKey={urgentKey} />); });
+  const heldIds = () => held.visible.map((fact) => fact.id);
+
+  it('plays a retry one phase per dwell even when the instance ends in the same refetch, then catches up', () => {
+    const opening: Held[] = [{ id: 'f1', kind: 'flow' }];
+    showHeld(opening);
+    const retry: Held[] = [
+      { id: 'retried', kind: 'retry' }, { id: 'locked', kind: 'retry' }, { id: 'completed', kind: 'retry' },
+      { id: 'f2', kind: 'flow' }, { id: 'f3', kind: 'flow' },
+    ];
+    // The engine finished the retry and the instance in milliseconds: one refetch brings it all, terminal included.
+    showHeld([...opening, ...retry], 'COMPLETED|');
+    advance(0);
+    expect(heldIds()).toEqual(['f1', 'retried']);
+    advance(700);
+    expect(heldIds()).toEqual(['f1', 'retried', 'locked']);
+    advance(700);
+    // The last held fact is shown: the terminal state is now caught up at once.
+    expect(heldIds()).toEqual(['f1', 'retried', 'locked', 'completed', 'f2', 'f3']);
+    expect(held.lag).toBe(0);
+  });
+
+  it('a failure after the retry is shown in turn, and Jump to now still flushes', () => {
+    showHeld([{ id: 'f1', kind: 'flow' }]);
+    showHeld([{ id: 'f1', kind: 'flow' }, { id: 'retried', kind: 'retry' }, { id: 'locked', kind: 'retry' },
+      { id: 'failed', kind: 'retry' }, { id: 'incident', kind: 'incident' }], '|charge');
+    advance(0);
+    expect(heldIds()).toEqual(['f1', 'retried']);
+    act(() => held.jumpToNow());
+    expect(heldIds()).toEqual(['f1', 'retried', 'locked', 'failed', 'incident']);
+  });
+});

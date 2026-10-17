@@ -508,9 +508,11 @@ export class EngineAPI {
     return res.json();
   }
 
-  static async getIncidents(projectId: string, open = true): Promise<IncidentDTO[]> {
+  /** A project's incidents, newest first; `processInstanceId` narrows them to one instance. */
+  static async getIncidents(projectId: string, open = true, processInstanceId?: string): Promise<IncidentDTO[]> {
+    const instance = processInstanceId ? `&processInstanceId=${encodeURIComponent(processInstanceId)}` : '';
     const res = await authenticatedFetch(
-      `${this.BASE_URL}/projects/${projectId}/incidents?open=${open}&size=100`,
+      `${this.BASE_URL}/projects/${projectId}/incidents?open=${open}&size=100${instance}`,
       { headers: this.getHeaders() },
     );
     if (!res.ok) throw await apiError(res);

@@ -12,6 +12,7 @@ export const INCIDENT_KIND_META: Record<string, { label: string; hint: string }>
   WORK_FAILED: { label: 'Work failed', hint: 'The step used up its attempts. Retry reopens it with a fresh attempt budget.' },
   LOOP_EXHAUSTED: { label: 'Loop exhausted', hint: 'A loop reached its limit with no exhaustion route. Retry restarts the step.' },
   MISSING_CORRELATION_KEY: { label: 'Missing correlation key', hint: 'A message wait could not compute its correlation key. Retry restarts the step.' },
+  CHILD_FAILED: { label: 'Called process failed', hint: 'A called process ended in failure and the call declares no on_error route. Retry calls it again.' },
   TOOL_OUTCOME_UNKNOWN: { label: 'Write outcome unknown', hint: 'An agent write was interrupted and its server takes no idempotency key, so it is never re-sent. Check the target system, then say whether it happened; the agent resumes with that fact.' },
 };
 
@@ -67,3 +68,17 @@ export const loadAgentStepModel = async (projectId: string, incident: IncidentDT
 /** Rolling a process back is a deployment: project operators, maintainers and owners (the engine enforces it too). */
 export const canRollBackProcess = (roles: readonly ProjectRole[] | undefined): boolean =>
   !!roles?.some((role) => role === 'OPERATOR' || role === 'MAINTAINER' || role === 'OWNER');
+
+/**
+ * Failed attempts of a step since it was last retried (or since it started),
+ * from its `EXTERNAL_TASK_FAILED` / `TASK_FAILED` history.
+ */
+export const failedAttempts = (history: readonly ActivityHistoryDTO[], activityId: string): number => {
+  let count = 0;
+  for (const event of history) {
+    if (event.activityId !== activityId) continue;
+    if (event.eventType === 'INCIDENT_RETRIED') count = 0;
+    else if (event.eventType === 'EXTERNAL_TASK_FAILED' || event.eventType === 'TASK_FAILED') count += 1;
+  }
+  return count;
+};

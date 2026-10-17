@@ -17,6 +17,13 @@ export interface PacedPlaybackOptions<T> {
   urgentKey?: string;
   /** What is played: a new key (another instance, a new run) starts over at its current state. */
   resetKey?: string;
+  /**
+   * Facts that must be seen even when an urgent fact follows them (a retry
+   * passing through its phases, M5 S4): while one is pending, the playback
+   * keeps its pace and catches up once they are shown. Bounded by the facts it
+   * names, so it never holds an urgent state back for long.
+   */
+  holdsCatchUp?: (fact: T) => boolean;
   /** Overrides the user's pace preference (tests). */
   pace?: PlaybackPace;
 }
@@ -37,6 +44,8 @@ interface PlaybackState {
   /** Facts shown; null until the first facts arrive (they are shown at once, never replayed). */
   shown: number | null;
   urgentKey: string | undefined;
+  /** An urgent change arrived while held: catch up once the held facts are shown. */
+  catchUpDue?: boolean;
 }
 
 /** End (exclusive) of each step: a step fact, plus the facts before it and the steps grouped with it. */
@@ -71,7 +80,7 @@ function nextCut(ends: number[], shown: number, length: number): number {
  * catches up to them. `instant` shows every fact as it arrives.
  */
 export function usePacedPlayback<T>(facts: T[], options: PacedPlaybackOptions<T>): PacedPlayback<T> {
-  const { id, isStep, sameStep, isUrgent, urgentKey, resetKey } = options;
+  const { id, isStep, sameStep, isUrgent, urgentKey, resetKey, holdsCatchUp } = options;
   const [preferredPace, setPace] = usePlaybackPace();
   const pace = options.pace ?? preferredPace;
   const dwell = PACE_DWELL_MS[pace];
@@ -97,12 +106,20 @@ export function usePacedPlayback<T>(facts: T[], options: PacedPlaybackOptions<T>
   if (next.shown === null) {
     if (length > 0) next = { ...next, shown: length, urgentKey };
   } else {
+    const held = (from: number) => !!holdsCatchUp && unique.slice(from).some(holdsCatchUp);
     if (urgentKey !== next.urgentKey) {
-      next = { ...next, urgentKey, shown: urgentKey ? length : next.shown };
+      const due = !!urgentKey;
+      next = due && held(next.shown ?? 0)
+        ? { ...next, urgentKey, catchUpDue: true }
+        : { ...next, urgentKey, shown: due ? length : next.shown, catchUpDue: false };
     }
     const shown = next.shown ?? 0;
     const urgentPending = !!isUrgent && unique.slice(shown).some(isUrgent);
-    if (shown < length && (pace === 'instant' || urgentPending)) next = { ...next, shown: length };
+    if (shown < length && (pace === 'instant' || ((urgentPending || next.catchUpDue) && !held(shown)))) {
+      next = { ...next, shown: length, catchUpDue: false };
+    } else if (next.catchUpDue && shown >= length) {
+      next = { ...next, catchUpDue: false };
+    }
   }
   if (next !== state) setState(next);
 

@@ -36,6 +36,11 @@ import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { StatusBadge } from '@/features/operations/ProcessOperations';
 import { IncidentsPanel } from '@/features/operations/IncidentsPanel';
+import { NodeIncidentCard, RetryProgress, type FailureDetails } from '@/features/operations/NodeIncidentCard';
+import { ErrorDetailsDialog } from '@/features/operations/ErrorDetailsDialog';
+import { useNodeIncidents } from '@/features/operations/useNodeIncidents';
+import { useInstanceIncidents } from '@/hooks/useInstanceIncidents';
+import { PACE_DWELL_MS } from '@/lib/run/playbackPace';
 import { LineagePanel } from '@/features/operations/LineagePanel';
 import { AgentStepEvidence, EvidenceAPI } from '@/api/evidence';
 import { agentStepModel } from '@/lib/run/incidents';
@@ -70,6 +75,8 @@ interface InstanceDetailViewProps {
   onOpenCanvas: (instance: ProcessInstanceDTO) => void;
   /** Opens a related instance (a caller or a called process). */
   onOpenInstance?: (instanceId: string) => void;
+  /** Opened from an incident: focus this step and open its incident card (M5 S4). */
+  initialFocusNodeId?: string;
 }
 
 type InspectorTab = 'telemetry' | 'variables' | 'audit';
@@ -82,17 +89,21 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   onBack,
   onOpenCanvas,
   onOpenInstance,
+  initialFocusNodeId,
 }) => {
   const [instance, setInstance] = useState<ProcessInstanceDTO>(initialInstance);
   const [workflow, setWorkflow] = useState<WorkflowFile | null>(null);
   const [definition, setDefinition] = useState<ProcessDefinitionDTO | null>(null);
   const [activities, setActivities] = useState<ActivityInstanceDTO[]>([]);
-  /** Nodes with an open incident, from the incidents panel: marked on the diagram. */
-  const [incidentNodeIds, setIncidentNodeIds] = useState<string[]>([]);
-  const onIncidentsChange = useCallback((incidents: IncidentDTO[]) => {
-    const ids = [...new Set(incidents.map((incident) => incident.activityId))].sort();
-    setIncidentNodeIds((current) => (current.join('|') === ids.join('|') ? current : ids));
-  }, []);
+  /* Open incidents of this instance, refreshed with the event stream (M5 S4). */
+  const openIncidents = useInstanceIncidents(projectId, instanceId, 0);
+  const incidentNodeIds = useMemo(
+    () => [...new Set(openIncidents.incidents.map((incident) => incident.activityId))].sort(),
+    [openIncidents.incidents],
+  );
+  const [failureDetails, setFailureDetails] = useState<FailureDetails | null>(null);
+  const [toastAudit, setToastAudit] = useState<string | null>(null);
+  const [auditHighlight, setAuditHighlight] = useState<string | null>(null);
   const [history, setHistory] = useState<ActivityHistoryDTO[]>([]);
   const [variables, setVariables] = useState<Record<string, unknown> | null>(null);
   const [jobs, setJobs] = useState<ProjectJob[]>([]);
@@ -167,10 +178,12 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
 
   /* ---- Live while the instance is still advancing: the event stream, polling as the fallback ---- */
   const isTerminal = ['COMPLETED', 'FAILED', 'CANCELLED'].includes(statusOf(instance));
+  const refreshIncidents = openIncidents.refresh;
   const refresh = useCallback(() => {
     void load(false);
     void loadVariablesAndJobs();
-  }, [load, loadVariablesAndJobs]);
+    refreshIncidents();
+  }, [load, loadVariablesAndJobs, refreshIncidents]);
   const streamState = useInstanceEvents(isTerminal ? undefined : projectId, instanceId, refresh);
   const live = streamState === 'live';
   useEffect(() => {
@@ -182,17 +195,21 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 3200);
+    const timer = window.setTimeout(() => { setToast(null); setToastAudit(null); }, toastAudit ? 6000 : 3200);
     return () => window.clearTimeout(timer);
-  }, [toast]);
+  }, [toast, toastAudit]);
 
-  /* ---- Keyboard: Esc back, arrows cycle nodes ---- */
+  /** Closes the open incident card; false when none is open. */
+  const closeIncidentCard = useRef<(() => boolean) | null>(null);
+
+  /* ---- Keyboard: Esc closes the incident card, then goes back; arrows cycle nodes ---- */
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
       if (event.key === 'Escape') {
-        onBack();
+        // The incident card closes first; the next Esc goes back.
+        if (!closeIncidentCard.current?.()) onBack();
         return;
       }
       if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
@@ -212,10 +229,45 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   // The canvas plays the instance back one flow at a time (M5 S3); the panels keep the real facts.
   const playback = useInstancePlayback(workflow, instance, activities, history, incidentNodeIds);
   const frame = playback.frame;
+  const onResolved = useCallback((nodeId: string, historyId: string | undefined) => {
+    const title = workflow?.nodes.find((node) => node.id === nodeId)?.title ?? humanize(nodeId);
+    setToast(`Resolved — ${title} completed after the retry`);
+    setToastAudit(historyId ?? null);
+  }, [workflow]);
+  const nodeIncidents = useNodeIncidents({
+    workflow,
+    incidents: openIncidents.incidents,
+    incidentsLoaded: !openIncidents.loading,
+    visibleHistory: frame?.history ?? [],
+    history,
+    historyLoaded: !loading,
+    activities: frame?.activities ?? [],
+    dwellMs: PACE_DWELL_MS[playback.pace],
+    initialFocusNodeId,
+    onResolved,
+  });
+  const canvasIncidentNodeIds = nodeIncidents.incidentNodeIds;
+  const { cardNodeId, closeCard } = nodeIncidents;
+  useEffect(() => {
+    closeIncidentCard.current = () => {
+      if (!cardNodeId) return false;
+      closeCard();
+      return true;
+    };
+  }, [cardNodeId, closeCard]);
   const path = useMemo(() => {
     if (!workflow || !frame) return null;
-    return deriveInstancePath(workflow, frame.instance, frame.activities, frame.history, { incidentNodeIds });
-  }, [workflow, frame, incidentNodeIds]);
+    return deriveInstancePath(workflow, frame.instance, frame.activities, frame.history,
+      { incidentNodeIds: canvasIncidentNodeIds });
+  }, [workflow, frame, canvasIncidentNodeIds]);
+
+  const incidentRetried = (incident: IncidentDTO) => {
+    nodeIncidents.retried(incident);
+    openIncidents.drop(incident.id);
+    void load(false);
+    void loadVariablesAndJobs();
+    openIncidents.refresh();
+  };
 
   /**
    * Content-stable projection of the path: polls return new object identities
@@ -311,6 +363,33 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
 
   const failedJobs = jobs.filter((job) => job.processInstanceId === instanceId);
 
+  /* ---- The card on the failing node (M5 S4) ---- */
+  const cardNode = nodeIncidents.cardNodeId
+    ? workflow?.nodes.find((node) => node.id === nodeIncidents.cardNodeId) ?? null : null;
+  const cardIncident = cardNode ? nodeIncidents.incidentAt[cardNode.id] : undefined;
+  const cardPhase = cardNode ? nodeIncidents.retryPhases[cardNode.id] : undefined;
+  const incidentOverlay = !cardNode || !projectId ? null
+    : cardPhase && cardPhase !== 'failed'
+      ? { nodeId: cardNode.id, content: <RetryProgress node={cardNode} phase={cardPhase} /> }
+      : cardIncident && workflow ? {
+        nodeId: cardNode.id,
+        content: (
+          <NodeIncidentCard
+            key={cardIncident.id}
+            projectId={projectId}
+            incident={cardIncident}
+            node={cardNode}
+            history={history}
+            canAct={canRetryIncidents}
+            model={agentStepModel(workflow, cardNode.id, history)}
+            onRetried={incidentRetried}
+            onViewDetails={setFailureDetails}
+            onCancelInstance={() => setConfirmCancel(true)}
+            onClose={nodeIncidents.closeCard}
+          />
+        ),
+      } : null;
+
   /* ------------------------------------------------------------------ */
 
   return (
@@ -399,7 +478,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             </button>
           )}
 
-          {status === 'RUNNING' && (
+          {status === 'RUNNING' && canRetryIncidents && (
             <button
               type="button"
               onClick={() => setConfirmCancel(true)}
@@ -436,13 +515,10 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         instanceId={instanceId}
         canRetry={canRetryIncidents}
         modelFor={workflow ? (incident) => agentStepModel(workflow, incident.activityId, history) : undefined}
+        incidents={openIncidents.incidents}
         hideWhenEmpty
-        onIncidentsChange={onIncidentsChange}
-        onRetried={(incident) => {
-          setToast(`Retried ${humanize(incident.activityId)}`);
-          void load(false);
-          void loadVariablesAndJobs();
-        }}
+        onOpenIncident={workflow ? (incident) => nodeIncidents.openCard(incident.activityId) : undefined}
+        onRetried={incidentRetried}
       />
 
       {/* ===== Call-process lineage ===== */}
@@ -462,7 +538,10 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               edges={workflow.edges}
               layoutPending={workflow.layoutPending}
               selectedNodeId={selectedNodeId}
-              onSelectNode={(id) => setSelectedNodeId(id)}
+              onSelectNode={(id) => {
+                setSelectedNodeId(id);
+                if (id && nodeIncidents.incidentAt[id]) nodeIncidents.openCard(id);
+              }}
               onNodeMove={() => undefined}
               onDeleteNode={() => undefined}
               onConnectNodes={() => undefined}
@@ -478,6 +557,10 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               nextPathEdges={instance.suspended || isTerminal ? undefined : stablePath.nextEdgeIds}
               path={stablePath.path}
               animateArrivals={playback.pace !== 'instant'}
+              incidentPulses={nodeIncidents.incidentPulses}
+              retryPhases={nodeIncidents.retryPhases}
+              focus={nodeIncidents.focus}
+              nodeOverlay={incidentOverlay}
               readOnly
             />
           ) : (
@@ -604,7 +687,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             {tab === 'variables' && <VariablesTab variables={variables} />}
 
             {/* ---------- Tab: Audit trail ---------- */}
-            {tab === 'audit' && <AuditTimeline history={history} />}
+            {tab === 'audit' && <AuditTimeline history={history} highlightId={auditHighlight} />}
           </div>
         </aside>
       </div>
@@ -643,11 +726,34 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         </div>
       )}
 
+      {failureDetails && projectId && (
+        <ErrorDetailsDialog
+          projectId={projectId}
+          jobId={failureDetails.jobId}
+          context={failureDetails.context}
+          onClose={() => setFailureDetails(null)}
+        />
+      )}
+
       {/* ===== Toast ===== */}
       {toast && (
         <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 animate-rise">
           <div className="flex items-center gap-2 rounded-full border border-hairline bg-mocha px-4 py-2 text-xs font-medium text-linen shadow-warm-lg">
             <CheckCircle2 className="h-3.5 w-3.5 text-sage-green" /> {toast}
+            {toastAudit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTab('audit');
+                  setAuditHighlight(toastAudit);
+                  setToast(null);
+                  setToastAudit(null);
+                }}
+                className="ml-1 font-semibold text-saffron underline-offset-2 hover:underline"
+              >
+                View in audit trail
+              </button>
+            )}
           </div>
         </div>
       )}

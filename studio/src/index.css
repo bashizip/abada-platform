@@ -262,6 +262,21 @@
   }
 }
 
+/* A new incident on a node (M5 S4): one attention pulse, then the red ring and badge stay. */
+@keyframes abadaIncidentNode {
+  0% { opacity: 0; transform: scale(1); }
+  20% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+.abada-incident-node {
+  animation: abadaIncidentNode 400ms var(--ease-standard) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .abada-incident-node {
+    animation: abadaArriveFadeOut var(--duration-calm) linear both;
+  }
+}
+
 /*
  * Connection handles are an editing affordance, not part of the diagram: they
  * stay invisible (edges still anchor on them) and only appear on node hover

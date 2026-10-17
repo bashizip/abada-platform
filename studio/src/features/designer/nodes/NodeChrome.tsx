@@ -1,8 +1,9 @@
 import type { LoopProblem } from '@/lib/apl/loopAnalysis';
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { AlertTriangle, CheckCircle2, Clock, Loader2, UserRound, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCcw, UserRound, XCircle } from 'lucide-react';
 import type { NowState } from '@/lib/run/instancePath';
+import type { RetryPhase } from '@/lib/run/retryPhase';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
 import {
   OUTSIDE_LABEL_GAP,
@@ -10,7 +11,7 @@ import {
   type FlowDirection,
   type Size,
 } from '@/lib/layout/nodeGeometry';
-import { DIFF_COLORS, LIVE_COLOR, type NodeRunStatus } from './nodeState';
+import { DIFF_COLORS, LIVE_COLOR, RETRY_COLORS, type NodeRunStatus } from './nodeState';
 import { palette } from '@/lib/tokens';
 import { EDGE_COLORS } from '../edgeStyle';
 
@@ -36,10 +37,13 @@ export const NodeHandles: React.FC = () => (
  * the instance is now wins: a human waiting shows a person, an incident a
  * warning sign (shape and icon, never colour alone).
  */
-export const StatusBadge: React.FC<{ status?: NodeRunStatus; live?: boolean; now?: NowState; x: number; y: number }> = ({
-  status, live, now, x, y,
+export const StatusBadge: React.FC<{
+  status?: NodeRunStatus; live?: boolean; now?: NowState; retry?: RetryPhase; x: number; y: number;
+}> = ({
+  status, live, now, retry, x, y,
 }) => {
-  const badge = now === 'incident' ? NOW_BADGES.incident
+  const badge = retry ? RETRY_BADGES[retry]
+    : now === 'incident' ? NOW_BADGES.incident
     : now === 'waiting' ? NOW_BADGES.waiting
       : status && status !== 'idle' ? STATUS_BADGES[status] : null;
   if (!badge && !live) return null;
@@ -48,8 +52,10 @@ export const StatusBadge: React.FC<{ status?: NodeRunStatus; live?: boolean; now
       className="pointer-events-none absolute z-30 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
       style={{ left: x, top: y }}
       title={badge?.label ?? 'Current live activity'}
+      role="img"
+      aria-label={badge?.label ?? 'Current live activity'}
     >
-      {live && <span className="absolute h-full w-full rounded-full bg-amethyst/50 animate-ping" />}
+      {live && !retry && <span className="absolute h-full w-full rounded-full bg-amethyst/50 animate-ping" />}
       <span
         className="relative flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-charcoal"
         style={{ background: badge?.color ?? LIVE_COLOR }}
@@ -58,6 +64,13 @@ export const StatusBadge: React.FC<{ status?: NodeRunStatus; live?: boolean; now
       </span>
     </span>
   );
+};
+
+const RETRY_BADGES: Record<RetryPhase, { label: string; color: string; icon: React.ReactNode }> = {
+  retrying: { label: 'Retrying — the work is reopened', color: RETRY_COLORS.retrying, icon: <RefreshCcw className="h-3 w-3 animate-spin text-charcoal motion-reduce:animate-none" /> },
+  active: { label: 'Retry running', color: RETRY_COLORS.active, icon: <Loader2 className="h-3 w-3 animate-spin text-linen motion-reduce:animate-none" /> },
+  completed: { label: 'Retry completed', color: RETRY_COLORS.completed, icon: <CheckCircle2 className="h-3 w-3 text-charcoal" /> },
+  failed: { label: 'Retry failed', color: RETRY_COLORS.failed, icon: <XCircle className="h-3 w-3 text-charcoal" /> },
 };
 
 const NOW_BADGES: Record<'incident' | 'waiting', { label: string; color: string; icon: React.ReactNode }> = {
@@ -135,6 +148,25 @@ export const ArrivalPulse: React.FC<{ seq?: number; shape: 'rect' | 'circle' | '
         style={{
           borderColor: EDGE_PATH_COLOR,
           // A diamond is a square turned a quarter: its corners touch the shape's box.
+          transform: shape === 'diamond' ? 'rotate(45deg) scale(0.7071)' : undefined,
+        }}
+      />
+    </span>
+  );
+};
+
+/**
+ * A new incident on the node (M5 S4): one attention pulse in the incident
+ * colour, keyed by the incident so a later incident on the same node pulses again.
+ */
+export const IncidentPulse: React.FC<{ seq?: string; shape: 'rect' | 'circle' | 'diamond' }> = ({ seq, shape }) => {
+  if (!seq) return null;
+  return (
+    <span key={seq} className="abada-incident-node pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+      <span
+        className={`absolute inset-0 border-[3px] ${shape === 'rect' ? 'rounded-xl' : shape === 'circle' ? 'rounded-full' : ''}`}
+        style={{
+          borderColor: palette.desertRose,
           transform: shape === 'diamond' ? 'rotate(45deg) scale(0.7071)' : undefined,
         }}
       />

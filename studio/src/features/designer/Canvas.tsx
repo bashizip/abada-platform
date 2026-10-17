@@ -12,7 +12,9 @@ import {
   Node,
   BackgroundVariant,
   MiniMap,
+  NodeToolbar,
   Panel,
+  Position,
   ViewportPortal,
   useReactFlow,
 } from '@xyflow/react';
@@ -53,6 +55,9 @@ import { ConnectMenu } from './ConnectMenu';
 import { palette } from '@/lib/tokens';
 import type { PathView } from '@/lib/run/instancePath';
 import { usePathArrivals } from './pathArrivals';
+import type { RetryPhase } from '@/lib/run/retryPhase';
+import { useReducedMotion } from '@/lib/motion';
+import { useFocusNode } from './useFocusNode';
 import { PathLegend } from './PathLegend';
 
 interface CanvasProps {
@@ -101,6 +106,17 @@ interface CanvasProps {
   path?: PathView;
   /** Paced playback (M5 S3): each step the path adds draws its edge and pulses its node once. */
   animateArrivals?: boolean;
+  /** Instance views: open incident id per node; a new id pulses the node once (M5 S4). */
+  incidentPulses?: Record<string, string>;
+  /** Instance views: phase of a retry in progress per node, shown at the playback pace (M5 S4). */
+  retryPhases?: Record<string, RetryPhase>;
+  /**
+   * Brings a node into view. A new `key` pans (and zooms in if needed) to the
+   * node, unless the user moved the canvas in the last few seconds.
+   */
+  focus?: { nodeId: string; key: string } | null;
+  /** Content anchored to a node: it follows pan and zoom and stays readable (an incident card). */
+  nodeOverlay?: { nodeId: string; content: React.ReactNode } | null;
   readOnly?: boolean;
   /** Document undo/redo (editable canvases only). */
   onUndo?: () => void;
@@ -154,6 +170,10 @@ const CanvasInner: React.FC<CanvasProps> = ({
   nextPathEdges = [],
   path,
   animateArrivals = false,
+  incidentPulses,
+  retryPhases,
+  focus,
+  nodeOverlay,
   readOnly = false,
   onUndo,
   onRedo,
@@ -162,7 +182,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
 }) => {
   const markerPrefix = `abada-canvas-${useId().replace(/:/g, '')}`;
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter, getNode, getZoom } = useReactFlow();
+  const reducedMotion = useReducedMotion();
   const [guides, setGuides] = useState<Alignment | null>(null);
   const [minimapChoice, setMinimapChoice] = useState<boolean | null>(null);
   const showMinimap = minimapChoice ?? rawNodes.length > MINIMAP_AUTO_NODES;
@@ -213,12 +234,14 @@ const CanvasInner: React.FC<CanvasProps> = ({
           childResults: path.children[node.id],
           pathHint: nodePathHint(path, node.id),
           arrivalSeq: arrivals.nodes.has(node.id) ? arrivals.seq : undefined,
+          incidentSeq: incidentPulses?.[node.id],
+          retryPhase: retryPhases?.[node.id],
         } : {}),
         selected: selectedNodeId === node.id,
       });
     }),
   [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
-    loops, issueCounts, path, showFullDiagram, arrivals]);
+    loops, issueCounts, path, showFullDiagram, arrivals, incidentPulses, retryPhases]);
 
   const reactFlowEdges: Edge<AbadaEdgeData>[] = useMemo(() =>
     rawEdges.map(edge => {
@@ -340,6 +363,11 @@ const CanvasInner: React.FC<CanvasProps> = ({
 
   const focusCanvas = useCallback(() => wrapperRef.current?.focus({ preventScroll: true }), []);
 
+  /* Brings the focused node into view (an incident arriving), unless the user just moved the canvas. */
+  const onUserMove = useFocusNode(focus, {
+    ready: layout.ready, direction: layout.direction, reducedMotion, viewport: { getNode, getZoom, setCenter },
+  });
+
   const onNodesDelete = useCallback((deletedNodes: Node[]) => {
     if (readOnly) return;
     deletedNodes.forEach((node) => onDeleteNode(node.id));
@@ -399,6 +427,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
             onNodeDragStop={onNodeDragStop}
             onNodesDelete={onNodesDelete}
             onPaneClick={onPaneClick}
+            onMoveStart={(event) => { if (event) onUserMove(); }}
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
             connectionLineStyle={{ stroke: palette.saffron, strokeWidth: 2 }}
@@ -446,6 +475,17 @@ const CanvasInner: React.FC<CanvasProps> = ({
                 onToggleFullDiagram={() => setShowFullDiagram((value) => !value)}
                 raised={showMinimap && rawNodes.length > 0}
               />
+            )}
+            {nodeOverlay && (
+              <NodeToolbar
+                nodeId={nodeOverlay.nodeId}
+                isVisible
+                position={layout.direction === 'vertical' ? Position.Right : Position.Bottom}
+                offset={14}
+                className="nodrag nopan nowheel"
+              >
+                {nodeOverlay.content}
+              </NodeToolbar>
             )}
             <CanvasControls
               nodes={rawNodes}

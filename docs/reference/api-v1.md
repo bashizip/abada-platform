@@ -102,7 +102,8 @@ uses a digest of the comment, never the text.
 
 `GET /api/v1/projects/{projectId}/incidents` lists a project's incidents,
 newest first (`open=true` by default; `page`, `size` ≤ 100), for project
-viewers, operators and owners. `GET /api/v1/process-instances/{id}/incidents`
+viewers, operators and owners; `processInstanceId` narrows the list to one
+instance of the project (an instance of another project yields an empty list). `GET /api/v1/process-instances/{id}/incidents`
 lists one instance's incidents, open and resolved (operations read scope).
 Each `IncidentDTO` has `id`, `projectId`, `processInstanceId`, `tokenId`,
 `activityId`, `type`, `message`, `createdAt`, `resolvedAt` and `resolution`

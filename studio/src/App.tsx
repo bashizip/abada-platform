@@ -101,7 +101,7 @@ export default function App() {
     selectedLiveInstance, liveWorkflow, activeLiveNodeIds, liveSelectedNodeId, setLiveSelectedNodeId,
     executionStatuses, setExecutionStatuses, activePathEdges, activeTokenEdges, nextPathEdges, instancePath, playback,
     instancesRefreshKey, setInstancesRefreshKey,
-    instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance,
+    instancePanelOpen, setInstancePanelOpen, detailInstance, setDetailInstance, detailFocusNodeId,
     livePanelWidth, setLivePanelWidth, livePanelPinned, setLivePanelPinned,
     openLiveInstance, openInstanceDetail, clearLiveInstanceState
   } = useLiveInstanceOverlay(activeProject, workflows, setSidebarTab, setDesignerMode, setShowRunPanel, setCurrentView, setSimulationLogs);
@@ -570,6 +570,7 @@ export default function App() {
             projectId={activeProject?.id}
             canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
             initialInstance={detailInstance}
+            initialFocusNodeId={detailFocusNodeId}
             onBack={() => {
               setDetailInstance(null);
               setCurrentView('operations');
@@ -837,6 +838,10 @@ export default function App() {
               void openLiveInstance(instance);
             }}
             onOpenDetail={(instance) => openInstanceDetail(instance)}
+            onOpenIncident={(incident) => {
+              void EngineAPI.getInstance(incident.processInstanceId, activeProject?.id)
+                .then((instance) => openInstanceDetail(instance, incident.activityId)).catch(() => undefined);
+            }}
           />
         )}
           </>
