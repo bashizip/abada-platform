@@ -67,7 +67,10 @@ and it always tells the truth about the gap:
   instance is not in or was never in.
 - Incidents, terminal states and human tasks waiting on the current user are
   never held back behind the queue: they are announced immediately, and the
-  playback catches up to them.
+  playback catches up to them. One bounded exception (S4): the facts of a
+  retry (`INCIDENT_RETRIED` up to the fact that completes or fails it) are
+  each shown for one dwell before the catch-up, so a retry that ends the
+  instance is still seen; the header status changes at once.
 - `prefers-reduced-motion` disables movement (not the pacing itself; steps still
   appear in order, with fades instead of motion).
 - The pace setting is per user (local preference), default *calm*.
@@ -265,6 +268,17 @@ the node in incident state, retry with a fixed input, observe completion.
 **Invariants.** Actions call the existing commands; no new retry semantics.
 The word "Replay" stays reserved for E15 replay-before-approval; the incident
 action is labelled *Retry*.
+
+**As built.** Retry phases are read from recorded facts only: *retrying* =
+`INCIDENT_RETRIED`; *active* = `EXTERNAL_TASK_LOCKED`, a claimed task, a
+started child, or a token waiting at the step again; *completed* = the work
+completed or a flow left the step; *failed* = the last attempt failed again.
+The instance view reads its incidents with the additive
+`processInstanceId` filter on `GET /v1/projects/{projectId}/incidents` and
+refreshes them with each stream event. A retry takes no input: the
+instance's current variables are used (fix one with the variables `PATCH`
+first). The Playwright scenario was run as a scripted browser check on the
+dev stack; a committed end-to-end harness is a separate task.
 
 ---
 
