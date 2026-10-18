@@ -34,18 +34,21 @@ public class EvidenceRetentionSweep {
     private static final List<ExternalTaskEntity.Status> FINISHED = List.of(ExternalTaskEntity.Status.COMPLETED,
             ExternalTaskEntity.Status.CANCELLED, ExternalTaskEntity.Status.BPMN_ERROR);
 
-    public record Result(int purged, int workingCopiesCleared, int startInputsPurged) {}
+    public record Result(int purged, int workingCopiesCleared, int startInputsPurged, int decisionInputsPurged) {}
 
     private final AgentStepRepository steps;
     private final ActivityHistoryService history;
     private final TransactionTemplate transactions;
     private final com.abada.engine.persistence.repository.ProcessStartInputRepository startInputs;
     private final com.abada.engine.persistence.repository.ReplayRunRepository replayRuns;
+    private final com.abada.engine.persistence.repository.DecisionInputEvidenceRepository decisionInputs;
 
     public EvidenceRetentionSweep(AgentStepRepository steps, ActivityHistoryService history,
             TransactionTemplate transactions,
             com.abada.engine.persistence.repository.ProcessStartInputRepository startInputs,
-            com.abada.engine.persistence.repository.ReplayRunRepository replayRuns) {
+            com.abada.engine.persistence.repository.ReplayRunRepository replayRuns,
+            com.abada.engine.persistence.repository.DecisionInputEvidenceRepository decisionInputs) {
+        this.decisionInputs = decisionInputs;
         this.replayRuns = replayRuns;
         this.startInputs = startInputs;
         this.steps = steps;
@@ -57,9 +60,11 @@ public class EvidenceRetentionSweep {
             initialDelayString = "${abada.evidence.purge-initial-delay-ms:120000}")
     public void scheduledSweep() {
         Result result = sweep(Instant.now());
-        if (result.purged() > 0 || result.workingCopiesCleared() > 0 || result.startInputsPurged() > 0) {
-            log.info("evidence_sweep purged={} working_copies_cleared={} start_inputs_purged={}", result.purged(),
-                    result.workingCopiesCleared(), result.startInputsPurged());
+        if (result.purged() > 0 || result.workingCopiesCleared() > 0 || result.startInputsPurged() > 0
+                || result.decisionInputsPurged() > 0) {
+            log.info("evidence_sweep purged={} working_copies_cleared={} start_inputs_purged={} "
+                    + "decision_inputs_purged={}", result.purged(), result.workingCopiesCleared(),
+                    result.startInputsPurged(), result.decisionInputsPurged());
         }
     }
 
@@ -80,7 +85,9 @@ public class EvidenceRetentionSweep {
         int inputs = transactions.execute(status -> startInputs.purgeDue(now));
         // Finished replays are kept for the same retention; their cases go with them.
         transactions.executeWithoutResult(status -> replayRuns.deleteDue(now));
-        return new Result(purged, cleared, inputs);
+        // The resolved inputs of decision-table applications follow the same retention.
+        int decisions = transactions.execute(status -> decisionInputs.purgeDue(now));
+        return new Result(purged, cleared, inputs, decisions);
     }
 
     private int purgeBatch(Instant now) {

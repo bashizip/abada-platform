@@ -80,6 +80,7 @@ public class AbadaEngine {
     private final com.abada.engine.persistence.repository.AgentStepRepository agentSteps;
     private final com.abada.engine.core.delegation.CallTargetService callTargets;
     private final com.abada.engine.core.replay.StartInputService startInputs;
+    private final com.abada.engine.core.agent.DecisionInputEvidenceRecorder decisionInputs;
     private final com.abada.engine.persistence.repository.ForEachItemRepository forEachItems;
     private final int maxForEachItems;
     private final int maxForEachParallel;
@@ -128,6 +129,7 @@ public class AbadaEngine {
             @Value("${abada.call-process.resume-immediately:true}") boolean resumeChildImmediately,
             com.abada.engine.security.AesEncryption encryption,
             com.abada.engine.core.replay.StartInputService startInputs,
+            com.abada.engine.core.agent.DecisionInputEvidenceRecorder decisionInputs,
             com.abada.engine.persistence.repository.ForEachItemRepository forEachItems,
             @Value("${abada.for-each.max-items:100}") int maxForEachItems,
             @Value("${abada.for-each.max-parallel:20}") int maxForEachParallel) {
@@ -135,6 +137,7 @@ public class AbadaEngine {
         this.maxForEachItems = maxForEachItems;
         this.maxForEachParallel = maxForEachParallel;
         this.startInputs = startInputs;
+        this.decisionInputs = decisionInputs;
         this.encryption = encryption;
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
@@ -2050,11 +2053,14 @@ public class AbadaEngine {
 
     private void recordDecisionTableAudits(ProcessInstance instance) {
         for (DecisionTableAudit audit : instance.takeDecisionAudits()) {
+            // The input values go to evidence under the project's policy; history keeps names and the evidence id.
+            String evidenceId = decisionInputs.record(instance, audit, Instant.now());
             historyService.record("DECISION_TABLE_APPLIED", instance, audit.activityId(), Map.of(
                     "decisionKey", audit.decisionKey(),
                     "matchedRuleIndexes", audit.matchedRuleIndexes(),
                     "inputNames", audit.inputNames(),
-                    "outputNames", audit.outputNames()));
+                    "outputNames", audit.outputNames(),
+                    "evidenceId", evidenceId));
             recordDecisionFact(instance, audit);
         }
     }

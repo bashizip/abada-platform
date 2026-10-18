@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("39");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("40");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,16 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V40: the resolved inputs of decision-table applications, kept as evidence.
+            for (String column : new String[] {"id", "instance_id", "project_id", "activity_id", "decision_key",
+                    "payload_mode", "inputs_enc", "redacted", "created_at", "purge_after", "purged_at"}) {
+                try (var columns = metadata.getColumns(null, schema, "decision_input_evidence", column)) {
+                    assertThat(columns.next()).as("decision_input_evidence." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "decision_input_evidence", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_decision_inputs_instance", "idx_decision_inputs_purge");
             }
             // V39: live provider model lists, the public price catalog and refresh leases.
             for (String[] column : new String[][] {{"model_catalog_prices", "model_key"},

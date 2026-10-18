@@ -499,7 +499,7 @@ public class ProcessInstance {
                 variables.putAll(result.outputs());
                 decisionAudits.add(new DecisionTableAudit(java.util.UUID.randomUUID().toString(), pointer, table.decisionKey(),
                         result.matchedRuleIndexes(), List.copyOf(result.inputs().keySet()),
-                        List.copyOf(result.outputs().keySet())));
+                        List.copyOf(result.outputs().keySet()), result.inputs()));
                 via = Via.of(firstFlow(pointer));
                 current = via == null ? null : via.flow().getTargetRef();
             } else if (definition.isExclusiveGateway(pointer)) {
