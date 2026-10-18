@@ -87,8 +87,9 @@ metadata:                 # required — authoring metadata
   variables:              # optional — declared instance variables (§5.3)
     - name: <identifier>  #   required — [A-Za-z_][A-Za-z0-9_]*
       type: <type>        #   optional — string|number|integer|boolean|object|list|any (default any)
-      required: <bool>    #   optional — default false
+      required: <bool>    #   optional — default false (documentation; not checked on the start payload yet)
       description: <string>
+      sensitive: <bool>   #   optional — default false; masked in redacted agent evidence
 flow:                     # required — the executable graph
   entry: <nodeId>         # required — id of the start node
   nodes: [ <APLNode>, ... ]  # required — at least one node

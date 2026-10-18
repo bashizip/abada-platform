@@ -174,8 +174,20 @@ flow:
   (for an agent: model and prompt, output contract, routing, retries, tools,
   review, evidence). Sections fold and remember how you left them. Each field
   shows its APL key in small type, and an engine error appears under the
-  field or rule it is about, with the count on the section heading. With
-  nothing selected, the panel lists the steps of the process.
+  field or rule it is about, with the count on the section heading.
+- **The process itself** is edited in the Properties panel when no step is
+  selected (click empty canvas). Set the name, description, category and
+  owner; the engine does not act on the last three, they are for people
+  reading the process. The key can change only until the process is first
+  saved: its deployed versions and instances are filed under it, so it is
+  fixed after that. **Variables** declares the start payload and what steps
+  write, each with a type, **required** and **sensitive**. Sensitive values
+  are masked in redacted agent evidence. Required documents the start payload
+  but the engine does not check it yet. Declaring any variable turns on the
+  engine's warning for expressions that read an unknown name. Engine issues
+  about the process, such as a variable declared twice, appear under the
+  field they name; the rest are listed at the top. Metadata keys the panel
+  does not show are kept as written.
 - **Decision tables** are edited in the panel: the decision key, what happens
   when several rules match (first match, unique match, collect all), the
   inputs, the outputs, and the rules in order. Type output values as text,
