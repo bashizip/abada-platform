@@ -1,8 +1,8 @@
 import React, { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { click, render } from '@/test/render';
+import { render } from '@/test/render';
 import { MotionProvider } from '@/components/ui';
-import { SignInPreview } from './SignInPreview';
+import { HOLD_MS, SignInPreview } from './SignInPreview';
 
 const entries = (container: HTMLElement) =>
   [...container.querySelectorAll('[aria-label="Audit trail"] li')].map((item) => item.textContent ?? '');
@@ -10,7 +10,7 @@ const entries = (container: HTMLElement) =>
 describe('SignInPreview', () => {
   afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
 
-  it('plays the example run once, one entry per step, then offers to play it again', () => {
+  it('plays the example run one entry per step, holds the finished run, then starts again', () => {
     vi.useFakeTimers();
     const container = render(<MotionProvider><SignInPreview /></MotionProvider>);
     expect(entries(container)).toEqual(['Starting…']);
@@ -24,13 +24,11 @@ describe('SignInPreview', () => {
     }
     expect(entries(container)[3]).toContain('Run completed');
     expect(container.textContent).toContain('Completed');
-    act(() => { vi.advanceTimersByTime(10_000); });
+    act(() => { vi.advanceTimersByTime(HOLD_MS - 100); });
     expect(entries(container)).toHaveLength(4);
-
-    const again = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Play again'))!;
-    expect(again.disabled).toBe(false);
-    click(again);
+    act(() => { vi.advanceTimersByTime(100); });
     expect(entries(container)).toEqual(['Starting…']);
+    expect(container.textContent).not.toContain('Play again');
   });
 
   it('labels itself as an example', () => {

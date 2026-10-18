@@ -43,18 +43,6 @@ describe('JsonViewer', () => {
   });
   afterEach(() => { document.body.innerHTML = ''; });
 
-  it('renders 500 variables six levels deep, all expanded, in under 100 ms with a bounded DOM', () => {
-    const data = manyVariables();
-    const container = render(<JsonViewer data={data} label="variables" defaultDepth={0} />);
-    const started = performance.now();
-    click(button(container, 'Expand all'));
-    const elapsed = performance.now() - started;
-    expect(container.querySelectorAll('[role="treeitem"]').length).toBeLessThanOrEqual(80);
-    expect(container.textContent).toContain('500 variables');
-    expect(container.textContent).toContain('6 levels');
-    expect(elapsed).toBeLessThan(100);
-  });
-
   it('opens the parents of a deep match and highlights it', () => {
     const container = render(<JsonViewer data={manyVariables()} label="variables" defaultDepth={0} />);
     type(container.querySelector('input[type="search"]')!, 'leaf 417');
