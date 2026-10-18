@@ -7,6 +7,8 @@ interface LineagePanelProps {
   instanceId: string;
   /** Opens a related instance; links are plain text without it. */
   onOpenInstance?: (instanceId: string) => void;
+  /** Inside the instance drawer: no strip chrome, and says so when there is no lineage. */
+  embedded?: boolean;
 }
 
 const humanize = (value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -24,7 +26,7 @@ const STATUS_TONE: Record<string, string> = {
  * down to this instance, and the children its call steps started. Hidden for
  * an instance that neither was called nor called anything.
  */
-export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceId, onOpenInstance }) => {
+export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceId, onOpenInstance, embedded = false }) => {
   const [lineage, setLineage] = useState<LineageDTO | null>(null);
 
   useEffect(() => {
@@ -36,7 +38,11 @@ export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceI
     return () => { cancelled = true; };
   }, [projectId, instanceId]);
 
-  if (!lineage || (lineage.ancestors.length === 0 && lineage.children.length === 0)) return null;
+  if (!lineage || (lineage.ancestors.length === 0 && lineage.children.length === 0)) {
+    return embedded ? (
+      <p className="py-2 text-xs text-sand">This instance was not called by another process and has called none.</p>
+    ) : null;
+  }
 
   const link = (target: LineageLinkDTO) => onOpenInstance ? (
     <button type="button" onClick={() => onOpenInstance(target.instanceId)}
@@ -47,7 +53,7 @@ export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceI
   ) : <span className="font-semibold text-linen" title={target.instanceId}>{humanize(target.processDefinitionId)}</span>;
 
   return (
-    <div className="shrink-0 border-b border-hairline bg-charcoal px-4 py-2 text-[11px] text-sand"
+    <div className={embedded ? 'py-1 text-xs text-sand' : 'shrink-0 border-b border-hairline bg-charcoal px-4 py-2 text-[11px] text-sand'}
       aria-label="Process lineage">
       {lineage.ancestors.length > 0 && (
         <div className="flex flex-wrap items-center gap-1">

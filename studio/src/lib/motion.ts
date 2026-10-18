@@ -82,7 +82,14 @@ export const toast: Variants = {
 };
 
 /** Side panels and drawers slide in from their own edge. */
-export function slideFrom(side: 'left' | 'right'): Variants {
+export function slideFrom(side: 'left' | 'right' | 'bottom'): Variants {
+  if (side === 'bottom') {
+    return {
+      initial: { opacity: 0, y: 24 },
+      enter: { opacity: 1, y: 0, transition: transition('base') },
+      exit: { opacity: 0, y: 24, transition: transition('fast') },
+    };
+  }
   const offset = side === 'left' ? -16 : 16;
   return {
     initial: { opacity: 0, x: offset },

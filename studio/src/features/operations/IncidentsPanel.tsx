@@ -31,6 +31,8 @@ interface IncidentsPanelProps {
   /** The open incidents shown, whenever they change (e.g. to mark them on the diagram). */
   onIncidentsChange?: (incidents: IncidentDTO[]) => void;
   onRetried?: (incident: IncidentDTO) => void;
+  /** Inside a drawer: no collapsible header, the rows fill the space. */
+  embedded?: boolean;
 }
 
 /**
@@ -49,6 +51,7 @@ export const IncidentsPanel: React.FC<IncidentsPanelProps> = ({
   onCountChange,
   onIncidentsChange,
   onRetried,
+  embedded = false,
 }) => {
   const [fetched, setIncidents] = useState<IncidentDTO[]>([]);
   const controlled = given !== undefined;
@@ -110,6 +113,35 @@ export const IncidentsPanel: React.FC<IncidentsPanelProps> = ({
 
   if (!projectId || (hideWhenEmpty && incidents.length === 0 && !error)) return null;
 
+  const body = (
+    <div className={embedded ? 'space-y-2' : 'max-h-72 space-y-2 overflow-y-auto px-6 pb-3'}>
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-desert-rose/40 bg-desert-rose/10 px-3 py-2 text-[11px] text-desert-rose">
+          <AlertTriangle className="h-3.5 w-3.5" /> Incidents unavailable: {error}
+        </div>
+      )}
+      {!loading && incidents.length === 0 && !error && (
+        <div className="rounded-lg border border-hairline bg-charcoal px-3 py-2 text-[11px] text-sand">
+          No open incidents. A token that stops on failed work, an exhausted loop or a missing correlation key shows up here.
+        </div>
+      )}
+      {incidents.map((incident) => (
+        <IncidentRow
+          key={incident.id}
+          projectId={projectId}
+          incident={incident}
+          showInstance={!instanceId}
+          canRetry={canRetry}
+          model={modelOf(incident)}
+          onRetried={() => retried(incident)}
+          onOpen={onOpenIncident ? () => onOpenIncident(incident) : undefined}
+        />
+      ))}
+    </div>
+  );
+
+  if (embedded) return <div aria-label="Open incidents">{body}</div>;
+
   return (
     <div className="shrink-0 border-b border-hairline bg-mocha" aria-label="Open incidents">
       <button
@@ -130,32 +162,7 @@ export const IncidentsPanel: React.FC<IncidentsPanelProps> = ({
         {collapsed ? <ChevronRight className="h-3.5 w-3.5 text-sand" /> : <ChevronDown className="h-3.5 w-3.5 text-sand" />}
       </button>
 
-      {!collapsed && (
-        <div className="max-h-72 space-y-2 overflow-y-auto px-6 pb-3">
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-desert-rose/40 bg-desert-rose/10 px-3 py-2 text-[11px] text-desert-rose">
-              <AlertTriangle className="h-3.5 w-3.5" /> Incidents unavailable: {error}
-            </div>
-          )}
-          {!loading && incidents.length === 0 && !error && (
-            <div className="rounded-lg border border-hairline bg-charcoal px-3 py-2 text-[11px] text-sand">
-              No open incidents. A token that stops on failed work, an exhausted loop or a missing correlation key shows up here.
-            </div>
-          )}
-          {incidents.map((incident) => (
-            <IncidentRow
-              key={incident.id}
-              projectId={projectId}
-              incident={incident}
-              showInstance={!instanceId}
-              canRetry={canRetry}
-              model={modelOf(incident)}
-              onRetried={() => retried(incident)}
-              onOpen={onOpenIncident ? () => onOpenIncident(incident) : undefined}
-            />
-          ))}
-        </div>
-      )}
+      {!collapsed && body}
     </div>
   );
 };
