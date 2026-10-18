@@ -307,10 +307,12 @@ attempt, confidence and route — never prompts, secrets or comment text.
 Each journaled step keeps digests, tokens, cost and timings. Payloads (prompts,
 replies, tool arguments and results) are kept as the project's **evidence
 policy** allows — `none`, `redacted` (default) or `full`, for a retention
-period — encrypted at rest.
+period — encrypted at rest. The same policy keeps the input values each
+decision table read, next to the rule it matched; history keeps only their
+names.
 
 - **Guarantee.** Only members with the `abada-evidence-reader` role can read
-  payloads, and every read is recorded.
+  payloads and decision input values, and every read is recorded.
 - **Limit.** Digests prove what was sent; after retention, payloads are gone.
 
 [Operate running processes](/user/operations/#one-instance)
