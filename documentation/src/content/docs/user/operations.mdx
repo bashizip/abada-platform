@@ -87,7 +87,21 @@ touched. The same layers appear during a **Dry Run** in the designer.
   against the threshold, the output contract result, token counts, prompt
   hash and worker. When a fallback model answered, **Fallback for** names the
   model it replaced.
-- **Variables** — the current process variables.
+- **Variables** — the instance's current variables as a tree: objects and
+  lists open and close, with their size (`{4}`, `[12]`). **Expand all**,
+  **Collapse all** and **Expand to level** set how much is open. Search finds
+  keys and values, marks each match, opens the branches that hold it and
+  steps through the matches with ↑ and ↓ (or Enter). Long text is cut, with
+  **show more**. Each row offers **Copy value** and **Copy path**; the path is
+  the one an expression uses (`applicant.address.city`, `items[2].sku`).
+  **JSON** shows the same values as formatted JSON with line numbers and
+  folding; **Copy** copies all of it. When a value changes while you watch,
+  its row flashes once and keeps a dot, and the drawer lists the changed paths
+  ("Changed in the last update"). The Studio compares two reads of the
+  variables, so a change appears once the diagram has replayed up to it; while
+  the replay is behind, the drawer says the values are the current ones. With
+  the keyboard: ↑ ↓ to move, → and ← to open and close, `c` and `p` to copy the
+  value or the path, `/` to search.
 - **Lineage** — the processes that called this instance and the ones it called.
 - **Versions** — the versions of the process, with this instance's marked. An
   instance stays on the version it started on.
@@ -106,6 +120,13 @@ touched. The same layers appear during a **Dry Run** in the designer.
   stays put, with a **new entries** button to come back.
 
 ![A completed instance: the taken path, including the way back to Draft, and the audit trail](../../../assets/screens/tutorial/22-instance-history.webp)
+
+The same viewer shows every other piece of JSON in the Studio: an agent
+step's request and result, a tool call awaiting approval, a task's process
+variables, the facts behind an audit entry, and a JSON resource in the project
+explorer. A value the evidence policy masked shows as a **redacted** badge; the
+value itself never reaches the Studio. The variables endpoint does not mask
+variables declared `sensitive`: anyone who may read the instance sees them.
 
 The engine stores attempt metadata in history — never prompts, model responses
 or provider keys. Journaled agent calls keep their prompts and results as the

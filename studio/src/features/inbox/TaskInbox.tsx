@@ -13,6 +13,8 @@ import {
 import { EngineAPI, EngineUserTaskDTO } from '@/api/engine';
 import { decisionError, decisionPayload, humanize, TaskOutcome } from './decision';
 import { ToolApprovalCard } from './ToolApprovalCard';
+import { JsonViewer } from '@/components/json/JsonViewer';
+import { jsonHeight } from '@/components/json/jsonLayout';
 import { ProjectAPI } from '@/api/projects';
 import { useToast } from '@/components/ToastContext';
 import {
@@ -447,9 +449,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
               {selectedTask.variables && Object.keys(selectedTask.variables).length > 0 && (
                 <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-5 shadow-warm-md">
                   <h3 className="text-sm font-semibold text-[#A89F91] mb-3">Process variables</h3>
-                  <pre className="text-[11px] font-mono text-[#EAE3D9] bg-[#1A1614] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
-                    {JSON.stringify(selectedTask.variables, null, 2)}
-                  </pre>
+                  <JsonViewer data={selectedTask.variables} label="variables" compact defaultDepth={1}
+                    height={jsonHeight(selectedTask.variables, 1, 14)} />
                 </div>
               )}
             </div>

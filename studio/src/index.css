@@ -286,6 +286,18 @@
   to { opacity: 1; }
 }
 
+/* A variable that changed in the last update (M5 S11): one flash, then a static marker stays. */
+.abada-json-flash {
+  animation: abadaJsonFlash var(--duration-calm) var(--ease-standard) 1;
+}
+@keyframes abadaJsonFlash {
+  from { background-color: color-mix(in srgb, var(--color-saffron) 28%, transparent); }
+  to { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .abada-json-flash { animation: none; box-shadow: inset 2px 0 0 var(--color-saffron); }
+}
+
 /*
  * Connection handles are an editing affordance, not part of the diagram: they
  * stay invisible (edges still anchor on them) and only appear on node hover

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { AlertTriangle, Bot, GitBranch, Lock, Wrench } from 'lucide-react';
 import { EvidenceAPI, formatUsd, type AgentStepEvidence, type AgentStepPayloads } from '@/api/evidence';
 import { stepTotals } from './agentSteps';
+import { JsonViewer } from '@/components/json/JsonViewer';
+import { jsonHeight } from '@/components/json/jsonLayout';
 
 interface AgentStepInspectorProps {
   steps: AgentStepEvidence[];
@@ -151,9 +153,10 @@ const PayloadView: React.FC<{ payloads: AgentStepPayloads }> = ({ payloads }) =>
       {(['request', 'result'] as const).map((part) => (
         <div key={part}>
           <p className="uppercase tracking-wider text-sand">{part}</p>
-          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-linen">
-            {payloads[part] === undefined || payloads[part] === null ? '—' : JSON.stringify(payloads[part], null, 2)}
-          </pre>
+          {payloads[part] === undefined || payloads[part] === null
+            ? <p className="text-sand">—</p>
+            : <JsonViewer data={payloads[part]} label={part === 'request' ? 'request fields' : 'result fields'} compact
+                defaultDepth={2} height={jsonHeight(payloads[part], 2, 8)} />}
         </div>
       ))}
     </div>

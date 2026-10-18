@@ -586,6 +586,38 @@ render under 100 ms (virtualised), search expands matches, copy path is exact,
 redacted values are never in the DOM; a test fails if a `<pre>` renders
 `JSON.stringify` output outside `JsonViewer`.
 
+**As built.** Reviewed from a clickable mock. `STUDIO/components/json/`:
+a pure model (`jsonModel`: nodes with exact paths, masks and S9 file
+references as their own kinds), search, windowed rows and a dependency-free
+tokenizer whose lines join back to `JSON.stringify(data, null, 2)`, under
+`JsonViewer` (Tree / JSON view, search with match navigation, expand all,
+collapse all, expand to level, copy value / path / all, *show more* past
+120 characters, WAI-ARIA tree keys on one focusable element). The rows use
+the S6 windowing hook, moved to `STUDIO/hooks/useVirtualRows`. The
+`VariablesTab` became `VariablesPanel` in the instance drawer, the
+Operations Variables drawer and the designer's live inspector. Changed
+variables come from facts only (`useVariableChanges`): two reads of the
+variables endpoint are compared, and the difference is held while the S3
+playback lags and shown when it catches up. A `VARIABLES_UPDATED` or
+decision fact names its variables as it becomes visible. Task and work
+completions record no variable names, so the label is "Changed in the last
+update", not "in the last step". The engine's mask (`****`, whole or inside a
+string) renders as a `redacted` badge and is never written to the DOM. The
+variables endpoint does not mask variables declared `sensitive`; that is an
+engine change for a separate task. File references render as chips without
+a download until S9. Migrated: audit fact details (live trail and static
+timeline), agent step payloads, tool approval arguments, task inbox
+variables, JSON resource preview, decision "Applied outputs" (no more
+`[object Object]`). The Deploy and Dry Run payloads and the agent output
+schema stay plain textareas (editing is out of scope). A guard test fails on
+a `<pre>` holding `JSON.stringify` and on a pretty-print outside an
+allowlist of editors and saved files. The bundle grows by 8.3 kB gzip (js +
+css). A lazy chunk would not lower that total, so the viewer loads with the
+app. 500 variables six levels deep, all expanded, render in under 100 ms in
+the component test with at most 80 rows in the DOM. Checked on the dev stack
+with a live S5 run: the drawer marked the variables the Review approval
+wrote.
+
 ---
 
 ## S12 — NL authoring workspace

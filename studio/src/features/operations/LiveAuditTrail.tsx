@@ -5,6 +5,8 @@ import type { ActivityHistoryDTO } from '@/api/engine';
 import type { AgentStepEvidence } from '@/api/evidence';
 import type { WorkflowFile } from '@/types';
 import { AgentStepInspector } from '@/features/operations/AgentStepInspector';
+import { JsonViewer } from '@/components/json/JsonViewer';
+import { jsonHeight } from '@/components/json/jsonLayout';
 import { EVENT_ICON, TONE_TEXT } from '@/features/operations/instanceTelemetry';
 import { buildAuditTrail, type NodeTrailEntry, type TrailActorKind, type TrailEntry, type TrailStatus } from '@/lib/run/auditTrail';
 import { eventMeta } from '@/lib/run/instanceDetail';
@@ -268,9 +270,9 @@ const TrailRow: React.FC<{
                   <span className="font-mono text-sand">{clock(fact.occurredAt)} · {fact.actor}</span>
                 </div>
                 {Object.keys(fact.details ?? {}).length > 0 && (
-                  <pre className="mt-1 overflow-x-auto font-mono text-[10px] leading-relaxed text-linen-muted">
-                    {JSON.stringify(fact.details, null, 2)}
-                  </pre>
+                  <div className="mt-1">
+                    <JsonViewer data={fact.details} label="details" compact defaultDepth={2} height={jsonHeight(fact.details)} />
+                  </div>
                 )}
               </li>
             ))}
