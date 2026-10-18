@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowUp, Copy, GripVertical, Maximize2, Plus, Trash2 } from 'lucide-react';
 import type { AplValidationIssue } from '@/api/apl';
 import type { DMNConfig, DMNRule, DMNValue } from '@/types';
@@ -417,20 +418,24 @@ export const DecisionTableEditor: React.FC<NodeEditorProps> = ({ node, issues, u
         <RuleList config={config} columns={columns} issues={issues} layout="compact" onChange={onRulesChange} />
       </Section>
 
-      <Drawer open={expanded} onClose={() => setExpanded(false)} width={Math.min(1100, 260 + columns.length * 150 + 360)}
-        title={`${node.title || node.id} · rules`}>
-        <div className="space-y-4">
-          <p className="text-[11px] text-sand">
-            <span className="font-semibold text-linen">{policy.label}.</span> {policy.help} Conditions read the
-            inputs {config.inputs.map((input) => input.name).filter(Boolean).join(', ') || '(none declared)'}.
-          </p>
-          <RuleList config={config} columns={columns} issues={issues} layout="table" onChange={onRulesChange} />
-          <div className="border-t border-hairline pt-3">
-            <span className="mb-2 block text-[10px] uppercase tracking-wider text-sand">Outputs</span>
-            <div className="max-w-sm">{outputsEditor}</div>
+      {/* Portalled: the side panel is its own stacking context and would clip a fixed drawer. */}
+      {createPortal(
+        <Drawer open={expanded} onClose={() => setExpanded(false)} width={Math.min(1100, 260 + columns.length * 150 + 360)}
+          title={`${node.title || node.id} · rules`}>
+          <div className="space-y-4">
+            <p className="text-[11px] text-sand">
+              <span className="font-semibold text-linen">{policy.label}.</span> {policy.help} Conditions read the
+              inputs {config.inputs.map((input) => input.name).filter(Boolean).join(', ') || '(none declared)'}.
+            </p>
+            <RuleList config={config} columns={columns} issues={issues} layout="table" onChange={onRulesChange} />
+            <div className="border-t border-hairline pt-3">
+              <span className="mb-2 block text-[10px] uppercase tracking-wider text-sand">Outputs</span>
+              <div className="max-w-sm">{outputsEditor}</div>
+            </div>
           </div>
-        </div>
-      </Drawer>
+        </Drawer>,
+        document.body,
+      )}
     </>
   );
 };
