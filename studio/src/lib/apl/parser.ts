@@ -13,6 +13,7 @@ import { WorkflowFile, WorkflowNode, WorkflowEdge, DMNConfig } from '@/types';
 import { getDefaultAgentModel } from '@/lib/agentModels';
 import { seedMissingPositions } from '@/lib/layout/seedLayout';
 import { isOutcomeRouteEdge, routeEdges } from './routes';
+import { edgeCondition, isElseBranch } from './gatewayRules';
 
 /**
  * Parses an APL YAML string into an APLDocument object.
@@ -372,6 +373,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           source: aplNode.id,
           target,
           label: r.if ? `if ${r.if}` : 'else',
+          // The rule's expression is carried verbatim so the round trip keeps
+          // bare CEL (`risk == "low"`) as well as `${…}` conditions.
+          ...(r.if ? { condition: r.if } : {}),
         });
       });
     } else if (aplNode.type === 'event-gateway') {
@@ -444,16 +448,6 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
  */
 export function workflowToAPL(wf: WorkflowFile): APLDocument {
   const aplNodes: APLNode[] = [];
-
-  // Real gateway conditions must be expressions the engine can evaluate
-  // (e.g. `${fraudScore > 75}`). Free-text edge labels are descriptions and
-  // must never be emitted as condition expressions.
-  const toCondition = (label?: string, condition?: string): string | undefined => {
-    const raw = label?.replace(/^if\s+/i, '').trim();
-    if (condition) return condition;
-    if (raw && /^\$\{.*\}$/.test(raw)) return raw;
-    return undefined;
-  };
 
   // Helper to find outgoing edge target for non-gateway nodes
   const getNextNode = (nodeId: string, sourceType: WorkflowNode['type']): string | undefined => {
@@ -601,8 +595,8 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
             ...baseNode,
             type: 'inclusive',
             rules: outEdges.map((e, idx) => {
-              const cond = toCondition(e.label, e.condition);
-              const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
+              const cond = edgeCondition(e);
+              const isElse = isElseBranch(e, idx, outEdges);
               return {
                 if: cond,
                 else: isElse ? e.target : undefined,
@@ -622,8 +616,8 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
           ...baseNode,
           type: 'condition',
           rules: outEdges.map((e, idx) => {
-            const cond = toCondition(e.label, e.condition);
-            const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
+            const cond = edgeCondition(e);
+            const isElse = isElseBranch(e, idx, outEdges);
             return {
               if: cond,
               else: isElse ? e.target : undefined,

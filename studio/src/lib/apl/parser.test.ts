@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aplToWorkflow, workflowToAPL } from './parser';
+import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from './parser';
 import { APLDocument } from './types';
 
 describe('aplToWorkflow', () => {
@@ -645,5 +645,50 @@ describe('APL round trip: call-process', () => {
       on_timeout: { after: 'PT1H', then: 'manual' },
       next: 'done',
     });
+  });
+});
+
+describe('APL YAML round trip: gateway rule conditions', () => {
+  // Deploy & Start saves the document through this round trip, so a lost `if`
+  // turns a valid document into one the engine rejects.
+  const roundTrip = (yaml: string) =>
+    parseAPLYaml(stringifyAPLYaml(workflowToAPL(aplToWorkflow(parseAPLYaml(yaml)))));
+  const rulesOf = (doc: APLDocument, id: string) =>
+    (doc.flow.nodes.find((n) => n.id === id) as { rules?: { if?: string; then?: string; else?: unknown }[] }).rules
+      ?.map((r) => ({ if: r.if, then: r.then, else: r.else }));
+
+  const yaml = (type: 'condition' | 'inclusive') => `
+version: abada.io/v1
+metadata:
+  key: path_demo
+  name: Path demo
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: gate
+    - id: gate
+      type: ${type}
+      rules:
+        - if: risk == "low"
+          then: archive
+        - if: \${score > 75}
+          then: review
+        - else: escalate
+    - id: archive
+      type: end
+    - id: review
+      type: end
+    - id: escalate
+      type: end
+`;
+
+  it.each(['condition', 'inclusive'] as const)('keeps bare CEL, ${…} and the else rule on a %s node', (type) => {
+    expect(rulesOf(roundTrip(yaml(type)), 'gate')).toEqual([
+      { if: 'risk == "low"', then: 'archive', else: undefined },
+      { if: '${score > 75}', then: 'review', else: undefined },
+      { if: undefined, then: 'escalate', else: 'escalate' },
+    ]);
   });
 });
