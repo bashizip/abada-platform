@@ -5,6 +5,7 @@ import css from '../index.css?raw';
 import { resetPlaybackPaceForTests } from '@/lib/run/playbackPace';
 import type { PlaybackPace } from '@/lib/run/playbackPace';
 import { stepEnds, usePacedPlayback, type PacedPlayback } from './usePacedPlayback';
+import { trailPrefix } from './useInstancePlayback';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -18,7 +19,7 @@ const isUrgent = (fact: Fact) => fact.kind === 'incident';
 const flow = (n: number, from = `n${n}`): Fact => ({ id: `f${n}`, kind: 'flow', from });
 
 let latest: PacedPlayback<Fact>;
-const Probe: React.FC<{ facts: Fact[]; pace?: PlaybackPace; urgentKey?: string; resetKey?: string }> = (props) => {
+const Probe: React.FC<{ facts: Fact[]; pace?: PlaybackPace; urgentKey?: string; resetKey?: string; fromStart?: boolean }> = (props) => {
   latest = usePacedPlayback(props.facts, { id, isStep, sameStep, isUrgent, ...props });
   return null;
 };
@@ -221,5 +222,41 @@ describe('usePacedPlayback holding a retry (M5 S4)', () => {
     expect(heldIds()).toEqual(['f1', 'retried']);
     act(() => held.jumpToNow());
     expect(heldIds()).toEqual(['f1', 'retried', 'locked', 'failed', 'incident']);
+  });
+});
+
+describe('an instance the user just started (M5 S5)', () => {
+  const note = (n: number): Fact => ({ id: `n${n}`, kind: 'note' });
+
+  it('plays the facts present at opening from the first one, one step per dwell', () => {
+    show({ facts: [note(0), flow(1), flow(2), flow(3)], pace: 'calm', fromStart: true });
+    advance(0);
+    expect(visibleIds()).toEqual(['n0', 'f1']);
+    expect(latest.lag).toBe(2);
+    advance(700);
+    expect(visibleIds()).toEqual(['n0', 'f1', 'f2']);
+    advance(700);
+    expect(visibleIds()).toEqual(['n0', 'f1', 'f2', 'f3']);
+  });
+
+  it('still catches up to an urgent fact at once', () => {
+    show({ facts: [flow(1), flow(2), { id: 'boom', kind: 'incident' }], pace: 'calm', fromStart: true });
+    expect(visibleIds()).toEqual(['f1', 'f2', 'boom']);
+  });
+
+  it('shows everything at once at the instant pace', () => {
+    show({ facts: [flow(1), flow(2)], pace: 'instant', fromStart: true });
+    expect(visibleIds()).toEqual(['f1', 'f2']);
+  });
+});
+
+describe('the audit trail prefix', () => {
+  const note = (n: number): Fact => ({ id: `n${n}`, kind: 'note' });
+  const facts = [note(0), flow(1), note(1), note(2), flow(2), note(3)];
+
+  it('adds the facts recorded after the last visible step, up to the next step', () => {
+    expect(trailPrefix(facts, 0, isStep).map(id)).toEqual(['n0']);
+    expect(trailPrefix(facts, 2, isStep).map(id)).toEqual(['n0', 'f1', 'n1', 'n2']);
+    expect(trailPrefix(facts, 5, isStep).map(id)).toEqual(['n0', 'f1', 'n1', 'n2', 'f2', 'n3']);
   });
 });

@@ -51,8 +51,8 @@ import {
   humanize,
   statusOf,
 } from '@/lib/run/instanceFormat';
+import { LiveAuditTrail } from '@/features/operations/LiveAuditTrail';
 import {
-  AuditTimeline,
   InfoRow,
   NodeTelemetry,
   VariablesTab,
@@ -77,6 +77,8 @@ interface InstanceDetailViewProps {
   onOpenInstance?: (instanceId: string) => void;
   /** Opened from an incident: focus this step and open its incident card (M5 S4). */
   initialFocusNodeId?: string;
+  /** The user just started this instance from the Studio: play it from its first fact (M5 S5). */
+  playFromStart?: boolean;
 }
 
 type InspectorTab = 'telemetry' | 'variables' | 'audit';
@@ -90,6 +92,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   onOpenCanvas,
   onOpenInstance,
   initialFocusNodeId,
+  playFromStart = false,
 }) => {
   const [instance, setInstance] = useState<ProcessInstanceDTO>(initialInstance);
   const [workflow, setWorkflow] = useState<WorkflowFile | null>(null);
@@ -109,7 +112,12 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
   const [jobs, setJobs] = useState<ProjectJob[]>([]);
   const [agentSteps, setAgentSteps] = useState<AgentStepEvidence[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [tab, setTab] = useState<InspectorTab>('telemetry');
+  // The audit trail tells the run as it happens, so it is what the inspector opens on (M5 S5).
+  const [tab, setTab] = useState<InspectorTab>('audit');
+  /** The node of the trail entry under the pointer: ringed on the canvas. */
+  const [trailHoverNodeId, setTrailHoverNodeId] = useState<string | null>(null);
+  /** The trail shows only this node's entries; set by clicking a node on the canvas. */
+  const [trailFilterNodeId, setTrailFilterNodeId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -227,7 +235,8 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
 
   /* ---- Derived overlay + path ---- */
   // The canvas plays the instance back one flow at a time (M5 S3); the panels keep the real facts.
-  const playback = useInstancePlayback(workflow, instance, activities, history, incidentNodeIds);
+  const playback = useInstancePlayback(workflow, instance, activities, history, incidentNodeIds,
+    { fromStart: playFromStart });
   const frame = playback.frame;
   const onResolved = useCallback((nodeId: string, historyId: string | undefined) => {
     const title = workflow?.nodes.find((node) => node.id === nodeId)?.title ?? humanize(nodeId);
@@ -428,7 +437,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {!isTerminal && (
+          {(!isTerminal || playback.lag > 0) && (
             <PlaybackControl pace={playback.pace} onPaceChange={playback.setPace} lag={playback.lag}
               onJumpToNow={playback.jumpToNow} />
           )}
@@ -540,6 +549,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               selectedNodeId={selectedNodeId}
               onSelectNode={(id) => {
                 setSelectedNodeId(id);
+                setTrailFilterNodeId(id);
                 if (id && nodeIncidents.incidentAt[id]) nodeIncidents.openCard(id);
               }}
               onNodeMove={() => undefined}
@@ -559,6 +569,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               animateArrivals={playback.pace !== 'instant'}
               incidentPulses={nodeIncidents.incidentPulses}
               retryPhases={nodeIncidents.retryPhases}
+              highlightNodeId={tab === 'audit' ? trailHoverNodeId : null}
               focus={nodeIncidents.focus}
               nodeOverlay={incidentOverlay}
               readOnly
@@ -593,9 +604,9 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
           {/* Tabs */}
           <div className="flex shrink-0 items-center gap-1 border-b border-hairline bg-charcoal/60 p-1.5">
             {([
+              { id: 'audit', label: 'Audit Trail', icon: Radio },
               { id: 'telemetry', label: 'Telemetry', icon: Bot },
               { id: 'variables', label: 'Variables', icon: Braces },
-              { id: 'audit', label: 'Audit Trail', icon: Radio },
             ] as const).map((item) => (
               <button
                 key={item.id}
@@ -638,7 +649,24 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+          {/* ---------- Tab: Audit trail (live, in step with the canvas) ---------- */}
+          {tab === 'audit' && (
+            <LiveAuditTrail
+              className="flex-1"
+              history={playback.trail}
+              workflow={workflow}
+              agentSteps={agentSteps}
+              projectId={projectId}
+              instanceId={instanceId}
+              onOpenInstance={onOpenInstance}
+              highlightId={auditHighlight}
+              filterNodeId={trailFilterNodeId}
+              onClearFilter={() => setTrailFilterNodeId(null)}
+              onHoverNode={setTrailHoverNodeId}
+            />
+          )}
+
+          <div className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain ${tab === 'audit' ? 'hidden' : ''}`}>
             {/* ---------- Tab: Telemetry ---------- */}
             {tab === 'telemetry' && (
               <div className="p-4">
@@ -686,8 +714,6 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
             {/* ---------- Tab: Variables ---------- */}
             {tab === 'variables' && <VariablesTab variables={variables} />}
 
-            {/* ---------- Tab: Audit trail ---------- */}
-            {tab === 'audit' && <AuditTimeline history={history} highlightId={auditHighlight} />}
           </div>
         </aside>
       </div>
@@ -745,6 +771,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
                 type="button"
                 onClick={() => {
                   setTab('audit');
+                  setTrailFilterNodeId(null);
                   setAuditHighlight(toastAudit);
                   setToast(null);
                   setToastAudit(null);

@@ -40,6 +40,8 @@ export interface AgentStepEvidence {
   policy?: string;
   state: string;
   model?: string;
+  /** The prompt version the worker reported for the step, when it reports one. */
+  promptVersion?: string;
   promptTokens?: number;
   completionTokens?: number;
   costUsd?: number;

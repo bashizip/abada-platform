@@ -40,6 +40,8 @@ export type CanvasNodeData = WorkflowNode & Record<string, unknown> & {
   incidentSeq?: string;
   /** Instance views: where a retry of this node is, shown at the playback pace (M5 S4). */
   retryPhase?: RetryPhase;
+  /** Instance views: the audit-trail entry under the pointer is about this node (M5 S5). */
+  trailHighlight?: boolean;
 };
 
 export type CanvasNode = Node<CanvasNodeData>;

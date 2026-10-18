@@ -174,6 +174,26 @@ export const IncidentPulse: React.FC<{ seq?: string; shape: 'rect' | 'circle' | 
   );
 };
 
+/**
+ * A ring around the node an audit-trail entry is about, while the user points
+ * at the entry (M5 S5). Outside the node, so it never hides the state outline.
+ */
+export const TrailHighlight: React.FC<{ on?: boolean; shape: 'rect' | 'circle' | 'diamond' }> = ({ on, shape }) => {
+  if (!on) return null;
+  return (
+    <span className="abada-trail-highlight pointer-events-none absolute -inset-1.5 z-20" aria-hidden="true">
+      <span
+        className={`absolute inset-0 border-2 ${shape === 'rect' ? 'rounded-2xl' : shape === 'circle' ? 'rounded-full' : ''}`}
+        style={{
+          borderColor: palette.saffron,
+          boxShadow: `0 0 14px ${palette.saffron}66`,
+          transform: shape === 'diamond' ? 'rotate(45deg) scale(0.7071)' : undefined,
+        }}
+      />
+    </span>
+  );
+};
+
 /** AI-diff marking above the node. */
 export const DiffBadge: React.FC<{ kind?: DiffChangeKind | null }> = ({ kind }) => {
   if (!kind) return null;

@@ -40,6 +40,8 @@ export function useLiveInstanceOverlay(
   const [detailInstance, setDetailInstance] = useState<ProcessInstanceDTO | null>(null);
   /** Step the instance view opens focused on (an incident's node, M5 S4). */
   const [detailFocusNodeId, setDetailFocusNodeId] = useState<string | undefined>(undefined);
+  /** The instance the user just started from the Studio: its view plays it from the first fact (M5 S5). */
+  const [detailStartedId, setDetailStartedId] = useState<string | null>(null);
 
   const {
     panelWidth: livePanelWidth,
@@ -48,7 +50,8 @@ export function useLiveInstanceOverlay(
     setPinned: setLivePanelPinned,
   } = useInspectorPanelPrefs();
 
-  const openInstanceDetail = useCallback((instance: ProcessInstanceDTO, focusNodeId?: string) => {
+  const openInstanceDetail = useCallback((instance: ProcessInstanceDTO, focusNodeId?: string,
+    options: { justStarted?: boolean } = {}) => {
     setSelectedLiveInstance(null);
     setLiveWorkflow(null);
     setLiveSelectedNodeId(null);
@@ -57,6 +60,7 @@ export function useLiveInstanceOverlay(
     setInstancePanelOpen(false);
     setDetailInstance(instance);
     setDetailFocusNodeId(focusNodeId);
+    setDetailStartedId(options.justStarted ? instance.id : null);
     setCurrentView('instance');
   }, [setCurrentView]);
 
@@ -190,6 +194,7 @@ export function useLiveInstanceOverlay(
     setInstancePanelOpen,
     detailInstance,
     detailFocusNodeId,
+    detailStartedId,
     setDetailInstance,
     livePanelWidth,
     setLivePanelWidth,
