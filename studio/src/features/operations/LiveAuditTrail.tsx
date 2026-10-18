@@ -4,6 +4,7 @@ import { ArrowDown, Bot, Cpu, Filter, Server, UserCheck, X } from 'lucide-react'
 import type { ActivityHistoryDTO } from '@/api/engine';
 import type { AgentStepEvidence } from '@/api/evidence';
 import type { WorkflowFile } from '@/types';
+import { DecisionRuleSummary } from './DecisionRuleSummary';
 import { AgentStepInspector } from '@/features/operations/AgentStepInspector';
 import { JsonViewer } from '@/components/json/JsonViewer';
 import { jsonHeight } from '@/components/json/jsonLayout';
@@ -249,6 +250,11 @@ const TrailRow: React.FC<{
             <span className="font-mono tabular-nums">{formatDuration(entry.durationMs)}</span>
           )}
           {isNode && entry.exit && <span className="font-mono text-saffron">{entry.exit}</span>}
+          {isNode && entry.decision?.rules[0] && !entry.decision.rules[0].otherwise && (
+            <span className="min-w-0 truncate font-mono text-mineral-teal" title={entry.decision.rules[0].when}>
+              when {entry.decision.rules[0].when}
+            </span>
+          )}
         </div>
       </button>
       {expanded && (
@@ -259,6 +265,7 @@ const TrailRow: React.FC<{
               {entry.commentLength !== undefined && ` · commented (${entry.commentLength} characters)`}
             </p>
           )}
+          {isNode && entry.decision && <DecisionRuleSummary decision={entry.decision} />}
           {steps.length > 0 && (
             <AgentStepInspector steps={steps} projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} />
           )}
