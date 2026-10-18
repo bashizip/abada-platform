@@ -570,6 +570,7 @@ export default function App() {
             instanceId={detailInstance.id}
             projectId={activeProject?.id}
             canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
+            canRollBack={canRollBackProcess(activeProject?.currentUserRoles)}
             initialInstance={detailInstance}
             initialFocusNodeId={detailFocusNodeId}
             playFromStart={detailStartedId === detailInstance.id}
