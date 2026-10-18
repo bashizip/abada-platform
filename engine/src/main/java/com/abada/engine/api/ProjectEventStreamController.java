@@ -17,6 +17,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * events as Server-Sent Events (E12), ids only. {@code Last-Event-ID} (or
  * {@code ?lastEventId=}) resumes after a seq; a comment heartbeat keeps idle
  * connections open. Clients reconnect when the stream times out.
+ *
+ * <p>A stream holds no database connection: the checks below run in their own
+ * short transactions and the stream's threads read with {@code JdbcTemplate}.
+ * This relies on {@code spring.jpa.open-in-view=false}, which would otherwise
+ * pin one pooled connection per open stream (EventStreamConnectionPoolTest).
  */
 @RestController
 public class ProjectEventStreamController {
