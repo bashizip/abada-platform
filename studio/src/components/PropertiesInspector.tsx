@@ -32,6 +32,8 @@ import {
   TimeoutEditor,
 } from '@/components/inspector/RouteEditors';
 import { AgentToolsEditor } from '@/components/inspector/AgentToolsEditor';
+import { GatewayBranchesEditor } from '@/components/inspector/GatewayBranchesEditor';
+import { gatewayBranches, setBranchCondition, setBranchElse } from '@/lib/apl/gatewayRules';
 import { AgentLimitsEditor, CallProcessEditor, DelegatesEditor, ReviewedByEditor } from '@/components/inspector/AgentEditors';
 
 interface PropertiesInspectorProps {
@@ -854,6 +856,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     : 'Conditional flows evaluate in order; the last flow becomes the default branch.'}
               </p>
             </div>
+
+            {selectedNode.subtype !== 'parallel' && workflow && onUpdateWorkflow && (
+              <GatewayBranchesEditor
+                branches={gatewayBranches(workflow, selectedNode.id)}
+                nodes={workflow.nodes}
+                inclusive={selectedNode.subtype === 'inclusive'}
+                onConditionChange={(edgeId, condition) => onUpdateWorkflow((wf) => setBranchCondition(wf, edgeId, condition))}
+                onElseChange={(edgeId, isElse) => onUpdateWorkflow((wf) => setBranchElse(wf, edgeId, isElse))}
+              />
+            )}
           </div>
         )}
 
