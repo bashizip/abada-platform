@@ -2,7 +2,6 @@ import React from 'react';
 import { m } from 'motion/react';
 import { ArrowRight, Eye, ShieldCheck, Workflow } from 'lucide-react';
 import { keycloak } from '@/auth/keycloakClient';
-import { SoundToggle } from '@/components/SoundToggle';
 import { SignInPreview } from '@/components/SignInPreview';
 import { enterExit, listStagger, useMotionVariants } from '@/lib/motion';
 
@@ -16,7 +15,7 @@ const POINTS = [
  * Full-screen entry point shown before the Keycloak session exists. The
  * workspace (canvas, dialogs, project tree) is not mounted until the user
  * signs in, so a fresh session starts here: what Abada does, an example run
- * playing once, and the way in.
+ * playing on a loop, and the way in.
  */
 export const SignInGate: React.FC = () => {
   const item = useMotionVariants(enterExit);
@@ -28,7 +27,6 @@ export const SignInGate: React.FC = () => {
         backgroundImage: 'radial-gradient(ellipse 60% 45% at 50% 0%, rgba(157, 78, 221, 0.16), transparent 70%), radial-gradient(circle, rgba(168, 159, 145, 0.10) 1.2px, transparent 1.2px)',
         backgroundSize: '100% 100%, 24px 24px',
       }}>
-      <SoundToggle className="absolute right-4 top-4" />
       <m.main variants={listStagger} initial="initial" animate="enter"
         className="mx-auto grid min-h-full max-w-6xl items-center gap-12 px-6 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,34rem)] lg:gap-16">
         <m.div variants={listStagger} className="flex flex-col items-start gap-6">

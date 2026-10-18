@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { m } from 'motion/react';
-import { Bot, Database, GitBranch, RotateCcw, UserCheck } from 'lucide-react';
+import { Bot, Database, GitBranch, UserCheck } from 'lucide-react';
 import { duration, easing, enterExit, useMotionVariants, useReducedMotion } from '@/lib/motion';
 
 /**
  * The sign-in screen's example run: the four roles of an Abada process, played
- * once at the Studio's own playback pace, with the audit entries arriving in
- * step with the diagram, as they do in Operations. Sample content, labelled
- * as such; under reduced motion it shows the finished run at once.
+ * on a loop at the Studio's own playback pace, with the audit entries arriving
+ * in step with the diagram, as they do in Operations. Sample content, labelled
+ * as such; under reduced motion it shows the finished run and stays still.
  */
 
 interface Step {
@@ -36,6 +36,8 @@ const STEPS: Step[] = [
 /** How long each step holds: the Studio's calm playback dwell plus the token's travel. */
 const STEP_MS = duration.calm + 400;
 const FIRST_STEP_MS = 900;
+/** How long the finished run stays on screen before it starts again. */
+export const HOLD_MS = 3000;
 
 export const SignInPreview: React.FC = () => {
   const reduced = useReducedMotion();
@@ -45,13 +47,13 @@ export const SignInPreview: React.FC = () => {
 
   useEffect(() => {
     if (reduced) { setStep(STEPS.length); return; }
-    if (step >= STEPS.length) return;
-    const timer = window.setTimeout(() => setStep((current) => current + 1), step === 0 ? FIRST_STEP_MS : STEP_MS);
+    const timer = step >= STEPS.length
+      ? window.setTimeout(() => { setStep(0); setRun((current) => current + 1); }, HOLD_MS)
+      : window.setTimeout(() => setStep((current) => current + 1), step === 0 ? FIRST_STEP_MS : STEP_MS);
     return () => window.clearTimeout(timer);
   }, [step, reduced, run]);
 
   const done = step >= STEPS.length;
-  const replay = () => { setStep(0); setRun((current) => current + 1); };
 
   return (
     <div className="w-full max-w-[34rem] rounded-panel border border-hairline bg-mocha-deep/90 shadow-warm-lg backdrop-blur-sm">
@@ -126,13 +128,9 @@ export const SignInPreview: React.FC = () => {
         {step === 0 && <li className="text-[11.5px] text-sand">Starting…</li>}
       </ol>
 
-      <div className="flex items-center justify-between border-t border-hairline px-4 py-2 text-[10.5px] text-sand">
-        <span>Example run · the Studio replays real runs the same way</span>
-        <button type="button" onClick={replay} disabled={!done}
-          className={`inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 transition-opacity duration-[var(--duration-base)] hover:text-linen ${done ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
-          <RotateCcw className="h-3 w-3" aria-hidden="true" /> Play again
-        </button>
-      </div>
+      <p className="border-t border-hairline px-4 py-2 text-[10.5px] text-sand">
+        Example run · the Studio replays real runs the same way
+      </p>
     </div>
   );
 };
