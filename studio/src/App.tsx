@@ -570,6 +570,7 @@ export default function App() {
             instanceId={detailInstance.id}
             projectId={activeProject?.id}
             canRetryIncidents={canRetryIncidents(activeProject?.currentUserRoles)}
+            canRollBack={canRollBackProcess(activeProject?.currentUserRoles)}
             initialInstance={detailInstance}
             initialFocusNodeId={detailFocusNodeId}
             playFromStart={detailStartedId === detailInstance.id}
@@ -841,6 +842,7 @@ export default function App() {
               void openLiveInstance(instance);
             }}
             onOpenDetail={(instance) => openInstanceDetail(instance)}
+            onOpenDesigner={() => setCurrentView('designer')}
             onOpenIncident={(incident) => {
               void EngineAPI.getInstance(incident.processInstanceId, activeProject?.id)
                 .then((instance) => openInstanceDetail(instance, incident.activityId)).catch(() => undefined);

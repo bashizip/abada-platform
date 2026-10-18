@@ -11,16 +11,41 @@ state means, and how to unblock an instance.
 
 ## The Operations view
 
-**Operations** lists every instance of the open project. The counters show
-what is running, what finished in the last day and what **needs
-intervention** (failed instances plus open [incidents](#incidents)); the
-worker strip shows each agent worker and its last heartbeat, and the
-**Incidents** strip lists the open incidents.
+**Operations** opens on six figures, each with its last 24 hours as a small
+line. Click the **i** on a figure to see where it comes from.
+
+| Figure | What it counts |
+| --- | --- |
+| Running | Instances running now (exact) |
+| Completed | Instances started in the last 24 hours that completed. Studio reads at most the newest 1 000; beyond that the figure shows **≥** |
+| Open incidents | Open [incidents](#incidents) of the project (up to 100, then **100+**) |
+| Waiting on you | Tasks you can claim. The engine lists only the tasks of your users and groups, so this is not every human step of the project |
+| p95 duration | 95th percentile run time of the last 100 completed instances |
+| AI cost | Priced agent calls of the instances started in the last 24 hours; **+** when some calls have no price |
+
+Studio computes these from the existing API lists; the figures follow the
+project's event stream and the 24-hour lines refresh every minute.
+
+Below them, **Needs attention** shows the most urgent open incidents as cards,
+most severe first: **Needs a decision** (an interrupted write only a person can
+settle), **Blocked** (work used up its attempts or a called process failed),
+**Waiting** (a loop limit or a missing correlation key). Click a card to open
+its instance on the failing step; **All incidents** lists every open incident
+with its actions. **Workers** shows each worker topic: online, failing (with
+its last error) or offline, and when it was last seen.
 
 ![Operations: instance counters, the agent worker online, and the instance list with status, process, version, duration and starter](../../../assets/screens/tutorial/21-operations.webp)
 
-Filter by status (*Running*, *Completed*, *Suspended*, *Failed*), definition or
-time range, or search by instance id, process or node.
+Then the instances, newest first. Filter with the chips: state (with counts),
+process and, once a process is chosen, its version; or pick a start-time range
+and search by business key, step or instance id. The version, time range and
+search filter the instances already loaded; more load as you scroll. A state
+pill pulses once when an instance changes state.
+
+Keyboard: `j` / `k` (or the arrows) move through the list, `Enter` opens the
+instance, `/` jumps to the search. Coming back from an instance puts you on the
+row you left. **Versions & rollback** in the header opens the version history
+of each process.
 
 | Worker state | Meaning |
 | --- | --- |
@@ -30,7 +55,13 @@ time range, or search by instance id, process or node.
 
 ## One instance
 
-Open an instance to see the path it took on the canvas and three tabs.
+Open an instance to see the path it took on the canvas. The header stays in
+place: the instance's state, process and version, who started it, the elapsed
+time, the playback pace, an incident chip when one is open, and the actions
+your role allows. The audit trail runs down the right side. The tabs at the
+bottom of the canvas open a drawer over it: **Step**, **Variables**,
+**Lineage** and **Versions**. Esc closes an incident card first, then the
+drawer, then goes back to Operations.
 
 The canvas draws three layers, told apart by shape as well as colour:
 
@@ -51,12 +82,15 @@ including parallel branches and loops. An instance started before 1.2 shows
 **Path reconstructed** in the legend: its path is inferred from the steps it
 touched. The same layers appear during a **Dry Run** in the designer.
 
-- **Telemetry** — for the selected step: its configuration and, for an agent,
+- **Step** — for the selected step (click it, or walk the steps with ← and →): its configuration and, for an agent,
   each attempt: model and provider, attempt number, latency, confidence
   against the threshold, the output contract result, token counts, prompt
   hash and worker. When a fallback model answered, **Fallback for** names the
   model it replaced.
 - **Variables** — the current process variables.
+- **Lineage** — the processes that called this instance and the ones it called.
+- **Versions** — the versions of the process, with this instance's marked. An
+  instance stays on the version it started on.
 - **Audit Trail** — open by default, beside the canvas. It tells the run step
   by step: one entry each time a token passes through a step, with who acted
   (the engine, an agent with its model and prompt version, a person, or a
@@ -106,7 +140,7 @@ Start** is different: its page opens right away and plays the run from the
 first step, even the steps the engine finished before the page loaded. With reduced motion turned on in your
 system, steps still appear one at a time, with fades instead of movement.
 
-**Agent steps.** For an agent step, the telemetry tab lists every model call,
+**Agent steps.** For an agent step, the **Step** tab lists every model call,
 tool call and delegation in order, attempt by attempt: the tool's policy
 (read, write, approval required), the state (a write whose outcome is unknown
 is highlighted; a proposed call shows who approved or rejected it, and when; a
@@ -134,10 +168,14 @@ an instance cancels the processes it called that are still running.
 
 | Action | In Studio | Effect |
 | --- | --- | --- |
-| Suspend / Resume | Instance header | A suspended instance accepts no completion; late worker reports are rejected and retried after resume |
-| Cancel | Instance header, or the incident card on the failing step | Ends the instance and retires all its open work (tasks, jobs, timers) in one transaction |
-| Retry a failed job | Failed step in the inspector | Gives the job one more attempt and resolves its `WORK_FAILED` incident |
-| Retry an incident | The incident card on the failing step, or the **Incidents** strip | Restarts the stopped step; see [Incidents](#incidents) |
+| Suspend / Resume | Instance header, or the row in Operations | A suspended instance accepts no completion; late worker reports are rejected and retried after resume |
+| Cancel | Instance header, the row in Operations, or the incident card on the failing step | Ends the instance and retires all its open work (tasks, jobs, timers) in one transaction |
+| Force fail | The row in Operations | Moves a stuck instance to *Failed*, for a run that must not continue |
+| Retry a failed job | The **Step** tab of the failed step | Gives the job one more attempt and resolves its `WORK_FAILED` incident |
+| Retry an incident | The incident card on the failing step, or **All incidents** in Operations | Restarts the stopped step; see [Incidents](#incidents) |
+
+These are Operator and Owner actions; other members do not see the buttons,
+and the engine refuses them on the API too.
 
 The same actions exist under `/api/v1/projects/{projectId}/instances/{instanceId}`
 (`DELETE` to cancel, `PUT …/suspension`) and
@@ -158,10 +196,12 @@ instance — other branches, timers — keeps going.
 
 ### In Studio
 
-The **Incidents** strip in Operations lists the open incidents of the project,
-newest first: kind, step, instance, when it opened and the engine's message.
-Click the step name to open the instance on that step. An instance's page
-shows the same strip with only its own incidents, and only while it has one.
+Operations shows the most urgent open incidents as cards under **Needs
+attention**; **All incidents** lists every one, newest first: kind, step,
+instance, when it opened and the engine's message, with the actions. Click a
+card or a step name to open the instance on that step. On an instance's page,
+the header shows an incident chip while it has one; click it to open the card
+on the failing step.
 
 **Retry** restarts the step: failed work is reopened with a fresh attempt
 budget, an exhausted loop starts a fresh pass, a message wait is armed again.

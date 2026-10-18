@@ -362,6 +362,22 @@ contentful render of the list ≤ 1 s with 1 000 instances (virtualised list).
 **Out of scope.** New backend aggregations beyond what `/api/v1` already
 returns; if a KPI needs a new endpoint, cut the KPI, not the redesign.
 
+**As built.** Reviewed from a clickable mock. The KPIs come from the existing
+lists only: running is exact; completed and AI cost come from the instances
+started in the last 24 h, read newest first up to 1 000 (then shown as ≥) and
+refreshed every minute; p95 from the last 100 completed; open incidents from
+the incident list (up to 100). "Awaiting humans" became **Waiting on you**:
+the task list only returns the caller's tasks, so a project-wide count would
+need a new endpoint. The version chip filters the loaded rows (the list API has
+no version filter). The list is hand-windowed (fixed 52 px rows, no new
+dependency) and keeps its filters and cursor across a visit to an instance.
+The instance view keeps the S5 trail docked right; the inspector tabs became a
+drawer over the canvas (Step, Variables, Lineage, Versions), and the incident
+strip became a header chip. Suspend, cancel and force fail are offered to
+Operators and Owners only. Visual checks were screenshots on the dev stack (no
+Playwright harness in the repo); the empty project and Lighthouse score were
+not captured there.
+
 ---
 
 ## S7 — Decision-table properties in the properties panel

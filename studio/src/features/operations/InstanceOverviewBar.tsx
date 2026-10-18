@@ -2,7 +2,7 @@ import React from 'react';
 import { Clock, Sparkles, User } from 'lucide-react';
 import { ProcessInstanceDTO } from '@/api/engine';
 import { formatUsd } from '@/api/evidence';
-import { StatusBadge } from '@/features/operations/ProcessOperations';
+import { InstanceStatePill } from '@/features/operations/InstanceStatePill';
 import {
   deriveBusinessLabel,
   formatDuration,
@@ -37,7 +37,7 @@ export const InstanceOverviewBar: React.FC<InstanceOverviewBarProps> = ({
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-t border-hairline bg-mocha px-4 py-2.5">
       <div className="flex items-center gap-3">
-        <StatusBadge instance={instance} />
+        <InstanceStatePill instance={instance} />
         <div className="flex min-w-0 items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 shrink-0 text-amethyst" />
           <span className="truncate text-xs font-semibold text-linen">{label}</span>

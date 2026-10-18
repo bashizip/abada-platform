@@ -678,6 +678,21 @@ export class EngineAPI {
     return res.json();
   }
 
+  /**
+   * One page of the project tasks the caller may see, with the engine's total
+   * (the engine never lists tasks outside the caller's users and groups).
+   */
+  static async getTaskPage(projectId: string, status: string, size = 100): Promise<{ items: EngineUserTaskDTO[]; total: number }> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks?status=${encodeURIComponent(status)}&page=0&size=${size}`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.statusText}`);
+    const items = await res.json() as EngineUserTaskDTO[];
+    const total = Number(res.headers.get('X-Total-Count'));
+    return { items, total: Number.isFinite(total) && res.headers.has('X-Total-Count') ? total : items.length };
+  }
+
   static async getTaskDetail(taskId: string, projectId: string): Promise<EngineUserTaskDTO> {
     const res = await authenticatedFetch(
       `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}`,
