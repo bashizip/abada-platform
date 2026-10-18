@@ -8,6 +8,10 @@ import { duration, easing, enterExit, useMotionVariants, useReducedMotion } from
  * on a loop at the Studio's own playback pace, with the audit entries arriving
  * in step with the diagram, as they do in Operations. Sample content, labelled
  * as such; under reduced motion it shows the finished run and stays still.
+ *
+ * Smoothness: only `transform` and `opacity` animate (the edge scales, the
+ * token translates), and every audit row is laid out from the start, so the
+ * card keeps its height and nothing around it moves while the run plays.
  */
 
 interface Step {
@@ -56,7 +60,7 @@ export const SignInPreview: React.FC = () => {
   const done = step >= STEPS.length;
 
   return (
-    <div className="w-full max-w-[34rem] rounded-panel border border-hairline bg-mocha-deep/90 shadow-warm-lg backdrop-blur-sm">
+    <div className="w-full max-w-[34rem] rounded-panel border border-hairline bg-mocha-deep/95 shadow-warm-lg">
       <div className="flex items-center gap-2 border-b border-hairline px-4 py-2.5">
         <span className="text-[12px] font-semibold text-linen">Lead triage</span>
         <span className="rounded border border-amethyst/40 px-1 text-[10px] text-amethyst-light">v3</span>
@@ -78,9 +82,9 @@ export const SignInPreview: React.FC = () => {
             return (
               <React.Fragment key={item.title}>
                 <li className="flex w-[4.5rem] flex-col items-center gap-1.5 text-center sm:w-20" aria-current={active ? 'step' : undefined}>
-                  <m.span key={`${run}-${lit}`}
-                    initial={lit && !reduced ? { scale: 0.9 } : false}
-                    animate={{ scale: 1 }}
+                  <m.span
+                    initial={false}
+                    animate={{ scale: lit && !reduced ? [0.9, 1] : 1 }}
                     transition={{ duration: duration.base / 1000, ease: [...easing.emphasised] }}
                     className={`relative grid h-10 w-10 place-items-center rounded-card border transition-colors duration-[var(--duration-base)] ${
                       lit ? item.tone : 'border-hairline bg-charcoal text-sand'} ${index === 1 ? 'rotate-45 rounded-control' : ''}`}>
@@ -96,16 +100,19 @@ export const SignInPreview: React.FC = () => {
                 </li>
                 {index < STEPS.length - 1 && (
                   <li aria-hidden="true" className="relative mx-1 mt-5 h-0.5 rounded-full bg-hairline">
-                    <m.span key={`edge-${run}`} className="absolute inset-y-0 left-0 rounded-full bg-mineral-teal-bright"
-                      initial={{ width: reduced ? '100%' : '0%' }}
-                      animate={{ width: step > index + 1 ? '100%' : '0%' }}
-                      transition={{ duration: reduced ? 0 : 0.4, ease: [...easing.standard] }} />
+                    <m.span data-edge className="absolute inset-0 origin-left rounded-full bg-mineral-teal-bright"
+                      initial={{ scaleX: reduced ? 1 : 0 }}
+                      animate={{ scaleX: step > index + 1 ? 1 : 0 }}
+                      transition={{ duration: reduced || step <= index + 1 ? 0 : 0.4, ease: [...easing.standard] }} />
                     {step === index + 1 && !reduced && (
-                      <m.span key={`token-${run}-${index}`}
-                        className="absolute -top-[3px] h-2 w-2 rounded-full bg-mineral-teal-bright shadow-[0_0_8px_var(--color-mineral-teal-bright)]"
-                        initial={{ left: '0%', opacity: 0 }}
-                        animate={{ left: ['0%', '0%', 'calc(100% - 8px)'], opacity: [0, 1, 1] }}
-                        transition={{ duration: STEP_MS / 1000, times: [0, 0.55, 0.95], ease: 'easeInOut' }} />
+                      // The track minus the token's width: translating it by 100% lands the token at the end.
+                      <m.span key={`token-${run}-${index}`} data-token
+                        className="absolute -top-[3px] left-0 right-2 h-2 will-change-transform"
+                        initial={{ x: '0%', opacity: 0 }}
+                        animate={{ x: ['0%', '0%', '100%'], opacity: [0, 1, 1] }}
+                        transition={{ duration: STEP_MS / 1000, times: [0, 0.55, 0.95], ease: 'easeInOut' }}>
+                        <span className="absolute left-0 top-0 h-2 w-2 rounded-full bg-mineral-teal-bright shadow-[0_0_8px_var(--color-mineral-teal-bright)]" />
+                      </m.span>
                     )}
                   </li>
                 )}
@@ -116,17 +123,24 @@ export const SignInPreview: React.FC = () => {
       </div>
 
       {/* The audit trail, entry by entry. */}
-      <ol className="space-y-1 border-t border-hairline px-4 py-3" aria-live="polite" aria-label="Audit trail">
-        {STEPS.slice(0, Math.min(step, STEPS.length)).map((item) => (
-          <m.li key={`${run}-${item.entry}`} variants={itemVariants} initial="initial" animate="enter"
-            className="flex items-baseline gap-2 text-[11.5px]">
-            <span className={`h-1.5 w-1.5 shrink-0 -translate-y-px rounded-full ${item.dot}`} />
-            <span className="font-semibold text-linen">{item.entry}</span>
-            <span className="min-w-0 truncate text-sand">{item.detail}</span>
-          </m.li>
-        ))}
-        {step === 0 && <li className="text-[11.5px] text-sand">Starting…</li>}
-      </ol>
+      {/* Every row is laid out from the start (hidden until reached) so the card never changes height. */}
+      <div className="relative border-t border-hairline px-4 py-3">
+        <ol className="space-y-1" aria-live="polite" aria-label="Audit trail">
+          {STEPS.map((item, index) => {
+            const shown = step > index;
+            return (
+              <m.li key={item.entry} variants={itemVariants} initial="exit" animate={shown ? 'enter' : 'exit'}
+                aria-hidden={!shown} data-shown={shown || undefined}
+                className="flex items-baseline gap-2 text-[11.5px]">
+                <span className={`h-1.5 w-1.5 shrink-0 -translate-y-px rounded-full ${item.dot}`} />
+                <span className="font-semibold text-linen">{item.entry}</span>
+                <span className="min-w-0 truncate text-sand">{item.detail}</span>
+              </m.li>
+            );
+          })}
+        </ol>
+        {step === 0 && <p className="absolute left-4 top-3 text-[11.5px] text-sand">Starting…</p>}
+      </div>
 
       <p className="border-t border-hairline px-4 py-2 text-[10.5px] text-sand">
         Example run · the Studio replays real runs the same way
