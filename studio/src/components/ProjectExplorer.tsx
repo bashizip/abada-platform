@@ -12,6 +12,12 @@ import {
 import { WorkflowFile } from '@/types';
 import { FormEditor } from '@/features/designer/FormEditor';
 import { FormSchema } from '@/features/inbox/formSchema';
+import { JsonViewer } from '@/components/json/JsonViewer';
+
+/** The parsed JSON, or undefined when the text is not JSON (it is then shown as text). */
+const parseJson = (text: string): unknown => {
+  try { return JSON.parse(text); } catch { return undefined; }
+};
 
 interface ProjectExplorerProps {
   projectId: string;
@@ -603,6 +609,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     const isText = !preview.contentType || preview.contentType.startsWith('text/') ||
       preview.contentType.includes('json') || preview.contentType.includes('yaml') ||
       preview.contentType.includes('xml') || preview.contentType.includes('csv');
+    const previewJson = preview.contentType?.includes('json') ? parseJson(base64ToText(preview.contentBase64)) : undefined;
     return (
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div className="bg-mocha border border-hairline rounded-2xl w-full max-w-2xl p-5 shadow-warm-lg flex flex-col max-h-[85vh] space-y-3">
@@ -624,7 +631,9 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
             <span>sha256 {preview.sha256.slice(0, 12)}…</span>
           </div>
           <div className="flex-1 overflow-auto bg-charcoal rounded-xl border border-hairline p-3">
-            {isText ? (
+            {previewJson !== undefined ? (
+              <JsonViewer data={previewJson} label="fields" height={384} defaultDepth={2} />
+            ) : isText ? (
               <pre className="text-[11px] text-[#A8D8B9] whitespace-pre-wrap break-all font-mono max-h-96 overflow-auto">
                 {base64ToText(preview.contentBase64)}
               </pre>

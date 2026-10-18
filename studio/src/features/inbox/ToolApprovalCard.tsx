@@ -1,15 +1,17 @@
 import React from 'react';
 import { ShieldCheck } from 'lucide-react';
 import type { ToolApprovalDTO } from '@/api/engine';
+import { JsonViewer } from '@/components/json/JsonViewer';
+import { jsonHeight } from '@/components/json/jsonLayout';
 
 interface ToolApprovalCardProps {
   approval: ToolApprovalDTO;
 }
 
-/** The arguments as shown to the approver, or why they are not shown. */
-export function approvalArguments(approval: ToolApprovalDTO): string | null {
+/** The arguments as shown to the approver, or null when the evidence policy hides them. */
+export function approvalArguments(approval: ToolApprovalDTO): unknown {
   if (approval.arguments === null || approval.arguments === undefined) return null;
-  return JSON.stringify(approval.arguments, null, 2);
+  return approval.arguments;
 }
 
 /**
@@ -54,9 +56,7 @@ export const ToolApprovalCard: React.FC<ToolApprovalCardProps> = ({ approval }) 
         {args === null ? (
           <p className="text-xs text-[#A89F91] italic">Hidden by the project's evidence policy.</p>
         ) : (
-          <pre className="text-xs font-mono text-[#EAE3D9] bg-[#1A1614] border border-[#3A322E] rounded-xl p-3 overflow-x-auto whitespace-pre-wrap break-all">
-            {args}
-          </pre>
+          <JsonViewer data={args} label="arguments" compact defaultDepth={2} height={jsonHeight(args, 2, 12)} />
         )}
       </div>
       <p className="text-[11px] text-[#A89F91] break-all">
