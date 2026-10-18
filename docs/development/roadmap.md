@@ -108,7 +108,7 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [ ] S4 Incident on the node: highlighted failing node, Retry / Retry on another model in a card anchored to it, the retry shown step by step
 - [ ] S5 Live audit trail open from the start of the instance, entries appearing one by one in sync with the canvas
 - [ ] S6 Operations redesign (design mock first; KPIs, live list, canvas-centred instance view, split of the 900-line files)
-- [ ] S7 Decision-table properties in the properties panel (mount the existing `DmnRuleInspector`, live validation, matched rule in Operations)
+- [ ] S7 Node properties and palette: every node kind fully editable in the properties panel (decision tables first: rules, reorder, rule-level engine validation), the palette drawn in the canvas shapes, the matched rule in Operations
 - [ ] S8 Form designer: compact controls whose density adapts to the form size; a large editor panel; sections, columns and steps; richer field types; validation and `visible_when` enforced by the engine
 - [ ] S9 File upload in human tasks: PostgreSQL storage (Flyway `V40`), references in variables, attach in the completion transaction, RBAC and audit
 - [ ] S10 Administration audit trail: append-only `admin_audit_events` (Flyway `V41`) written in the mutation's transaction, denied attempts included, no secrets; filterable table with live updates and CSV export

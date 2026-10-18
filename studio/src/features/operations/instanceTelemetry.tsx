@@ -30,6 +30,9 @@ import { WorkflowFile, toolRefOf } from '@/types';
 import { AgentStepEvidence } from '@/api/evidence';
 import { aggregateNodeTelemetry, boundarySummary, eventMeta } from '@/lib/run/instanceDetail';
 import { formatDuration, humanize, unwrapVariable } from '@/lib/run/instanceFormat';
+import { decisionOf, type TrailDecision } from '@/lib/run/auditTrail';
+import { outputColumns } from '@/components/inspector/decisionTable';
+import { DecisionRuleSummary } from '@/features/operations/DecisionRuleSummary';
 
 /* ------------------------------------------------------------------ */
 /* Tone / event metadata                                               */
@@ -244,6 +247,8 @@ export const NodeTelemetry: React.FC<{
   if (!node) return <p className="text-[11px] text-sand">Unknown node.</p>;
 
   const nodeEvents = history.filter((event) => event.activityId === nodeId);
+  const decisions = nodeEvents.map((event) => decisionOf(event, node)).filter((decision): decision is TrailDecision => !!decision);
+  const lastDecision = decisions.at(-1);
   const failures = nodeEvents
     .map((event) => ({ event, failure: failureOf(event, node.title, telemetry.workerIds) }))
     .filter((item) => item.failure !== null);
@@ -454,16 +459,24 @@ export const NodeTelemetry: React.FC<{
               <InfoRow label="Rules">{node.dmnConfig.rules.length}</InfoRow>
             </div>
           )}
+          {lastDecision && (
+            <div className="rounded-xl border border-hairline bg-charcoal p-3">
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">
+                Last decision{decisions.length > 1 ? ` · ${decisions.length} applications` : ''}
+              </div>
+              <DecisionRuleSummary decision={lastDecision} />
+            </div>
+          )}
           {variables && node.dmnConfig && (
             <div className="rounded-xl border border-hairline bg-charcoal p-3">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">Applied outputs</div>
-              {node.dmnConfig.outputs.map((output) => {
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">Output variables now</div>
+              {(lastDecision?.outputNames.length ? lastDecision.outputNames : outputColumns(node.dmnConfig.rules)).map((name) => {
                 const unwrapped = unwrapVariable(variables);
                 const value = unwrapped && typeof unwrapped === 'object'
-                  ? (unwrapped as Record<string, unknown>)[output.name]
+                  ? (unwrapped as Record<string, unknown>)[name]
                   : undefined;
                 return (
-                  <InfoRow key={output.name} label={output.name}>
+                  <InfoRow key={name} label={name}>
                     {value === undefined ? '—' : <span className="font-mono"><JsonValueInline value={value} /></span>}
                   </InfoRow>
                 );

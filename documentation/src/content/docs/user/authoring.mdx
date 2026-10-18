@@ -163,8 +163,30 @@ flow:
   why and nothing is generated. A candidate that still misses a branch or a
   human step the request asked for opens with a warning naming what is
   missing. You review the result before it applies.
-- **Decision tables** have a matrix editor (inputs, rows, hit policy,
-  `otherwise`).
+- **The palette** draws every step exactly as the canvas does: circles for
+  events, diamonds for gateways, cards for work. Type in **Find a node** to
+  filter (by name, purpose or APL type, so `dmn` finds the decision table);
+  <kbd>Enter</kbd> adds the first match. Click a step to add it after the
+  selected one, already connected, or drag it onto the canvas where you want
+  it. Arrow keys move through the list.
+- **The Properties panel** edits every property of the selected step. It
+  opens with the step's name and description, then one section per concern
+  (for an agent: model and prompt, output contract, routing, retries, tools,
+  review, evidence). Sections fold and remember how you left them. Each field
+  shows its APL key in small type, and an engine error appears under the
+  field or rule it is about, with the count on the section heading. With
+  nothing selected, the panel lists the steps of the process.
+- **Decision tables** are edited in the panel: the decision key, what happens
+  when several rules match (first match, unique match, collect all), the
+  inputs, the outputs, and the rules in order. Type output values as text,
+  numbers, `true`/`false`, or `"quoted"` text; an empty cell means the rule
+  does not set that output. Reorder rules by dragging the handle, with the
+  arrow buttons, or with <kbd>Alt</kbd>+arrow keys on the handle. The
+  **otherwise** fallback stays last: it applies only when no rule matched.
+  **Expand** opens the whole table in a wide drawer.
+- **For each**, **agent evidence** and the **assignment mode** of a human task
+  are edited in the panel too. A step saved as the deprecated `approval-gate`
+  stays one when you save; the panel offers to convert it to a human task.
 - **Agent steps** pick their tools from the project's tool servers, with each
   tool's policy: a step may tighten a policy (for example require approval)
   but never loosen it, and an approval-required tool asks who approves it.
@@ -184,6 +206,11 @@ The engine is the only APL validator, and Studio asks it directly:
 - **Errors** (`ABADA-APL-VALIDATION-001`) block **Apply to diagram** and
   **Deploy & Start**: a broken route, a cycle without a repeat limit, a model
   outside the engine's allow-list, an expression that is not valid CEL.
+  Decision-table rules are checked one by one: an empty or invalid condition,
+  a condition reading a name that is not one of the table's inputs, a second
+  `otherwise`, and, under unique match, two rules with the same condition. Two
+  different conditions that can both hold under unique match are only caught
+  when the table runs.
 - **Warnings** never block. `ABADA-APL-SCHEMA-001` flags an unknown field —
   usually a typo such as `confidence_treshold` — or a wrong type;
   `ABADA-APL-VARIABLE-001` flags an undeclared variable.

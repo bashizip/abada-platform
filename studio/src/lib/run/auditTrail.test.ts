@@ -144,6 +144,27 @@ describe('the audit trail of an instance', () => {
       .toMatchObject({ matchedRules: [1, 3], action: 'Applied rules #1, #3' });
   });
 
+  it('reads each matched rule from the definition: its condition and outputs, inputs by name only', () => {
+    const table: WorkflowFile = { ...workflow, nodes: workflow.nodes.map((candidate) => (candidate.id === 'rules'
+      ? { ...candidate, dmnConfig: { decisionKey: 'risk', hitPolicy: 'FIRST', inputs: [{ name: 'score' }], outputs: [],
+        rules: [
+          { id: 'r0', when: 'score >= 750', then: { tier: 'A' } },
+          { id: 'r1', when: 'score >= 600', then: { tier: 'B', review: true } },
+          { id: 'r2', otherwise: true, then: { tier: 'C' } },
+        ] } }
+      : candidate)) };
+    const applied = (indexes: number[]) => nodeEntries(buildAuditTrail([
+      flow('start', 'rules', 0),
+      event('DECISION_TABLE_APPLIED', 'rules', 0, { decisionKey: 'risk', matchedRuleIndexes: indexes,
+        inputNames: ['score'], outputNames: ['tier', 'review'] }),
+      flow('rules', 'done', 0),
+    ], table))[0];
+    expect(applied([1]).decision).toEqual({ decisionKey: 'risk', inputNames: ['score'], outputNames: ['tier', 'review'],
+      rules: [{ number: 2, otherwise: false, when: 'score >= 600', then: { tier: 'B', review: true } }] });
+    expect(applied([2])).toMatchObject({ action: 'Applied the fallback (rule #3)',
+      decision: { rules: [{ number: 3, otherwise: true, then: { tier: 'C' } }] } });
+  });
+
   it('keeps one pass per branch of a parallel split and one for the join', () => {
     const history = [
       flow('start', 'split', 0),

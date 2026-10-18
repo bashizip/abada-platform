@@ -99,8 +99,9 @@ class AplVariablesTest {
     }
 
     @Test
-    void decisionRuleReadingANonInputIsReportedEvenWithoutDeclarations() {
-        assertThat(variableWarnings(document("", """
+    void decisionRuleReadingANonInputIsAnErrorEvenWithoutDeclarations() {
+        // Conditions see only the table's inputs, so such a rule can never use the name (M5 S7: an error, at the rule).
+        assertThatThrownBy(() -> parser.parseDetailed(document("", """
                     - id: tier
                       type: decision-table
                       inputs:
@@ -111,10 +112,11 @@ class AplVariablesTest {
                         - otherwise: true
                           then: { tierName: STANDARD }
                       next: done
-                """))).singleElement().satisfies(issue -> {
-            assertThat(issue.path()).isEqualTo("/flow/nodes/1/rules/0/when");
-            assertThat(issue.message()).contains("'amount'").contains("not one of the table inputs");
-        });
+                """))).isInstanceOfSatisfying(BpmnValidationException.class, error -> assertThat(error.getIssues())
+                .singleElement().satisfies(issue -> {
+                    assertThat(issue.path()).isEqualTo("/flow/nodes/1/rules/0/when");
+                    assertThat(issue.message()).contains("reads amount, which is not a declared input");
+                }));
     }
 
     @Test

@@ -1,5 +1,5 @@
 import type { ActivityHistoryDTO, FlowTakenDTO } from '@/api/engine';
-import type { WorkflowFile, WorkflowNode } from '@/types';
+import type { DMNValue, WorkflowFile, WorkflowNode } from '@/types';
 import { eventMeta } from '@/lib/run/instanceDetail';
 import { humanize } from '@/lib/run/instanceFormat';
 
@@ -58,9 +58,55 @@ export interface NodeTrailEntry extends TrailEntryBase {
   externalTaskIds: string[];
   /** Decision-table entries: the rules that matched, numbered from 1. */
   matchedRules?: number[];
+  /** Decision-table entries: the matched rules themselves, read from the instance's deployed definition. */
+  decision?: TrailDecision;
   /** Human entries: the outcome chosen and whether a comment was given (its length, never its text). */
   outcome?: string;
   commentLength?: number;
+}
+
+/** One rule of a decision table as the deployed definition declares it, numbered from 1. */
+export interface TrailDecisionRule {
+  number: number;
+  otherwise: boolean;
+  when?: string;
+  then: Record<string, DMNValue>;
+}
+
+/**
+ * What a decision-table application recorded, joined with the rules it names.
+ * The engine records input and output names, never their values.
+ */
+export interface TrailDecision {
+  decisionKey?: string;
+  rules: TrailDecisionRule[];
+  inputNames: string[];
+  outputNames: string[];
+}
+
+const names = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [];
+
+/**
+ * The decision a `DECISION_TABLE_APPLIED` fact records, with each matched rule
+ * read from `node` (the node of the instance's own definition version, so the
+ * indexes name the rules that actually ran). Null for any other fact.
+ */
+export function decisionOf(fact: ActivityHistoryDTO, node: WorkflowNode | undefined): TrailDecision | null {
+  if (fact.eventType !== 'DECISION_TABLE_APPLIED') return null;
+  const details = (fact.details ?? {}) as Record<string, unknown>;
+  const indexes = Array.isArray(details.matchedRuleIndexes)
+    ? details.matchedRuleIndexes.filter((index): index is number => typeof index === 'number') : [];
+  const rules = node?.dmnConfig?.rules ?? [];
+  return {
+    decisionKey: typeof details.decisionKey === 'string' ? details.decisionKey : undefined,
+    rules: indexes.map((index) => {
+      const rule = rules[index];
+      return { number: index + 1, otherwise: !!rule?.otherwise, when: rule?.when, then: rule?.then ?? {} };
+    }),
+    inputNames: names(details.inputNames),
+    outputNames: names(details.outputNames),
+  };
 }
 
 export interface InstanceTrailEntry extends TrailEntryBase {
@@ -169,6 +215,7 @@ function describe(pass: Pass, promptVersions: ReadonlyMap<string, string>): void
     if (fact.eventType === 'DECISION_TABLE_APPLIED' && Array.isArray(details.matchedRuleIndexes)) {
       entry.matchedRules = (details.matchedRuleIndexes as unknown[])
         .filter((index): index is number => typeof index === 'number').map((index) => index + 1);
+      entry.decision = decisionOf(fact, node) ?? undefined;
     }
     const agent = details.agent as Record<string, unknown> | undefined;
     if (agent && typeof agent === 'object') {
@@ -202,6 +249,9 @@ function actionOf(entry: NodeTrailEntry, node: WorkflowNode | undefined, attempt
   if (status === 'failed') return attempts > 1 ? `Failed after ${attempts} attempts` : 'Failed';
   if (node?.type === 'gateway') return status === 'completed' ? 'Routed the token' : 'Waiting for the other branches';
   if (entry.matchedRules) {
+    if (entry.matchedRules.length > 0 && entry.decision?.rules.every((rule) => rule.otherwise)) {
+      return `Applied the fallback (rule #${entry.matchedRules[0]})`;
+    }
     return entry.matchedRules.length === 0 ? 'No rule matched'
       : `Applied rule${entry.matchedRules.length > 1 ? 's' : ''} ${entry.matchedRules.map((rule) => `#${rule}`).join(', ')}`;
   }

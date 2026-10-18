@@ -1,35 +1,16 @@
 import React, { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
-import { Bot, Code2, ShieldAlert, Table, UserCheck, Workflow, Zap } from 'lucide-react';
-import type { NodeType } from '@/types';
+import { ShieldAlert, Zap } from 'lucide-react';
 import { TASK_HEIGHT, TASK_WIDTH, outcomePortPoint } from '@/lib/layout/nodeGeometry';
 import { EDGE_COLORS } from '../edgeStyle';
 import { useCanvasView, useCompactZoom } from '../canvasContext';
-import { NODE_ACCENT, NODE_TYPE_LABEL, taskFact } from './nodeStyle';
+import { NODE_ACCENT, taskFact } from './nodeStyle';
+import { kindOf, kindSpec } from './nodeCatalog';
+import { kindIcon } from './kindIcons';
 import { ArrivalPulse, DiffBadge, IncidentPulse, TrailHighlight, NodeBadges, NodeHandles, PathBadges, StatusBadge } from './NodeChrome';
 import { type CanvasNode, pathClass, pathFill, stateOutline, withPathHint } from './nodeState';
 
 const SIZE = { width: TASK_WIDTH, height: TASK_HEIGHT };
-
-function TaskIcon({ type, className }: { type: NodeType; className?: string }) {
-  const props = { className, style: { color: NODE_ACCENT[type] }, 'aria-hidden': true } as const;
-  switch (type) {
-    case 'agent':
-      return <Bot {...props} />;
-    case 'human':
-      return <UserCheck {...props} />;
-    case 'dmn':
-      return <Table {...props} />;
-    case 'engine-task':
-      return <Zap {...props} />;
-    case 'call-process':
-      return <Workflow {...props} />;
-    case 'script':
-      return <Code2 {...props} />;
-    default:
-      return null;
-  }
-}
 
 /**
  * Activity card with a fixed footprint (so auto-layout places exactly what
@@ -41,11 +22,13 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
   const { direction } = useCanvasView();
   const compact = useCompactZoom();
   const accent = NODE_ACCENT[data.type];
+  const kind = kindOf(data);
+  const Icon = kindIcon(kind);
   const outline = stateOutline(data, selected);
   const fact = taskFact(data);
   const outcomes = data.outcomeKinds ?? [];
   const tooltip = withPathHint(data,
-    [NODE_TYPE_LABEL[data.type], data.diffAnnotation || data.description].filter(Boolean).join(' — '));
+    [kindSpec(kind).label, data.diffAnnotation || data.description].filter(Boolean).join(' — '));
 
   return (
     <div
@@ -66,7 +49,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<CanvasNode>) => {
       <div className="flex h-full flex-col justify-between py-2.5 pl-4 pr-3">
         <div className="flex min-w-0 items-start gap-2">
           <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={{ background: `${accent}26` }}>
-            <TaskIcon type={data.type} className="h-3.5 w-3.5" />
+            {Icon && <Icon className="h-3.5 w-3.5" style={{ color: accent }} aria-hidden="true" />}
           </span>
           <span className={`line-clamp-2 font-semibold text-linen ${compact ? 'text-[15px] leading-[18px]' : 'text-[12px] leading-[15px]'}`}>
             {data.title}

@@ -18,6 +18,9 @@ export interface Rect { x: number; y: number; width: number; height: number }
 
 export const EVENT_SIZE = 44;
 export const GATEWAY_SIZE = 52;
+/** Gateway diamond (canvas coordinates) whose tips touch the bounding-box side midpoints, i.e. the ports. */
+export const diamond = (inset: number, size = GATEWAY_SIZE) =>
+  `${size / 2},${inset} ${size - inset},${size / 2} ${size / 2},${size - inset} ${inset},${size / 2}`;
 export const TASK_WIDTH = 216;
 export const TASK_HEIGHT = 80;
 

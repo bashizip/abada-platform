@@ -1059,6 +1059,26 @@ these three.
   never guesses a decision.
 - More than one `otherwise` rule in a table is a deployment error.
 
+### 4.4a Rule checks at deployment
+
+Deployment and `POST /v1/apl/validate` check every rule and report each
+problem with `ABADA-APL-VALIDATION-001` at the rule's own path
+(`/flow/nodes/<i>/rules/<j>`, or `…/rules/<j>/when`), so an editor can show it
+on that rule. Every broken rule of a table is reported at once.
+
+| Check | Why |
+| --- | --- |
+| A rule that is not the fallback has an empty `when` | It could never match. |
+| `when` is not valid CEL | It would fail on every run. |
+| `when` reads a name that is not a declared input | Conditions see only the table's inputs, so the name never has a value; the rule fails whenever its result depends on it. |
+| A second `otherwise` rule | Only one fallback can apply. |
+| Under `UNIQUE`, two rules with the same condition (whitespace ignored) | They always match together, so the table always fails. |
+
+Overlaps between *different* conditions under `UNIQUE` (`score > 600` and
+`score > 700`) cannot be decided statically: they remain a run-time failure
+of the command, as described in §4.3. Definitions that were deployed before
+these checks existed still load and run unchanged.
+
 ### 4.5 Transactional execution and audit
 
 - Inputs are resolved from instance variables at evaluation time (`${...}` or

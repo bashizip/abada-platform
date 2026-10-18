@@ -48,7 +48,9 @@ import type { LayoutMode } from '@/lib/layout/elkLayout';
 import { savePreferredLayout, hasSavedLayout } from '@/lib/run/layoutPrefs';
 import { playCue } from '@/lib/sound';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
-import { WorkflowNode, WorkflowEdge, EventSubtype, GatewaySubtype } from '@/types';
+import { WorkflowNode, WorkflowEdge } from '@/types';
+import { NODE_KIND_MIME, isNodeKind, kindSpec, type NodeKind } from './nodes/nodeCatalog';
+import { sizeOf } from '@/lib/layout/nodeGeometry';
 import { analyzeLoops } from '@/lib/apl/loopAnalysis';
 import type { Route } from '@/lib/apl/routes';
 import { ConnectMenu } from './ConnectMenu';
@@ -77,7 +79,8 @@ interface CanvasProps {
   issueCounts?: Map<string, number>;
   /** Receives auto-laid-out nodes on editable canvases (read-only ones keep a local view). */
   onAutoLayout?: (nodes: WorkflowNode[]) => void;
-  onAddNode: (type: WorkflowNode['type'], subtype?: EventSubtype | GatewaySubtype) => void;
+  /** Adds a node of a palette kind: at `at` (flow coordinates) when dropped on the canvas. */
+  onAddNode: (kind: NodeKind, at?: { x: number; y: number }) => void;
   onOpenAplEditor: () => void;
   onFocusPrompt: () => void;
   onToast?: (message: string) => void;
@@ -185,11 +188,28 @@ const CanvasInner: React.FC<CanvasProps> = ({
 }) => {
   const markerPrefix = `abada-canvas-${useId().replace(/:/g, '')}`;
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { fitView, setCenter, getNode, getZoom } = useReactFlow();
+  const { fitView, setCenter, getNode, getZoom, screenToFlowPosition } = useReactFlow();
   const reducedMotion = useReducedMotion();
   const [guides, setGuides] = useState<Alignment | null>(null);
   const [minimapChoice, setMinimapChoice] = useState<boolean | null>(null);
   const showMinimap = minimapChoice ?? rawNodes.length > MINIMAP_AUTO_NODES;
+
+  /** A palette entry dragged over the canvas can be dropped. */
+  const onPaletteDragOver = useCallback((event: React.DragEvent) => {
+    if (!event.dataTransfer.types.includes(NODE_KIND_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  /** Dropped: the node is centred on the drop point. */
+  const onPaletteDrop = useCallback((event: React.DragEvent) => {
+    const kind = event.dataTransfer.getData(NODE_KIND_MIME);
+    if (!isNodeKind(kind)) return;
+    event.preventDefault();
+    const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const { width, height } = sizeOf({ type: kindSpec(kind).type });
+    onAddNode(kind, { x: Math.round(point.x - width / 2), y: Math.round(point.y - height / 2) });
+  }, [onAddNode, screenToFlowPosition]);
 
   const layout = useDiagramLayout({
     nodes: rawNodes,
@@ -431,6 +451,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
             onNodeDragStop={onNodeDragStop}
             onNodesDelete={onNodesDelete}
             onPaneClick={onPaneClick}
+            onDragOver={readOnly ? undefined : onPaletteDragOver}
+            onDrop={readOnly ? undefined : onPaletteDrop}
             onMoveStart={(event) => { if (event) onUserMove(); }}
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
@@ -514,7 +536,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
             <h2 className="text-sm font-semibold text-linen">Start with an empty APL process</h2>
             <p className="text-xs text-sand mt-1 mb-5">Choose a visual node, paste canonical YAML, or describe the process in plain language.</p>
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => onAddNode('event')}
+              <button onClick={() => onAddNode('start')}
                 className="rounded-xl border border-saffron/30 bg-saffron/10 p-3 text-left hover:border-saffron transition-colors">
                 <CirclePlay className="w-4 h-4 text-saffron mb-2" />
                 <span className="block text-xs font-semibold">Start node</span>

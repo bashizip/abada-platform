@@ -52,7 +52,8 @@ import { loadAplContract, reloadAplContract } from '@/lib/aplContract';
 import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
 import { isEditableTarget, undoShortcut } from '@/lib/history/shortcuts';
 import { WorkflowDiffSnapshot } from '@/lib/aiDiff/types';
-import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType, EventSubtype, GatewaySubtype } from '@/types';
+import { WorkflowFile, WorkflowNode, WorkflowEdge, NodeType } from '@/types';
+import { createNode, type NodeKind } from '@/features/designer/nodes/nodeCatalog';
 import { dryRunFingerprint as computeDryRunFingerprint } from '@/lib/run/workflowFingerprint';
 import { canRetryIncidents, canRollBackProcess } from '@/lib/run/incidents';
 import { LEAD_TRIAGE_EXAMPLES, STARTER_PROCESS_KEY } from '@/lib/starter/leadTriage';
@@ -257,50 +258,26 @@ export default function App() {
     setSelectedNodeId(newNode.id);
   };
 
-  const handleAddNode = (type: NodeType, subtype?: EventSubtype | GatewaySubtype) => {
+  /**
+   * Adds a node of `kind`: at `at` when dropped on the canvas, otherwise after
+   * the selected node and connected from it (never from an end event).
+   */
+  const handleAddNode = (kind: NodeKind, at?: { x: number; y: number }) => {
     playCue('tap', { emphasis: 'strong' });
-    const id = `${type}-${Date.now()}`;
-    const isFirstEvent = type === 'event'
-      && !currentWorkflow.nodes.some((node) => node.type === 'event' && node.subtype === 'start');
-    const eventTitle = subtype === 'timer' ? 'Timer Catch'
-      : subtype === 'message' ? 'Message Catch'
-      : subtype === 'signal' ? 'Signal Catch'
-      : isFirstEvent ? 'Start Process' : 'End Process';
-    const defaultTitles: Record<NodeType, string> = {
-      agent: 'AI Validation Agent', human: 'Executive Review Task', dmn: 'Risk Matrix Policy',
-      gateway: subtype === 'parallel' ? 'Parallel Gateway'
-        : subtype === 'inclusive' ? 'Inclusive Gateway'
-        : subtype === 'event' ? 'Event Gateway'
-        : 'Branching Gateway',
-      event: eventTitle, 'engine-task': 'Engine Service Task',
-      script: 'Script Step', 'call-process': 'Call Process',
-    };
-    const newNode: WorkflowNode = {
-      id, type,
-      subtype: type === 'event'
-        ? (subtype && ['start', 'end', 'timer', 'message', 'signal'].includes(subtype as EventSubtype)
-          ? (subtype as EventSubtype) : isFirstEvent ? 'start' : 'end')
-        : type === 'gateway' ? subtype : undefined,
-      title: defaultTitles[type],
-      description: type === 'gateway' && subtype === 'event'
-        ? 'Competing catch events — the first to fire advances the instance and the engine cancels every sibling wait state'
-        : `Newly instantiated ${type} node`,
-      x: 120 + currentWorkflow.nodes.length * 260, y: 220,
-      agentConfig: type === 'agent' ? { model: getDefaultAgentModel(), systemPrompt: 'Evaluate incoming data and perform risk verification.', confidenceThreshold: 0, temperature: 0.2, tools: [] } : undefined,
-      dmnConfig: type === 'dmn' ? { decisionKey: `DMN_POLICY_${Date.now().toString().slice(-4)}`, hitPolicy: 'FIRST', inputs: [{ name: 'PayloadValue', type: 'NUMBER', expr: '${payload.value}' }], outputs: [{ name: 'AllowPass', type: 'BOOLEAN' }], rules: [{ id: 'r1', when: 'PayloadValue > 100', then: { AllowPass: true } }, { id: 'r2', otherwise: true, then: { AllowPass: false } }] } : undefined,
-      humanConfig: type === 'human' ? { assignees: ['Operations Analyst'], formKey: '', formFields: ['Review Notes', 'Approval Signature'] } : undefined,
-      engineTaskConfig: type === 'engine-task' ? { service: 'abada:service' } : undefined,
-      callProcessConfig: type === 'call-process' ? { process: '' } : undefined,
-      scriptConfig: type === 'script' ? { script: '', format: 'javascript' } : undefined,
-    };
-    updateActiveWorkflow((wf) => {
-      const sourceExists = selectedNodeId && wf.nodes.some((node) => node.id === selectedNodeId);
-      return {
-        ...wf,
-        nodes: [...wf.nodes, newNode],
-        edges: sourceExists ? [...wf.edges, { id: `e-${Date.now()}`, source: selectedNodeId, target: id }] : wf.edges,
-      };
-    });
+    const taken = new Set(currentWorkflow.nodes.map((node) => node.id));
+    const base = kind.replace(/-/g, '_');
+    let id = base;
+    for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
+    const selected = currentWorkflow.nodes.find((node) => node.id === selectedNodeId);
+    const position = at
+      ?? (selected ? { x: selected.x + 260, y: selected.y } : { x: 120 + currentWorkflow.nodes.length * 260, y: 220 });
+    const newNode = createNode(kind, id, position);
+    const connectFrom = !at && selected && !(selected.type === 'event' && selected.subtype === 'end') ? selected.id : null;
+    updateActiveWorkflow((wf) => ({
+      ...wf,
+      nodes: [...wf.nodes, newNode],
+      edges: connectFrom ? [...wf.edges, { id: `e-${Date.now()}`, source: connectFrom, target: id }] : wf.edges,
+    }));
     setSelectedNodeId(id);
   };
 

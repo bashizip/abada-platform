@@ -19,6 +19,11 @@ const workflow: WorkflowFile = {
     node('charge', 'engine-task'),
     node('review', 'human'),
     node('score', 'agent', { agentConfig: { model: 'gpt-4o', systemPrompt: 'SECRET SYSTEM PROMPT', confidenceThreshold: 0, temperature: 0, tools: [] } }),
+    node('tier', 'dmn', { dmnConfig: { decisionKey: 'LOAN_TIER', hitPolicy: 'FIRST', inputs: [{ name: 'score' }], outputs: [],
+      rules: [
+        { id: 'r0', when: 'score >= 750', then: { tier: 'A' } },
+        { id: 'r1', when: 'score >= 600', then: { tier: 'B', auto_approve: false } },
+      ] } }),
     node('done', 'event', { subtype: 'end' }),
   ],
   edges: [],
@@ -152,5 +157,22 @@ describe('the live audit trail', () => {
     act(() => { button('Review')!.click(); });
     expect(container.textContent).toContain('commented (42 characters)');
     expect(container.textContent).not.toContain('SECRET SYSTEM PROMPT');
+  });
+
+  it('shows the decision rule that matched, from the deployed table, with input names but no values', () => {
+    const facts = [flow('start', 'tier'),
+      event('DECISION_TABLE_APPLIED', 'tier', { decisionKey: 'LOAN_TIER', matchedRuleIndexes: [1],
+        inputNames: ['score'], outputNames: ['tier', 'auto_approve'] }),
+      flow('tier', 'done'),
+    ];
+    show(facts);
+    expect(titles()).toContain('Tier · Applied rule #2');
+    expect(container.textContent).toContain('when score >= 600');
+    act(() => { button('Tier')!.click(); });
+    const decision = container.querySelector('[aria-label="Decision"]')!;
+    expect(decision.textContent).toContain('Rule 2');
+    expect(decision.textContent).toContain('tier = B');
+    expect(decision.textContent).toContain('auto_approve = false');
+    expect(decision.textContent).toContain('input values are not recorded');
   });
 });

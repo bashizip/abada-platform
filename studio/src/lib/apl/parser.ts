@@ -226,6 +226,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           budgetUsd: aplNode.budget_usd,
           delegates: aplNode.delegates,
           reviewedBy: aplNode.reviewed_by,
+          evidence: aplNode.evidence
+            ? { payloads: aplNode.evidence.payloads, retentionDays: aplNode.evidence.retention_days }
+            : undefined,
         };
         break;
       case 'engine-task':
@@ -277,13 +280,17 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
     case 'human-input':
         wNode.type = 'human';
         wNode.humanConfig = {
+          // The deprecated alias is kept as written; the panel offers the conversion.
+          kind: aplNode.type === 'approval-gate' ? 'approval-gate' : undefined,
           assignees: aplNode.assignees || ['Reviewer'],
+          mode: aplNode.mode,
           slaHours: aplNode.sla_hours ?? ('slaHours' in aplNode ? aplNode.slaHours : undefined),
           escalateTo: aplNode.escalate_to,
           onError: aplNode.on_error,
           onTimeout: aplNode.on_timeout,
           outcomes: aplNode.outcomes,
-          formKey: 'formKey' in aplNode ? aplNode.formKey : undefined,
+          // `formId` is the deprecated alias of `formKey`; it is saved back as `formKey`.
+          formKey: aplNode.type === 'human-input' ? aplNode.formKey ?? aplNode.formId : undefined,
           formFields: [],
         };
         break;
@@ -525,18 +532,21 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         budget_usd: node.agentConfig?.budgetUsd,
         delegates: node.agentConfig?.delegates?.length ? node.agentConfig.delegates : undefined,
         reviewed_by: node.agentConfig?.reviewedBy,
+        evidence: agentEvidence(node),
         next: hasAgentRoutes(node) ? undefined : getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
       aplNodes.push({
         ...baseNode,
-        type: 'human-input',
+        type: node.humanConfig?.kind ?? 'human-input',
         assignees: node.humanConfig?.assignees || [],
+        mode: node.humanConfig?.mode,
         sla_hours: node.humanConfig?.slaHours || undefined,
         escalate_to: node.humanConfig?.escalateTo?.length ? node.humanConfig.escalateTo : undefined,
         on_error: node.humanConfig?.onError || undefined,
         on_timeout: node.humanConfig?.onTimeout || undefined,
-        formKey: node.humanConfig?.formKey,
+        // An approval gate cannot take a form.
+        formKey: node.humanConfig?.kind === 'approval-gate' ? undefined : node.humanConfig?.formKey || undefined,
         // With outcomes every exit is an outcome's `next`.
         outcomes: node.humanConfig?.outcomes && Object.keys(node.humanConfig.outcomes).length
           ? node.humanConfig.outcomes : undefined,
@@ -741,6 +751,16 @@ function metadataExtras(metadata: APLDocument['metadata']): Record<string, unkno
 
 /** Route edges are labelled `on_*` or `outcome: <name>`; see `routes.ts`. */
 export { isOutcomeRouteEdge };
+
+/** An agent's `evidence` override, or undefined when it sets nothing. */
+function agentEvidence(node: WorkflowNode): { payloads?: 'none' | 'redacted' | 'full'; retention_days?: number } | undefined {
+  const evidence = node.agentConfig?.evidence;
+  if (!evidence || (evidence.payloads === undefined && evidence.retentionDays === undefined)) return undefined;
+  return {
+    ...(evidence.payloads ? { payloads: evidence.payloads } : {}),
+    ...(evidence.retentionDays !== undefined ? { retention_days: evidence.retentionDays } : {}),
+  };
+}
 
 function hasAgentRoutes(node: WorkflowNode): boolean {
   return Object.keys(node.agentConfig?.routes ?? {}).length > 0;

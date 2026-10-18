@@ -86,6 +86,34 @@ class DecisionTableRuntimeTest {
     }
 
     @Test
+    void runsTheUniqueAplTableAndRecordsTheMatchedRule() {
+        try (ConfigurableApplicationContext context = startApplication()) {
+            context.getBean(DatabaseTestHelper.class).cleanup();
+            AbadaEngine engine = context.getBean(AbadaEngine.class);
+            deploy(engine, "/apl/decision-table-rules.apl.yaml");
+
+            var tierA = engine.startProcess("loan_tier", "alice",
+                    Map.of("applicant", Map.of("score", 780), "amount", 20000));
+            var tierB = engine.startProcess("loan_tier", "alice",
+                    Map.of("applicant", Map.of("score", 650), "amount", 90000));
+            var tierC = engine.startProcess("loan_tier", "alice",
+                    Map.of("applicant", Map.of("score", 300), "amount", 1000));
+
+            assertThat(engine.getProcessInstanceById(tierA.getId()).getVariables())
+                    .containsEntry("tier", "A").containsEntry("auto_approve", true);
+            assertThat(engine.getProcessInstanceById(tierB.getId()).getVariables()).containsEntry("tier", "B");
+            assertThat(engine.getProcessInstanceById(tierC.getId()).getVariables()).containsEntry("tier", "C");
+            // The audit names the rule that matched (the fallback is rule index 2), never the values.
+            assertThat(context.getBean(ActivityHistoryRepository.class)
+                    .findByProcessInstanceIdOrderByOccurredAtAsc(tierC.getId()))
+                    .filteredOn(event -> "DECISION_TABLE_APPLIED".equals(event.getEventType()))
+                    .singleElement()
+                    .satisfies(event -> assertThat(event.getDetailsJson())
+                            .contains("\"matchedRuleIndexes\":[2]").doesNotContain("300"));
+        }
+    }
+
+    @Test
     void rollsBackStartWhenTheDecisionCannotBeMade() {
         try (ConfigurableApplicationContext context = startApplication()) {
             context.getBean(DatabaseTestHelper.class).cleanup();

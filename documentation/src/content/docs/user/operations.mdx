@@ -86,7 +86,8 @@ touched. The same layers appear during a **Dry Run** in the designer.
   each attempt: model and provider, attempt number, latency, confidence
   against the threshold, the output contract result, token counts, prompt
   hash and worker. When a fallback model answered, **Fallback for** names the
-  model it replaced.
+  model it replaced. For a decision table: the last decision (the rule that
+  matched, its condition and outputs) and the output variables' current values.
 - **Variables** — the instance's current variables as a tree: objects and
   lists open and close, with their size (`{4}`, `[12]`). **Expand all**,
   **Collapse all** and **Expand to level** set how much is open. Search finds
@@ -110,8 +111,10 @@ touched. The same layers appear during a **Dry Run** in the designer.
   (the engine, an agent with its model and prompt version, a person, or a
   worker), what happened, when, how long the step waited, and where the token
   went next (`→ Draft (outcome reject)`, `→ Triage (timeout)`). An agent entry
-  opens on its model and tool calls; a decision-table entry names the rules
-  that matched; a person's entry gives the outcome and whether they commented
+  opens on its model and tool calls; a decision-table entry names the rule
+  that matched and its condition, and opens on the rule itself as the
+  instance's version declares it (the condition and the outputs it set) and
+  the names of the inputs it read — the engine never records input values; a person's entry gives the outcome and whether they commented
   (the comment itself stays in the process variables). Click an entry for the
   facts the engine recorded. Point at an entry to ring its step on the canvas;
   click a step on the canvas to see only its entries. While the instance runs,

@@ -380,7 +380,7 @@ not captured there.
 
 ---
 
-## S7 — Decision-table properties in the properties panel
+## S7 — Decision-table properties in the properties panel (widened: every node, and the palette)
 
 **Goal.** Selecting a `decision-table` node shows and edits its full definition
 in the properties panel, like agent and human nodes.
@@ -405,6 +405,40 @@ in the properties panel, like agent and human nodes.
 **Acceptance tests.** Component tests for edit, reorder, validation errors and
 YAML round trip; the Studio kitchen-sink parity check covers every
 `decision-table` property.
+
+**Widened scope (agreed at planning).** The same treatment for every node
+kind: the palette draws each kind in its canvas shape, and every APL property
+of every node is editable in the panel.
+
+**As built.** One node catalog (`features/designer/nodes/nodeCatalog.ts`)
+names, colours and creates every kind; the event circle, gateway diamond and
+activity card are one drawing (`shapes.tsx`) used by the canvas, the palette
+and the panel header. The palette gains search (name, purpose, APL type,
+keywords), arrow keys, drag onto the canvas and the call-process and for-each
+kinds; `approval-gate` is not offered because it is a deprecated alias. The
+panel is a frame over one editor per kind (`components/inspector/`), built
+from collapsible sections (open state remembered per kind) and fields that
+show the APL key and the engine issue for that field (`issuesAt`, by issue
+path). The decision-table editor replaces the unmounted `DmnRuleInspector`
+(removed): output columns are derived from the rules' `then` keys (APL has no
+output declarations), values are typed in place (`"42"` keeps text), the
+fallback is shown and saved last (the engine applies it wherever it is
+written), reorder works by drag, buttons and Alt+arrows; Expand opens a
+portalled drawer. Newly editable: for-each fields, agent `evidence`, human
+`mode`. Kept as written instead of edited: an `approval-gate` stays one (the
+panel offers the conversion; it used to be saved as `human-input`), `formId`
+reads as `formKey`, `requireDoubleSignOff` is kept and labelled reserved (it
+has no runtime effect). The engine gained `DecisionTableRules`: empty `when`,
+invalid CEL, a name that is not an input (previously a warning from
+`AplVariables`), a second `otherwise`, and identical conditions under
+`UNIQUE`, each at `/flow/nodes/<i>/rules/<j>`, on deployment and authoring
+only. Narrowed from the text above: overlapping but different `UNIQUE`
+conditions stay a run-time failure, and Operations shows the matched rule
+(condition and outputs, from the instance's own definition version) and the
+input *names*, because the engine records no input values; recording them
+under the evidence policy is a follow-up. Verified on the dev stack with
+screenshots; Cmd+Z did not reach the app inside the desktop browser pane, the
+toolbar Undo did.
 
 ---
 

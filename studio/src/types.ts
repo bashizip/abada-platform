@@ -76,6 +76,14 @@ export interface AgentConfig {
   timeoutMs?: number;
   maxAttempts?: number;
   retryBackoffMs?: number;
+  /** What the step journal keeps of this agent's payloads; only stricter than the project policy (`evidence`). */
+  evidence?: AgentEvidence;
+}
+
+export interface AgentEvidence {
+  payloads?: 'none' | 'redacted' | 'full';
+  /** Days the journal keeps the payloads (`retention_days`). */
+  retentionDays?: number;
 }
 
 export type DMNValue = string | number | boolean;
@@ -108,7 +116,14 @@ export interface DMNConfig {
 }
 
 export interface HumanConfig {
+  /**
+   * The APL block: `human-input` (default) or the deprecated `approval-gate` alias, kept as written so
+   * saving never rewrites it; the panel offers the conversion.
+   */
+  kind?: 'human-input' | 'approval-gate';
   assignees: string[];
+  /** Authoring hint for several assignees (`mode`); the engine does not enforce it. */
+  mode?: 'serial' | 'parallel';
   /** Service level in hours: the engine escalates the open task in place when it is missed. */
   slaHours?: number;
   /** Groups added as candidates when the task is escalated (`escalate_to`). */
