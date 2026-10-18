@@ -1,55 +1,117 @@
-import React from 'react';
-import { WorkflowNode, WorkflowFile, AgentConfig, HumanConfig } from '@/types';
-import { agentModelOptions, getDefaultAgentModel } from '@/lib/agentModels';
-import { useAplContract } from '@/lib/aplContract';
-import { 
-  Bot, 
-  UserCheck, 
-  Table, 
-  GitFork, 
-  GitMerge,
-  Circle, 
-  Plus, 
-  Trash2, 
-  ShieldAlert, 
-  Sparkles, 
-  Clock, 
-  Zap, 
-  Sliders, 
-  Info,
-  Terminal,
-  Mail,
-  Radio,
-  GitCompare
-} from 'lucide-react';
-import { TooltipProvider, UITooltip } from '@/components/ui';
-import { FormPicker } from '@/components/FormPicker';
+import React, { useState } from 'react';
+import { Check, Copy, MousePointerClick, Repeat2 } from 'lucide-react';
+import type { AgentConfig, WorkflowFile, WorkflowNode } from '@/types';
+import { TooltipProvider } from '@/components/ui';
 import type { AplValidationIssue } from '@/api/apl';
 import { isOutcomeRouteEdge, setRoute, syncRouteEdges, type Route } from '@/lib/apl/routes';
 import { analyzeLoops } from '@/lib/apl/loopAnalysis';
-import {
-  AgentRoutesEditor, ErrorRoutesEditor, LoopEditor, NameListEditor, OrderedPickList, OutcomesEditor, RouteSelect,
-  TimeoutEditor,
-} from '@/components/inspector/RouteEditors';
-import { AgentToolsEditor } from '@/components/inspector/AgentToolsEditor';
-import { GatewayBranchesEditor } from '@/components/inspector/GatewayBranchesEditor';
-import { gatewayBranches, setBranchCondition, setBranchElse } from '@/lib/apl/gatewayRules';
-import { AgentLimitsEditor, CallProcessEditor, DelegatesEditor, ReviewedByEditor } from '@/components/inspector/AgentEditors';
+import { issuesAt, nodeRelativePath } from '@/lib/apl/issues';
+import { NODE_KINDS, kindOf, kindSpec } from '@/features/designer/nodes/nodeCatalog';
+import { NodeGlyph } from '@/features/designer/nodes/shapes';
+import { LoopEditor } from '@/components/inspector/RouteEditors';
+import { Field, FieldIssues, Section } from '@/components/inspector/InspectorKit';
+import { SectionScope } from '@/components/inspector/sectionScope';
+import { INPUT, TEXTAREA } from '@/components/inspector/fieldStyles';
+import type { NodeEditorProps } from '@/components/inspector/nodeEditor';
+import { AgentEditor } from '@/components/inspector/AgentEditor';
+import { HumanEditor } from '@/components/inspector/HumanEditor';
+import { DecisionTableEditor } from '@/components/inspector/DecisionTableEditor';
+import { CallProcessNodeEditor, EngineTaskEditor, ScriptEditor } from '@/components/inspector/WorkEditors';
+import { CatchEventEditor, EventGatewayEditor, GatewayEditor, PlainEventEditor } from '@/components/inspector/FlowEditors';
 
 interface PropertiesInspectorProps {
   selectedNode: WorkflowNode | null;
   onUpdateNode: (updatedNode: WorkflowNode) => void;
   onRunAgentTest?: (agentConfig: AgentConfig, testInput: string) => Promise<unknown>;
   nodeCount: number;
-  /** Full active workflow — enables the event-gateway competing-events editor. */
+  /** Full active workflow: route targets, gateway branches and event-gateway children. */
   workflow?: WorkflowFile;
-  /** Mutates the active workflow (nodes + edges) for event-gateway child authoring. */
+  /** Mutates the active workflow (nodes + edges) in one undo step. */
   onUpdateWorkflow?: (updater: (wf: WorkflowFile) => WorkflowFile) => void;
-  /** Owning project — enables the human-node form picker. */
+  /** Owning project — enables the human-node form picker and agent tools. */
   projectId?: string;
   /** Engine validation issues about the selected node. */
   issues?: AplValidationIssue[];
 }
+
+/** The editor for each kind of node; every one reads the same props. */
+const EDITORS: Record<ReturnType<typeof kindOf>, React.FC<NodeEditorProps>> = {
+  start: PlainEventEditor,
+  end: PlainEventEditor,
+  message: CatchEventEditor,
+  timer: CatchEventEditor,
+  signal: CatchEventEditor,
+  agent: AgentEditor,
+  'human-input': HumanEditor,
+  'engine-task': EngineTaskEditor,
+  script: ScriptEditor,
+  'decision-table': DecisionTableEditor,
+  exclusive: GatewayEditor,
+  parallel: GatewayEditor,
+  inclusive: GatewayEditor,
+  'event-gateway': EventGatewayEditor,
+  'call-process': CallProcessNodeEditor,
+  'for-each': CallProcessNodeEditor,
+};
+
+/** Kinds whose config object must exist before their editor can show. */
+const hasConfig = (node: WorkflowNode): boolean => {
+  switch (node.type) {
+    case 'agent': return !!node.agentConfig;
+    case 'human': return !!node.humanConfig;
+    case 'dmn': return !!node.dmnConfig;
+    default: return true;
+  }
+};
+
+const IdChip: React.FC<{ id: string }> = ({ id }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button type="button" title="Copy the node id" aria-label={`Copy node id ${id}`}
+      onClick={() => {
+        navigator.clipboard?.writeText(id).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }).catch(() => undefined);
+      }}
+      className="flex max-w-[45%] items-center gap-1 rounded border border-hairline bg-charcoal px-1.5 py-0.5 font-mono text-[10px] text-sand hover:text-linen">
+      <span className="truncate">{id}</span>
+      {copied ? <Check className="h-3 w-3 shrink-0 text-sage-green" /> : <Copy className="h-3 w-3 shrink-0" />}
+    </button>
+  );
+};
+
+/** Nothing selected: what the process holds, and how to start editing. */
+const ProcessOverview: React.FC<{ workflow?: WorkflowFile; nodeCount: number }> = ({ workflow, nodeCount }) => {
+  const counts = new Map<string, number>();
+  for (const node of workflow?.nodes ?? []) counts.set(kindOf(node), (counts.get(kindOf(node)) ?? 0) + 1);
+  const present = NODE_KINDS.filter((spec) => counts.has(spec.kind));
+  return (
+    <div className="space-y-4 p-4">
+      <div className="space-y-2 rounded-2xl border border-hairline bg-charcoal p-4 text-center">
+        <MousePointerClick className="mx-auto h-6 w-6 text-sand" aria-hidden="true" />
+        <p className="text-xs font-medium text-linen">Select a step to edit it</p>
+        <p className="text-[11px] leading-relaxed text-sand">
+          Every property of the step shows here. Add steps from the palette: click one, or drag it onto the canvas.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <span className="block text-[11px] font-semibold uppercase tracking-wider text-sand">
+          This process · {nodeCount} step{nodeCount === 1 ? '' : 's'}
+        </span>
+        <ul className="space-y-1">
+          {present.map((spec) => (
+            <li key={spec.kind} className="flex items-center gap-3 rounded-lg px-2 py-1 text-xs text-linen">
+              <span className="flex w-10 justify-center"><NodeGlyph kind={spec.kind} size={18} /></span>
+              <span className="flex-1">{spec.label}</span>
+              <span className="font-mono text-sand">{counts.get(spec.kind)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   selectedNode,
@@ -60,1028 +122,100 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   projectId,
   issues = [],
 }) => {
-  const aplContractValue = useAplContract();
-  /** Engine bound for an agent field (served APL contract), or the fallback until it loads. */
-  const agentBound = (field: string, side: 'min' | 'max', fallback: number): number =>
-    aplContractValue?.agentBounds[field]?.[side] ?? fallback;
-
   if (!selectedNode) {
     return (
-      <TooltipProvider delayDuration={0}>
-        <aside className="w-full min-w-0 bg-mocha border-l border-hairline flex flex-col h-full z-10 p-4 space-y-5 overflow-y-auto">
-        <div className="flex items-center space-x-2 text-saffron">
-          <Sliders className="w-4 h-4" />
-          <h2 className="font-bold text-sm text-linen tracking-wide">Properties Inspector</h2>
-        </div>
-
-        <div className="p-4 bg-charcoal rounded-2xl border border-hairline text-center space-y-2">
-          <Info className="w-6 h-6 text-sand mx-auto" />
-          <p className="text-xs text-linen font-medium">No Node Selected</p>
-          <p className="text-[11px] text-sand leading-relaxed">
-            Select a step on the canvas to edit its settings: agent prompts and models, routes, review outcomes, repeat limits or decision rules.
-          </p>
-        </div>
-
-        {/* Workflow Summary Card */}
-        <div className="space-y-3">
-          <span className="text-[11px] font-semibold tracking-wider text-sand uppercase block">
-            Process Architecture Stats
-          </span>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-3 bg-charcoal rounded-xl border border-hairline">
-              <span className="text-[10px] text-sand block">Total Nodes</span>
-              <span className="text-lg font-bold text-linen">{nodeCount}</span>
-            </div>
-            <div className="p-3 bg-charcoal rounded-xl border border-amethyst/30 glow-amethyst-subtle">
-              <span className="text-[10px] text-amethyst block">AI Agents</span>
-              <span className="text-lg font-bold text-amethyst">Active</span>
-            </div>
-            <div className="p-3 bg-charcoal rounded-xl border border-mineral-teal/30">
-              <span className="text-[10px] text-mineral-teal block">DMN Rules</span>
-              <span className="text-lg font-bold text-mineral-teal">Bound</span>
-            </div>
-            <div className="p-3 bg-charcoal rounded-xl border border-desert-rose/30">
-              <span className="text-[10px] text-desert-rose block">Human SLAs</span>
-              <span className="text-lg font-bold text-desert-rose">Active</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Global Process Rules */}
-        <div className="p-3.5 bg-charcoal rounded-xl border border-hairline space-y-2.5 text-xs">
-          <span className="font-semibold text-linen block">Execution Policy</span>
-          <div className="flex justify-between text-sand">
-            <span>Orchestration Mode</span>
-            <span className="text-saffron font-mono">Serverless</span>
-          </div>
-          <div className="flex justify-between text-sand">
-            <span>Model Engine</span>
-            <span className="text-amethyst font-mono">{getDefaultAgentModel()}</span>
-          </div>
-          <div className="flex justify-between text-sand">
-            <span>Default Fallback</span>
-            <span className="text-desert-rose">Escalate to Human</span>
-          </div>
-        </div>
+      <aside className="z-10 flex h-full w-full min-w-0 flex-col overflow-y-auto border-l border-hairline bg-mocha">
+        <ProcessOverview workflow={workflow} nodeCount={nodeCount} />
       </aside>
-      </TooltipProvider>
     );
   }
 
-  // Handle updates to general node properties
-  const handleGeneralChange = (field: keyof WorkflowNode, value: any) => {
-    onUpdateNode({
-      ...selectedNode,
-      [field]: value,
-    });
-  };
+  const kind = kindOf(selectedNode);
+  const spec = kindSpec(kind);
+  const Editor = EDITORS[kind];
+  const nodes = workflow?.nodes ?? [];
+  const nextTarget = workflow?.edges.find((edge) => edge.source === selectedNode.id && !isOutcomeRouteEdge(edge))?.target;
+  const loopProblem = workflow ? analyzeLoops(workflow).targets.get(selectedNode.id) : undefined;
+  const loopable = kind !== 'start' && kind !== 'end';
+  // Issues the engine did not pin to a field are listed at the top; the rest show next to their field.
+  const general = issues.filter((issue) => !nodeRelativePath(issue) || nodeRelativePath(issue) === '/id');
+  const placed = issues.length - general.length;
 
-  // Handle agent config updates
-  const handleAgentChange = (field: keyof AgentConfig, value: any) => {
-    if (!selectedNode.agentConfig) return;
-    onUpdateNode({
-      ...selectedNode,
-      agentConfig: {
-        ...selectedNode.agentConfig,
-        [field]: value,
-      },
-    });
-  };
-
-  // Numeric agent settings round-trip into the node APL; an empty field is
-  // written back as undefined so the YAML omits the key (engine default wins).
-  const handleAgentNumber = (field: 'maxTokens' | 'maxAttempts' | 'timeoutMs' | 'retryBackoffMs', raw: string) => {
-    if (raw.trim() === '') {
-      handleAgentChange(field, undefined);
-      return;
-    }
-    const parsed = Number(raw);
-    handleAgentChange(field, Number.isFinite(parsed) ? parsed : undefined);
-  };
-
-  // Handle human task updates
-  const handleHumanChange = (field: keyof HumanConfig, value: any) => {
-    if (!selectedNode.humanConfig) return;
-    onUpdateNode({
-      ...selectedNode,
-      humanConfig: {
-        ...selectedNode.humanConfig,
-        [field]: value,
-      },
-    });
-  };
-
-  /**
-   * Route edits go through the workflow so the node config and its canvas
-   * edges change together, in one undo step.
-   */
-  const routeTo = (route: Route, target: string | null) =>
-    onUpdateWorkflow?.((wf) => setRoute(wf, selectedNode.id, route, target));
-  /** Replaces the node and re-derives its route edges (loop, outcomes). */
-  const commitWithRoutes = (updated: WorkflowNode, dropNext = false) =>
-    onUpdateWorkflow?.((wf) => syncRouteEdges({
+  const editorProps: NodeEditorProps = {
+    node: selectedNode,
+    nodes,
+    workflow,
+    projectId,
+    issues,
+    update: onUpdateNode,
+    updateWorkflow: onUpdateWorkflow,
+    routeTo: (route: Route, target: string | null) =>
+      onUpdateWorkflow?.((wf) => setRoute(wf, selectedNode.id, route, target)),
+    commitWithRoutes: (updated, dropNext = false) => onUpdateWorkflow?.((wf) => syncRouteEdges({
       ...wf,
       nodes: wf.nodes.map((node) => (node.id === updated.id ? updated : node)),
       // A review with outcomes, or an agent with routes, has no `next`: its exits are the outcomes or routes.
       edges: dropNext ? wf.edges.filter((edge) => edge.source !== updated.id || isOutcomeRouteEdge(edge)) : wf.edges,
-    }));
-  const nodes = workflow?.nodes ?? [];
-  const nextTarget = workflow?.edges.find((edge) => edge.source === selectedNode.id && !isOutcomeRouteEdge(edge))?.target;
-  const loopProblem = workflow ? analyzeLoops(workflow).targets.get(selectedNode.id) : undefined;
-  const loopable = !(selectedNode.type === 'event' && (selectedNode.subtype === 'start' || selectedNode.subtype === 'end'));
-
-  // Model selector options are the engine's allowed models (served APL
-  // contract), joined by the current model when it is not among them, so the
-  // dropdown can never render an empty/ghost selection.
-  const agentConfig = selectedNode.agentConfig;
-  const humanConfig = selectedNode.humanConfig;
-  const currentModel = agentConfig?.model || getDefaultAgentModel();
-  const allowedModels = agentModelOptions(aplContractValue?.allowedAgentModels ?? []);
-  const modelOptions = allowedModels.includes(currentModel) ? allowedModels : [currentModel, ...allowedModels];
-
-  /* ---- Event-gateway authoring: the gateway's competing catch events are
-     materialized canvas nodes (gateway → catch → next edges), so the editor
-     below reads and writes the shared workflow nodes/edges directly. ---- */
-
-  /** Catch-event children currently wired out of the selected event gateway. */
-  const eventGatewayChildren = (): WorkflowNode[] => {
-    if (!workflow) return [];
-    return workflow.edges
-      .filter((e) => e.source === selectedNode.id)
-      .map((e) => workflow.nodes.find((n) => n.id === e.target))
-      .filter((n): n is WorkflowNode => !!n && n.type === 'event'
-        && (n.subtype === 'message' || n.subtype === 'timer' || n.subtype === 'signal'));
+    })),
+    nextTarget,
   };
-
-  /** The successor a catch child currently routes to (its outgoing edge). */
-  const childNextTarget = (childId: string): string | undefined =>
-    workflow?.edges.find((e) => e.source === childId)?.target;
-
-  const handleChildEventKindChange = (childId: string, subtype: 'message' | 'timer' | 'signal') => {
-    onUpdateWorkflow?.((wf) => ({
-      ...wf,
-      nodes: wf.nodes.map((n) => n.id === childId
-        ? { ...n, subtype, catchEventConfig: { definitionRef: '' } }
-        : n),
-    }));
-  };
-
-  const handleChildEventDefinitionChange = (childId: string, definitionRef: string) => {
-    onUpdateWorkflow?.((wf) => ({
-      ...wf,
-      nodes: wf.nodes.map((n) => n.id === childId
-        ? { ...n, catchEventConfig: { definitionRef } }
-        : n),
-    }));
-  };
-
-  const handleChildEventNextChange = (childId: string, target: string) => {
-    onUpdateWorkflow?.((wf) => {
-      const existing = wf.edges.find((e) => e.source === childId);
-      if (!target) return { ...wf, edges: wf.edges.filter((e) => e.source !== childId) };
-      if (existing) {
-        return { ...wf, edges: wf.edges.map((e) => (e.id === existing.id ? { ...e, target } : e)) };
-      }
-      return { ...wf, edges: [...wf.edges, { id: `e-${Date.now()}`, source: childId, target, label: 'Next' }] };
-    });
-  };
-
-  const handleAddChildEvent = (subtype: 'message' | 'timer' | 'signal') => {
-    const yOffset = eventGatewayChildren().length * 84;
-    onUpdateWorkflow?.((wf) => {
-      const childId = `${selectedNode.id}_e${Date.now()}`;
-      const child: WorkflowNode = {
-        id: childId,
-        type: 'event',
-        subtype,
-        title: subtype === 'message' ? 'Message Catch' : subtype === 'timer' ? 'Timer Catch' : 'Signal Catch',
-        description: 'Competing catch event of the event gateway',
-        x: selectedNode.x + 260,
-        y: selectedNode.y + yOffset,
-        catchEventConfig: { definitionRef: '' },
-      };
-      return {
-        ...wf,
-        nodes: [...wf.nodes, child],
-        edges: [...wf.edges, { id: `e-${Date.now()}`, source: selectedNode.id, target: childId, label: 'Race' }],
-      };
-    });
-  };
-
-  const handleRemoveChildEvent = (childId: string) => {
-    onUpdateWorkflow?.((wf) => ({
-      ...wf,
-      nodes: wf.nodes.filter((n) => n.id !== childId),
-      edges: wf.edges.filter((e) => e.source !== childId && e.target !== childId),
-    }));
-  };
-
-  const isEventGateway = selectedNode.type === 'gateway' && selectedNode.subtype === 'event';
-  const gatewayChildren = isEventGateway ? eventGatewayChildren() : [];
-  const gatewayChildIds = new Set(gatewayChildren.map((c) => c.id));
-  const gatewayNextOptions = workflow?.nodes
-    .filter((n) => n.id !== selectedNode.id && !gatewayChildIds.has(n.id)) ?? [];
-  const gatewayRoutedCount = gatewayChildren.filter((c) =>
-    (c.catchEventConfig?.definitionRef || '').trim() !== '' && !!childNextTarget(c.id)
-  ).length;
 
   return (
     <TooltipProvider delayDuration={0}>
-    <aside className="w-full min-w-0 bg-mocha border-l border-hairline flex flex-col h-full z-10 overflow-y-auto">
-      {/* Header */}
-      <div className="p-4 border-b border-hairline bg-charcoal/60 sticky top-0 z-10 backdrop-blur-md flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          {selectedNode.type === 'agent' && <Bot className="w-4 h-4 text-amethyst" />}
-          {selectedNode.type === 'human' && <UserCheck className="w-4 h-4 text-desert-rose" />}
-          {selectedNode.type === 'dmn' && <Table className="w-4 h-4 text-mineral-teal" />}
-          {selectedNode.type === 'engine-task' && <Zap className="w-4 h-4 text-sage-green" />}
-          {selectedNode.type === 'gateway' && (selectedNode.subtype === 'event'
-            ? <GitCompare className="w-4 h-4 text-saffron" />
-            : selectedNode.subtype === 'parallel'
-              ? <GitMerge className="w-4 h-4 text-saffron" />
-              : <GitFork className="w-4 h-4 text-saffron" />)}
-          {selectedNode.type === 'event'
-            && (selectedNode.subtype === 'message'
-              ? <Mail className="w-4 h-4 text-saffron" />
-              : selectedNode.subtype === 'timer'
-                ? <Clock className="w-4 h-4 text-saffron" />
-                : selectedNode.subtype === 'signal'
-                  ? <Radio className="w-4 h-4 text-saffron" />
-                  : <Circle className="w-4 h-4 text-saffron" />)}
-          <h2 className="font-bold text-sm text-linen tracking-wide capitalize">
-            {selectedNode.type} Node Settings
-          </h2>
-        </div>
-        <span className="text-[10px] font-mono text-sand bg-charcoal px-2 py-0.5 rounded border border-hairline">
-          {selectedNode.id}
-        </span>
-      </div>
-
-      <div className="p-4 space-y-6">
-        {/* General Details */}
-        <div className="space-y-3">
-          <span className="text-[11px] font-semibold tracking-wider text-sand uppercase block">
-            General Properties
-          </span>
-
-          <div className="space-y-1.5">
-            <label className="text-xs text-sand block">Node Title</label>
-            <input
-              type="text"
-              value={selectedNode.title}
-              onChange={(e) => handleGeneralChange('title', e.target.value)}
-              className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-saffron"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs text-sand block">Description</label>
-            <textarea
-              rows={2}
-              value={selectedNode.description}
-              onChange={(e) => handleGeneralChange('description', e.target.value)}
-              className="w-full bg-charcoal border border-hairline rounded-xl p-3 text-xs text-linen focus:outline-none focus:border-saffron resize-none"
-            />
-          </div>
-        </div>
-
-        {issues.length > 0 && (
-          <div className="space-y-1 rounded-xl border border-desert-rose/40 bg-desert-rose/10 p-3">
-            <span className="text-[11px] font-semibold text-desert-rose">Validation</span>
-            {issues.map((issue, index) => (
-              <p key={index} className="text-[10px] leading-relaxed text-linen">
-                <span className="font-mono text-desert-rose">{issue.severity === 'ERROR' ? 'error' : 'warning'}</span> {issue.message}
-              </p>
-            ))}
-          </div>
-        )}
-
-        {loopable && onUpdateWorkflow && (
-          <div className="space-y-2 pt-4 border-t border-hairline">
-            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block">Loop</span>
-            <LoopEditor
-              loop={selectedNode.loop}
-              problem={loopProblem}
-              nodes={nodes}
-              excludeId={selectedNode.id}
-              onChange={(loop) => commitWithRoutes({ ...selectedNode, loop })}
-            />
-          </div>
-        )}
-
-        {/* AI Agent Configuration Panel */}
-        {selectedNode.type === 'agent' && selectedNode.agentConfig && (
-          <div className="space-y-4 pt-4 border-t border-hairline">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-wider text-amethyst uppercase flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                AI Agent Configuration
-              </span>
-              <span className="max-w-[50%] truncate text-[10px] bg-amethyst/20 text-amethyst px-2 py-0.5 rounded-full font-mono" title={currentModel}>
-                {currentModel}
-              </span>
-            </div>
-
-            {/* Model Selection */}
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">LLM Engine Model</label>
-              <select
-                value={currentModel}
-                onChange={(e) => handleAgentChange('model', e.target.value)}
-                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-amethyst"
-              >
-                {modelOptions.map((model) => (
-                  <option key={model} value={model}>
-                    {model}{model === getDefaultAgentModel() ? ' (Default)' : ''}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[10px] text-sand leading-relaxed">
-                Mirrored into the node's APL (<span className="font-mono text-amethyst">model:</span>). Any model id already in the YAML stays selected and is listed first.
-              </p>
-            </div>
-
-            {/* System Prompt */}
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">System Directive / Prompt</label>
-              <textarea
-                rows={4}
-                value={selectedNode.agentConfig.systemPrompt}
-                onChange={(e) => handleAgentChange('systemPrompt', e.target.value)}
-                className="w-full bg-charcoal border border-hairline rounded-xl p-3 text-xs text-linen font-mono focus:outline-none focus:border-amethyst leading-relaxed"
-              />
-            </div>
-
-            {/* Confidence Slider */}
-            <div className="space-y-2 p-3 bg-charcoal rounded-xl border border-amethyst/30 glow-amethyst-subtle">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-linen font-medium flex items-center gap-1">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amethyst" />
-                  Confidence Threshold
-                </span>
-                <span className="font-mono font-bold text-amethyst">
-                  {selectedNode.agentConfig.confidenceThreshold}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min={agentBound('confidence_threshold', 'min', 0)}
-                max={agentBound('confidence_threshold', 'max', 100)}
-                value={selectedNode.agentConfig.confidenceThreshold ?? 0}
-                onChange={(e) => handleAgentChange('confidenceThreshold', Number(e.target.value))}
-                className="w-full accent-amethyst bg-mocha h-1.5 rounded-lg cursor-pointer"
-              />
-              <p className="text-[10px] text-sand leading-relaxed">
-                {selectedNode.agentConfig.confidenceThreshold
-                  ? <>The engine requires the model to report <code>_confidence</code> of at least <strong className="text-amethyst">{selectedNode.agentConfig.confidenceThreshold}%</strong> (declare an output schema). A missing or lower score goes to the low-confidence route below; without a route the attempt is retried and then becomes an incident.</>
-                  : <>0% = no confidence gate.</>}
-              </p>
-            </div>
-
-            {/* Routes: the engine-side output contract (T5, T7) and boundaries (E4) */}
-            <div className="space-y-2 p-3 bg-charcoal rounded-xl border border-hairline">
-              <span className="text-xs text-linen font-medium block">Routes</span>
-              <p className="text-[10px] text-sand leading-relaxed">
-                Where the instance goes when the engine rejects the agent result, when the step fails for good, or
-                when it takes too long. Without a route, a rejected result counts as a failed attempt and a last
-                failure opens an incident.
-              </p>
-              <AgentRoutesEditor routes={selectedNode.agentConfig.routes} nextTarget={nextTarget} nodes={nodes}
-                excludeId={selectedNode.id}
-                onChange={(routes) => commitWithRoutes(
-                  { ...selectedNode, agentConfig: { ...selectedNode.agentConfig!, routes } }, !!routes)} />
-              <RouteSelect label="Low confidence (on_low_confidence)" value={selectedNode.agentConfig.onLowConfidence}
-                nodes={nodes} excludeId={selectedNode.id} onChange={(target) => routeTo({ kind: 'low_confidence' }, target)} />
-              <RouteSelect label="Invalid output (on_invalid_output)" value={selectedNode.agentConfig.onInvalidOutput}
-                nodes={nodes} excludeId={selectedNode.id} onChange={(target) => routeTo({ kind: 'invalid_output' }, target)} />
-              <ErrorRoutesEditor value={selectedNode.agentConfig.onError} nodes={nodes} excludeId={selectedNode.id}
-                onSetRule={(code, target) => routeTo({ kind: 'error', ...(code ? { code } : {}) }, target)} />
-              <TimeoutEditor value={selectedNode.agentConfig.onTimeout} nodes={nodes} excludeId={selectedNode.id}
-                onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
-              <OrderedPickList
-                label="Fallback models (only while the model before is rate-limited or unavailable)"
-                value={selectedNode.agentConfig.fallbackModels ?? []}
-                options={allowedModels.filter((model) => model !== currentModel)}
-                max={3}
-                onChange={(fallbackModels) => handleAgentChange('fallbackModels', fallbackModels.length ? fallbackModels : undefined)}
-              />
-            </div>
-
-            {/* Temperature Slider */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-xs text-sand">
-                <span>Temperature (Determinism)</span>
-                <span className="font-mono text-linen">{selectedNode.agentConfig.temperature}</span>
-              </div>
-              <input
-                type="range"
-                min={agentBound('temperature', 'min', 0)}
-                max={agentBound('temperature', 'max', 2)}
-                step="0.05"
-                value={selectedNode.agentConfig.temperature}
-                onChange={(e) => handleAgentChange('temperature', Number(e.target.value))}
-                className="w-full accent-saffron bg-charcoal h-1.5 rounded-lg cursor-pointer"
-              />
-            </div>
-
-            {/* Max Tokens & Max Attempts — mirrored into max_tokens / max_attempts */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs text-sand block">Max Tokens</label>
-                <input
-                  type="number"
-                  min={agentBound('max_tokens', 'min', 1)}
-                  max={agentBound('max_tokens', 'max', 1000000)}
-                  step="1"
-                  placeholder="engine default"
-                  value={selectedNode.agentConfig.maxTokens ?? ''}
-                  onChange={(e) => handleAgentNumber('maxTokens', e.target.value)}
-                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-amethyst"
-                />
-                <p className="text-[10px] text-sand leading-relaxed">
-                  APL <span className="font-mono text-amethyst">max_tokens:</span> — empty leaves the engine default.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-sand block">Max Attempts</label>
-                <input
-                  type="number"
-                  min={agentBound('max_attempts', 'min', 1)}
-                  max={agentBound('max_attempts', 'max', 20)}
-                  step="1"
-                  placeholder="engine default"
-                  value={selectedNode.agentConfig.maxAttempts ?? ''}
-                  onChange={(e) => handleAgentNumber('maxAttempts', e.target.value)}
-                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-amethyst"
-                />
-                <p className="text-[10px] text-sand leading-relaxed">
-                  APL <span className="font-mono text-amethyst">max_attempts:</span> durable retries before the job fails.
-                </p>
-              </div>
-            </div>
-
-            {/* Profile — read-only badge (abada.agent/v1 is currently the only
-                supported value per the APL node reference) */}
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">Worker Profile</label>
-              <div className="flex items-center gap-2 w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs">
-                <span className="font-mono text-linen">{agentConfig?.profileVersion || 'abada.agent/v1'}</span>
-                <span className="text-[10px] text-sand bg-amethyst/10 px-1.5 py-0.5 rounded">Default &amp; only supported</span>
-              </div>
-            </div>
-
-            {/* Input Variable Bindings */}
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">Prompt Inputs (bindings)</label>
-              <p className="text-[10px] text-sand">Named variable expressions (e.g. <span className="font-mono text-amethyst">${'{'}{'payload'}{'}'}</span>) bound into the prompt scope.</p>
-              <div className="rounded-lg border border-hairline divide-y divide-hairline bg-charcoal overflow-hidden">
-                {Object.entries(agentConfig?.inputs || {}).map(([name, expr]) => (
-                  <div key={name} className="group flex items-center gap-1.5 px-2 py-1.5">
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => {
-                        const next: Record<string, string> = { ...agentConfig?.inputs };
-                        const oldExpr = next[name];
-                        delete next[name];
-                        next[e.target.value] = oldExpr;
-                        handleAgentChange('inputs', next);
-                      }}
-                      className="w-28 bg-mocha border border-hairline rounded px-2 py-1 text-[11px] font-mono text-linen focus:outline-none focus:border-amethyst"
-                    />
-                    <input
-                      type="text"
-                      value={expr}
-                      onChange={(e) => handleAgentChange('inputs', { ...agentConfig?.inputs, [name]: e.target.value })}
-                      className="flex-1 min-w-0 bg-mocha border border-hairline rounded px-2 py-1 text-[11px] font-mono text-amethyst focus:outline-none focus:border-amethyst"
-                      placeholder='${payload}'
-                    />
-                    <button
-                      onClick={() => {
-                        const next: Record<string, string> = { ...agentConfig?.inputs };
-                        delete next[name];
-                        handleAgentChange('inputs', next);
-                      }}
-                      className="text-red-400 hover:text-red-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Remove input binding"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={() => {
-                    const next: Record<string, string> = { ...agentConfig?.inputs, input_1: '${payload}' };
-                    handleAgentChange('inputs', next);
-                  }}
-                  className="w-full text-left text-xs text-amethyst hover:text-amethyst-bright flex items-center gap-1 font-medium px-3 py-2"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Add Input Binding</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Result Variable + Output Schema */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs text-sand block">Result Variable</label>
-                <input
-                  type="text"
-                  placeholder={selectedNode.id + '_result'}
-                  value={agentConfig?.resultVariable ?? ''}
-                  onChange={(e) => handleAgentChange('resultVariable', e.target.value || undefined)}
-                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-linen focus:outline-none focus:border-amethyst"
-                />
-                <p className="text-[10px] text-sand">Where the agent output is written. Empty = engine default.</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-sand block">Output Schema (JSON)</label>
-                <textarea
-                  rows={3}
-                  value={JSON.stringify(agentConfig?.outputSchema ?? {}, null, 2)}
-                  onChange={(e) => {
-                    try {
-                      const parsed = e.target.value.trim() ? JSON.parse(e.target.value) : {};
-                      handleAgentChange('outputSchema', parsed);
-                    } catch {
-                      handleAgentChange('outputSchema', undefined);
-                    }
-                  }}
-                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-[10px] font-mono text-amethyst focus:outline-none focus:border-amethyst resize-y"
-                  placeholder='{"approved": true}'
-                />
-                <p className="text-[10px] text-sand">Expected JSON shape; the engine checks every result against it before it is stored.</p>
-              </div>
-            </div>
-
-            {/* Timeout & Retry Backoff */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs text-sand block">Timeout (ms)</label>
-                <input
-                  type="number"
-                  min={agentBound('timeout_ms', 'min', 1)}
-                  max={agentBound('timeout_ms', 'max', 3600000)}
-                  step="1000"
-                  placeholder="60000"
-                  value={agentConfig?.timeoutMs ?? ''}
-                  onChange={(e) => handleAgentNumber('timeoutMs', e.target.value)}
-                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-amethyst focus:outline-none focus:border-amethyst"
-                />
-                <p className="text-[10px] text-sand">Worker call timeout. Empty = engine default (60 000).</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-sand block">Retry Backoff (ms)</label>
-                <input
-                  type="number"
-                  min={agentBound('retry_backoff_ms', 'min', 0)}
-                  max={agentBound('retry_backoff_ms', 'max', 3600000)}
-                  step="100"
-                  placeholder="2000"
-                  value={agentConfig?.retryBackoffMs ?? ''}
-                  onChange={(e) => handleAgentNumber('retryBackoffMs', e.target.value)}
-                  className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-amethyst focus:outline-none focus:border-amethyst"
-                />
-                <p className="text-[10px] text-sand">Pause between durable retries. Empty = engine default (2 000).</p>
-              </div>
-            </div>
-
-            {/* Tools from the project's tool servers (E7), loop limits (E8), delegates (E20b) */}
-            <AgentToolsEditor projectId={projectId} tools={selectedNode.agentConfig.tools ?? []}
-              onChange={(tools) => handleAgentChange('tools', tools)} />
-            <AgentLimitsEditor
-              limits={{ maxTurns: selectedNode.agentConfig.maxTurns, maxTokensTotal: selectedNode.agentConfig.maxTokensTotal,
-                budgetUsd: selectedNode.agentConfig.budgetUsd }}
-              onChange={(patch) => onUpdateNode({ ...selectedNode, agentConfig: { ...selectedNode.agentConfig!, ...patch } })} />
-            <ReviewedByEditor
-              reviewers={nodes.filter((candidate) => candidate.type === 'human' && candidate.humanConfig?.outcomes
-                && Object.keys(candidate.humanConfig.outcomes).length > 0)
-                .map((candidate) => ({ id: candidate.id, label: candidate.title || candidate.id,
-                  outcomes: Object.keys(candidate.humanConfig!.outcomes!) }))}
-              value={selectedNode.agentConfig.reviewedBy}
-              onChange={(reviewedBy) => handleAgentChange('reviewedBy', reviewedBy)} />
-            <DelegatesEditor delegates={selectedNode.agentConfig.delegates ?? []}
-              onChange={(delegates) => handleAgentChange('delegates', delegates)} />
-
-            {/* Live Test Drawer */}
-            <div className="pt-3 border-t border-hairline space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-linen block">Agent Execution Contract</span>
-                <span className="text-[10px] text-mineral-teal font-mono">abada.agent/v1</span>
-              </div>
-              <p className="text-[11px] text-sand leading-relaxed bg-charcoal p-2.5 rounded-xl border border-hairline">
-                Agent execution is bounded by the Engine runtime contract. Live execution runs via external workers (<span className="font-mono text-saffron">abada-agent-worker</span>) when instances are started on the Engine.
-              </p>
-              <UITooltip content="Use 'Dry Run' to mock agent choices locally, or 'Deploy & Start' to run live on the engine with the external agent worker.">
-                <button
-                  type="button"
-                  disabled
-                  className="w-full py-2 bg-amethyst/30 border border-amethyst/40 text-sand font-semibold text-xs rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Bot className="w-3.5 h-3.5 text-amethyst" />
-                  <span>External Worker Test (Deploy Required)</span>
-                </button>
-              </UITooltip>
-            </div>
-
-          </div>
-        )}
-
-
-        {/* Engine task: the external worker topic and its boundaries */}
-        {selectedNode.type === 'engine-task' && (
-          <div className="space-y-4 pt-4 border-t border-hairline">
-            <span className="text-[11px] font-semibold tracking-wider text-sage-green uppercase block flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5" />
-              Engine Task
-            </span>
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">Service topic</label>
-              <input
-                type="text"
-                value={selectedNode.engineTaskConfig?.service ?? ''}
-                placeholder="crm.sync"
-                onChange={(e) => onUpdateNode({
-                  ...selectedNode,
-                  engineTaskConfig: { ...selectedNode.engineTaskConfig, service: e.target.value },
-                })}
-                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-linen focus:outline-none focus:border-sage-green"
-              />
-            </div>
-            <ErrorRoutesEditor value={selectedNode.engineTaskConfig?.onError} nodes={nodes} excludeId={selectedNode.id}
-              onSetRule={(code, target) => routeTo({ kind: 'error', ...(code ? { code } : {}) }, target)} />
-            <TimeoutEditor value={selectedNode.engineTaskConfig?.onTimeout} nodes={nodes} excludeId={selectedNode.id}
-              onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
-          </div>
-        )}
-
-        {selectedNode.type === 'call-process' && (
-          <div className="space-y-4 pt-4 border-t border-hairline">
-            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block">Call process</span>
-            <CallProcessEditor config={selectedNode.callProcessConfig ?? { process: '' }}
-              onChange={(callProcessConfig) => onUpdateNode({ ...selectedNode, callProcessConfig })} />
-            <ErrorRoutesEditor value={selectedNode.callProcessConfig?.onError} nodes={nodes} excludeId={selectedNode.id}
-              onSetRule={(code, target) => routeTo({ kind: 'error', ...(code ? { code } : {}) }, target)} />
-            <TimeoutEditor value={selectedNode.callProcessConfig?.onTimeout} nodes={nodes} excludeId={selectedNode.id}
-              onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
-          </div>
-        )}
-
-        {/* Script Configuration (in-transaction server-side script) */}
-        {selectedNode.type === 'script' && (
-          <div className="space-y-4 pt-4 border-t border-hairline">
-            <span className="text-[11px] font-semibold tracking-wider text-mineral-teal uppercase block flex items-center gap-1.5">
-              <Terminal className="w-3.5 h-3.5" />
-              Script Configuration
-            </span>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">Script Body</label>
-              <textarea
-                rows={8}
-                value={selectedNode.scriptConfig?.script || ''}
-                onChange={(e) => onUpdateNode({
-                  ...selectedNode,
-                  scriptConfig: {
-                    ...(selectedNode.scriptConfig || { format: 'javascript' }),
-                    script: e.target.value,
-                  },
-                })}
-                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen font-mono leading-relaxed focus:outline-none focus:border-mineral-teal resize-y"
-                placeholder="variables.put('result', variables.input * 2);"
-              />
-              <p className="text-[10px] text-sand leading-relaxed">
-                Executed by the engine inside the workflow transaction. All instance
-                variables are bound by name plus the <span className="font-mono text-mineral-teal">variables</span>
-                map — the APL form of an embedded Java delegate.
-              </p>
-            </div>
-
-            {/* Script Format */}
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">Script Engine</label>
-              <select
-                value={selectedNode.scriptConfig?.format || 'javascript'}
-                onChange={(e) => onUpdateNode({
-                  ...selectedNode,
-                  scriptConfig: {
-                    script: selectedNode.scriptConfig?.script || '',
-                    format: e.target.value,
-                  },
-                })}
-                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-mineral-teal focus:outline-none focus:border-mineral-teal"
-              >
-                <option value="javascript">JavaScript (ECMAScript)</option>
-              </select>
-              <p className="text-[10px] text-sand">Engine script engine name — defaults to <span className="font-mono text-mineral-teal">javascript</span>.</p>
-            </div>
-          </div>
-        )}
-
-        {/* Catch Event Configuration (durable message/timer/signal subscription) */}
-        {selectedNode.type === 'event'
-          && (selectedNode.subtype === 'message' || selectedNode.subtype === 'timer' || selectedNode.subtype === 'signal')
-          && (
-          <div className="space-y-4 pt-4 border-t border-hairline">
-            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block flex items-center gap-1.5">
-              {selectedNode.subtype === 'message'
-                ? <Mail className="w-3.5 h-3.5" />
-                : selectedNode.subtype === 'timer'
-                  ? <Clock className="w-3.5 h-3.5" />
-                  : <Radio className="w-3.5 h-3.5" />}
-              {selectedNode.subtype === 'message'
-                ? 'Message Catch'
-                : selectedNode.subtype === 'timer'
-                  ? 'Timer Catch'
-                  : 'Signal Catch'} Configuration
-            </span>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">
-                {selectedNode.subtype === 'message'
-                  ? 'Message Name'
-                  : selectedNode.subtype === 'timer'
-                    ? 'Duration (ISO-8601)'
-                    : 'Signal Name'}
-              </label>
-              <input
-                type="text"
-                value={selectedNode.catchEventConfig?.definitionRef || ''}
-                onChange={(e) => onUpdateNode({
-                  ...selectedNode,
-                  catchEventConfig: {
-                    definitionRef: e.target.value,
-                  },
-                })}
-                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-saffron font-mono"
-                placeholder={selectedNode.subtype === 'timer' ? 'PT1H' : 'MyMessage'}
-              />
-              <p className="text-[10px] text-sand leading-relaxed">
-                {selectedNode.subtype === 'message'
-                  ? 'The instance suspends on a durable subscription and resumes when a message with this name is correlated against the correlationKey variable.'
-                  : selectedNode.subtype === 'timer'
-                    ? 'The instance suspends and the durable job scheduler resumes it after the duration elapses.'
-                    : 'The instance suspends on a durable subscription and resumes when this signal is broadcast.'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Gateway Configuration */}
-        {selectedNode.type === 'gateway' && selectedNode.subtype !== 'event' && (
-          <div className="space-y-4 pt-4 border-t border-hairline">
-            <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase block">
-              Gateway Configuration
-            </span>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">Gateway Kind</label>
-              <select
-                value={selectedNode.subtype || 'exclusive'}
-                onChange={(e) => handleGeneralChange('subtype', e.target.value)}
-                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-saffron"
-              >
-                <option value="exclusive">Exclusive — one matching branch (&gt;1 outgoing edge routes via conditions)</option>
-                <option value="parallel">Parallel — unconditional fork / join</option>
-                <option value="inclusive">Inclusive — every matching branch fires</option>
-                <option value="event">Event — competing catch events, first to fire wins</option>
-              </select>
-              <p className="text-[10px] text-sand leading-relaxed">
-                {selectedNode.subtype === 'parallel'
-                  ? 'Fork: connect each outgoing edge; the engine runs every branch concurrently. Join: upstream nodes converge back here and it continues along its single outgoing edge.'
-                  : selectedNode.subtype === 'inclusive'
-                    ? 'Fork: every outgoing edge whose condition matches fires (zero matches need an else/fallback edge, or the run fails loudly). Join: upstream nodes converge back here and it continues along its single outgoing edge.'
-                    : 'Conditional flows evaluate in order; the last flow becomes the default branch.'}
-              </p>
-            </div>
-
-            {selectedNode.subtype !== 'parallel' && workflow && onUpdateWorkflow && (
-              <GatewayBranchesEditor
-                branches={gatewayBranches(workflow, selectedNode.id)}
-                nodes={workflow.nodes}
-                inclusive={selectedNode.subtype === 'inclusive'}
-                onConditionChange={(edgeId, condition) => onUpdateWorkflow((wf) => setBranchCondition(wf, edgeId, condition))}
-                onElseChange={(edgeId, isElse) => onUpdateWorkflow((wf) => setBranchElse(wf, edgeId, isElse))}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Event Gateway Configuration — inline competing catch events */}
-        {isEventGateway && workflow && onUpdateWorkflow && (
-          <div className="space-y-4 pt-4 border-t border-hairline">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-wider text-saffron uppercase flex items-center gap-1.5">
-                <GitCompare className="w-3.5 h-3.5" />
-                Competing Events
-              </span>
-              <span className="text-[10px] font-mono text-sand bg-charcoal px-2 py-0.5 rounded border border-hairline">
-                {gatewayChildren.length} catch(es)
-              </span>
-            </div>
-
-            <p className="text-[10px] text-sand leading-relaxed">
-              The instance waits on every catch below; the first to fire advances
-              and the engine cancels every sibling wait state in the same
-              transaction. Each catch needs a name and a successor.
+      <aside className="z-10 flex h-full w-full min-w-0 flex-col overflow-y-auto border-l border-hairline bg-mocha"
+        aria-label={`${spec.label} properties`}>
+        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-hairline bg-charcoal/80 px-4 py-3 backdrop-blur-md">
+          <span className="flex w-11 shrink-0 justify-center"><NodeGlyph kind={kind} size={26} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-sm font-semibold text-linen">{spec.label}</h2>
+            <p className="truncate text-[10px] text-sand">
+              {spec.description} · <code className="font-mono text-sand-dim">{spec.aplType}</code>
             </p>
+          </div>
+          <IdChip id={selectedNode.id} />
+        </header>
 
-            {gatewayChildren.length === 0 && (
-              <div className="text-[11px] text-sand leading-relaxed p-3 bg-charcoal rounded-xl border border-dashed border-hairline">
-                No competing events yet. Add at least two below (or drag catch events
-                onto the canvas and connect them to this gateway).
+        <SectionScope.Provider value={kind}>
+          <div className="space-y-3 p-4">
+            <div className="space-y-3">
+              <Field label="Name" htmlFor="node-title" help="Shown on the canvas and in Operations.">
+                <input id="node-title" value={selectedNode.title} className={INPUT}
+                  onChange={(e) => onUpdateNode({ ...selectedNode, title: e.target.value })} />
+              </Field>
+              <Field label="Description" apl="description" htmlFor="node-description" issues={issuesAt(issues, 'description')}>
+                <textarea id="node-description" rows={2} value={selectedNode.description} className={TEXTAREA}
+                  placeholder="What this step is for"
+                  onChange={(e) => onUpdateNode({ ...selectedNode, description: e.target.value })} />
+              </Field>
+            </div>
+
+            {issues.length > 0 && (
+              <div role="status" className="space-y-1 rounded-xl border border-desert-rose/40 bg-desert-rose/10 p-3">
+                <span className="text-[11px] font-semibold text-desert-rose">
+                  {issues.length} validation issue{issues.length === 1 ? '' : 's'}
+                </span>
+                <FieldIssues issues={general} />
+                {placed > 0 && (
+                  <p className="text-[10px] text-sand">
+                    {general.length ? `${placed} more are` : placed === 1 ? 'It is' : 'They are'} shown next to the field they are about.
+                  </p>
+                )}
               </div>
             )}
 
-            {gatewayChildren.map((child) => (
-              <div key={child.id} className="p-3 bg-charcoal rounded-xl border border-hairline space-y-2">
-                <div className="flex items-center gap-2">
-                  <select
-                    value={child.subtype}
-                    onChange={(e) => handleChildEventKindChange(child.id, e.target.value as 'message' | 'timer' | 'signal')}
-                    className="flex-1 bg-charcoal border border-hairline rounded-lg px-2 py-1.5 text-[11px] text-linen focus:outline-none focus:border-saffron"
-                  >
-                    <option value="message">Message catch</option>
-                    <option value="timer">Timer</option>
-                    <option value="signal">Signal</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveChildEvent(child.id)}
-                    className="p-1.5 rounded-lg border border-desert-rose/30 text-desert-rose hover:bg-desert-rose/15 transition-colors shrink-0"
-                    title="Remove this competing event (deletes its canvas node and flows)"
-                    aria-label="Remove competing event"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-sand block">
-                    {child.subtype === 'message'
-                      ? 'Message Name'
-                      : child.subtype === 'timer'
-                        ? 'Duration (ISO-8601)'
-                        : 'Signal Name'}
-                  </label>
-                  <input
-                    type="text"
-                    value={child.catchEventConfig?.definitionRef || ''}
-                    onChange={(e) => handleChildEventDefinitionChange(child.id, e.target.value)}
-                    className="w-full bg-charcoal border border-hairline rounded-lg px-2.5 py-1.5 text-[11px] text-linen font-mono focus:outline-none focus:border-saffron"
-                    placeholder={child.subtype === 'timer' ? 'PT1H' : child.subtype === 'message' ? 'MyMessage' : 'MySignal'}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-sand block">Continues To</label>
-                  <select
-                    value={childNextTarget(child.id) || ''}
-                    onChange={(e) => handleChildEventNextChange(child.id, e.target.value)}
-                    className="w-full bg-charcoal border border-hairline rounded-lg px-2.5 py-1.5 text-[11px] text-linen focus:outline-none focus:border-saffron"
-                  >
-                    <option value="">— select successor (required) —</option>
-                    {gatewayNextOptions.map((n) => (
-                      <option key={n.id} value={n.id}>{n.title || n.id}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
+            {hasConfig(selectedNode) && <Editor {...editorProps} />}
 
-            <div className="flex gap-2">
-              {(['message', 'timer', 'signal'] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => handleAddChildEvent(kind)}
-                  className="flex-1 py-1.5 rounded-lg border border-saffron/30 bg-saffron/10 text-[11px] font-semibold text-saffron hover:bg-saffron/20 transition-colors flex items-center justify-center gap-1"
-                >
-                  {kind === 'message'
-                    ? <Mail className="w-3 h-3" />
-                    : kind === 'timer'
-                      ? <Clock className="w-3 h-3" />
-                      : <Radio className="w-3 h-3" />}
-                  Add {kind === 'message' ? 'Message' : kind === 'timer' ? 'Timer' : 'Signal'}
-                </button>
-              ))}
-            </div>
-
-            <div className={`p-2.5 rounded-lg border text-[10px] leading-relaxed ${
-              gatewayRoutedCount >= 2
-                ? 'border-sage-green/30 bg-sage-green/10 text-sage-green'
-                : 'border-desert-rose/30 bg-desert-rose/10 text-desert-rose'
-            }`}>
-              {gatewayRoutedCount >= 2
-                ? `Ready: ${gatewayChildren.length} competing event(s) with a name and a successor. First to fire wins.`
-                : `Only ${gatewayRoutedCount} of ${gatewayChildren.length} event(s) are fully routed (need a name and a successor). The engine requires at least two competing events.`}
-            </div>
+            {loopable && onUpdateWorkflow && (
+              <Section id="loop" title="Repeat limit" icon={<Repeat2 className="h-3.5 w-3.5" />}
+                defaultOpen={!!selectedNode.loop || !!loopProblem} issues={issuesAt(issues, 'loop')}
+                summary="A step that a flow returns to needs a bound, so a loop can never run forever.">
+                <LoopEditor loop={selectedNode.loop} problem={loopProblem} nodes={nodes} excludeId={selectedNode.id}
+                  onChange={(loop) => editorProps.commitWithRoutes({ ...selectedNode, loop })} />
+              </Section>
+            )}
           </div>
-        )}
-
-        {/* Human Input Configuration */}
-         {selectedNode.type === 'human' && humanConfig && (
-           <div className="space-y-4 pt-4 border-t border-hairline">
-             <span className="text-[11px] font-semibold tracking-wider text-desert-rose uppercase block flex items-center gap-1.5">
-               <UserCheck className="w-3.5 h-3.5" />
-               Human Input
-             </span>
-
-             <div className="space-y-1.5">
-               <label className="text-xs text-sand block">Form</label>
-               <FormPicker
-                 projectId={projectId}
-                 value={humanConfig.formKey}
-                 onChange={(key) => handleHumanChange('formKey', key)}
-               />
-             </div>
-
-             <div className="space-y-1.5">
-               <label className="text-xs text-sand block">Assignee Groups / Users</label>
-               <p className="text-[10px] text-sand">At least one required. These groups may claim the task.</p>
-               <div className="rounded-lg border border-hairline divide-y divide-hairline bg-charcoal overflow-hidden">
-                 {humanConfig.assignees.map((assignee, idx) => (
-                  <div key={idx} className="group flex items-center gap-1.5 px-2 py-1.5">
-                    <input
-                      type="text"
-                      value={assignee}
-                      placeholder="risk-officers"
-                      onChange={(e) => {
-                        const assignees = [...humanConfig.assignees];
-                        assignees[idx] = e.target.value;
-                        handleHumanChange('assignees', assignees);
-                      }}
-                      className="flex-1 min-w-0 bg-mocha border border-hairline rounded px-2 py-1 text-[11px] font-mono text-linen focus:outline-none focus:border-desert-rose"
-                    />
-                    <button
-                      onClick={() => {
-                        const assignees = humanConfig.assignees.filter((_, i) => i !== idx);
-                        handleHumanChange('assignees', assignees);
-                      }}
-                      className="text-red-400 hover:text-red-300 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Remove assignee"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                    onClick={() => {
-                      const assignees = [...humanConfig.assignees, ''];
-                      handleHumanChange('assignees', assignees);
-                    }}
-                  className="w-full text-left text-xs text-desert-rose hover:text-saffron flex items-center gap-1 font-medium px-3 py-2"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Add Assignee</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-sand block">SLA (Hours) · escalates the open task when missed</label>
-              <input
-                type="number"
-                min={0}
-                placeholder="No service level"
-                value={humanConfig.slaHours ?? ''}
-                onChange={(e) => {
-                  const slaHours = e.target.value === '' ? undefined : Number(e.target.value);
-                  // escalate_to needs a service level; dropping the SLA drops the escalation too.
-                  onUpdateNode({ ...selectedNode, humanConfig: { ...humanConfig, slaHours,
-                    escalateTo: slaHours ? humanConfig.escalateTo : undefined } });
-                }}
-                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs text-linen focus:outline-none focus:border-desert-rose"
-              />
-            </div>
-
-            <NameListEditor
-              label="Escalate to (groups added when the SLA is missed)"
-              value={humanConfig.escalateTo ?? []}
-              placeholder={humanConfig.slaHours ? 'managers' : 'Set an SLA first'}
-              disabled={!humanConfig.slaHours}
-              onChange={(escalateTo) => handleHumanChange('escalateTo', escalateTo.length ? escalateTo : undefined)}
-            />
-
-            <OutcomesEditor
-              outcomes={humanConfig.outcomes}
-              nextTarget={nextTarget}
-              nodes={nodes}
-              excludeId={selectedNode.id}
-              onChange={(outcomes) => commitWithRoutes(
-                { ...selectedNode, humanConfig: { ...humanConfig, outcomes } }, !!outcomes)}
-            />
-
-            <RouteSelect label="If the task is failed (on_error)"
-              value={typeof humanConfig.onError === 'string' ? humanConfig.onError : undefined}
-              nodes={nodes} excludeId={selectedNode.id} onChange={(target) => routeTo({ kind: 'error' }, target)} />
-            <TimeoutEditor value={humanConfig.onTimeout} nodes={nodes} excludeId={selectedNode.id}
-              onChange={(after, target) => routeTo({ kind: 'timeout', after }, target)} />
-
-          </div>
-        )}
-      </div>
-    </aside>
+        </SectionScope.Provider>
+      </aside>
     </TooltipProvider>
   );
 };

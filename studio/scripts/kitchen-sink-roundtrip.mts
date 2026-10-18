@@ -8,6 +8,11 @@
  *   1. engine/src/test/resources/apl/kitchen-sink.apl.yaml  → BPMN → APL
  *   2. engine/src/test/resources/bpmn/kitchen-sink-test.bpmn → APL → BPMN
  *
+ * 3. Every property the properties panel edits survives the Studio canvas
+ *    round trip (APL → canvas → APL) for the decision-table and for-each
+ *    fixtures: `decisionKey`, `hitPolicy`, `inputs`, ordered `rules` with
+ *    `when`/`then`/`otherwise`, and the for-each bounds.
+ *
  * Run with `npm run verify:kitchen-sink` from studio/ (needs `tsx`).
  *
  * When the engine test fixtures are not present (e.g. inside a Docker build
@@ -17,7 +22,7 @@
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { parseAPLYaml } from '../src/lib/apl/parser';
+import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '../src/lib/apl/parser';
 import { compileAPLToBPMN } from '../src/lib/bpmn/compiler';
 import { transpileBPMNToAPL } from '../src/lib/bpmn/transpiler';
 import { APLDocument, APLNode } from '../src/lib/apl/types';
@@ -139,6 +144,43 @@ check('recompiled BPMN declares the event-based gateway', bpmnFromTranspiled.inc
 check('recompiled BPMN wires StartEvent → InitialTask → ParallelFork',
   bpmnFromTranspiled.includes('sourceRef="StartEvent_1"') && bpmnFromTranspiled.includes('targetRef="InitialTask"'));
 check('recompiled BPMN reaches the end event', bpmnFromTranspiled.includes('targetRef="EndEvent_1"'));
+
+console.log('3. Properties panel fields survive the canvas round trip');
+
+/** A node through the canvas model and back, as Studio saves it. */
+const throughCanvas = (doc: APLDocument): APLDocument =>
+  parseAPLYaml(stringifyAPLYaml(workflowToAPL(aplToWorkflow(doc))));
+const nodeOf = (doc: APLDocument, id: string) => doc.flow.nodes.find((n) => n.id === id) as any;
+/** Decision-table fields in one canonical form (inputs as a map, the fallback wrapped). */
+const tableFields = (node: any) => ({
+  decisionKey: node.decisionKey,
+  hitPolicy: node.hitPolicy,
+  inputs: Object.fromEntries((Array.isArray(node.inputs) ? node.inputs : Object.entries(node.inputs ?? {})
+    .map(([name, expr]) => ({ name, expr }))).map((input: any) => [input.name, input.expr ?? ''])),
+  rules: (node.rules ?? []).map((rule: any) => (rule.otherwise
+    ? { otherwise: typeof rule.otherwise === 'object' ? rule.otherwise.then : rule.then }
+    : { when: rule.when, then: rule.then })),
+});
+
+if (fixtureExists('apl/decision-table-rules.apl.yaml')) {
+  const table = parseAPLYaml(engineFixture('apl/decision-table-rules.apl.yaml'));
+  const original = tableFields(nodeOf(table, 'tier'));
+  const saved = tableFields(nodeOf(throughCanvas(table), 'tier'));
+  check('decision table keeps decisionKey, hitPolicy, inputs and ordered rules',
+    JSON.stringify(saved) === JSON.stringify(original), { original, saved });
+  check('decision table keeps its description and next',
+    nodeOf(throughCanvas(table), 'tier')?.description === nodeOf(table, 'tier')?.description
+      && nodeOf(throughCanvas(table), 'tier')?.next === 'done');
+}
+if (fixtureExists('apl/for-each-batch.apl.yaml')) {
+  const batch = parseAPLYaml(engineFixture('apl/for-each-batch.apl.yaml'));
+  const keys = ['items', 'process', 'item_input', 'inputs', 'outputs', 'max_items', 'max_parallel', 'results', 'on_error', 'next'];
+  const pick = (node: any) => Object.fromEntries(keys.map((key) => [key, node?.[key]]));
+  const original = pick(nodeOf(batch, 'check_each'));
+  const saved = pick(nodeOf(throughCanvas(batch), 'check_each'));
+  check('for-each keeps every field', nodeOf(throughCanvas(batch), 'check_each')?.type === 'for-each'
+    && JSON.stringify(saved) === JSON.stringify(original), { original, saved });
+}
 
 if (failures > 0) {
   console.error(`\nKitchen-sink round-trip FAILED with ${failures} drift(s)`);

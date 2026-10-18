@@ -16,7 +16,7 @@ const sources = import.meta.glob(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx
 const PRETTY_PRINT_ALLOWED: Record<string, string> = {
   '/src/features/run/DeployDialog.tsx': 'fills the editable payload textarea',
   '/src/features/run/DryRunPanel.tsx': 'fills the editable payload textarea',
-  '/src/components/PropertiesInspector.tsx': 'fills the editable output-schema textarea',
+  '/src/components/inspector/AgentEditor.tsx': 'fills the editable output-schema textarea',
   '/src/components/FormPicker.tsx': 'saves a form resource',
   '/src/components/ProjectExplorer.tsx': 'saves a form resource',
   '/src/lib/starter/leadTriage.ts': 'writes the starter form resource',

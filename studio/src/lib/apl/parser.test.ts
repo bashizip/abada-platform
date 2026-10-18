@@ -692,3 +692,48 @@ flow:
     ]);
   });
 });
+
+describe('APL round trip: properties the panel edits (M5 S7)', () => {
+  const source = `version: abada.io/v1
+metadata: { key: props, name: Props }
+flow:
+  entry: start
+  nodes:
+    - { id: start, type: webhook, next: triage }
+    - id: triage
+      type: agent
+      model: gemini-3.6-flash
+      prompt: Triage
+      evidence: { payloads: none, retention_days: 7 }
+      next: gate
+    - { id: gate, type: approval-gate, assignees: [risk, legal], mode: serial, next: review }
+    - { id: review, type: human-input, assignees: [ops], formId: claim-form, requireDoubleSignOff: true, next: done }
+    - { id: done, type: end }
+`;
+  const roundTrip = () => parseAPLYaml(stringifyAPLYaml(workflowToAPL(aplToWorkflow(parseAPLYaml(source)))));
+  const node = (doc: APLDocument, id: string) => doc.flow.nodes.find((n) => n.id === id) as any;
+
+  it('maps evidence, mode and the approval-gate kind onto the canvas model', () => {
+    const wf = aplToWorkflow(parseAPLYaml(source));
+    const byId = (id: string) => wf.nodes.find((n) => n.id === id)!;
+    expect(byId('triage').agentConfig!.evidence).toEqual({ payloads: 'none', retentionDays: 7 });
+    expect(byId('gate').humanConfig).toMatchObject({ kind: 'approval-gate', mode: 'serial' });
+    expect(byId('review').humanConfig!.formKey).toBe('claim-form');
+    expect(byId('review').aplExtras).toEqual({ requireDoubleSignOff: true });
+  });
+
+  it('saves them back: the gate stays a gate, formId becomes formKey, reserved keys are kept', () => {
+    const doc = roundTrip();
+    expect(node(doc, 'triage').evidence).toEqual({ payloads: 'none', retention_days: 7 });
+    expect(node(doc, 'gate')).toMatchObject({ type: 'approval-gate', mode: 'serial', assignees: ['risk', 'legal'] });
+    expect(node(doc, 'gate')).not.toHaveProperty('formKey');
+    expect(node(doc, 'review')).toMatchObject({ type: 'human-input', formKey: 'claim-form', requireDoubleSignOff: true });
+    expect(node(doc, 'review')).not.toHaveProperty('formId');
+  });
+
+  it('converts an approval gate to a human task when its kind is cleared', () => {
+    const wf = aplToWorkflow(parseAPLYaml(source));
+    const converted = { ...wf, nodes: wf.nodes.map((n) => (n.id === 'gate' ? { ...n, humanConfig: { ...n.humanConfig!, kind: undefined } } : n)) };
+    expect(node(workflowToAPL(converted), 'gate').type).toBe('human-input');
+  });
+});
