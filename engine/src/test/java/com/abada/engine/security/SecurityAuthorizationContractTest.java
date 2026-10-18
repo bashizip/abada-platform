@@ -380,6 +380,17 @@ class SecurityAuthorizationContractTest {
         // Operations access and administration do not include evidence payloads.
         assertForbidden(get(payloads), "operator");
         assertForbidden(get(payloads), "admin");
+        // The resolved inputs of a decision-table application are evidence too.
+        String decisionInputs = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID
+                + "/instances/missing/decisions/missing/inputs";
+        mvc.perform(get(decisionInputs)).andExpect(status().isUnauthorized());
+        mvc.perform(get(decisionInputs).header("Authorization", "Bearer invalid")).andExpect(status().isUnauthorized());
+        mvc.perform(get(decisionInputs).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(decisionInputs).header("X-Auth-Request-User", "forged")
+                        .header("X-Auth-Request-Groups", "abada-evidence-reader"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(get(decisionInputs), "operator");
+        assertForbidden(get(decisionInputs), "admin");
 
         // Deciding a tool approval: authenticated people only, never a worker credential.
         String decision = "/v1/tasks/missing/decision";

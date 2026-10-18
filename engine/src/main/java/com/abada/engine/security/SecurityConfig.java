@@ -59,7 +59,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/tasks/**")
                         .hasAnyAuthority("SCOPE_task:write", AbadaRoles.TASK_USER, AbadaRoles.ADMIN)
                 // Evidence payloads: evidence readers only, never implied by administration.
-                .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/*/agent-steps/*/payloads")
+                .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/*/agent-steps/*/payloads",
+                                "/v1/projects/*/instances/*/decisions/*/inputs")
                         .hasAnyAuthority(AbadaRoles.EVIDENCE_READ_SCOPE, AbadaRoles.EVIDENCE_READER)
                 .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/**")
                         .hasAnyAuthority("SCOPE_operations:read", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
