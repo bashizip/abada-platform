@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AplAPI, type AplValidationIssue } from '@/api/apl';
 import { stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
-import { issuesByNode } from '@/lib/apl/issues';
+import { issuesByNode, processIssues } from '@/lib/apl/issues';
 import type { WorkflowFile } from '@/types';
 
 const DEBOUNCE_MS = 900;
@@ -9,10 +9,12 @@ const DEBOUNCE_MS = 900;
 /**
  * Engine validation of the document being edited on the canvas, debounced and
  * grouped by node so the canvas can badge the nodes and the inspector can list
- * a node's issues. An unreachable engine simply yields no issues.
+ * a node's issues; issues about no node are the process's own, shown when
+ * nothing is selected. An unreachable engine simply yields no issues.
  */
 export function useAplValidation(workflow: WorkflowFile | null, enabled: boolean) {
   const [byNode, setByNode] = useState<Map<string, AplValidationIssue[]>>(new Map());
+  const [ofProcess, setOfProcess] = useState<AplValidationIssue[]>([]);
   const sequence = useRef(0);
   const source = useMemo(() => {
     if (!enabled || !workflow) return null;
@@ -28,21 +30,26 @@ export function useAplValidation(workflow: WorkflowFile | null, enabled: boolean
     if (!source) {
       sequence.current++;
       setByNode(new Map());
+      setOfProcess([]);
       return undefined;
     }
     const current = ++sequence.current;
     const timer = window.setTimeout(() => {
       AplAPI.validate(source.yaml)
         .then((result) => {
-          if (current === sequence.current) setByNode(issuesByNode(result.issues, source.nodeIds));
+          if (current !== sequence.current) return;
+          setByNode(issuesByNode(result.issues, source.nodeIds));
+          setOfProcess(processIssues(result.issues, source.nodeIds));
         })
         .catch(() => {
-          if (current === sequence.current) setByNode(new Map());
+          if (current !== sequence.current) return;
+          setByNode(new Map());
+          setOfProcess([]);
         });
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [source]);
 
   const counts = useMemo(() => new Map([...byNode].map(([id, list]) => [id, list.length])), [byNode]);
-  return { issuesByNode: byNode, issueCounts: counts };
+  return { issuesByNode: byNode, issueCounts: counts, processIssues: ofProcess };
 }

@@ -1,4 +1,4 @@
-import type { APLAgentNode, Delegates } from './lib/apl/types.generated';
+import type { APLAgentNode, Delegates, VariableDeclaration } from './lib/apl/types.generated';
 
 /** One process an agent may delegate to (`delegates`, E20b). */
 export type AgentDelegate = Delegates[number];
@@ -235,11 +235,18 @@ export interface WorkflowEdge {
 }
 
 export interface WorkflowFile {
-  /** APL `metadata` keys Studio does not edit (description, owner, variables), kept verbatim. */
+  /** APL `metadata` keys Studio does not edit, kept verbatim. */
   metadataExtras?: Record<string, unknown>;
   id: string;
   name: string;
-  category: 'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom';
+  /** APL `metadata.category`: free text, authoring metadata only. Empty is left out of the YAML. */
+  category: string;
+  /** APL `metadata.owner`: authoring metadata only, not executed. */
+  owner?: string;
+  /** APL `metadata.description`; the project document keeps its own `description`. */
+  processDescription?: string;
+  /** APL `metadata.variables`, in declaration order; keys Studio does not edit stay on each entry. */
+  variables?: VariableDeclaration[];
   fileType: 'apl' | 'bpmn' | 'dmn' | 'prompt' | 'json';
   version: string;
   updatedAt: string;

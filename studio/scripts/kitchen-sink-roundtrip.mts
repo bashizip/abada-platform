@@ -13,6 +13,12 @@
  *    fixtures: `decisionKey`, `hitPolicy`, `inputs`, ordered `rules` with
  *    `when`/`then`/`otherwise`, and the for-each bounds.
  *
+ * 4. Process metadata survives the same round trip: every engine APL fixture
+ *    keeps its `metadata` exactly (no invented owner or category), and a
+ *    document using every field (`key`, `name`, `description`, `owner`,
+ *    `category`, `variables` with `type`/`required`/`sensitive`/`description`,
+ *    plus a key Studio does not edit) is saved unchanged, edits included.
+ *
  * Run with `npm run verify:kitchen-sink` from studio/ (needs `tsx`).
  *
  * When the engine test fixtures are not present (e.g. inside a Docker build
@@ -20,6 +26,7 @@
  * warning so the production image can still be built.
  */
 import * as fs from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '../src/lib/apl/parser';
@@ -147,6 +154,12 @@ check('recompiled BPMN reaches the end event', bpmnFromTranspiled.includes('targ
 
 console.log('3. Properties panel fields survive the canvas round trip');
 
+/** JSON with object keys sorted, so key order does not count as drift. */
+const sortKeys = (value: unknown): unknown => Array.isArray(value) ? value.map(sortKeys)
+  : value && typeof value === 'object'
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, sortKeys(v)]))
+    : value;
+
 /** A node through the canvas model and back, as Studio saves it. */
 const throughCanvas = (doc: APLDocument): APLDocument =>
   parseAPLYaml(stringifyAPLYaml(workflowToAPL(aplToWorkflow(doc))));
@@ -181,6 +194,60 @@ if (fixtureExists('apl/for-each-batch.apl.yaml')) {
   check('for-each keeps every field', nodeOf(throughCanvas(batch), 'check_each')?.type === 'for-each'
     && JSON.stringify(saved) === JSON.stringify(original), { original, saved });
 }
+
+console.log('4. Process metadata survives the canvas round trip');
+
+const fixtureNames = readdirSync(resolve(engineFixturePath, 'apl')).filter((name) => name.endsWith('.apl.yaml'));
+let compared = 0;
+const drifted = fixtureNames.filter((name) => {
+  let doc: APLDocument;
+  try {
+    doc = parseAPLYaml(engineFixture(`apl/${name}`));
+  } catch {
+    return false; // fixtures for invalid documents are the parser tests' business
+  }
+  if (!doc?.metadata?.name || !doc.flow?.nodes?.length) return false;
+  const expected = { ...doc.metadata, key: doc.metadata.key || doc.metadata.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() };
+  compared++;
+  return JSON.stringify(sortKeys(throughCanvas(doc).metadata)) !== JSON.stringify(sortKeys(expected));
+});
+check(`every engine APL fixture keeps its metadata exactly (${compared} of ${fixtureNames.length} files compared)`,
+  drifted.length === 0 && compared > 0, drifted);
+
+const documented: APLDocument = {
+  version: 'abada.io/v1',
+  metadata: {
+    key: 'refunds',
+    name: 'Refunds',
+    description: 'Refund requests under review',
+    owner: 'payments-team',
+    category: 'payments',
+    variables: [
+      { name: 'amount', type: 'number', required: true, description: 'Refund amount' },
+      { name: 'iban', type: 'string', sensitive: true },
+      { name: 'notes' },
+    ],
+    ...({ labels: { tier: 'gold' } } as object),
+  },
+  flow: { entry: 'start', nodes: [{ id: 'start', type: 'webhook', next: 'done' }, { id: 'done', type: 'end' }] },
+};
+check('a document using every metadata field is saved unchanged',
+  JSON.stringify(sortKeys(throughCanvas(documented).metadata)) === JSON.stringify(sortKeys(documented.metadata)),
+  throughCanvas(documented).metadata);
+
+const edited = aplToWorkflow(documented);
+edited.name = 'Refund desk';
+edited.owner = 'risk-team';
+edited.category = 'finance';
+edited.processDescription = 'Refunds over the limit';
+edited.variables = [...edited.variables!.slice(0, 2), { name: 'reason', type: 'string', required: true }];
+const editedSaved = parseAPLYaml(stringifyAPLYaml(workflowToAPL(edited))).metadata as any;
+check('panel edits to metadata and variables are saved, the rest kept',
+  editedSaved.name === 'Refund desk' && editedSaved.owner === 'risk-team' && editedSaved.category === 'finance'
+    && editedSaved.description === 'Refunds over the limit' && editedSaved.key === 'refunds'
+    && JSON.stringify(editedSaved.variables.map((v: any) => v.name)) === JSON.stringify(['amount', 'iban', 'reason'])
+    && editedSaved.variables[1].sensitive === true && editedSaved.labels?.tier === 'gold',
+  editedSaved);
 
 if (failures > 0) {
   console.error(`\nKitchen-sink round-trip FAILED with ${failures} drift(s)`);

@@ -729,7 +729,7 @@ export default function App() {
                     workflow={currentWorkflow}
                     nodeCount={currentWorkflow.nodes.length}
                     projectId={activeProject?.id}
-                    issues={selectedNode ? validation.issuesByNode.get(selectedNode.id) : undefined}
+                    issues={selectedNode ? validation.issuesByNode.get(selectedNode.id) : validation.processIssues}
                   />
                   </SidePanel>
 
