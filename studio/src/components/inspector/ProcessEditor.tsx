@@ -106,7 +106,7 @@ export const ProcessEditor: React.FC<ProcessEditorProps> = ({ workflow, update, 
             : 'Lowercase letters, digits, - and _, starting with a letter. Empty derives it from the name.'}>
           <input id="process-key" aria-label="Process key" value={workflow.processKey ?? ''} readOnly={keyLocked}
             placeholder={workflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}
-            className={`${MONO_INPUT} ${keyLocked ? 'cursor-default text-sand' : ''}`}
+            className={keyLocked ? `${MONO_INPUT.replace('text-linen', 'text-sand')} cursor-default` : MONO_INPUT}
             onChange={(e) => update({ processKey: e.target.value.trim() || undefined })} />
         </Field>
         <Field label="Description" apl="metadata.description" htmlFor="process-description"
@@ -115,19 +115,17 @@ export const ProcessEditor: React.FC<ProcessEditorProps> = ({ workflow, update, 
             value={workflow.processDescription ?? ''} placeholder="What this process is for"
             onChange={(e) => update({ processDescription: e.target.value || undefined })} />
         </Field>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Category" apl="metadata.category" htmlFor="process-category" issues={metadataIssuesAt(issues, 'category')}>
-            <input id="process-category" aria-label="Category" list="process-category-suggestions" value={workflow.category}
-              placeholder="none" className={INPUT} onChange={(e) => update({ category: e.target.value })} />
-            <datalist id="process-category-suggestions">
-              {CATEGORY_SUGGESTIONS.map((category) => <option key={category} value={category} />)}
-            </datalist>
-          </Field>
-          <Field label="Owner" apl="metadata.owner" htmlFor="process-owner" issues={metadataIssuesAt(issues, 'owner')}>
-            <input id="process-owner" aria-label="Owner" value={workflow.owner ?? ''} placeholder="risk-team" className={INPUT}
-              onChange={(e) => update({ owner: e.target.value || undefined })} />
-          </Field>
-        </div>
+        <Field label="Category" apl="metadata.category" htmlFor="process-category" issues={metadataIssuesAt(issues, 'category')}>
+          <input id="process-category" aria-label="Category" list="process-category-suggestions" value={workflow.category}
+            placeholder="none" className={INPUT} onChange={(e) => update({ category: e.target.value })} />
+          <datalist id="process-category-suggestions">
+            {CATEGORY_SUGGESTIONS.map((category) => <option key={category} value={category} />)}
+          </datalist>
+        </Field>
+        <Field label="Owner" apl="metadata.owner" htmlFor="process-owner" issues={metadataIssuesAt(issues, 'owner')}>
+          <input id="process-owner" aria-label="Owner" value={workflow.owner ?? ''} placeholder="risk-team" className={INPUT}
+            onChange={(e) => update({ owner: e.target.value || undefined })} />
+        </Field>
         <p className="text-[10px] leading-relaxed text-sand">
           Description, category and owner are for the people reading the process; the engine does not act on them.
         </p>

@@ -437,7 +437,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
   return {
     id: `wf-${Date.now()}`,
     name: apl.metadata.name,
-    metadataExtras: metadataExtras(apl.metadata),
+    metadataExtras: metadataExtras({ ...apl.metadata }),
     processKey: apl.metadata.key || apl.metadata.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
     category: apl.metadata.category ?? '',
     ...(apl.metadata.owner !== undefined ? { owner: apl.metadata.owner } : {}),
@@ -733,13 +733,13 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
   return {
     version: 'abada.io/v1',
     metadata: {
-      ...wf.metadataExtras,
       key: wf.processKey || wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
       name: wf.name,
       ...(wf.category ? { category: wf.category } : {}),
       ...(wf.owner ? { owner: wf.owner } : {}),
       ...(wf.processDescription ? { description: wf.processDescription } : {}),
       ...(wf.variables?.length ? { variables: wf.variables } : {}),
+      ...metadataExtras(wf.metadataExtras ?? {}),
     },
     flow: {
       entry: entryNode ? entryNode.id : '',
@@ -748,11 +748,12 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
   };
 }
 
-/** Metadata keys Studio does not edit, kept verbatim. */
-function metadataExtras(metadata: APLDocument['metadata']): Record<string, unknown> | undefined {
-  const {
-    key: _key, name: _name, category: _category, owner: _owner, description: _description, variables: _variables, ...rest
-  } = metadata;
+/** Metadata keys the properties panel edits; every other key is kept verbatim. */
+const EDITED_METADATA = new Set(['key', 'name', 'category', 'owner', 'description', 'variables']);
+
+/** Metadata keys Studio does not edit, kept verbatim (after the edited ones when saved). */
+function metadataExtras(metadata: Record<string, unknown>): Record<string, unknown> | undefined {
+  const rest = Object.fromEntries(Object.entries(metadata).filter(([key]) => !EDITED_METADATA.has(key)));
   return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
