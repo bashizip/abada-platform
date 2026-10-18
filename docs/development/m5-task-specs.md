@@ -435,8 +435,10 @@ invalid CEL, a name that is not an input (previously a warning from
 only. Narrowed from the text above: overlapping but different `UNIQUE`
 conditions stay a run-time failure, and Operations shows the matched rule
 (condition and outputs, from the instance's own definition version) and the
-input *names*, because the engine records no input values; recording them
-under the evidence policy is a follow-up. Verified on the dev stack with
+input *names*, because the engine recorded no input values. Follow-up done:
+the resolved inputs are now kept as decision-input evidence under the evidence
+policy (V40, `decision_input_evidence`) and open on demand next to the rule
+for evidence readers. Verified on the dev stack with
 screenshots; Cmd+Z did not reach the app inside the desktop browser pane, the
 toolbar Undo did.
 

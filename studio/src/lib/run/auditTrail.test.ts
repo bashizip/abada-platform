@@ -163,6 +163,17 @@ describe('the audit trail of an instance', () => {
       rules: [{ number: 2, otherwise: false, when: 'score >= 600', then: { tier: 'B', review: true } }] });
     expect(applied([2])).toMatchObject({ action: 'Applied the fallback (rule #3)',
       decision: { rules: [{ number: 3, otherwise: true, then: { tier: 'C' } }] } });
+    expect(applied([1]).decision?.evidenceId).toBeUndefined();
+  });
+
+  it('carries the id of the input values kept as evidence, never a value', () => {
+    const entry = nodeEntries(buildAuditTrail([
+      flow('start', 'rules', 0),
+      event('DECISION_TABLE_APPLIED', 'rules', 0, { decisionKey: 'risk', matchedRuleIndexes: [0],
+        inputNames: ['score'], outputNames: ['tier'], evidenceId: 'ev-7' }),
+      flow('rules', 'done', 0),
+    ], workflow))[0];
+    expect(entry.decision?.evidenceId).toBe('ev-7');
   });
 
   it('keeps one pass per branch of a parallel split and one for the join', () => {

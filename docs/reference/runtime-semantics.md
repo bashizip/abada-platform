@@ -252,8 +252,22 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   A `COLLECT` evaluation merges outputs in rule order, later outputs
   overwriting earlier ones on key collision.
 - Each applied evaluation appends `DECISION_TABLE_APPLIED` history and a
-  matching outbox event carrying the decision key, matched rule indexes and
-  input/output names — never the values themselves.
+  matching outbox event carrying the decision key, matched rule indexes,
+  input/output names and an `evidenceId` — never the values themselves.
+- The resolved input values are kept apart, as decision-input evidence, in
+  the same transaction (`decision_input_evidence`, one row per application,
+  keyed by `evidenceId`). The project's evidence policy governs them as it
+  governs agent payloads: nothing under `none`, sensitive variables masked by
+  name and by value under `redacted`, as evaluated under `full`; always
+  AES-GCM encrypted and cleared by the retention sweep after
+  `retention_days`. A node-level `evidence` override applies to agent nodes
+  only. A failed evaluation rolls back with the command and leaves no
+  evidence. History recorded before 1.2.0 has no `evidenceId`.
+- Evidence readers (`abada-evidence-reader` or `agent-evidence:read`, project
+  members only, not implied by administration) read one application's
+  inputs with `GET /api/v1/projects/{projectId}/instances/{instanceId}/decisions/{evidenceId}/inputs`
+  (`no-store`; `410` once purged). Every read is recorded as `EVIDENCE_READ`
+  with `kind: decision-inputs`, without the values.
 
 ## Events and timers
 

@@ -265,7 +265,9 @@ const TrailRow: React.FC<{
               {entry.commentLength !== undefined && ` · commented (${entry.commentLength} characters)`}
             </p>
           )}
-          {isNode && entry.decision && <DecisionRuleSummary decision={entry.decision} />}
+          {isNode && entry.decision && (
+            <DecisionRuleSummary decision={entry.decision} projectId={projectId} instanceId={instanceId} />
+          )}
           {steps.length > 0 && (
             <AgentStepInspector steps={steps} projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} />
           )}

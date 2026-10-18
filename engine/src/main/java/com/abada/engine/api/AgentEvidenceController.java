@@ -40,6 +40,14 @@ public class AgentEvidenceController {
                 .body(evidence.payloads(projectId, instanceId, stepId));
     }
 
+    /** What one decision-table application read; evidence readers of the project only, and every read is audited. */
+    @GetMapping("/v1/projects/{projectId}/instances/{instanceId}/decisions/{evidenceId}/inputs")
+    public ResponseEntity<AgentEvidenceService.DecisionInputs> decisionInputs(@PathVariable String projectId,
+            @PathVariable String instanceId, @PathVariable String evidenceId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(evidence.decisionInputs(projectId, instanceId, evidenceId));
+    }
+
     @GetMapping("/v1/projects/{projectId}/evidence-policy")
     public AgentEvidenceService.PolicyView policy(@PathVariable String projectId) {
         return evidence.policy(projectId);

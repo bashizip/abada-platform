@@ -98,7 +98,7 @@ flow:                     # required — the executable graph
 payload and anything written by an `engine-task`, `script` or `human-input`
 node. Declarations are checked statically (§6.1); the engine does **not** yet
 enforce them on the start payload. A declaration with `sensitive: true` is
-masked in redacted agent evidence (§3.2.2): fields with that name and the
+masked in redacted agent and decision-input evidence (§3.2.2, §4.5): fields with that name and the
 variable's value wherever it appears.
 
 - `version` is currently `abada.io/v1`. It is the APL language version, not a
@@ -1086,8 +1086,16 @@ these checks existed still load and run unchanged.
 - Outputs are written to **top-level instance variables** inside the same
   transaction that advances the process.
 - Every application is recorded as a `DECISION_TABLE_APPLIED` history event
-  carrying `decisionKey`, `matchedRuleIndexes`, `inputNames` and
-  `outputNames` — identifiers only, never values.
+  carrying `decisionKey`, `matchedRuleIndexes`, `inputNames`, `outputNames`
+  and `evidenceId` — identifiers only, never values.
+- The resolved input values are kept as evidence under the project's evidence
+  policy (§3.2.2: `none`, `redacted` or `full`, encrypted,
+  purged after `retention_days`). Under `redacted`, variables declared
+  `sensitive: true` are masked by name and wherever their value was read
+  under another input name. Evidence readers fetch them with `GET
+  .../instances/{id}/decisions/{evidenceId}/inputs`; every read is recorded
+  as `EVIDENCE_READ`. A node-level `evidence` override does not apply to
+  decision tables.
 - Because execution is in-transaction, a decision that fails evaluation
   (UNIQUE ambiguity or no-match/no-otherwise) rolls back the entire step —
   this is the property the Studio Run panel proves end-to-end.

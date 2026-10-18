@@ -464,7 +464,7 @@ export const NodeTelemetry: React.FC<{
               <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sand">
                 Last decision{decisions.length > 1 ? ` · ${decisions.length} applications` : ''}
               </div>
-              <DecisionRuleSummary decision={lastDecision} />
+              <DecisionRuleSummary decision={lastDecision} projectId={projectId} instanceId={instanceId} />
             </div>
           )}
           {variables && node.dmnConfig && (

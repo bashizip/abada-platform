@@ -87,7 +87,8 @@ touched. The same layers appear during a **Dry Run** in the designer.
   against the threshold, the output contract result, token counts, prompt
   hash and worker. When a fallback model answered, **Fallback for** names the
   model it replaced. For a decision table: the last decision (the rule that
-  matched, its condition and outputs) and the output variables' current values.
+  matched, its condition and outputs, with **Show input values** for evidence
+  readers) and the output variables' current values.
 - **Variables** — the instance's current variables as a tree: objects and
   lists open and close, with their size (`{4}`, `[12]`). **Expand all**,
   **Collapse all** and **Expand to level** set how much is open. Search finds
@@ -114,7 +115,12 @@ touched. The same layers appear during a **Dry Run** in the designer.
   opens on its model and tool calls; a decision-table entry names the rule
   that matched and its condition, and opens on the rule itself as the
   instance's version declares it (the condition and the outputs it set) and
-  the names of the inputs it read — the engine never records input values; a person's entry gives the outcome and whether they commented
+  the names of the inputs it read. **Show input values** opens the values the
+  table read, as the project's evidence policy kept them (masked under
+  `redacted`, absent under `none`, gone after the retention period); it needs
+  the `abada-evidence-reader` role and every read is recorded in the history.
+  Decisions recorded before 1.2.0 list the inputs by name only. A person's
+  entry gives the outcome and whether they commented
   (the comment itself stays in the process variables). Click an entry for the
   facts the engine recorded. Point at an entry to ring its step on the canvas;
   click a step on the canvas to see only its entries. While the instance runs,
