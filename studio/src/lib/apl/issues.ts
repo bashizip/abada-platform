@@ -92,3 +92,13 @@ export const issuesAt = (issues: AplValidationIssue[], ...segments: (string | nu
     return path === prefix || path.startsWith(`${prefix}/`);
   });
 };
+
+/** Engine issues about no node: the process itself (`/metadata/…`, `/flow/entry`, the document as a whole). */
+export const processIssues = (issues: AplValidationIssue[], nodeIds: string[]): AplValidationIssue[] =>
+  sortIssues(issues).filter((issue) => !issueNodeId(issue, nodeIds));
+
+/** The issues about one process field: `metadataIssuesAt(issues, 'variables', 2)` for the third variable. */
+export const metadataIssuesAt = (issues: AplValidationIssue[], ...segments: (string | number)[]): AplValidationIssue[] => {
+  const prefix = ['/metadata', ...segments].join('/');
+  return issues.filter((issue) => issue.path === prefix || (issue.path ?? '').startsWith(`${prefix}/`));
+};

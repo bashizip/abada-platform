@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { issueLine, issueNodeId, issuesByNode, issuesToLogs, sortIssues } from './issues';
+import { issueLine, issueNodeId, issuesByNode, issuesToLogs, metadataIssuesAt, processIssues, sortIssues } from './issues';
 
 const SOURCE = [
   'version: abada.io/v1',          // 0
@@ -74,5 +74,25 @@ describe('issues by node', () => {
       { code: 'E', severity: 'ERROR', message: 'e', elementId: 'draft' },
     ], ids);
     expect(grouped.get('draft')?.map((issue) => issue.code)).toEqual(['E', 'W']);
+  });
+});
+
+describe('process issues', () => {
+  const issues = [
+    { code: 'W', severity: 'WARNING' as const, message: 'w', path: '/flow/nodes/1/model' },
+    { code: 'V', severity: 'ERROR' as const, message: 'dup', path: '/metadata/variables/2/name' },
+    { code: 'K', severity: 'ERROR' as const, message: 'key', path: '/metadata/key' },
+    { code: 'E', severity: 'ERROR' as const, message: 'entry', path: '/flow/entry' },
+  ];
+
+  it('keeps the issues about no node, errors first', () => {
+    expect(processIssues(issues, ['start', 'draft']).map((issue) => issue.code)).toEqual(['V', 'K', 'E']);
+  });
+
+  it('matches a metadata field and everything under it, not a field sharing its prefix', () => {
+    expect(metadataIssuesAt(issues, 'variables').map((issue) => issue.code)).toEqual(['V']);
+    expect(metadataIssuesAt(issues, 'variables', 2).map((issue) => issue.code)).toEqual(['V']);
+    expect(metadataIssuesAt(issues, 'variables', 1)).toEqual([]);
+    expect(metadataIssuesAt([{ code: 'X', severity: 'ERROR', message: 'x', path: '/metadata/keys' }], 'key')).toEqual([]);
   });
 });

@@ -737,3 +737,57 @@ flow:
     expect(node(workflowToAPL(converted), 'gate').type).toBe('human-input');
   });
 });
+
+describe('APL round trip: process metadata', () => {
+  const documented: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: {
+      key: 'refunds',
+      name: 'Refunds',
+      description: 'Refund requests under review',
+      owner: 'payments-team',
+      category: 'payments',
+      variables: [
+        { name: 'amount', type: 'number', required: true, description: 'Refund amount' },
+        { name: 'iban', type: 'string', sensitive: true },
+      ],
+    },
+    flow: { entry: 'start', nodes: [{ id: 'start', type: 'webhook', next: 'done' }, { id: 'done', type: 'end' }] },
+  };
+
+  it('maps every metadata field Studio edits and keeps the rest verbatim', () => {
+    const withExtra = structuredClone(documented);
+    (withExtra.metadata as unknown as Record<string, unknown>).labels = { tier: 'gold' };
+    const workflow = aplToWorkflow(withExtra);
+
+    expect(workflow).toMatchObject({
+      processKey: 'refunds', name: 'Refunds', category: 'payments', owner: 'payments-team',
+      processDescription: 'Refund requests under review', metadataExtras: { labels: { tier: 'gold' } },
+    });
+    expect(workflow.variables).toEqual(documented.metadata.variables);
+    expect(workflowToAPL(workflow).metadata).toEqual(withExtra.metadata);
+  });
+
+  it('saves edits and leaves cleared fields out instead of inventing values', () => {
+    const workflow = aplToWorkflow(documented);
+    const metadata = workflowToAPL({
+      ...workflow,
+      owner: undefined,
+      category: '',
+      processDescription: 'Refunds over the limit',
+      variables: [{ ...workflow.variables![0], type: 'integer' }],
+    }).metadata;
+
+    expect(metadata).toEqual({
+      key: 'refunds',
+      name: 'Refunds',
+      description: 'Refunds over the limit',
+      variables: [{ name: 'amount', type: 'integer', required: true, description: 'Refund amount' }],
+    });
+  });
+
+  it('writes no owner, category or variables a document never had', () => {
+    const bare = aplToWorkflow({ ...documented, metadata: { key: 'refunds', name: 'Refunds' } });
+    expect(workflowToAPL(bare).metadata).toEqual({ key: 'refunds', name: 'Refunds' });
+  });
+});

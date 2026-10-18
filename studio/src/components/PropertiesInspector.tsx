@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Check, Copy, MousePointerClick, Repeat2 } from 'lucide-react';
+import { Check, Copy, Repeat2, Workflow } from 'lucide-react';
 import type { AgentConfig, WorkflowFile, WorkflowNode } from '@/types';
 import { TooltipProvider } from '@/components/ui';
 import type { AplValidationIssue } from '@/api/apl';
 import { isOutcomeRouteEdge, setRoute, syncRouteEdges, type Route } from '@/lib/apl/routes';
 import { analyzeLoops } from '@/lib/apl/loopAnalysis';
 import { issuesAt, nodeRelativePath } from '@/lib/apl/issues';
-import { NODE_KINDS, kindOf, kindSpec } from '@/features/designer/nodes/nodeCatalog';
+import { kindOf, kindSpec } from '@/features/designer/nodes/nodeCatalog';
 import { NodeGlyph } from '@/features/designer/nodes/shapes';
 import { LoopEditor } from '@/components/inspector/RouteEditors';
 import { Field, FieldIssues, Section } from '@/components/inspector/InspectorKit';
@@ -17,6 +17,7 @@ import { AgentEditor } from '@/components/inspector/AgentEditor';
 import { HumanEditor } from '@/components/inspector/HumanEditor';
 import { DecisionTableEditor } from '@/components/inspector/DecisionTableEditor';
 import { CallProcessNodeEditor, EngineTaskEditor, ScriptEditor } from '@/components/inspector/WorkEditors';
+import { ProcessEditor } from '@/components/inspector/ProcessEditor';
 import { CatchEventEditor, EventGatewayEditor, GatewayEditor, PlainEventEditor } from '@/components/inspector/FlowEditors';
 
 interface PropertiesInspectorProps {
@@ -30,7 +31,7 @@ interface PropertiesInspectorProps {
   onUpdateWorkflow?: (updater: (wf: WorkflowFile) => WorkflowFile) => void;
   /** Owning project — enables the human-node form picker and agent tools. */
   projectId?: string;
-  /** Engine validation issues about the selected node. */
+  /** Engine validation issues about the selected node, or about the process when none is selected. */
   issues?: AplValidationIssue[];
 }
 
@@ -64,10 +65,10 @@ const hasConfig = (node: WorkflowNode): boolean => {
   }
 };
 
-const IdChip: React.FC<{ id: string }> = ({ id }) => {
+const IdChip: React.FC<{ id: string; what?: string }> = ({ id, what = 'node id' }) => {
   const [copied, setCopied] = useState(false);
   return (
-    <button type="button" title="Copy the node id" aria-label={`Copy node id ${id}`}
+    <button type="button" title={`Copy the ${what}`} aria-label={`Copy ${what} ${id}`}
       onClick={() => {
         navigator.clipboard?.writeText(id).then(() => {
           setCopied(true);
@@ -78,38 +79,6 @@ const IdChip: React.FC<{ id: string }> = ({ id }) => {
       <span className="truncate">{id}</span>
       {copied ? <Check className="h-3 w-3 shrink-0 text-sage-green" /> : <Copy className="h-3 w-3 shrink-0" />}
     </button>
-  );
-};
-
-/** Nothing selected: what the process holds, and how to start editing. */
-const ProcessOverview: React.FC<{ workflow?: WorkflowFile; nodeCount: number }> = ({ workflow, nodeCount }) => {
-  const counts = new Map<string, number>();
-  for (const node of workflow?.nodes ?? []) counts.set(kindOf(node), (counts.get(kindOf(node)) ?? 0) + 1);
-  const present = NODE_KINDS.filter((spec) => counts.has(spec.kind));
-  return (
-    <div className="space-y-4 p-4">
-      <div className="space-y-2 rounded-2xl border border-hairline bg-charcoal p-4 text-center">
-        <MousePointerClick className="mx-auto h-6 w-6 text-sand" aria-hidden="true" />
-        <p className="text-xs font-medium text-linen">Select a step to edit it</p>
-        <p className="text-[11px] leading-relaxed text-sand">
-          Every property of the step shows here. Add steps from the palette: click one, or drag it onto the canvas.
-        </p>
-      </div>
-      <div className="space-y-2">
-        <span className="block text-[11px] font-semibold uppercase tracking-wider text-sand">
-          This process · {nodeCount} step{nodeCount === 1 ? '' : 's'}
-        </span>
-        <ul className="space-y-1">
-          {present.map((spec) => (
-            <li key={spec.kind} className="flex items-center gap-3 rounded-lg px-2 py-1 text-xs text-linen">
-              <span className="flex w-10 justify-center"><NodeGlyph kind={spec.kind} size={18} /></span>
-              <span className="flex-1">{spec.label}</span>
-              <span className="font-mono text-sand">{counts.get(spec.kind)}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
   );
 };
 
@@ -124,8 +93,24 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 }) => {
   if (!selectedNode) {
     return (
-      <aside className="z-10 flex h-full w-full min-w-0 flex-col overflow-y-auto border-l border-hairline bg-mocha">
-        <ProcessOverview workflow={workflow} nodeCount={nodeCount} />
+      <aside className="z-10 flex h-full w-full min-w-0 flex-col overflow-y-auto border-l border-hairline bg-mocha"
+        aria-label="Process properties">
+        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-hairline bg-charcoal/80 px-4 py-3 backdrop-blur-md">
+          <span className="flex w-11 shrink-0 justify-center text-mineral-teal"><Workflow className="h-5 w-5" aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-sm font-semibold text-linen">{workflow?.name || 'Process'}</h2>
+            <p className="truncate text-[10px] text-sand">
+              Process · {nodeCount} step{nodeCount === 1 ? '' : 's'} · <code className="font-mono text-sand-dim">metadata</code>
+            </p>
+          </div>
+          {workflow?.processKey && <IdChip id={workflow.processKey} what="process key" />}
+        </header>
+        {workflow && (
+          <SectionScope.Provider value="process">
+            <ProcessEditor workflow={workflow} issues={issues}
+              update={(patch) => onUpdateWorkflow?.((wf) => ({ ...wf, ...patch }))} />
+          </SectionScope.Provider>
+        )}
       </aside>
     );
   }

@@ -11,11 +11,15 @@ const base = { description: '', x: 0, y: 0 };
 const agent: WorkflowNode = { ...base, id: 'draft', type: 'agent', title: 'Draft',
   agentConfig: { model: 'gemini-3.6-flash', systemPrompt: '', confidenceThreshold: 0, temperature: 0.2, tools: [] } };
 const task: WorkflowNode = { ...base, id: 'sync', type: 'engine-task', title: 'Sync', engineTaskConfig: { service: 'crm' } };
-const workflow = { nodes: [agent, task], edges: [] } as unknown as WorkflowFile;
+const workflow = { name: 'Lead triage', processKey: 'lead_triage', category: '', nodes: [agent, task], edges: [] } as unknown as WorkflowFile;
 
-const show = (node: WorkflowNode | null, extra: { issues?: AplValidationIssue[]; onUpdateNode?: (node: WorkflowNode) => void } = {}) => render(
+const show = (node: WorkflowNode | null, extra: {
+  issues?: AplValidationIssue[];
+  onUpdateNode?: (node: WorkflowNode) => void;
+  onUpdateWorkflow?: (updater: (wf: WorkflowFile) => WorkflowFile) => void;
+} = {}) => render(
   <ToastProvider>
-    <PropertiesInspector selectedNode={node} onUpdateNode={extra.onUpdateNode ?? vi.fn()} onUpdateWorkflow={vi.fn()}
+    <PropertiesInspector selectedNode={node} onUpdateNode={extra.onUpdateNode ?? vi.fn()} onUpdateWorkflow={extra.onUpdateWorkflow ?? vi.fn()}
       workflow={workflow} nodeCount={2} issues={extra.issues} />
   </ToastProvider>,
 );
@@ -76,10 +80,19 @@ describe('properties inspector', () => {
     expect(container.textContent).toContain('the engine applies the stricter of the two');
   });
 
-  it('shows an overview, not invented stats, when nothing is selected', () => {
-    const container = show(null);
-    expect(container.textContent).toContain('Select a step to edit it');
-    expect(container.textContent).toContain('This process · 2 steps');
+  it('edits the process itself when nothing is selected, with its steps and its own issues', () => {
+    const onUpdateWorkflow = vi.fn();
+    const container = show(null, { onUpdateWorkflow, issues: [
+      { code: 'ABADA-APL-VALIDATION-001', severity: 'ERROR', message: 'metadata.key must match', path: '/metadata/key' },
+    ] });
+    expect(container.querySelector('h2')?.textContent).toBe('Lead triage');
+    expect(container.querySelector('header')?.textContent).toContain('Process · 2 steps');
+    expect(container.textContent).toContain('Steps · 2');
+    expect(container.textContent).toContain('metadata.key must match');
     expect(container.textContent).not.toContain('Serverless');
+
+    type(byLabel(container, 'Owner'), 'sales-ops');
+    const updater = onUpdateWorkflow.mock.calls.at(-1)![0] as (wf: WorkflowFile) => WorkflowFile;
+    expect(updater(workflow)).toMatchObject({ owner: 'sales-ops', name: 'Lead triage', nodes: workflow.nodes });
   });
 });
