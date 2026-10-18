@@ -10,7 +10,6 @@ import {
   FileText,
   Settings,
   FolderKanban,
-  Sparkles,
 } from 'lucide-react';
 import { Project } from '@/api/projects';
 import { WorkflowFile } from '@/types';
@@ -18,6 +17,8 @@ import { keycloak } from '@/auth/keycloakClient';
 import { getGroupsFromToken } from '@/auth/keycloakClient';
 import { IconButton, TooltipProvider, UITooltip } from '@/components/ui';
 import { SoundToggle } from '@/components/SoundToggle';
+import { ViewNav } from '@/components/ViewNav';
+import type { NavTab, StudioView } from '@/lib/studioViews';
 
 interface HeaderProps {
   currentWorkflow: WorkflowFile;
@@ -33,8 +34,8 @@ interface HeaderProps {
   onOpenProcessDetails?: () => void;
   onOpenSettings?: () => void;
   nodeCount: number;
-  currentView?: 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
-  onViewChange?: (view: 'designer' | 'inbox' | 'operations' | 'administration' | 'insight') => void;
+  currentView?: StudioView;
+  onViewChange?: (view: NavTab) => void;
   activeProject?: Project;
   onOpenProjects?: () => void;
   readOnlyInstance?: boolean;
@@ -101,39 +102,8 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Global View Navigation (isolated, always centered) */}
         <div className="flex-1 flex items-center justify-center min-w-0">
-          <div className="flex items-center bg-charcoal rounded-xl border border-hairline p-1 shrink-0">
-            {(['designer', 'inbox', 'operations', 'insight'] as const).map(view => (
-              <button
-                key={view}
-                data-cuelume-select
-                onClick={() => onViewChange?.(view)}
-                className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ${
-                  currentView === view
-                    ? 'bg-mocha text-linen border border-hairline'
-                    : 'text-sand hover:text-linen border border-transparent'
-                }`}
-              >
-                {view === 'designer' ? 'Canvas'
-                  : view === 'inbox' ? 'Task Inbox'
-                  : view === 'operations' ? 'Operations'
-                  : <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />Insight</span>}
-              </button>
-            ))}
-            {getGroupsFromToken().includes('abada-admin') && (
-              <button
-                key="administration"
-                data-cuelume-select
-                onClick={() => onViewChange?.('administration')}
-                className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ml-1 ${
-                  currentView === 'administration'
-                    ? 'bg-mocha text-linen border border-hairline'
-                    : 'text-sand hover:text-linen border border-transparent'
-                }`}
-              >
-                Admin
-              </button>
-            )}
-          </div>
+          <ViewNav currentView={currentView} onViewChange={onViewChange}
+            showAdmin={getGroupsFromToken().includes('abada-admin')} />
         </div>
 
         {/* Action Controls (right, never shrinks) */}

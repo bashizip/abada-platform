@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
 import { SidePanel } from '@/components/SidePanel';
@@ -11,15 +11,16 @@ import { ProcessDetailsModal } from '@/components/ProcessDetailsModal';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { ProjectDialog } from '@/components/ProjectDialog';
 import { SignInGate } from '@/components/SignInGate';
+import { switchDirection, type StudioView } from '@/lib/studioViews';
 import { AIDiffModal } from '@/features/designer/AIDiffModal';
 import { InsightReviewDialog } from '@/features/designer/InsightReviewDialog';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProjectAdmin } from '@/features/admin/ProjectAdmin';
 import { AdministrationView } from '@/features/admin/AdministrationView';
 import { InsightPanel } from '@/features/insight/InsightPanel';
-import { Activity } from 'lucide-react';
+import { Activity, ExternalLink, X } from 'lucide-react';
 import { AnimatePresence, m } from 'motion/react';
-import { page } from '@/lib/motion';
+import { useMotionVariants, viewSwitch } from '@/lib/motion';
 import { ProcessOperations } from '@/features/operations/ProcessOperations';
 import { InstanceOverviewBar } from '@/features/operations/InstanceOverviewBar';
 import { LiveInstanceInspector } from '@/features/operations/LiveInstanceInspector';
@@ -31,7 +32,7 @@ import { issuesToLogs } from '@/lib/apl/issues';
 import { AiProvidersAPI } from '@/api/aiProviders';
 import { AplAPI } from '@/api/apl';
 import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
-import { EngineAPI } from '@/api/engine';
+import { EngineAPI, type ProcessInstanceDTO } from '@/api/engine';
 import { InsightAPI } from '@/api/insight';
 import { ProjectAPI } from '@/api/projects';
 import { keycloak } from '@/auth/keycloakClient';
@@ -59,8 +60,8 @@ import { canRetryIncidents, canRollBackProcess } from '@/lib/run/incidents';
 import { LEAD_TRIAGE_EXAMPLES, STARTER_PROCESS_KEY } from '@/lib/starter/leadTriage';
 import { runSequentialInsightEvidence } from '@/lib/starter/insightEvidence';
 
-type StudioView = 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
 type DesignerMode = 'diagram' | 'apl';
+type DetailOrigin = { view: 'operations' } | { view: 'designer'; liveInstance?: ProcessInstanceDTO };
 
 /** The designer's side panels: resizable within these bounds, pinned beside the canvas or folded to a rail. */
 const EXPLORER_PANEL = { defaultWidth: 256, minWidth: 200, maxWidth: 480 };
@@ -70,6 +71,14 @@ export default function App() {
   const { showToast } = useToast();
   const [authenticated, setAuthenticated] = useState<boolean>(keycloak.authenticated === true);
   const [currentView, setCurrentView] = useState<StudioView>('designer');
+  // The side the current view arrived from, derived when the view changes (M5 view switch).
+  const [arrivedView, setArrivedView] = useState<StudioView>(currentView);
+  const [viewDirection, setViewDirection] = useState<-1 | 0 | 1>(0);
+  if (arrivedView !== currentView) {
+    setViewDirection(switchDirection(arrivedView, currentView));
+    setArrivedView(currentView);
+  }
+  const viewVariants = useMotionVariants(useMemo(() => viewSwitch(viewDirection), [viewDirection]));
   const [designerMode, setDesignerMode] = useState<DesignerMode>('diagram');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
@@ -106,6 +115,17 @@ export default function App() {
     livePanelWidth, setLivePanelWidth, livePanelPinned, setLivePanelPinned,
     openLiveInstance, openInstanceDetail, clearLiveInstanceState
   } = useLiveInstanceOverlay(activeProject, workflows, setSidebarTab, setDesignerMode, setShowRunPanel, setCurrentView, setSimulationLogs);
+
+  /**
+   * Where the instance view was opened from, so Back returns there: Operations,
+   * or the canvas (watching that instance live, or editing after Deploy & Start).
+   */
+  const [detailOrigin, setDetailOrigin] = useState<DetailOrigin>({ view: 'operations' });
+  const openDetailFrom = (origin: DetailOrigin, instance: ProcessInstanceDTO, focusNodeId?: string,
+    options?: { justStarted?: boolean }) => {
+    setDetailOrigin(origin);
+    openInstanceDetail(instance, focusNodeId, options);
+  };
 
   const {
     authoringCandidate, setAuthoringCandidate, isGenerating, handleGenerateWorkflow,
@@ -409,7 +429,7 @@ export default function App() {
         ? `Deployed and started with ${warningCount} APL warning${warningCount === 1 ? '' : 's'}; see the log panel.`
         : 'Successfully deployed workflow and started process instance.', undefined, { emphasis: 'strong' });
       // The instance view, with the audit trail open, plays the new run from its first step (M5 S5).
-      openInstanceDetail(instance, undefined, { justStarted: true });
+      openDetailFrom({ view: 'designer' }, instance, undefined, { justStarted: true });
     } catch (err: any) {
       setSimulationLogs(prev => [...prev, { id: `deploy-${Date.now()}-err`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'Deploy & Start Error', nodeType: 'event', status: 'error', message: `Deploy & Start failed: ${err.message}` }]);
       showToast('error', err.message || 'Deployment failed');
@@ -539,7 +559,7 @@ export default function App() {
         onOpenProjects={() => setShowProjects(true)}
         readOnlyInstance={isLiveReadOnly}
       />
-      <m.div key={currentView} variants={page} initial="initial" animate="enter"
+      <m.div key={currentView} variants={viewVariants} initial="initial" animate="enter"
         className="flex flex-1 overflow-hidden relative">
         {currentView === 'instance' && detailInstance ? (
           <InstanceDetailView
@@ -551,9 +571,11 @@ export default function App() {
             initialInstance={detailInstance}
             initialFocusNodeId={detailFocusNodeId}
             playFromStart={detailStartedId === detailInstance.id}
+            backLabel={detailOrigin.view === 'designer' ? 'Canvas' : 'Operations'}
             onBack={() => {
               setDetailInstance(null);
-              setCurrentView('operations');
+              setCurrentView(detailOrigin.view);
+              if (detailOrigin.view === 'designer' && detailOrigin.liveInstance) void openLiveInstance(detailOrigin.liveInstance);
             }}
             onOpenCanvas={(instance) => {
               setCurrentView('designer');
@@ -590,6 +612,7 @@ export default function App() {
             }}
             selectedInstanceId={selectedLiveInstance?.id}
             onSelectInstance={(instance) => void openLiveInstance(instance)}
+            onOpenInstanceDetail={(instance) => openDetailFrom({ view: 'designer' }, instance)}
             instancesRefreshKey={instancesRefreshKey}
             treeRefreshKey={treeRefreshKey}
           />
@@ -619,6 +642,15 @@ export default function App() {
                   <PlaybackControl pace={playback.pace} onPaceChange={playback.setPace} lag={playback.lag}
                     onJumpToNow={playback.jumpToNow} className="ml-1" />
                 )}
+                <button type="button" onClick={() => openDetailFrom({ view: 'designer', liveInstance: selectedLiveInstance }, selectedLiveInstance)}
+                  title="Open this instance in Operations"
+                  className="ml-1 flex items-center gap-1 rounded-md border border-hairline px-2 py-0.5 text-[10.5px] font-semibold text-sand transition-colors hover:border-mineral-teal/60 hover:text-linen">
+                  <ExternalLink className="h-3 w-3" aria-hidden="true" /> Operations
+                </button>
+                <button type="button" onClick={clearLiveInstanceState} aria-label="Leave the live view" title="Leave the live view and edit the process"
+                  className="grid h-5 w-5 place-items-center rounded-md text-sand transition-colors hover:bg-charcoal hover:text-linen">
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
               </div>
             )}
 
@@ -818,11 +850,11 @@ export default function App() {
               setCurrentView('designer');
               void openLiveInstance(instance);
             }}
-            onOpenDetail={(instance) => openInstanceDetail(instance)}
+            onOpenDetail={(instance) => openDetailFrom({ view: 'operations' }, instance)}
             onOpenDesigner={() => setCurrentView('designer')}
             onOpenIncident={(incident) => {
               void EngineAPI.getInstance(incident.processInstanceId, activeProject?.id)
-                .then((instance) => openInstanceDetail(instance, incident.activityId)).catch(() => undefined);
+                .then((instance) => openDetailFrom({ view: 'operations' }, instance, incident.activityId)).catch(() => undefined);
             }}
           />
         )}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderTree, ChevronDown, Layers, Activity, RotateCcw } from 'lucide-react';
+import { FolderTree, ChevronDown, Layers, Activity, RotateCcw, ExternalLink } from 'lucide-react';
 import { WorkflowFile } from '@/types';
 import { EngineAPI, ProcessDefinitionDTO, ProcessInstanceDTO, EngineInfoResponse } from '@/api/engine';
 import { ProjectExplorer } from '@/components/ProjectExplorer';
@@ -19,6 +19,8 @@ interface SidebarProps {
   onTabChange: (tab: 'files' | 'palette' | 'instances') => void;
   selectedInstanceId?: string;
   onSelectInstance: (instance: ProcessInstanceDTO) => void;
+  /** Opens the instance's page in Operations. */
+  onOpenInstanceDetail?: (instance: ProcessInstanceDTO) => void;
   instancesRefreshKey?: number;
   treeRefreshKey?: number;
 }
@@ -36,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   selectedInstanceId,
   onSelectInstance,
+  onOpenInstanceDetail,
   instancesRefreshKey = 0,
   treeRefreshKey = 0,
 }) => {
@@ -189,7 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto p-3 space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold tracking-wider text-sand uppercase">
-              Live Executions
+              Instances
             </span>
             <button
               onClick={() => {
@@ -237,32 +240,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
             {visibleInstances.map((instance) => (
-              <button
-                key={instance.id}
-                onClick={() => onSelectInstance(instance)}
-                className={`w-full text-left p-2.5 rounded-xl border transition-all hover:bg-mocha-hover ${
-                  selectedInstanceId === instance.id
-                    ? 'bg-charcoal border-mineral-teal/60'
-                    : 'bg-mocha border-hairline'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-linen truncate">
-                    {instance.processDefinitionId.split(':')[0]}
-                  </span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    instance.status === 'ACTIVE' || instance.status === 'RUNNING' ? 'bg-sage-green/10 text-sage-green border border-sage-green/30' :
-                    instance.status === 'COMPLETED' ? 'bg-amethyst/10 text-amethyst border border-amethyst/30' :
-                    'bg-desert-rose/10 text-desert-rose border border-desert-rose/30'
-                  }`}>
-                    {instance.status}
-                  </span>
-                </div>
-                <div className="flex justify-between text-[10px] text-sand font-mono">
-                  <span>ID: {instance.id.substring(0, 8)}...</span>
-                  <span>{new Date(instance.startDate).toLocaleTimeString()}</span>
-                </div>
-              </button>
+              <div key={instance.id} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => onSelectInstance(instance)}
+                  title="Watch this instance on the canvas"
+                  className={`w-full text-left p-2.5 rounded-xl border transition-all hover:bg-mocha-hover ${
+                    selectedInstanceId === instance.id
+                      ? 'bg-charcoal border-mineral-teal/60'
+                      : 'bg-mocha border-hairline'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-linen truncate">
+                      {instance.processDefinitionId.split(':')[0]}
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      instance.status === 'ACTIVE' || instance.status === 'RUNNING' ? 'bg-sage-green/10 text-sage-green border border-sage-green/30' :
+                      instance.status === 'COMPLETED' ? 'bg-amethyst/10 text-amethyst border border-amethyst/30' :
+                      'bg-desert-rose/10 text-desert-rose border border-desert-rose/30'
+                    }`}>
+                      {instance.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-sand font-mono pr-6">
+                    <span>ID: {instance.id.substring(0, 8)}...</span>
+                    <span>{new Date(instance.startDate).toLocaleTimeString()}</span>
+                  </div>
+                </button>
+                {onOpenInstanceDetail && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenInstanceDetail(instance)}
+                    aria-label="Open in Operations"
+                    title="Open this instance in Operations"
+                    className="absolute bottom-2 right-2 grid h-5 w-5 place-items-center rounded-md text-sand opacity-60 transition-opacity hover:bg-charcoal hover:text-linen hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </div>

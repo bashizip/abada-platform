@@ -31,6 +31,8 @@ interface InstanceDetailViewProps {
   /** Project operator, maintainer or owner: may roll the process back. */
   canRollBack?: boolean;
   initialInstance: ProcessInstanceDTO;
+  /** Where Back returns to, named on the button. */
+  backLabel?: string;
   onBack: () => void;
   onOpenCanvas: (instance: ProcessInstanceDTO) => void;
   /** Opens a related instance (a caller or a called process). */
@@ -52,7 +54,7 @@ const isTyping = (target: EventTarget | null) => {
  * Esc closes the incident card, then the drawer, then goes back.
  */
 export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
-  instanceId, projectId, canRetryIncidents = false, canRollBack = false, initialInstance, onBack, onOpenCanvas,
+  instanceId, projectId, canRetryIncidents = false, canRollBack = false, initialInstance, backLabel = 'Operations', onBack, onOpenCanvas,
   onOpenInstance, initialFocusNodeId, playFromStart = false,
 }) => {
   const openIncidents = useInstanceIncidents(projectId, instanceId, 0);
@@ -155,7 +157,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
       <div className="flex h-full w-full flex-col overflow-hidden bg-charcoal text-linen">
         <InstanceHeader instance={instance} definition={data.definition} isTerminal={isTerminal} live={data.live}
           incidents={openIncidents.incidents} nodeTitle={nodeTitle} playback={playback} canOperate={canRetryIncidents}
-          onBack={onBack} onOpenCanvas={() => onOpenCanvas(instance)} onOpenIncident={nodeIncidents.openCard}
+          backLabel={backLabel} onBack={onBack} onOpenCanvas={() => onOpenCanvas(instance)} onOpenIncident={nodeIncidents.openCard}
           onToggleSuspend={() => void mutate(
             () => EngineAPI.setInstanceSuspension(instance.id, projectId as string, status !== 'SUSPENDED'),
             status === 'SUSPENDED' ? `Resumed ${label}` : `Suspended ${label}`)}
