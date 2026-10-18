@@ -1,5 +1,5 @@
 <#-- Copied from Keycloak 21.1.1 base/login/template.ftl. Abada changes: SVG
-     favicon, the Studio brand header and interaction sounds (js/sounds.js). Re-diff when upgrading Keycloak. -->
+     favicon, the Studio brand header, the four-roles line under the card and interaction sounds (js/sounds.js). Re-diff when upgrading Keycloak. -->
 <#macro registrationLayout bodyClass="" displayInfo=false displayMessage=true displayRequiredFields=false>
 <!DOCTYPE html>
 <html class="${properties.kcHtmlClass!}">
@@ -159,6 +159,12 @@
       </div>
 
     </div>
+    <ul class="abada-pillars" aria-label="${msg("abadaPillarsLabel")}">
+        <li><span class="abada-dot abada-dot-agent"></span>${msg("abadaPillarAgent")}</li>
+        <li><span class="abada-dot abada-dot-rule"></span>${msg("abadaPillarRule")}</li>
+        <li><span class="abada-dot abada-dot-human"></span>${msg("abadaPillarHuman")}</li>
+        <li><span class="abada-dot abada-dot-record"></span>${msg("abadaPillarRecord")}</li>
+    </ul>
   </div>
 </body>
 </html>
