@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AgentStepInspector } from '@/features/operations/AgentStepInspector';
+import { JsonValueInline } from '@/components/json/JsonInline';
+import { jsonHeight } from '@/components/json/jsonLayout';
+import { JsonViewer } from '@/components/json/JsonViewer';
 import {
   Activity,
   AlertTriangle,
@@ -12,10 +15,8 @@ import {
   GitCompare,
   GitFork,
   GitMerge,
-  Loader2,
   PlayCircle,
   Radio,
-  Search,
   Table,
   UserCheck,
   Workflow,
@@ -72,51 +73,6 @@ export const EVENT_ICON: Record<string, React.ElementType> = {
 /* Primitives                                                          */
 /* ------------------------------------------------------------------ */
 
-export const isPrimitive = (value: unknown): boolean => value === null || typeof value !== 'object';
-
-const VariableValue: React.FC<{ value: unknown }> = ({ value }) => {
-  if (value === null) return <span className="text-sand italic">null</span>;
-  if (typeof value === 'boolean' || typeof value === 'number') {
-    return <span className="text-saffron">{String(value)}</span>;
-  }
-  return <span className="text-linen">{String(value)}</span>;
-};
-
-export const VariableTree: React.FC<{ data: unknown }> = ({ data }) => {
-  if (isPrimitive(data)) return <VariableValue value={data} />;
-  if (Array.isArray(data)) {
-    if (data.length === 0) return <span className="text-sand italic">[]</span>;
-    return (
-      <div className="mt-0.5 space-y-1 border-l border-hairline pl-2.5">
-        {data.map((item, index) => (
-          <div key={index} className="flex gap-1.5">
-            <span className="shrink-0 font-mono text-[10px] text-sand/70">[{index}]</span>
-            <VariableTree data={item} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  const entries = Object.entries(data as Record<string, unknown>);
-  if (entries.length === 0) return <span className="text-sand italic">{'{ }'}</span>;
-  return (
-    <div className="mt-0.5 space-y-1.5 border-l border-hairline pl-2.5">
-      {entries.map(([key, value]) => (
-        <div key={key} className="flex flex-col gap-0.5">
-          <div className="flex gap-1.5">
-            <span className="shrink-0 font-mono text-[11px] text-saffron">{key}</span>
-            <span className="text-sand">:</span>
-            <span className="min-w-0 break-words">
-              {isPrimitive(value) ? <VariableValue value={value} /> : null}
-            </span>
-          </div>
-          {!isPrimitive(value) && <VariableTree data={value} />}
-        </div>
-      ))}
-    </div>
-  );
-};
-
 export const InfoRow: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex items-start justify-between gap-3 py-1.5">
     <span className="shrink-0 text-[11px] text-sand">{label}</span>
@@ -167,66 +123,6 @@ export const ConfidenceGauge: React.FC<{ achieved: number; threshold: number | u
           <AlertTriangle className="h-3 w-3" /> Below the APL threshold — this attempt would be rejected.
         </p>
       )}
-    </div>
-  );
-};
-
-/* ------------------------------------------------------------------ */
-/* Variables tab (searchable tree)                                     */
-/* ------------------------------------------------------------------ */
-
-export const VariablesTab: React.FC<{ variables: Record<string, unknown> | null }> = ({ variables }) => {
-  const [variableSearch, setVariableSearch] = useState('');
-
-  const filteredVariables = useMemo(() => {
-    if (!variables) return null;
-    const unwrapped = unwrapVariable(variables) as Record<string, unknown>;
-    const query = variableSearch.trim().toLowerCase();
-    if (!query) return unwrapped;
-    const pick = (value: unknown, key: string): boolean =>
-      key.toLowerCase().includes(query)
-      || (typeof value === 'string' && value.toLowerCase().includes(query));
-    const walk = (value: unknown, key: string): unknown => {
-      if (isPrimitive(value)) return pick(value, key) ? value : undefined;
-      if (Array.isArray(value)) {
-        const mapped = value.map((item, index) => walk(item, `${key}[${index}]`));
-        return mapped.some((item) => item !== undefined) ? mapped : undefined;
-      }
-      const entries = Object.entries(value as Record<string, unknown>);
-      const kept = entries
-        .map(([childKey, child]) => [childKey, walk(child, childKey)] as const)
-        .filter(([, child]) => child !== undefined);
-      return kept.length ? Object.fromEntries(kept) : undefined;
-    };
-    const result = walk(unwrapped, '');
-    return result === undefined ? {} : (result as Record<string, unknown>);
-  }, [variables, variableSearch]);
-
-  return (
-    <div className="p-4">
-      <div className="relative mb-3">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-sand" />
-        <input
-          type="text"
-          value={variableSearch}
-          onChange={(event) => setVariableSearch(event.target.value)}
-          placeholder="Search variables…"
-          className="w-full rounded-lg border border-hairline bg-charcoal py-1.5 pl-8 pr-3 text-[11px] text-linen placeholder-sand outline-none transition-all focus:border-saffron"
-        />
-      </div>
-      <div className="rounded-xl border border-hairline bg-charcoal p-3">
-        {variables === null ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-[11px] text-sand">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-mineral-teal" /> Reading variables…
-          </div>
-        ) : Object.keys(filteredVariables ?? {}).length === 0 ? (
-          <p className="text-[11px] text-sand">
-            {variableSearch ? 'No variables match the search.' : 'No variables available.'}
-          </p>
-        ) : (
-          <VariableTree data={filteredVariables} />
-        )}
-      </div>
     </div>
   );
 };
@@ -291,9 +187,9 @@ export const AuditTimeline: React.FC<{
               </div>
             </button>
             {expanded && (
-              <pre className="mt-1 overflow-x-auto rounded-lg border border-hairline bg-charcoal p-2 font-mono text-[10px] leading-relaxed text-linen-muted">
-                {JSON.stringify(details, null, 2)}
-              </pre>
+              <div className="mt-1">
+                <JsonViewer data={details} label="details" compact defaultDepth={2} height={jsonHeight(details)} />
+              </div>
             )}
           </li>
         );
@@ -568,7 +464,7 @@ export const NodeTelemetry: React.FC<{
                   : undefined;
                 return (
                   <InfoRow key={output.name} label={output.name}>
-                    {value === undefined ? '—' : String(value)}
+                    {value === undefined ? '—' : <span className="font-mono"><JsonValueInline value={value} /></span>}
                   </InfoRow>
                 );
               })}

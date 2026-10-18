@@ -15,11 +15,11 @@ import { ActivityHistoryDTO, EngineAPI, ProcessInstanceDTO, ProjectJob } from '@
 import { AgentStepEvidence, EvidenceAPI } from '@/api/evidence';
 import { WorkflowFile } from '@/types';
 import { humanize, statusOf } from '@/lib/run/instanceFormat';
+import { VariablesPanel } from './VariablesPanel';
 import {
   AuditTimeline,
   InfoRow,
   NodeTelemetry,
-  VariablesTab,
 } from '@/features/operations/instanceTelemetry';
 import { INSPECTOR_PANEL_DEFAULT_WIDTH } from '@/lib/run/panelPrefs';
 
@@ -294,7 +294,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
           </div>
         )}
 
-        {tab === 'variables' && <VariablesTab variables={variables} />}
+        {tab === 'variables' && <VariablesPanel variables={variables} resetKey={instanceId} className="p-4" />}
 
         {tab === 'audit' && <AuditTimeline history={history} />}
       </div>

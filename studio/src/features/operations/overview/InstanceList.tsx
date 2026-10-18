@@ -3,7 +3,7 @@ import { CheckCircle2, Loader2, SearchX, Workflow } from 'lucide-react';
 import type { ProcessInstanceDTO } from '@/api/engine';
 import { EmptyState, Skeleton } from '@/components/ui';
 import { InstanceRow, ROW_GRID, ROW_HEIGHT, RowAction } from './InstanceRow';
-import { useVirtualRows } from './useVirtualRows';
+import { useVirtualRows } from '@/hooks/useVirtualRows';
 
 /** Rows from the end at which the next page loads. */
 const LOAD_AHEAD = 12;

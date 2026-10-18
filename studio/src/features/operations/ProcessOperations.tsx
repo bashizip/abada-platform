@@ -7,7 +7,7 @@ import { countPerHour } from '@/lib/run/kpiBuckets';
 import { deriveBusinessLabel, humanize, statusOf } from '@/lib/run/instanceFormat';
 import { IncidentsPanel } from './IncidentsPanel';
 import { VersionsPanel } from './VersionsPanel';
-import { VariablesTab } from './instanceTelemetry';
+import { VariablesPanel } from './VariablesPanel';
 import { ConfirmDialog, ConfirmRequest } from './ConfirmDialog';
 import { OperationsToast } from './OperationsToast';
 import { useOperationsNotice } from './useOperationsNotice';
@@ -205,7 +205,7 @@ export const ProcessOperations: React.FC<{
         </Drawer>
         <Drawer open={variablesFor !== null} onClose={() => setVariablesFor(null)}
           title={variablesFor ? `Variables · ${deriveBusinessLabel(variablesFor).label}` : 'Variables'}>
-          <VariablesTab variables={variables} />
+          <VariablesPanel variables={variables} resetKey={variablesFor?.id} />
         </Drawer>
         <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
         <OperationsToast notice={notice} onDismiss={() => setNotice(null)} />

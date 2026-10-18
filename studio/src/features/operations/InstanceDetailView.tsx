@@ -10,7 +10,8 @@ import { LiveAuditTrail } from './LiveAuditTrail';
 import { LineagePanel } from './LineagePanel';
 import { VersionsPanel } from './VersionsPanel';
 import { ErrorDetailsDialog } from './ErrorDetailsDialog';
-import { NodeTelemetry, VariablesTab } from './instanceTelemetry';
+import { NodeTelemetry } from './instanceTelemetry';
+import { VariablesPanel } from './VariablesPanel';
 import type { FailureDetails } from './NodeIncidentCard';
 import { useNodeIncidents } from './useNodeIncidents';
 import { ConfirmDialog, ConfirmRequest } from './ConfirmDialog';
@@ -189,7 +190,10 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               ) : (
                 <p className="py-2 text-xs text-sand">Select a step on the diagram, or walk the steps with ← and →.</p>
               ))}
-              {drawerTab === 'variables' && <VariablesTab variables={data.variables} />}
+              {drawerTab === 'variables' && (
+                <VariablesPanel variables={data.variables} visibleFacts={playback.frame?.history} lag={playback.lag}
+                  onJumpToNow={playback.jumpToNow} resetKey={instanceId} />
+              )}
               {drawerTab === 'lineage' && <LineagePanel projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} embedded />}
               {drawerTab === 'versions' && (
                 <VersionsPanel projectId={projectId} processKeys={[instance.processDefinitionId]} canRollBack={canRollBack}
