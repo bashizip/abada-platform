@@ -82,6 +82,8 @@ export interface TrailDecision {
   rules: TrailDecisionRule[];
   inputNames: string[];
   outputNames: string[];
+  /** The id of the input values kept as evidence; absent in history recorded before they were kept. */
+  evidenceId?: string;
 }
 
 const names = (value: unknown): string[] =>
@@ -106,6 +108,7 @@ export function decisionOf(fact: ActivityHistoryDTO, node: WorkflowNode | undefi
     }),
     inputNames: names(details.inputNames),
     outputNames: names(details.outputNames),
+    evidenceId: typeof details.evidenceId === 'string' && details.evidenceId ? details.evidenceId : undefined,
   };
 }
 
