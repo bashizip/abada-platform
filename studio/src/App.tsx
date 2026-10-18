@@ -842,6 +842,7 @@ export default function App() {
               void openLiveInstance(instance);
             }}
             onOpenDetail={(instance) => openInstanceDetail(instance)}
+            onOpenDesigner={() => setCurrentView('designer')}
             onOpenIncident={(incident) => {
               void EngineAPI.getInstance(incident.processInstanceId, activeProject?.id)
                 .then((instance) => openInstanceDetail(instance, incident.activityId)).catch(() => undefined);
