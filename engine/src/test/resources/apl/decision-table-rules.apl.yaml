@@ -1,0 +1,36 @@
+version: abada.io/v1
+metadata:
+  key: loan_tier
+  name: Loan tier
+  category: decisions
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: tier
+    - id: tier
+      type: decision-table
+      description: Exclusive tiers under UNIQUE, with one fallback
+      decisionKey: LOAN_TIER
+      hitPolicy: UNIQUE
+      inputs:
+        - name: score
+          expr: "${applicant.score}"
+        - name: amount
+      rules:
+        - when: score >= 750 && amount <= 50000
+          then:
+            tier: "A"
+            auto_approve: true
+        - when: score >= 600 && score < 750
+          then:
+            tier: "B"
+            auto_approve: false
+        - otherwise:
+            then:
+              tier: "C"
+              auto_approve: false
+      next: done
+    - id: done
+      type: end

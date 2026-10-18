@@ -741,6 +741,18 @@ public final class AplParser {
                     .filter(issue -> issue.severity() == ValidationSeverity.ERROR).toList();
             if (!loopErrors.isEmpty()) throw new BpmnValidationException(loopErrors);
             loopIssues.stream().filter(issue -> issue.severity() != ValidationSeverity.ERROR).forEach(warnings::add);
+            // Decision-table rules, each issue pinned to its rule (`/flow/nodes/<i>/rules/<j>`).
+            List<BpmnValidationIssue> tableErrors = new ArrayList<>();
+            for (DecisionTableMeta table : decisionTables.values()) {
+                String pointer = pointerById.get(table.id());
+                for (BpmnValidationIssue issue : DecisionTableRules.check(table, APL_VALIDATION_CODE,
+                        LANGUAGE_VERSION, definition.getId())) {
+                    tableErrors.add(pointer == null ? issue : new BpmnValidationIssue(issue.code(), issue.severity(),
+                            issue.message(), issue.processDefinitionId(), issue.elementId(), issue.namespace(),
+                            issue.sourceLocation(), issue.suggestedResolution(), pointer + "/" + issue.path()));
+                }
+            }
+            if (!tableErrors.isEmpty()) throw new BpmnValidationException(tableErrors);
             try {
                 com.abada.engine.expression.DefinitionPolicyValidator.validate(definition, APL_VALIDATION_CODE,
                         LANGUAGE_VERSION);

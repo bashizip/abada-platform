@@ -493,6 +493,13 @@ external DMN-table binding with a native in-transaction table.
 
 \* required unless the rule is the `otherwise` fallback.
 
+**Checked at deployment**, each on the rule it is about: an empty `when`, a
+`when` that is not valid CEL, a `when` reading a name that is not one of the
+`inputs` (conditions see only the inputs), a second `otherwise` rule, and,
+under `UNIQUE`, two rules with the same condition. Overlapping but different
+conditions under `UNIQUE` can only be caught when the table runs. Details:
+[APL specification §4.4a](apl-specification.md#44a-rule-checks-at-deployment).
+
 **Example.**
 
 ```yaml
