@@ -8,7 +8,7 @@ vi.mock('motion/react', async (importOriginal) => ({
 }));
 
 import {
-  MAX_UI_DURATION_MS, backdrop, duration, enterExit, modal, page, slideFrom, toast,
+  MAX_UI_DURATION_MS, backdrop, duration, enterExit, modal, page, slideFrom, toast, viewSwitch,
   useMotionVariants, useReducedMotion, withoutMovement,
 } from './motion';
 
@@ -30,7 +30,7 @@ describe('motion tokens', () => {
     expect(duration).toEqual({ fast: 150, base: 240, calm: 700 });
     expect(duration.fast).toBeLessThanOrEqual(MAX_UI_DURATION_MS);
     expect(duration.base).toBeLessThanOrEqual(MAX_UI_DURATION_MS);
-    for (const variants of [enterExit, modal, backdrop, toast, page, slideFrom('left'), slideFrom('right')]) {
+    for (const variants of [enterExit, modal, backdrop, toast, page, slideFrom('left'), slideFrom('right'), viewSwitch(1)]) {
       for (const target of Object.values(variants)) {
         const seconds = (target as { transition?: { duration?: number } }).transition?.duration ?? 0;
         expect(seconds * 1000).toBeLessThanOrEqual(MAX_UI_DURATION_MS);
@@ -44,6 +44,14 @@ describe('motion tokens', () => {
     expect(still.enter).toMatchObject({ opacity: 1 });
     expect(still.enter).not.toHaveProperty('y');
     expect(withoutMovement(modal).initial).toEqual({ opacity: 0 });
+  });
+
+  it('brings a view in from the side of the tab it was reached from, and only fades it under reduced motion', () => {
+    expect(viewSwitch(1).initial).toMatchObject({ opacity: 0, x: 12 });
+    expect(viewSwitch(-1).initial).toMatchObject({ x: -12 });
+    expect(viewSwitch(0).initial).toMatchObject({ x: 0 });
+    expect(viewSwitch(1).enter).toMatchObject({ opacity: 1, x: 0 });
+    expect(withoutMovement(viewSwitch(1)).initial).toEqual({ opacity: 0 });
   });
 
   it('treats an unknown preference as full motion', () => {

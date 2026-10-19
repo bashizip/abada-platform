@@ -60,6 +60,24 @@ export const page: Variants = {
   exit: { opacity: 0, transition: transition('fast') },
 };
 
+/**
+ * Switching between the Studio's top-level views: the new view fades in while
+ * travelling a short way from the side of the tab it was reached from
+ * (`direction` 1 = a tab to the right, -1 = to the left, 0 = in place). A
+ * translation only, settling at `transform: none`, so the view's fixed-position
+ * overlays are positioned normally once it has arrived.
+ */
+export function viewSwitch(direction: -1 | 0 | 1): Variants {
+  return {
+    initial: { opacity: 0, x: VIEW_TRAVEL_PX * direction },
+    enter: { opacity: 1, x: 0, transition: transition('base') },
+    exit: { opacity: 0, transition: transition('fast') },
+  };
+}
+
+/** How far a view travels as it arrives: enough to read as direction, not as a slide. */
+export const VIEW_TRAVEL_PX = 12;
+
 /** Dialogs: scale up slightly from where the eye already is. */
 export const modal: Variants = {
   initial: { opacity: 0, scale: 0.97 },

@@ -43,6 +43,7 @@ export const InstanceHeader: React.FC<{
   nodeTitle: (nodeId: string) => string;
   playback: { pace: PlaybackPace; setPace: (pace: PlaybackPace) => void; lag: number; jumpToNow: () => void };
   canOperate: boolean;
+  backLabel?: string;
   onBack: () => void;
   onOpenCanvas: () => void;
   onOpenIncident: (nodeId: string) => void;
@@ -51,16 +52,16 @@ export const InstanceHeader: React.FC<{
   onExport: () => void;
 }> = ({
   instance, definition, isTerminal, live, incidents, nodeTitle, playback, canOperate,
-  onBack, onOpenCanvas, onOpenIncident, onToggleSuspend, onCancel, onExport,
+  backLabel = 'Operations', onBack, onOpenCanvas, onOpenIncident, onToggleSuspend, onCancel, onExport,
 }) => {
   const status = statusOf(instance);
   const { label } = deriveBusinessLabel(instance);
   const first = incidents[0];
   return (
     <header className="sticky top-0 z-[var(--elevation-panel)] flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-mocha-deep px-4 py-2.5">
-      <button type="button" onClick={onBack} title="Back to Operations (Esc)"
+      <button type="button" onClick={onBack} title={`Back to ${backLabel} (Esc)`}
         className={`${button} border-hairline bg-charcoal text-sand hover:border-hairline-strong hover:text-linen`}>
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Operations
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> {backLabel}
       </button>
       <div className="flex min-w-0 max-w-xs flex-col">
         <h1 className="truncate text-[15px] font-semibold tracking-tight text-linen">{label}</h1>
