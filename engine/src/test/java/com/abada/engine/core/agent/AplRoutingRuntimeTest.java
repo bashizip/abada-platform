@@ -200,7 +200,6 @@ class AplRoutingRuntimeTest {
                         "spring.datasource.hikari.maximum-pool-size=6",
                         "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
                         "spring.jpa.hibernate.ddl-auto=validate",
-                        "spring.jpa.open-in-view=false",
                         "spring.flyway.enabled=true",
                         "spring.task.scheduling.enabled=false",
                         "abada.outbox.dispatcher.enabled=false",

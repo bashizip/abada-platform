@@ -4,6 +4,12 @@ spring:
     version: "@project.version@"
   profiles:
     active: dev
+  jpa:
+    # No EntityManager (and so no pooled connection) is held for a whole HTTP
+    # request: each one is held only by the transaction that needs it. With
+    # open-in-view, a 30-minute event stream kept its connection for its life
+    # and a few watching clients exhausted the pool (see runtime-state.md).
+    open-in-view: false
 
 server:
   port: ${SERVER_PORT:5601}

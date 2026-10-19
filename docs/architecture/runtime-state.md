@@ -260,6 +260,17 @@ security review and operational runbooks remain 1.0 RC gates; see the roadmap.
   workflow row lock.
 - Require an idempotency key or protocol identity where a client can repeat a
   mutation after losing the response.
+- Hold a pooled database connection only for the transaction or statement that
+  needs it, never for an HTTP request. `spring.jpa.open-in-view` is `false` for
+  every profile: with it on, Spring kept an EntityManager, and Hibernate kept
+  its connection, for the whole request, so each open project event stream
+  (up to 30 minutes) pinned one connection and a few watching clients
+  exhausted the pool for every request, worker and scheduler on the replica.
+  Long-lived or asynchronous requests (event streams) do their checks in short
+  transactions on the request thread and stream without a connection.
+  `EventStreamConnectionPoolTest` opens three times more streams than the pool
+  has connections against PostgreSQL and requires zero checked-out
+  connections and a responsive API.
 
 Exactly-once refers to committed workflow state transitions. Calls to external
 systems are at-least-once unless their own idempotency contract prevents a
