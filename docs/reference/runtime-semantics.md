@@ -89,7 +89,8 @@ should use external tasks and an idempotent worker operation.
   whole command: HTTP 422 `FORM_INVALID` with `details.violations` listing
   `{ field, rule }` (rules: `required`, `type`, `format`, `pattern`,
   `minLength`, `maxLength`, `min`, `max`, `option`, `decimals`,
-  `not_submittable`). Values are never echoed or logged. The task stays open;
+  `not_submittable`, and for file fields `file_unknown`, `file_not_pending`,
+  `file_size`, `file_type`, `file_total`). Values are never echoed or logged. The task stays open;
   no history, outbox event or variable is written.
 - `visible_when` (portable CEL subset, APL specification §2.9) is evaluated
   over the process variables overlaid with the submitted values. A hidden
@@ -111,6 +112,27 @@ should use external tasks and an idempotent worker operation.
   version then has no pinned form).
 - `camunda:formKey` in BPMN maps to the canonical `formKey` (see
   [bpmn-support.md](bpmn-support.md)).
+
+## Files in human tasks
+
+Since 1.2 (V42) a `file` form field takes uploaded files; the full contract is
+[process files](process-files.md).
+
+- Files are uploaded before completion
+  (`POST /v1/projects/{p}/tasks/{t}/files?field=…&name=…`) and stay `PENDING`.
+  The bytes go to RustFS, outside any workflow transaction; PostgreSQL gets
+  only the metadata row.
+- Completing the task with the file ids attaches them **in the completion
+  transaction**: the rows become `ATTACHED` and the field's variable gets the
+  reference `{ fileId, name, contentType, size, sha256 }` (a list for a
+  `multiple` field). No remote call is made in that transaction; a refused
+  completion leaves the files `PENDING` and attaches nothing.
+- The process never holds bytes: variables, history, outbox events and
+  webhooks carry references and ids only. Workers download through the engine
+  with the lease of their external task.
+- `PENDING` files expire after 24 hours; attached files follow the project's
+  file retention after the instance ends (kept by default). Deletion is a
+  durable, idempotent, at-least-once sweep.
 
 ## Process control
 

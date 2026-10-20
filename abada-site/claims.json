@@ -46,12 +46,19 @@
       ]
     },
     {
-      "id": "postgres-only",
-      "status": "released",
-      "text": "PostgreSQL is the only required infrastructure; schema upgrades from every supported prior version are tested on PostgreSQL.",
+      "id": "self-hosted-storage",
+      "status": "next",
+      "text": "PostgreSQL and RustFS, both self-hosted, are the only required infrastructure: PostgreSQL holds process state and the metadata of task files, RustFS their contents; schema upgrades from every supported prior version are tested on PostgreSQL.",
       "proof": [
         {
-          "path": "docs/reference/deployment-support.md"
+          "path": "docs/reference/deployment-support.md",
+          "contains": "PostgreSQL + RustFS"
+        },
+        {
+          "path": "docs/reference/process-files.md"
+        },
+        {
+          "path": "engine/src/test/java/com/abada/engine/files/PostgresRustfsFileTest.java"
         },
         {
           "path": "engine/src/test/java/com/abada/engine/persistence/PostgresSchemaUpgradeTest.java"

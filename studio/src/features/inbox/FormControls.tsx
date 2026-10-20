@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FormDensity, FormField, optionsOf } from './formSchema';
 import { controlHeight, fromLocalInput, renderMarkdown, toLocalInput } from './formControlHelpers';
+import { FileField } from './FileField';
 
 /**
  * One input per field type, compact by default: 32 px controls (28 px in a
@@ -198,7 +199,8 @@ export const FieldControl: React.FC<ControlProps> = (props) => {
         </div>
       );
     case 'file':
-      return <p className="text-[12px] text-sand-dim">File upload arrives in a later release.</p>;
+      return <FileField field={field} value={value} onChange={onChange} readOnly={readOnly} density={density}
+        invalid={invalid} describedBy={describedBy} />;
     default:
       return (
         <input {...common} type={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'}

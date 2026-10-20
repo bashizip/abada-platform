@@ -75,6 +75,11 @@ wait_for_health() {
   return 1
 }
 
+# From 1.2 the engine needs RustFS (process files); a stack started before then
+# gets it here, without touching the other services.
+echo "Ensuring RustFS (object storage for process files) is running..."
+"${COMPOSE[@]}" up -d --no-deps --wait rustfs
+
 echo "Recreating only abada-engine and abada-studio..."
 "${COMPOSE[@]}" up -d --no-deps --force-recreate abada-engine abada-studio
 

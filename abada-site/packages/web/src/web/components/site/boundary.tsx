@@ -4,7 +4,8 @@ const INSIDE = [
   { name: "Studio", detail: "Design, tasks, operations" },
   { name: "Engine", detail: "Processes, rules, agent contract" },
   { name: "Agent worker", detail: "Model calls, outside the transaction" },
-  { name: "PostgreSQL", detail: "The only database" },
+  { name: "PostgreSQL", detail: "Process state, history and evidence" },
+  { name: "RustFS", detail: "Files attached to tasks, self-hosted" },
 ];
 
 const YOURS = [

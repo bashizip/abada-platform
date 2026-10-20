@@ -55,7 +55,10 @@ describe('formProblems', () => {
   const field = (extra: Record<string, unknown>) => ({ id: 'a', type: 'string', label: 'A', ...extra }) as FormSchema['fields'][number];
   it.each([
     ['an unknown type', field({ type: 'colour' }), 'unknown type'],
-    ['a file field', field({ type: 'file' }), 'file fields arrive'],
+    ['a bad accept entry', field({ type: 'file', accept: ['pdf'] }), "accept entry 'pdf'"],
+    ['accept on a text field', field({ accept: ['.pdf'] }), "'accept' only applies to file fields"],
+    ['a zero max size', field({ type: 'file', maxSize: 0 }), 'maxSize is a whole number'],
+    ['a file count on a single file', field({ type: 'file', max: 2 }), 'min/max do not apply'],
     ['a bad variable name', field({ id: '1a' }), 'letters, digits'],
     ['a select without options', field({ type: 'select' }), 'at least one non-empty option'],
     ['a duplicate option', field({ type: 'radio', options: ['x', 'x'] }), 'listed twice'],

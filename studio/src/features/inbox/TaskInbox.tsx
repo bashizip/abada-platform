@@ -14,6 +14,9 @@ import {
 import { EngineAPI, EngineUserTaskDTO, FormRejectedError } from '@/api/engine';
 import { decisionError, decisionPayload, humanize, TaskOutcome } from './decision';
 import { ToolApprovalCard } from './ToolApprovalCard';
+import { FormFiles, FormFilesContext } from './fileFieldModel';
+import { discardFile, fetchFileBlob, uploadTaskFile } from '@/api/files';
+import { FileAccessContext } from '@/components/json/fileAccess';
 import { JsonViewer } from '@/components/json/JsonViewer';
 import { jsonHeight } from '@/components/json/jsonLayout';
 import { useToast } from '@/components/ToastContext';
@@ -49,6 +52,15 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedTask, setSelectedTask] = useState<EngineUserTaskDTO | null>(null);
+  // File fields upload to the selected task (M5 S9); the bytes go through the engine to file storage.
+  const selectedTaskId = selectedTask?.id;
+  const selectedProjectId = selectedTask?.projectId;
+  const formFiles = useMemo<FormFiles | null>(() => (selectedTaskId && selectedProjectId ? {
+    upload: (fieldId, file, onProgress, signal) => uploadTaskFile(selectedProjectId, selectedTaskId, fieldId, file, onProgress, signal),
+    discard: (fileId) => discardFile(selectedProjectId, fileId),
+    read: (fileId) => fetchFileBlob(selectedProjectId, fileId),
+  } : null), [selectedTaskId, selectedProjectId]);
+  const fileAccess = useMemo(() => (selectedProjectId ? { projectId: selectedProjectId } : null), [selectedProjectId]);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [schema, setSchema] = useState<FormSchema | null>(null);
@@ -376,15 +388,17 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                       {selectedTask.formKey}{formPinned ? ' · checked by the engine' : ''}
                     </span>
                   </h3>
-                  <FormRenderer
-                    schema={schema}
-                    values={formValues}
-                    onChange={setFormValues}
-                    errors={formErrors}
-                    onErrors={setFormErrors}
-                    variables={selectedTask.variables ?? {}}
-                    readOnly={selectedTask.status !== 'CLAIMED'}
-                  />
+                  <FormFilesContext.Provider value={formFiles}>
+                    <FormRenderer
+                      schema={schema}
+                      values={formValues}
+                      onChange={setFormValues}
+                      errors={formErrors}
+                      onErrors={setFormErrors}
+                      variables={selectedTask.variables ?? {}}
+                      readOnly={selectedTask.status !== 'CLAIMED'}
+                    />
+                  </FormFilesContext.Provider>
                   {selectedTask.status === 'CLAIMED' && outcomes.length === 0 && (
                     <div className="mt-4 flex justify-end">
                       <button
@@ -462,8 +476,10 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
               {selectedTask.variables && Object.keys(selectedTask.variables).length > 0 && (
                 <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-5 shadow-warm-md">
                   <h3 className="text-sm font-semibold text-[#A89F91] mb-3">Process variables</h3>
-                  <JsonViewer data={selectedTask.variables} label="variables" compact defaultDepth={1}
-                    height={jsonHeight(selectedTask.variables, 1, 14)} />
+                  <FileAccessContext.Provider value={fileAccess}>
+                    <JsonViewer data={selectedTask.variables} label="variables" compact defaultDepth={1}
+                      height={jsonHeight(selectedTask.variables, 1, 14)} />
+                  </FileAccessContext.Provider>
                 </div>
               )}
             </div>

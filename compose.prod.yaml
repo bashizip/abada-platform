@@ -4,10 +4,19 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the production environment file}
     restart: always
 
+  rustfs:
+    environment:
+      RUSTFS_ACCESS_KEY: ${ABADA_FILES_ACCESS_KEY:?Set ABADA_FILES_ACCESS_KEY in the production environment file}
+      RUSTFS_SECRET_KEY: ${ABADA_FILES_SECRET_KEY:?Set ABADA_FILES_SECRET_KEY in the production environment file}
+      RUSTFS_SSE_S3_MASTER_KEY: ${ABADA_FILES_SSE_MASTER_KEY:?Set ABADA_FILES_SSE_MASTER_KEY in the production environment file}
+    restart: always
+
   abada-engine:
     image: ${ABADA_REGISTRY:-ghcr.io/bashizip}/abada-engine:${ABADA_VERSION:?Set ABADA_VERSION in the production environment file}
     environment:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the production environment file}
+      ABADA_FILES_ACCESS_KEY: ${ABADA_FILES_ACCESS_KEY:?Set ABADA_FILES_ACCESS_KEY in the production environment file}
+      ABADA_FILES_SECRET_KEY: ${ABADA_FILES_SECRET_KEY:?Set ABADA_FILES_SECRET_KEY in the production environment file}
       ABADA_SECURITY_MODE: oidc
       OIDC_ISSUER_URI: ${OIDC_ISSUER_URI:?Set OIDC_ISSUER_URI in the production environment file}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:?Set OIDC_AUDIENCE in the production environment file}

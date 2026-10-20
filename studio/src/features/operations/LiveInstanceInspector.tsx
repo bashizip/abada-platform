@@ -294,7 +294,7 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
           </div>
         )}
 
-        {tab === 'variables' && <VariablesPanel variables={variables} resetKey={instanceId} className="p-4" />}
+        {tab === 'variables' && <VariablesPanel variables={variables} resetKey={instanceId} className="p-4" projectId={projectId} />}
 
         {tab === 'audit' && <AuditTimeline history={history} />}
       </div>

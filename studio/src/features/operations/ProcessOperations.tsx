@@ -205,7 +205,7 @@ export const ProcessOperations: React.FC<{
         </Drawer>
         <Drawer open={variablesFor !== null} onClose={() => setVariablesFor(null)}
           title={variablesFor ? `Variables · ${deriveBusinessLabel(variablesFor).label}` : 'Variables'}>
-          <VariablesPanel variables={variables} resetKey={variablesFor?.id} />
+          <VariablesPanel variables={variables} resetKey={variablesFor?.id} projectId={projectId} />
         </Drawer>
         <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
         <OperationsToast notice={notice} onDismiss={() => setNotice(null)} />

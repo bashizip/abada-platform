@@ -142,9 +142,10 @@ verification checks, reboot recovery, backups and upgrades, is in the
   Encrypt rate limits. Browsers do not trust staging certificates.
 
 <Aside type="caution" title="Keep .env.server safe">
-  It holds the only copy of the generated secrets. Back it up with the
-  databases (see [backup and upgrades](/user/backup-upgrade/)) and never
-  commit or share it.
+  It holds the only copy of the generated secrets, including the key that
+  encrypts the files of task forms in RustFS. Back it up with the databases
+  and the RustFS volume (see [backup and upgrades](/user/backup-upgrade/)) and
+  never commit or share it.
 </Aside>
 
 Stop without deleting data:

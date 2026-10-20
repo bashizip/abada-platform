@@ -31,7 +31,10 @@ The doctrine every change must respect:
 Do not bypass or weaken the durable state machine to add agent features.
 
 The current release line is 1.0.0-rc.x. Its certified production topology is
-one or more engine instances backed by PostgreSQL. Database-authoritative
+one or more engine instances backed by PostgreSQL; from 1.2, self-hosted
+installations also run RustFS (self-hosted, S3-compatible object storage),
+which holds the contents of files uploaded to task forms while PostgreSQL
+keeps their metadata and state. Database-authoritative
 execution, restart recovery, atomic mutation commands, versioned definitions,
 durable jobs/subscriptions, transactional outbox delivery, cluster-safe work
 acquisition, stable API/worker contracts and backend RBAC are in scope.
@@ -47,6 +50,8 @@ Use these documents as the authoritative product contract:
 - `docs/reference/runtime-semantics.md` — command, retry, event, variable,
   cancellation, and suspension semantics.
 - `docs/reference/deployment-support.md` — certified deployment matrix.
+- `docs/reference/process-files.md` — files in human tasks: RustFS storage,
+  attach-in-completion, access, deletion and backup.
 - `docs/architecture/runtime-state.md` — persistence and transaction model.
 - `docs/release-notes/` — version-specific upgrade notes and limitations.
 
@@ -178,6 +183,11 @@ PostgreSQL is authoritative in production. Preserve these invariants:
    Consumers must be able to deduplicate by event identifier.
 7. External side effects are at-least-once unless an explicit idempotency
    contract proves otherwise. Do not describe them as globally exactly-once.
+8. File contents live in the object store (RustFS), never in PostgreSQL,
+   process variables, history, outbox events or webhooks. No object-store call
+   is made inside a workflow-state transaction; attaching a file changes
+   metadata only, and object deletion is a durable, idempotent sweep
+   (`docs/reference/process-files.md`).
 
 Use optimistic version columns and database locks deliberately. Avoid adding a
 remote call inside a workflow-state transaction unless the runtime contract

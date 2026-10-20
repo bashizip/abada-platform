@@ -1,7 +1,9 @@
 ---
 title: Backup and upgrades
-description: Back up PostgreSQL and perform a versioned Compose upgrade.
+description: Back up PostgreSQL and the file storage, and perform a versioned Compose upgrade.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
 
 ## Backup
 
@@ -21,6 +23,26 @@ On the [single-VM server](/user/server/), use `--env-file .env.server` and
 docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml \
   exec -T keycloak-db pg_dump -U keycloak -d keycloak -Fc > keycloak.dump
 ```
+
+### Files of task forms (RustFS)
+
+Since 1.2 the contents of uploaded files are in RustFS, not in PostgreSQL.
+Back up its volume **after** the database dump, so every file the dump knows
+has its contents in the archive, and keep `ABADA_FILES_SSE_MASTER_KEY` with
+the backup: files cannot be read without it.
+
+```bash
+docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
+  exec -T rustfs tar -C /data -cf - . > abada-files.tar
+shasum -a 256 abada-files.tar > abada-files.tar.sha256
+```
+
+Restore both together. A database restored without its files shows those
+files as unavailable (they download with HTTP 410); files restored without
+their database rows are removed by the engine's orphan sweep after an hour.
+To restore the volume, stop the engine and RustFS, empty the volume, then
+`tar -xf abada-files.tar` into it (for example from a one-off container that
+mounts `abada_rustfs_data`).
 
 Test restore into a separate environment. For an in-place restore, stop the
 engine first, verify the checksum, and stream the backup to PostgreSQL:
@@ -43,6 +65,16 @@ docker compose --env-file .env.prod -f compose.yaml -f compose.prod.yaml \
    to the new version and run `./release/abada-platform up server`.
 5. Wait for health, verify Flyway, start and complete a canary workflow, and
    inspect the Studio Operations tab history before removing the prior archive.
+
+<Aside type="caution" title="Upgrading to 1.2 adds RustFS">
+  From 1.2 a self-hosted installation needs RustFS, which keeps the files
+  uploaded to task forms. Re-running the one-line installer adds it. For
+  production Compose, add `ABADA_RUSTFS_IMAGE`, `ABADA_FILES_ACCESS_KEY`,
+  `ABADA_FILES_SECRET_KEY` (`openssl rand -hex 24` each) and
+  `ABADA_FILES_SSE_MASTER_KEY` (`openssl rand -base64 32`) to `.env.prod`
+  before `up`; the server profile generates them. Readiness then includes
+  `objectStore`.
+</Aside>
 
 Never edit a released Flyway migration or downgrade a database without a
 release-specific rollback procedure. Image rollback alone cannot undo a schema

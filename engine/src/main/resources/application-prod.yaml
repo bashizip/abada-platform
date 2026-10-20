@@ -61,5 +61,9 @@ abada:
     audience: ${OIDC_AUDIENCE}
     jwk-set-uri: ${OIDC_JWK_SET_URI:}
     allowed-origins: ${ABADA_ALLOWED_ORIGINS}
+  # An external object store is reached over TLS. The bundled RustFS of the
+  # release Compose stack sits on its internal network and opts out explicitly.
+  files:
+    require-tls: ${ABADA_FILES_REQUIRE_TLS:true}
 
 spring.security.oauth2.resourceserver.jwt.issuer-uri: ${OIDC_ISSUER_URI}

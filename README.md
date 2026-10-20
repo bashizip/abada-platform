@@ -9,9 +9,9 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-34d399)](CONTRIBUTING.md)
 
 Abada is an open-source runtime for business processes in which AI agents, deterministic
-rules and people work together. It runs on your servers with PostgreSQL as its only
-database, signs users in through your OIDC provider and calls only the model endpoint you
-configure. The engine — not the model, the worker or the UI — decides what an AI answer
+rules and people work together. It runs on your servers — PostgreSQL for process state and,
+from 1.2, RustFS (self-hosted, S3-compatible) for the files people attach to tasks — signs users
+in through your OIDC provider and calls only the model endpoint you configure. The engine — not the model, the worker or the UI — decides what an AI answer
 is allowed to change.
 
 **Agents advise. Rules decide. Humans approve. PostgreSQL remembers.**
@@ -66,8 +66,8 @@ Docker is the only prerequisite.
 curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
 
-The installer pulls the published images and starts Studio, the engine, the agent worker
-and PostgreSQL, then prints the local URLs and development accounts. A Gemini key is
+The installer pulls the published images and starts Studio, the engine, the agent worker,
+PostgreSQL and (from 1.2) RustFS for task-form files, then prints the local URLs and development accounts. A Gemini key is
 optional at install time; you can add a model provider later in Studio.
 
 From a clone of this repository:
@@ -159,6 +159,7 @@ flowchart LR
     studio["Studio<br/>design · tasks · operations"]
     engine["Engine<br/>processes · rules · agent contract"]
     db[("PostgreSQL")]
+    files[("RustFS<br/>task-form files (1.2)")]
     worker["Agent worker"]
     workers["Your workers<br/>(Java SDK)"]
     idp["Your OIDC provider"]
@@ -166,6 +167,7 @@ flowchart LR
   end
   studio --> engine
   engine --- db
+  engine --- files
   worker -- "fetch · complete" --> engine
   workers -- "fetch · complete" --> engine
   worker --> model
@@ -227,7 +229,8 @@ item of a list, and refinements are applied as validated patches. It builds on `
 crash-safe writes, bounded and engine-priced cost, routing agents, call-process and agent
 delegation) and `1.1.0-rc.1` (bounded loops, error and timeout routes, service levels, model
 fallback, review decisions). It targets self-hosted Docker Compose deployments with one or more
-engine instances on PostgreSQL.
+engine instances on PostgreSQL. From 1.2, self-hosted installations also run RustFS, which keeps
+the files uploaded to task forms (PostgreSQL keeps their metadata).
 
 Public-cloud production certification and an independent security review are not yet scheduled;
 see the [deployment support matrix](docs/reference/deployment-support.md) and the

@@ -41,6 +41,12 @@ export const authenticatedFetch = async (
   }
 };
 
+/** A fresh access token for requests `fetch` cannot make (an upload with progress); null when signed out. */
+export const freshToken = async (): Promise<string | null> => {
+  await ensureFreshToken(30);
+  return keycloak.token ?? null;
+};
+
 export const apiError = async (response: Response): Promise<Error> => {
   let message = response.statusText || `HTTP ${response.status}`;
   try {

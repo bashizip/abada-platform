@@ -1,12 +1,11 @@
-import React from 'react';
-import { FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, FileText } from 'lucide-react';
+import { downloadFile, formatBytes } from '@/api/files';
+import { useFileAccess } from './fileAccess';
 import { markMasks, MASK_MARK, REDACTION_MASK, type FileReference, type JsonNode } from './jsonModel';
 import { matchRanges } from './jsonSearch';
 import { LONG_STRING } from './jsonRows';
 import { VALUE_TONE } from './jsonLayout';
-
-const formatBytes = (size: number): string =>
-  size < 1024 ? `${size} B` : size < 1_048_576 ? `${Math.round(size / 1024)} kB` : `${(size / 1_048_576).toFixed(1)} MB`;
 
 /** What stands in for a value the engine masked. The value itself never reaches the Studio. */
 export const RedactedBadge: React.FC = () => (
@@ -16,15 +15,36 @@ export const RedactedBadge: React.FC = () => (
   </span>
 );
 
-/** A file reference (M5 S9). Downloading arrives with file storage. */
-export const FileChip: React.FC<{ file: FileReference; query?: string; current?: boolean }> = ({ file, query, current }) => (
-  <span title={`${file.contentType} · ${formatBytes(file.size)}`}
-    className="inline-flex items-center gap-1 rounded-control border border-hairline bg-mocha-deep px-1.5 align-middle font-sans text-[11px] leading-[17px] text-linen-muted">
-    <FileText className="h-3 w-3 text-sand" aria-hidden="true" />
-    <Highlighted text={file.name} query={query} current={current} />
-    <span className="text-sand">· {formatBytes(file.size)}</span>
-  </span>
-);
+/**
+ * A file reference (M5 S9). Inside a project's view it downloads the file
+ * through the engine (permissions and audit apply); elsewhere it only shows it.
+ */
+export const FileChip: React.FC<{ file: FileReference; query?: string; current?: boolean }> = ({ file, query, current }) => {
+  const access = useFileAccess();
+  const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle');
+  const body = (
+    <>
+      <FileText className="h-3 w-3 text-sand" aria-hidden="true" />
+      <Highlighted text={file.name} query={query} current={current} />
+      <span className="text-sand">· {formatBytes(file.size)}</span>
+      {access && <Download className={`h-3 w-3 ${state === 'failed' ? 'text-desert-rose' : 'text-sand'}`} aria-hidden="true" />}
+    </>
+  );
+  const className = 'inline-flex items-center gap-1 rounded-control border border-hairline bg-mocha-deep px-1.5 align-middle font-sans text-[11px] leading-[17px] text-linen-muted';
+  if (!access) return <span title={`${file.contentType} · ${formatBytes(file.size)}`} className={className}>{body}</span>;
+  const download = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setState('loading');
+    downloadFile(access.projectId, file.fileId, file.name).then(() => setState('idle'), () => setState('failed'));
+  };
+  return (
+    <button type="button" onClick={download} disabled={state === 'loading'}
+      title={state === 'failed' ? 'The file could not be downloaded' : `Download ${file.name} · ${file.contentType}`}
+      className={`${className} hover:border-mineral-teal hover:text-linen disabled:opacity-60`}>
+      {body}
+    </button>
+  );
+};
 
 /** Text with the search matches marked. */
 export const Highlighted: React.FC<{ text: string; query?: string; current?: boolean }> = ({ text, query, current }) => {

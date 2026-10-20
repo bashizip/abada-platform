@@ -80,6 +80,7 @@ public class AbadaEngine {
     private final com.abada.engine.persistence.repository.AgentStepRepository agentSteps;
     private final com.abada.engine.core.delegation.CallTargetService callTargets;
     private final com.abada.engine.forms.FormSnapshotService formSnapshots;
+    private final com.abada.engine.files.ProcessFileService processFiles;
     private final com.abada.engine.core.replay.StartInputService startInputs;
     private final com.abada.engine.core.agent.DecisionInputEvidenceRecorder decisionInputs;
     private final com.abada.engine.persistence.repository.ForEachItemRepository forEachItems;
@@ -134,8 +135,10 @@ public class AbadaEngine {
             com.abada.engine.persistence.repository.ForEachItemRepository forEachItems,
             @Value("${abada.for-each.max-items:100}") int maxForEachItems,
             @Value("${abada.for-each.max-parallel:20}") int maxForEachParallel,
-            com.abada.engine.forms.FormSnapshotService formSnapshots) {
+            com.abada.engine.forms.FormSnapshotService formSnapshots,
+            com.abada.engine.files.ProcessFileService processFiles) {
         this.formSnapshots = formSnapshots;
+        this.processFiles = processFiles;
         this.forEachItems = forEachItems;
         this.maxForEachItems = maxForEachItems;
         this.maxForEachParallel = maxForEachParallel;
@@ -572,7 +575,10 @@ public class AbadaEngine {
         if (pinnedForm.isPresent()) {
             com.abada.engine.forms.FormSubmission.Result checked = com.abada.engine.forms.FormSubmission.check(
                     pinnedForm.get().snapshot().formKey(), pinnedForm.get().form(), instance.getVariables(), variables);
-            variables = checked.accepted();
+            // File fields: the submitted ids become references; metadata only, no object-store call (S9).
+            variables = processFiles.attach(pinnedForm.get().snapshot().formKey(), pinnedForm.get().form(),
+                    instance.getId(), instance.getDefinition().getId(), currentTask.getId(), activityId, user,
+                    checked.accepted());
             discardedFields = checked.discarded();
         }
         if (variables != null && !variables.isEmpty()) {
@@ -656,6 +662,38 @@ public class AbadaEngine {
             return java.util.Optional.of(new TaskForm(snapshot.formKey(), true, snapshot.revision(), snapshot.schema()));
         }
         return java.util.Optional.empty();
+    }
+
+    /**
+     * Where a file for a task's form field may be uploaded (S9): an open task
+     * the user may complete, whose pinned form has a {@code file} field with
+     * this id. Read-only; throws when any of that does not hold.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public com.abada.engine.files.ProcessFileService.UploadTarget fileUploadTarget(String taskId, String user,
+            List<String> groups, String fieldId) {
+        TaskInstance task = getTaskById(taskId).orElseThrow(() -> new ProcessEngineException("Task not found"));
+        requireUserTask(task);
+        ProcessInstance instance = getProcessInstanceById(task.getProcessInstanceId());
+        if (instance == null) throw new ProcessEngineException("Task not found");
+        requireActive(instance);
+        String principalId = IdentityContext.get().map(Identity::principalId).orElse(null);
+        taskManager.checkCanComplete(task, user, taskGroupResolver.effectiveGroups(instance.getProjectId(),
+                principalId, groups));
+        java.util.Optional<com.abada.engine.forms.FormSnapshotService.Pinned> pinned =
+                pinnedForm(instance, task.getTaskDefinitionKey());
+        if (pinned.isEmpty()) {
+            throw new ProcessEngineException("Task '" + task.getTaskDefinitionKey()
+                    + "' has no pinned form; files are uploaded to file fields of pinned forms only");
+        }
+        com.abada.engine.forms.FormSchema.Field field = pinned.get().form().field(fieldId);
+        if (field == null || !field.type().equals("file")) {
+            throw new ProcessEngineException("The form of task '" + task.getTaskDefinitionKey()
+                    + "' has no file field '" + fieldId + "'");
+        }
+        return new com.abada.engine.files.ProcessFileService.UploadTarget(instance.getProjectId(),
+                instance.getDefinition().getId(), instance.getId(), task.getId(), task.getTaskDefinitionKey(), user,
+                field);
     }
 
     /** A task's form: {@code pinned} is false when it is the live project form. */

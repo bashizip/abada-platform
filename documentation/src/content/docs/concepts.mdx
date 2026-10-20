@@ -353,8 +353,9 @@ becomes a new version only after policy-compliant human review.
   must deduplicate with the key it receives to make retries harmless.
 - **Nothing auto-applies.** Insight proposals and agent-proposed changes wait
   for a person.
-- **The certified topology** is one or more engine instances on PostgreSQL
-  with Docker Compose; see the
+- **The certified topology** is one or more engine instances on PostgreSQL,
+  with RustFS (self-hosted object storage) for the files of task forms since
+  1.2, on Docker Compose; see the
   [deployment support matrix](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/deployment-support.md).
 </Aside>
 

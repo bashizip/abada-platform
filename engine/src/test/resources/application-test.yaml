@@ -55,6 +55,12 @@ logging:
     io.micrometer: WARN
 
 abada:
+  # Tests on H2 keep file contents in memory; the RustFS tests use a container.
+  files:
+    store: memory
+    health-cache: PT0S
+    sweep:
+      enabled: false
   # Tests never reach the public price catalog or a provider's model list.
   ai:
     price-catalog:
