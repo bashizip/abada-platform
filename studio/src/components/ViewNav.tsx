@@ -1,6 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { m } from 'motion/react';
-import { Sparkles } from 'lucide-react';
 import { transition, useReducedMotion } from '@/lib/motion';
 import { navTabFor, type NavTab, type StudioView } from '@/lib/studioViews';
 
@@ -9,7 +8,7 @@ const TABS: { id: NavTab; label: React.ReactNode }[] = [
   { id: 'designer', label: 'Canvas' },
   { id: 'inbox', label: 'Task Inbox' },
   { id: 'operations', label: 'Operations' },
-  { id: 'insight', label: <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />Insight</span> },
+  { id: 'insight', label: 'Insight' },
   { id: 'administration', label: 'Admin' },
 ];
 
