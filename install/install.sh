@@ -251,6 +251,10 @@ if [[ -n "$ENV_BACKUP" ]]; then
   PREVIOUS_ENGINE="$(sed -n 's/^ABADA_ENGINE_IMAGE=.*:\([^:]*\)$/\1/p' "$ENV_FILE" | head -n 1)"
   info "Updating the existing installation in ${INSTALL_DIR} from ${PREVIOUS_ENGINE:-an unknown version} to ${VERSION}."
   info "Your settings are kept; the previous file is saved as ${ENV_BACKUP}."
+  if ! grep -q '^ABADA_FILES_ACCESS_KEY=' "$ENV_FILE"; then
+    # From 1.2, files uploaded to task forms are kept in RustFS (object storage).
+    info "This update adds RustFS, the file storage for task forms (Docker volume abada_rustfs_data)."
+  fi
   while IFS= read -r template_line || [[ -n "$template_line" ]]; do
     case "$template_line" in ''|'#'*) continue ;; esac
     template_key="${template_line%%=*}"
@@ -284,6 +288,7 @@ echo ""
 echo "  Studio:  http://studio.localhost"
 echo "  Engine:  http://api.localhost/api/v1/info"
 echo "  Keycloak: http://keycloak.localhost"
+echo "  Files:   kept in RustFS (volume abada_rustfs_data); back it up with the database"
 echo ""
 echo "  Initialize: alice / alice"
 echo "  HIGH review: bob / bob"

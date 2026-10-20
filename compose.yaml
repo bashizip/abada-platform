@@ -24,6 +24,37 @@ services:
       retries: 12
       start_period: 10s
 
+  # Object storage for process files (S9): required for self-hosted installations
+  # from 1.2. Only the engine reaches it, on the internal data network; its console
+  # is off and no port is published. The bucket is created by the engine.
+  rustfs:
+    image: ${ABADA_RUSTFS_IMAGE:-rustfs/rustfs:1.0.3}
+    command: ["/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${ABADA_FILES_ACCESS_KEY:-abada-dev-files}
+      RUSTFS_SECRET_KEY: ${ABADA_FILES_SECRET_KEY:-abada-dev-files-secret}
+      # Server-side encryption (SSE-S3) of every stored file. Keep this key with
+      # your backups: files cannot be read without it.
+      RUSTFS_SSE_S3_MASTER_KEY: ${ABADA_FILES_SSE_MASTER_KEY:-YWJhZGEtZGV2LW9ubHktc3NlLW1hc3Rlci1rZXktMDA=}
+      RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_OBS_LOGGER_LEVEL: warn
+    volumes:
+      - rustfs_data:/data
+    networks:
+      - data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   abada-engine:
     image: ${ABADA_ENGINE_IMAGE:-ghcr.io/bashizip/abada-engine:1.1.2}
     environment:
@@ -78,6 +109,15 @@ services:
       ABADA_KEYCLOAK_REALM: ${ABADA_KEYCLOAK_REALM:-abada-dev}
       ABADA_KEYCLOAK_ADMIN_CLIENT_ID: ${ABADA_KEYCLOAK_ADMIN_CLIENT_ID:-abada-admin-api}
       ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET: ${ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET:-abada-dev-admin-api-secret}
+      # Process files: bytes in the bundled RustFS, metadata in PostgreSQL. Plain
+      # HTTP is allowed only because RustFS sits on the internal data network.
+      ABADA_FILES_ENDPOINT: ${ABADA_FILES_ENDPOINT:-http://rustfs:9000}
+      ABADA_FILES_BUCKET: ${ABADA_FILES_BUCKET:-abada-files}
+      ABADA_FILES_ACCESS_KEY: ${ABADA_FILES_ACCESS_KEY:-abada-dev-files}
+      ABADA_FILES_SECRET_KEY: ${ABADA_FILES_SECRET_KEY:-abada-dev-files-secret}
+      ABADA_FILES_REQUIRE_TLS: ${ABADA_FILES_REQUIRE_TLS:-false}
+      ABADA_FILES_MAX_FILE_BYTES: ${ABADA_FILES_MAX_FILE_BYTES:-10485760}
+      ABADA_FILES_MAX_TASK_BYTES: ${ABADA_FILES_MAX_TASK_BYTES:-52428800}
     volumes:
       - engine_logs:/app/logs
     networks:
@@ -91,6 +131,8 @@ services:
           memory: 2G
     depends_on:
       postgres:
+        condition: service_healthy
+      rustfs:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:5601/api/actuator/health/readiness"]
@@ -195,4 +237,5 @@ networks:
 
 volumes:
   postgres_data:
+  rustfs_data:
   engine_logs:
