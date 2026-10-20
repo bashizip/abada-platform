@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle,
+  ChevronLeft,
   Clock,
   FileText,
   Inbox,
@@ -188,7 +189,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   return (
     <div className="flex flex-1 overflow-hidden bg-[#1A1614] text-[#EAE3D9]">
       {/* Task list */}
-      <div className="w-80 border-r border-[#3A322E] flex flex-col bg-[#25201D] shrink-0">
+      {/* On a phone the list and the open task take turns; side by side from md up. */}
+      <div className={`w-full md:w-80 border-r border-[#3A322E] flex-col bg-[#25201D] shrink-0 ${selectedTask ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-[#3A322E]">
           <h2 className="text-lg font-semibold text-[#EAE3D9] flex items-center gap-2">
             <Inbox className="text-[#2A9D8F]" />
@@ -269,11 +271,15 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
       </div>
 
       {/* Task detail */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={`flex-1 min-w-0 flex-col overflow-hidden ${selectedTask ? 'flex' : 'hidden md:flex'}`}>
         {selectedTask ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="p-8 max-w-3xl mx-auto w-full space-y-5">
-              <div className="flex items-start justify-between gap-4 pb-5 border-b border-[#3A322E]">
+            <div className="p-4 md:p-8 max-w-3xl mx-auto w-full space-y-5">
+              <button type="button" onClick={() => setSelectedTask(null)}
+                className="md:hidden flex items-center gap-1 text-xs text-sand hover:text-linen">
+                <ChevronLeft className="w-3.5 h-3.5" /> All tasks
+              </button>
+              <div className="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-[#3A322E]">
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-2xl font-bold text-[#EAE3D9]">{selectedTask.name || 'Unnamed task'}</h1>

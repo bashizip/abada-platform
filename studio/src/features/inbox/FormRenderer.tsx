@@ -149,7 +149,7 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
     const gridColumn = columns === 1 || span === 0 ? '1 / -1' : `span ${Math.min(span, columns)}`;
     const labelled = field.type !== 'boolean' && field.type !== 'markdown';
     return (
-      <div key={field.id} className="grid min-w-0 content-start gap-1" style={{ gridColumn }} data-field={field.id}>
+      <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-1" style={{ gridColumn }} data-field={field.id}>
         {labelled ? (
           <label id={`label-${field.id}`} htmlFor={`field-${field.id}`}
             className="flex items-baseline gap-1 text-[12px] font-semibold leading-tight text-linen-muted">
@@ -173,7 +173,7 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
   const gridStyle = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` };
 
   return (
-    <div ref={root} className={`grid min-w-0 ${SECTION_GAP[density]}`} data-density={density} data-columns={columns}
+    <div ref={root} className={`grid min-w-0 grid-cols-[minmax(0,1fr)] ${SECTION_GAP[density]}`} data-density={density} data-columns={columns}
       data-layout={mobile ? 'mobile' : 'desktop'}>
       {schema.title && (
         <h3 className="border-b border-hairline pb-2 text-[14px] font-semibold text-linen">{schema.title}</h3>
@@ -188,7 +188,7 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
               <i key={st.title + index} className={`h-[3px] rounded-full ${index <= current ? 'bg-mineral-teal' : 'bg-hairline'}`} />
             ))}
           </div>
-          <ol className="flex justify-between gap-2 text-[11px] text-sand-dim">
+          <ol className="flex flex-wrap justify-between gap-x-2 gap-y-0.5 text-[11px] text-sand-dim">
             {steps.map((st, index) => (
               <li key={st.title + index} className={index === current ? 'font-semibold text-linen' : ''}
                 aria-current={index === current ? 'step' : undefined}>
@@ -203,7 +203,7 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
       ) : shown.map(({ section, rows, inputs }) => {
         const closed = section.collapsible && collapsed[section.id];
         return (
-          <section key={section.id} className={`grid ${GAP[density]}`} aria-labelledby={section.title ? `section-${section.id}` : undefined}>
+          <section key={section.id} className={`grid min-w-0 grid-cols-[minmax(0,1fr)] ${GAP[density]}`} aria-labelledby={section.title ? `section-${section.id}` : undefined}>
             {section.title && (
               <header className="flex items-baseline gap-2 border-b border-hairline pb-1.5">
                 <h4 id={`section-${section.id}`} className="text-[13px] font-semibold text-linen">{section.title}</h4>

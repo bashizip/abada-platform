@@ -266,7 +266,9 @@ export const FormEditor: React.FC<FormEditorProps> = ({ initialSchema, onSave, o
                   <div key={key} {...dropProps(key, s, r)} data-form-row={key}
                     className={`relative grid min-h-[52px] gap-1.5 rounded-md p-0.5 ${dropTarget === key ? 'bg-mineral-teal/10 outline-1 outline-dashed outline-mineral-teal' : ''}`}
                     style={{ gridTemplateColumns: mobile ? 'minmax(0,1fr)' : 'repeat(4, minmax(0, 1fr))' }}>
-                    {used >= 4 && <span className="absolute -top-2 right-1.5 text-[9.5px] text-sand-dim">row full</span>}
+                    {used >= 4 && dropTarget === key && (
+                      <span className="absolute -top-2 right-1.5 rounded bg-mocha px-1 text-[9.5px] text-saffron">row full</span>
+                    )}
                     {row.map((cell) => {
                       const field = schema.fields.find((candidate) => candidate.id === cellField(cell));
                       if (!field) return null;

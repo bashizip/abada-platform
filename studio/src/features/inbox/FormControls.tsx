@@ -109,15 +109,17 @@ export const FieldControl: React.FC<ControlProps> = (props) => {
         </select>
       );
     case 'radio':
+      // Separate pills, so three or four options wrap cleanly in a narrow cell.
       return (
         <div role="radiogroup" aria-labelledby={`label-${field.id}`} aria-describedby={describedBy}
-          className={`inline-flex max-w-full flex-wrap overflow-hidden rounded-md border ${invalid ? 'border-desert-rose' : 'border-hairline'}`}>
+          className="flex max-w-full flex-wrap gap-1">
           {options.map((option) => {
             const on = value === option.value;
             return (
               <label key={option.value}
-                className={`flex cursor-pointer items-center border-r border-hairline px-2.5 text-[12.5px] last:border-r-0 ${
-                  density === 'compact' ? 'h-[26px]' : 'h-[30px]'} ${on ? 'bg-mineral-teal/20 text-linen' : 'bg-charcoal text-sand hover:text-linen'}`}>
+                className={`flex cursor-pointer items-center rounded-md border px-2.5 text-[12.5px] transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-mineral-teal/40 ${
+                  density === 'compact' ? 'h-7' : 'h-8'} ${on ? 'border-mineral-teal/70 bg-mineral-teal/20 text-linen'
+                  : `${invalid ? 'border-desert-rose' : 'border-hairline'} bg-charcoal text-sand hover:text-linen`}`}>
                 <input type="radio" name={id} value={option.value} checked={on} disabled={readOnly}
                   onChange={() => onChange(option.value)} className="sr-only" />
                 {option.label}
