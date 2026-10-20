@@ -27,19 +27,25 @@ export const authenticatedFetch = async (
   input: string | URL,
   init: RequestInit = {},
 ): Promise<Response> => {
+  await refreshOrExpire(30);
+  // A network failure (the engine not reachable, an abort) is not a session problem: it propagates as is.
+  let response = await requestWithCurrentToken(input, init);
+  if (response.status === 401 && keycloak.authenticated) {
+    await refreshOrExpire(-1);
+    response = await requestWithCurrentToken(input, init);
+  }
+  return response;
+};
+
+/** Only a failed token refresh means the session is over. */
+async function refreshOrExpire(minValidity: number): Promise<void> {
   try {
-    await ensureFreshToken(30);
-    let response = await requestWithCurrentToken(input, init);
-    if (response.status === 401 && keycloak.authenticated) {
-      await ensureFreshToken(-1);
-      response = await requestWithCurrentToken(input, init);
-    }
-    return response;
+    await ensureFreshToken(minValidity);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Authentication session expired. Sign in again. (${message})`);
   }
-};
+}
 
 /** A fresh access token for requests `fetch` cannot make (an upload with progress); null when signed out. */
 export const freshToken = async (): Promise<string | null> => {

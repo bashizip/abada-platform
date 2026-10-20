@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useReducer, useRef } from 'react';
-import { AuthoringAPI } from '@/api/authoring';
+import { AuthoringAPI, EngineUnreachableError } from '@/api/authoring';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import type { WorkflowFile } from '@/types';
 import {
@@ -8,6 +8,17 @@ import {
 } from './authoringSession';
 
 let sequence = 0;
+
+/**
+ * Waits before asking again when the engine did not answer (it may be starting). Nothing was
+ * generated, so a repeat cannot double a draft; a model call that did start is never repeated.
+ */
+export const UNREACHABLE_RETRY_DELAYS_MS = [2000, 4000, 8000];
+
+const pause = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
+  const timer = window.setTimeout(resolve, ms);
+  signal.addEventListener('abort', () => { window.clearTimeout(timer); resolve(); }, { once: true });
+});
 const nextId = (prefix: string) => `${prefix}-${Date.now()}-${++sequence}`;
 
 /** The draft keeps the identity of what it will replace (or of the new draft it will become). */
@@ -25,6 +36,9 @@ function adopt(parsed: WorkflowFile, state: AuthoringSessionState): WorkflowFile
 }
 
 function readableError(error: unknown): string {
+  if (error instanceof EngineUnreachableError) {
+    return 'The engine could not be reached; it may be starting or restarting. Try again in a moment.';
+  }
   const message = error instanceof Error ? error.message : String(error);
   if (/\b403\b/.test(message) || /OWNER or MAINTAINER/i.test(message)) {
     return 'Drafting with AI needs the Owner or Maintainer role in this project.';
@@ -58,8 +72,21 @@ export function useAuthoringSession(projectId: string | undefined, origin: Workf
     inFlight.current = { id, controller };
     dispatch({ type: 'start', id, text: prompt, request, at: Date.now() });
     try {
-      const candidate = await AuthoringAPI.generate(projectId, prompt, request === 'REFINE' ? 'refine' : 'new',
-        request === 'REFINE' ? stringifyAPLYaml(workflowToAPL(base)) : undefined, controller.signal);
+      const baseSource = request === 'REFINE' ? stringifyAPLYaml(workflowToAPL(base)) : undefined;
+      let candidate;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          candidate = await AuthoringAPI.generate(projectId, prompt, request === 'REFINE' ? 'refine' : 'new',
+            baseSource, controller.signal);
+          break;
+        } catch (error) {
+          if (!(error instanceof EngineUnreachableError) || attempt >= UNREACHABLE_RETRY_DELAYS_MS.length
+            || controller.signal.aborted) throw error;
+          dispatch({ type: 'notice', id, notice: 'The engine is not answering yet (it may be starting). Asking again…' });
+          await pause(UNREACHABLE_RETRY_DELAYS_MS[attempt], controller.signal);
+          if (controller.signal.aborted) return;
+        }
+      }
       if (controller.signal.aborted) return;
       const draft = adopt(aplToWorkflow(parseAPLYaml(candidate.aplSource)), stateRef.current);
       dispatch({

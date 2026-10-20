@@ -4,6 +4,7 @@ import { Sparkles, X, Send, RotateCcw, Undo2, Pencil } from 'lucide-react';
 import type { WorkflowFile, WorkflowNode } from '@/types';
 import { MotionBackdrop, MotionPanel, StatusPill, Skeleton, EmptyState } from '@/components/ui';
 import { PropertiesInspector } from '@/components/PropertiesInspector';
+import { AplSourceView } from '@/components/AplSourceView';
 import { listItem, useMotionVariants } from '@/lib/motion';
 import { stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { nodeChanges } from '@/lib/apl/nodeChanges';
@@ -201,7 +202,7 @@ export const AuthoringWorkspace: React.FC<AuthoringWorkspaceProps> = ({
                   description="Describe the process on the right. The draft appears here, and you can refine it before it reaches the canvas." />
               )
             ) : view === 'yaml' ? (
-              <pre aria-label="APL source" className="absolute inset-0 overflow-auto bg-charcoal-ink p-4 font-mono text-[11px] leading-relaxed text-linen-muted">{yaml}</pre>
+              <AplSourceView source={yaml} className="absolute inset-0" />
             ) : (
               <>
                 <DraftDiagram
@@ -351,9 +352,9 @@ const TurnCard: React.FC<{
         <>
           <Skeleton className="h-2 w-full" label="Waiting for the model" />
           <div className="flex items-center justify-between gap-2 text-[10.5px] text-sand">
-            <span>{now - turn.startedAt > SLOW_AFTER_MS
+            <span>{turn.notice ?? (now - turn.startedAt > SLOW_AFTER_MS
               ? 'Still working: a draft can take up to a minute.'
-              : 'Asking the model in the authoring service…'}</span>
+              : 'Asking the model in the authoring service…')}</span>
             <button type="button" onClick={onCancel} className="text-amethyst-light underline underline-offset-2 hover:text-linen">Cancel</button>
           </div>
         </>

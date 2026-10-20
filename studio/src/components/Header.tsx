@@ -68,30 +68,30 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <TooltipProvider delayDuration={0}>
       <header className="h-14 bg-mocha border-b border-hairline px-4 flex items-center gap-3 z-20 shrink-0">
-        {/* Brand + clean file identifier (left, never shrinks) */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-2">
+        {/* Brand + clean file identifier (left): the names truncate first, so nothing overlaps. */}
+        <div className="flex min-w-0 flex-1 basis-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             <img src="/abada-app-icon.svg" alt="" className="w-8 h-8 rounded-[7px] glow-amethyst-subtle" />
             <span className="font-bold text-sm tracking-wide text-linen hidden lg:inline">
               ABADA
             </span>
           </div>
 
-          <div className="h-4 w-px bg-hairline" />
+          <div className="h-4 w-px shrink-0 bg-hairline" />
 
           <button type="button" onClick={onOpenProjects}
-            className="flex items-center gap-1.5 text-xs text-sand hover:text-saffron max-w-[180px]"
+            className="flex min-w-0 shrink items-center gap-1.5 text-xs text-sand hover:text-saffron max-w-[180px]"
             title="New project / Open project">
             <FolderKanban className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">{activeProject?.name || 'Open project'}</span>
           </button>
 
-          <div className="h-4 w-px bg-hairline" />
+          <div className="h-4 w-px shrink-0 bg-hairline" />
 
           <button
             type="button"
             onClick={onOpenProcessDetails}
-            className="flex items-center gap-1.5 text-xs font-mono text-linen hover:text-saffron transition-colors max-w-[240px] truncate"
+            className="flex min-w-0 shrink-[2] items-center gap-1.5 text-xs font-mono text-linen hover:text-saffron transition-colors max-w-[240px]"
             title="View process details"
             aria-label="Open process details"
           >
@@ -100,14 +100,14 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Global View Navigation (isolated, always centered) */}
-        <div className="flex-1 flex items-center justify-center min-w-0">
+        {/* Global View Navigation: never shrinks below its tabs */}
+        <div className="flex flex-none items-center justify-center">
           <ViewNav currentView={currentView} onViewChange={onViewChange}
             showAdmin={getGroupsFromToken().includes('abada-admin')} />
         </div>
 
-        {/* Action Controls (right, never shrinks) */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Action Controls (right): labels fold to icons on narrower screens; tooltips keep the text */}
+        <div className="flex flex-1 basis-0 items-center justify-end gap-2 xl:gap-3 shrink-0">
           {currentView === 'designer' && !readOnlyInstance && (
             <>
               <IconButton
@@ -139,14 +139,15 @@ export const Header: React.FC<HeaderProps> = ({
                   data-cuelume-tap
                   onClick={onRunSimulation}
                   disabled={isSimulating}
-                  className={`text-xs font-semibold px-4 py-1.5 rounded-xl transition-all flex items-center gap-2 shadow-warm-md ${
+                  aria-label="Dry Run"
+                  className={`text-xs font-semibold px-2.5 xl:px-4 py-1.5 rounded-xl transition-all flex shrink-0 items-center gap-2 shadow-warm-md ${
                     isSimulating
                       ? 'bg-saffron/50 text-charcoal cursor-not-allowed'
                       : 'bg-saffron hover:bg-saffron-bright text-charcoal active:scale-95'
                   }`}
                 >
-                  {isSimulating ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Dry Running…</span></>
-                    : <><Play className="w-3.5 h-3.5 fill-charcoal" /><span>Dry Run</span></>}
+                  {isSimulating ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span className="hidden xl:inline">Dry Running…</span></>
+                    : <><Play className="w-3.5 h-3.5 fill-charcoal" /><span className="hidden xl:inline">Dry Run</span></>}
                 </button>
               </UITooltip>
 
@@ -156,14 +157,15 @@ export const Header: React.FC<HeaderProps> = ({
                   data-cuelume-tap
                   onClick={onDeploy}
                   disabled={isDeploying}
-                  className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
+                  aria-label="Deploy & Start"
+                  className={`text-xs font-semibold px-2.5 xl:px-4 py-1.5 rounded-lg transition-all flex shrink-0 items-center gap-2 ${
                     isDeploying
                       ? 'bg-mineral-teal/50 text-charcoal cursor-not-allowed'
                       : 'bg-mineral-teal hover:bg-mineral-teal-bright text-charcoal active:scale-95'
                   }`}
                 >
-                  {isDeploying ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Starting…</span></>
-                    : <><CheckCircle2 className="w-3.5 h-3.5" /><span>Deploy & Start</span></>}
+                  {isDeploying ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span className="hidden xl:inline">Starting…</span></>
+                    : <><CheckCircle2 className="w-3.5 h-3.5" /><span className="hidden xl:inline">Deploy & Start</span></>}
                 </button>
               </UITooltip>
             </>

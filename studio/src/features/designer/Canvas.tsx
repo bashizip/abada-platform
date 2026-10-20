@@ -1,4 +1,4 @@
-import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -87,6 +87,10 @@ interface CanvasProps {
   onFocusPrompt: () => void;
   /** The nodes of a draft just applied from the AI workspace play their landing once. */
   landing?: boolean;
+  /** The Diagram / APL YAML switch, drawn in the canvas toolbar row so the two never overlap. */
+  modeSwitch?: React.ReactNode;
+  /** Runs this layout once per new `seq` (an applied AI draft is tidied). */
+  layoutRequest?: { mode: LayoutMode; seq: number };
   onToast?: (message: string) => void;
   processKey?: string;
   isSimulating: boolean;
@@ -169,6 +173,8 @@ const CanvasInner: React.FC<CanvasProps> = ({
   onOpenAplEditor,
   onFocusPrompt,
   landing = false,
+  modeSwitch,
+  layoutRequest,
   onToast,
   processKey,
   isSimulating,
@@ -223,6 +229,18 @@ const CanvasInner: React.FC<CanvasProps> = ({
     onApplyPositions: readOnly ? undefined : onAutoLayout,
     onError: (message) => onToast?.(`Auto-layout failed: ${message}`),
   });
+
+  // A layout asked for from outside (an AI draft just applied is tidied once). A process still
+  // waiting for its first layout gets that one instead.
+  const handledLayoutRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!layoutRequest || handledLayoutRequest.current === layoutRequest.seq) return;
+    handledLayoutRequest.current = layoutRequest.seq;
+    if (layoutPending || readOnly || rawNodes.length === 0) return;
+    void layout.runLayout(layoutRequest.mode);
+    // Only a new request runs the layout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutRequest?.seq]);
 
   const view: CanvasView = useMemo(
     () => ({ direction: layout.direction, readOnly, layout: layout.layout }),
@@ -492,15 +510,18 @@ const CanvasInner: React.FC<CanvasProps> = ({
                 ariaLabel="Diagram overview"
               />
             )}
-            {(rawNodes.length > 0 || canUndo || canRedo) && (
-              <LayoutToolbar
+            {((rawNodes.length > 0 || canUndo || canRedo) || modeSwitch) && (
+              <Panel position="top-left" className="flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2">
+              {(rawNodes.length > 0 || canUndo || canRedo) && <LayoutToolbar
                 mode={layout.mode}
                 busy={layout.busy}
                 onLayout={layout.runLayout}
                 showLayout={rawNodes.length > 0}
                 history={!readOnly && onUndo && onRedo ? { onUndo, onRedo, canUndo, canRedo } : undefined}
                 onDraft={readOnly ? undefined : onFocusPrompt}
-              />
+              />}
+              {modeSwitch}
+              </Panel>
             )}
             {path && (
               <PathLegend
@@ -626,7 +647,6 @@ const LayoutToolbar: React.FC<{
   /** Opens the natural-language bar, whatever its display mode (M5 S12). */
   onDraft?: () => void;
 }> = ({ mode, busy, onLayout, showLayout, history, onDraft }) => (
-  <Panel position="top-left">
     <div
       role="group"
       aria-label="Edit history and auto layout"
@@ -679,7 +699,6 @@ const LayoutToolbar: React.FC<{
         </button>
       ))}
     </div>
-  </Panel>
 );
 
 /**

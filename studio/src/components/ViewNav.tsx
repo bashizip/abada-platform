@@ -1,6 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { m } from 'motion/react';
-import { Sparkles } from 'lucide-react';
 import { transition, useReducedMotion } from '@/lib/motion';
 import { navTabFor, type NavTab, type StudioView } from '@/lib/studioViews';
 
@@ -9,7 +8,7 @@ const TABS: { id: NavTab; label: React.ReactNode }[] = [
   { id: 'designer', label: 'Canvas' },
   { id: 'inbox', label: 'Task Inbox' },
   { id: 'operations', label: 'Operations' },
-  { id: 'insight', label: <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />Insight</span> },
+  { id: 'insight', label: 'Insight' },
   { id: 'administration', label: 'Admin' },
 ];
 
@@ -59,7 +58,7 @@ export const ViewNav: React.FC<ViewNavProps> = ({ currentView, onViewChange, sho
           data-cuelume-select
           aria-current={active === tab.id ? 'page' : undefined}
           onClick={() => onViewChange?.(tab.id)}
-          className={`relative z-10 text-xs px-4 py-1.5 rounded-lg transition-colors duration-[var(--duration-base)] font-medium whitespace-nowrap border ${
+          className={`relative z-10 text-xs px-2.5 xl:px-4 py-1.5 rounded-lg transition-colors duration-[var(--duration-base)] font-medium whitespace-nowrap border ${
             tab.id === 'administration' ? 'ml-1' : ''} ${
             active === tab.id
               // The sliding highlight paints the background; before it is measured the tab paints its own.
