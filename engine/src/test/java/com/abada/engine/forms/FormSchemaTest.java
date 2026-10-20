@@ -17,12 +17,26 @@ class FormSchemaTest {
     @Test
     void theSupplierFormWithEveryFieldTypeAndALayoutIsValid() throws Exception {
         FormSchema form = FormSchema.parse(FormConformanceTest.read("apl/forms/supplier-onboarding.json"));
-        assertThat(form.fields()).hasSize(31);
+        assertThat(form.fields()).hasSize(33);
         assertThat(form.fields().stream().map(FormSchema.Field::type).distinct())
                 .containsExactlyInAnyOrderElementsOf(FormSchema.TYPES.stream().filter(type -> !type.equals("number"))
                         .toList());
         assertThat(form.field("vat_id").visibleWhen().identifiers()).containsExactly("vat_registered");
         assertThat(form.field("regions").options()).containsExactly("iberia", "benelux", "dach", "nordics", "france", "italy");
+    }
+
+    @Test
+    void aFileFieldDeclaresWhatItAccepts() {
+        FormSchema form = parse("""
+                {"fields":[
+                  {"id":"invoice","type":"file","label":"Invoice","required":true,"accept":[".PDF","image/*"],
+                   "maxSize":2000000},
+                  {"id":"photos","type":"file","multiple":true,"min":1,"max":3}]}""");
+        assertThat(form.field("invoice").accept()).containsExactly(".pdf", "image/*");
+        assertThat(form.field("invoice").maxSize()).isEqualTo(2_000_000L);
+        assertThat(form.field("invoice").multipleFiles()).isFalse();
+        assertThat(form.field("photos").multipleFiles()).isTrue();
+        assertThat(form.field("photos").maxNumber()).isEqualByComparingTo("3");
     }
 
     @Test
@@ -40,7 +54,13 @@ class FormSchemaTest {
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {
             "unknown type | {'id':'a','type':'colour'} | unknown type 'colour'",
-            "file is reserved | {'id':'a','type':'file'} | file fields arrive with file upload",
+            "bad accept entry | {'id':'a','type':'file','accept':['pdf']} | is not an extension (.pdf) or a content type",
+            "accept not a list | {'id':'a','type':'file','accept':'.pdf'} | 'accept' is a list",
+            "accept on text | {'id':'a','type':'string','accept':['.pdf']} | 'accept' only applies to file fields",
+            "multiple on select | {'id':'a','type':'select','options':['x'],'multiple':true} | 'multiple' only applies",
+            "zero max size | {'id':'a','type':'file','maxSize':0} | maxSize is a whole number of bytes",
+            "file count on a single file | {'id':'a','type':'file','max':2} | min/max do not apply",
+            "file count min over max | {'id':'a','type':'file','multiple':true,'min':3,'max':1} | min is larger than max",
             "bad id | {'id':'1a','type':'string'} | must be letters, digits and _",
             "select without options | {'id':'a','type':'select'} | needs at least one option",
             "duplicate option | {'id':'a','type':'radio','options':['x','x']} | listed twice",

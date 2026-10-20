@@ -37,6 +37,13 @@
     { "name": "a display field cannot be submitted", "set": { "request_view": "SUP-0000" }, "violations": [["request_view", "not_submittable"]], "discarded": [] },
     { "name": "a text over maxLength", "set": { "legal_name": "LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME" }, "violations": [["legal_name", "maxLength"]], "discarded": [] },
     { "name": "variables the form does not declare pass through", "set": { "crm_reference": "OPP-77" }, "violations": [], "discarded": [] },
-    { "name": "several violations at once, in field order", "unset": ["iban"], "set": { "category": "", "phone": "call me" }, "violations": [["phone", "pattern"], ["category", "required"], ["iban", "required"]], "discarded": [] }
+    { "name": "several violations at once, in field order", "unset": ["iban"], "set": { "category": "", "phone": "call me" }, "violations": [["phone", "pattern"], ["category", "required"], ["iban", "required"]], "discarded": [] },
+    { "name": "a file field takes the id of an uploaded file", "set": { "iso_certified": true, "certificate_expiry": "2027-06-30", "iso_certificate": "3f2b8c1e-0d4a-4e7b-9c55-1a2b3c4d5e6f" }, "violations": [], "discarded": [] },
+    { "name": "a file field takes nothing but a file id", "set": { "iso_certified": true, "certificate_expiry": "2027-06-30", "iso_certificate": "certificate.pdf" }, "violations": [["iso_certificate", "type"]], "discarded": [] },
+    { "name": "a hidden file field is discarded", "set": { "iso_certificate": "3f2b8c1e-0d4a-4e7b-9c55-1a2b3c4d5e6f" }, "violations": [], "discarded": ["iso_certificate"] },
+    { "name": "several files take a list of ids", "set": { "supporting_documents": ["3f2b8c1e-0d4a-4e7b-9c55-1a2b3c4d5e6f", "7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d"] }, "violations": [], "discarded": [] },
+    { "name": "more files than the field allows", "set": { "supporting_documents": ["3f2b8c1e-0d4a-4e7b-9c55-1a2b3c4d5e6f", "7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d", "0b1c2d3e-4f5a-4b6c-9d7e-8f9a0b1c2d3e", "c0ffee00-1234-4abc-8def-0123456789ab"] }, "violations": [["supporting_documents", "max"]], "discarded": [] },
+    { "name": "the same file twice", "set": { "supporting_documents": ["3f2b8c1e-0d4a-4e7b-9c55-1a2b3c4d5e6f", "3f2b8c1e-0d4a-4e7b-9c55-1a2b3c4d5e6f"] }, "violations": [["supporting_documents", "type"]], "discarded": [] },
+    { "name": "a single id where a list is expected", "set": { "supporting_documents": "3f2b8c1e-0d4a-4e7b-9c55-1a2b3c4d5e6f" }, "violations": [["supporting_documents", "type"]], "discarded": [] }
   ]
 }

@@ -94,6 +94,12 @@ public final class FormSubmission {
         return new Result(accepted, List.copyOf(discarded));
     }
 
+    private static final Pattern FILE_ID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
+    private static boolean fileId(Object value) {
+        return value instanceof String text && FILE_ID.matcher(text).matches();
+    }
+
     private static boolean empty(Object value) {
         return value == null || (value instanceof String text && text.isEmpty())
                 || (value instanceof Collection<?> collection && collection.isEmpty());
@@ -140,6 +146,19 @@ public final class FormSubmission {
                     if (!(item instanceof String text) || !field.options().contains(text)) return "option";
                     if (seen.contains(text)) return "option";
                     seen.add(text);
+                }
+                if (field.minNumber() != null && items.size() < field.minNumber().intValue()) return "min";
+                if (field.maxNumber() != null && items.size() > field.maxNumber().intValue()) return "max";
+                return null;
+            }
+            case "file" -> {
+                // File ids from POST .../tasks/{task}/files; the engine checks each one when it attaches them.
+                if (!field.multipleFiles()) return fileId(value) ? null : "type";
+                if (!(value instanceof Collection<?> items)) return "type";
+                List<Object> seen = new ArrayList<>();
+                for (Object item : items) {
+                    if (!fileId(item) || seen.contains(item)) return "type";
+                    seen.add(item);
                 }
                 if (field.minNumber() != null && items.size() < field.minNumber().intValue()) return "min";
                 if (field.maxNumber() != null && items.size() > field.maxNumber().intValue()) return "max";

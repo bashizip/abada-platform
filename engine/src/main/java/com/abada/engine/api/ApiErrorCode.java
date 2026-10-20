@@ -23,5 +23,11 @@ public enum ApiErrorCode {
     AI_PROVIDER_TEST_FAILED,
     /** Task completion refused by its pinned form; {@code details.violations} list field ids and rule names (S8). */
     FORM_INVALID,
+    /** An upload was refused before anything was kept; {@code details.reason} names the rule (S9). */
+    FILE_REJECTED,
+    /** The object store (RustFS) did not answer; nothing was kept and the call can be retried (S9). */
+    OBJECT_STORE_UNAVAILABLE,
+    /** The file's record exists but its contents are missing from the object store (S9). */
+    FILE_UNAVAILABLE,
     INTERNAL_ERROR
 }

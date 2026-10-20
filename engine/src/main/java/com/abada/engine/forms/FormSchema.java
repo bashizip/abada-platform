@@ -28,15 +28,19 @@ import java.util.regex.Pattern;
  */
 public record FormSchema(String title, List<Field> fields, Map<String, Field> byId) {
 
-    /** Every field type; {@code file} is reserved until file upload (S9) and refused at deploy. */
+    /** Every field type. A {@code file} field takes uploaded files (S9) and holds their references. */
     public static final Set<String> TYPES = Set.of("string", "textarea", "number", "boolean", "select", "date",
-            "email", "url", "currency", "multiselect", "radio", "checkbox-group", "datetime", "display", "markdown");
+            "email", "url", "currency", "multiselect", "radio", "checkbox-group", "datetime", "display", "markdown",
+            "file");
     public static final Set<String> NON_INPUT = Set.of("display", "markdown");
     public static final int MAX_FIELDS = 200;
     public static final int MAX_ROW_CELLS = 4;
     public static final int GRID_COLUMNS = 4;
     public static final int MAX_TEXT_LENGTH = 10_000;
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+    private static final Pattern ACCEPT = Pattern.compile("\\.[a-z0-9]{1,16}|[a-z]+/(\\*|[a-z0-9.+-]+)");
+    /** A file field's own size limit cannot exceed this; the engine's configured cap still applies. */
+    public static final long MAX_FILE_SIZE = 1024L * 1024 * 1024;
     private static final Pattern ISO_DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Set<String> TEXT = Set.of("string", "textarea", "email", "url");
     private static final Set<String> CHOICE = Set.of("select", "radio", "multiselect", "checkbox-group");
@@ -50,7 +54,8 @@ public record FormSchema(String title, List<Field> fields, Map<String, Field> by
     public record Field(String id, String type, String label, boolean required, List<String> options,
             BigDecimal minNumber, BigDecimal maxNumber, String minText, String maxText,
             Integer minLength, Integer maxLength, com.google.re2j.Pattern pattern, String currency,
-            VisibilityExpression visibleWhen, String variable) {
+            VisibilityExpression visibleWhen, String variable, List<String> accept, boolean multipleFiles,
+            Long maxSize) {
 
         public boolean input() {
             return !NON_INPUT.contains(type);
@@ -117,10 +122,6 @@ public record FormSchema(String title, List<Field> fields, Map<String, Field> by
             problems.add(at + ": id '" + id + "' must be letters, digits and _, not starting with a digit");
             return null;
         }
-        if (type.equals("file")) {
-            problems.add(where + ": file fields arrive with file upload; remove the field or change its type");
-            return null;
-        }
         if (!TYPES.contains(type)) {
             problems.add(where + ": unknown type '" + type + "'; expected one of " + new java.util.TreeSet<>(TYPES));
             return null;
@@ -163,10 +164,11 @@ public record FormSchema(String title, List<Field> fields, Map<String, Field> by
         boolean hasMin = node.hasNonNull("min");
         boolean hasMax = node.hasNonNull("max");
         if (hasMin || hasMax) {
-            if (type.equals("number") || type.equals("currency") || MULTI.contains(type)) {
+            boolean fileCount = type.equals("file") && node.path("multiple").asBoolean(false);
+            if (type.equals("number") || type.equals("currency") || MULTI.contains(type) || fileCount) {
                 minNumber = numberRule(node, "min", where, problems);
                 maxNumber = numberRule(node, "max", where, problems);
-                if (MULTI.contains(type) && ((minNumber != null && minNumber.signum() < 0)
+                if ((MULTI.contains(type) || fileCount) && ((minNumber != null && minNumber.signum() < 0)
                         || (maxNumber != null && maxNumber.signum() < 0))) {
                     problems.add(where + ": selection counts cannot be negative");
                 }
@@ -215,9 +217,51 @@ public record FormSchema(String title, List<Field> fields, Map<String, Field> by
                 problems.add(where + ": a display field names the process variable it shows in 'variable'");
             }
         }
+        List<String> accept = List.of();
+        boolean multipleFiles = false;
+        Long maxSize = null;
+        if (type.equals("file")) {
+            accept = parseAccept(node.path("accept"), where, problems);
+            if (node.has("multiple") && !node.path("multiple").isBoolean()) {
+                problems.add(where + ": 'multiple' is true or false");
+            }
+            multipleFiles = node.path("multiple").asBoolean(false);
+            if (node.hasNonNull("maxSize")) {
+                JsonNode value = node.path("maxSize");
+                if (!value.isIntegralNumber() || value.asLong() < 1 || value.asLong() > MAX_FILE_SIZE) {
+                    problems.add(where + ": maxSize is a whole number of bytes between 1 and " + MAX_FILE_SIZE);
+                } else {
+                    maxSize = value.asLong();
+                }
+            }
+        } else {
+            for (String name : List.of("accept", "multiple", "maxSize")) {
+                if (node.has(name)) problems.add(where + ": '" + name + "' only applies to file fields");
+            }
+        }
         String label = node.path("label").asText(id);
         return new Field(id, type, label, required, options, minNumber, maxNumber, minText, maxText,
-                minLength, maxLength, pattern, currency, visibleWhen, variable);
+                minLength, maxLength, pattern, currency, visibleWhen, variable, accept, multipleFiles, maxSize);
+    }
+
+    /** {@code accept}: extensions ({@code .pdf}) and content types ({@code application/pdf}, {@code image/*}). */
+    private static List<String> parseAccept(JsonNode node, String where, List<String> problems) {
+        if (node.isMissingNode() || node.isNull()) return List.of();
+        if (!node.isArray()) {
+            problems.add(where + ": 'accept' is a list of extensions (.pdf) or content types (image/*)");
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode entry : node) {
+            String value = entry.isTextual() ? entry.asText().strip().toLowerCase(java.util.Locale.ROOT) : "";
+            if (!ACCEPT.matcher(value).matches()) {
+                problems.add(where + ": accept entry '" + (entry.isTextual() ? entry.asText() : entry.toString())
+                        + "' is not an extension (.pdf) or a content type (image/*)");
+                continue;
+            }
+            if (!values.contains(value)) values.add(value);
+        }
+        return List.copyOf(values);
     }
 
     private static List<String> parseOptions(JsonNode node, String where, List<String> problems) {

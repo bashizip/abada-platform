@@ -61,6 +61,15 @@ public class GlobalExceptionHandler {
                 request));
     }
 
+    /** The object store did not answer; the message names the operation, never a credential (S9). */
+    @ExceptionHandler(com.abada.engine.files.ObjectStoreUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleObjectStoreUnavailable(
+            com.abada.engine.files.ObjectStoreUnavailableException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiErrors.response(
+                HttpStatus.SERVICE_UNAVAILABLE, ApiErrorCode.OBJECT_STORE_UNAVAILABLE,
+                "File storage is unavailable; try again later", request.getRequestURI(), Map.of()));
+    }
+
     /** The submitted values break the task's pinned form; nothing was committed. Values are never echoed. */
     @ExceptionHandler(com.abada.engine.forms.FormSubmission.RejectedException.class)
     public ResponseEntity<ErrorResponse> handleFormRejected(com.abada.engine.forms.FormSubmission.RejectedException ex,

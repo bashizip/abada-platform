@@ -21,7 +21,7 @@ class PostgresSchemaUpgradeTest {
             .withPassword("abada");
 
     @ParameterizedTest(name = "upgrades schema v{0} to latest")
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40})
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41})
     void upgradesEveryPreviouslyPublishedSchemaVersion(int sourceVersion) throws Exception {
         String schema = "upgrade_from_v" + sourceVersion;
         Flyway.configure()
@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("41");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("42");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,25 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V42: process file metadata (bytes live in RustFS), file retention and the sweep lease.
+            for (String column : new String[] {"id", "project_id", "uploaded_by", "content_type", "size_bytes",
+                    "sha256", "name", "object_key", "state", "instance_id", "task_id", "field_id", "created_at",
+                    "attached_at", "deleting_reason", "lease_owner", "lease_expires_at", "attempts", "last_error",
+                    "entity_version"}) {
+                try (var columns = metadata.getColumns(null, schema, "process_files", column)) {
+                    assertThat(columns.next()).as("process_files." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "process_files", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_process_files_state_created",
+                        "idx_process_files_task_uploader", "idx_process_files_instance");
+            }
+            try (var columns = metadata.getColumns(null, schema, "projects", "file_retention_days")) {
+                assertThat(columns.next()).as("projects.file_retention_days").isTrue();
+            }
+            try (var columns = metadata.getColumns(null, schema, "file_sweep_leases", "last_completed_at")) {
+                assertThat(columns.next()).as("file_sweep_leases.last_completed_at").isTrue();
             }
             // V41: the task forms a definition version pins at deployment.
             try (var columns = metadata.getColumns(null, schema, "process_definitions", "form_snapshots")) {

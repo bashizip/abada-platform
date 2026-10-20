@@ -142,14 +142,14 @@ class TaskFormApiTest {
     @Test
     void anInvalidFormFailsTheDeploymentLoudly() throws Exception {
         ((ObjectNode) form.withArray("fields").get(4)).put("pattern", "(?=lookahead)x");
-        ((ObjectNode) form.withArray("fields").get(5)).put("type", "file");
+        ((ObjectNode) form.withArray("fields").get(5)).put("type", "file").putArray("accept").add("bogus");
         replaceForm();
         assertThatThrownBy(this::deploy).isInstanceOfSatisfying(BpmnValidationException.class, invalid ->
                 assertThat(invalid.getIssues()).allSatisfy(issue -> {
                     assertThat(issue.code()).isEqualTo(FormSnapshotService.FORM_CODE);
                     assertThat(issue.elementId()).isEqualTo("review");
                 }).anySatisfy(issue -> assertThat(issue.message()).contains("not a portable regular expression"))
-                        .anySatisfy(issue -> assertThat(issue.message()).contains("file fields arrive with file upload")));
+                        .anySatisfy(issue -> assertThat(issue.message()).contains("accept entry 'bogus'")));
     }
 
     @Test

@@ -26,6 +26,8 @@
     { "id": "sanctions_view", "type": "display", "label": "Sanctions screening", "variable": "sanctions_result" },
     { "id": "iso_certified", "type": "boolean", "label": "ISO 9001 certified" },
     { "id": "certificate_expiry", "type": "date", "label": "Certificate expiry", "required": true, "visible_when": "iso_certified == true" },
+    { "id": "iso_certificate", "type": "file", "label": "ISO certificate", "accept": [".pdf", "image/*"], "maxSize": 5000000, "visible_when": "iso_certified == true" },
+    { "id": "supporting_documents", "type": "file", "label": "Supporting documents", "multiple": true, "max": 3, "accept": [".pdf", ".docx"] },
     { "id": "insurance_cover", "type": "currency", "label": "Liability insurance", "currency": "EUR", "min": 1000000 },
     { "id": "risk_notes", "type": "textarea", "label": "Risk notes", "maxLength": 2000 },
     { "id": "iban", "type": "string", "label": "IBAN", "required": true, "pattern": "[A-Z]{2}[0-9]{2}[A-Z0-9 ]{11,30}" },
@@ -58,6 +60,7 @@
       { "id": "compliance", "title": "Compliance", "collapsible": true, "rows": [
         [{ "field": "help_compliance", "span": 4 }],
         [{ "field": "sanctions_view", "span": 2 }, "iso_certified", "certificate_expiry"],
+        [{ "field": "iso_certificate", "span": 2 }, { "field": "supporting_documents", "span": 2 }],
         ["insurance_cover", { "field": "risk_notes", "span": 3 }]
       ] },
       { "id": "bank", "title": "Bank details", "rows": [

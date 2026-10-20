@@ -37,7 +37,7 @@ management:
         enabled: true
       group:
         readiness:
-          include: readinessState,db
+          include: readinessState,db,objectStore
   metrics:
     distribution:
       percentiles-histogram:
@@ -79,6 +79,21 @@ abada:
         topics:
           - ${ABADA_FIRST_PARTY_AGENT_TOPICS:abada:agent}
         models: ${ABADA_FIRST_PARTY_AGENT_MODELS:}
+  # Process files (S9): bytes in RustFS through the S3 API, metadata in PostgreSQL.
+  # RustFS is required for self-hosted installations; readiness fails while it
+  # cannot be reached. Credentials come from the environment and are never logged.
+  files:
+    store: ${ABADA_FILES_STORE:s3}
+    endpoint: ${ABADA_FILES_ENDPOINT:http://localhost:9000}
+    region: ${ABADA_FILES_REGION:us-east-1}
+    bucket: ${ABADA_FILES_BUCKET:abada-files}
+    access-key: ${ABADA_FILES_ACCESS_KEY:}
+    secret-key: ${ABADA_FILES_SECRET_KEY:}
+    create-bucket: ${ABADA_FILES_CREATE_BUCKET:true}
+    server-side-encryption: ${ABADA_FILES_SERVER_SIDE_ENCRYPTION:true}
+    require-tls: ${ABADA_FILES_REQUIRE_TLS:false}
+    max-file-bytes: ${ABADA_FILES_MAX_FILE_BYTES:10485760}
+    max-task-bytes: ${ABADA_FILES_MAX_TASK_BYTES:52428800}
   identity:
     admin:
       url: ${ABADA_KEYCLOAK_URL:}
