@@ -26,6 +26,8 @@ export interface AuthoringTurn {
   error?: string;
   /** For an edit: the node it changed, so typing in one field stays one turn. */
   nodeId?: string;
+  /** While pending: why the answer is taking longer (the engine is being asked again). */
+  notice?: string;
   /** Set aside by "undo to here"; restored, or dropped by the next prompt or edit. */
   setAside?: boolean;
 }
@@ -43,6 +45,7 @@ export type AuthoringAction =
   | { type: 'resolve'; id: string; draft: WorkflowFile; summary?: string; operations?: number; attempts: number;
       model?: string; warnings: string[] }
   | { type: 'fail'; id: string; error: string }
+  | { type: 'notice'; id: string; notice: string }
   | { type: 'cancel'; id: string }
   | { type: 'remove'; id: string }
   | { type: 'undoTo'; id: string }
@@ -100,6 +103,9 @@ export function authoringReducer(state: AuthoringSessionState, action: Authoring
     case 'fail':
       return { ...state, turns: state.turns.map((turn) => turn.id === action.id && turn.status === 'pending'
         ? { ...turn, status: 'failed', error: action.error } : turn) };
+    case 'notice':
+      return { ...state, turns: state.turns.map((turn) => turn.id === action.id && turn.status === 'pending'
+        ? { ...turn, notice: action.notice } : turn) };
     case 'cancel':
       return { ...state, turns: state.turns.filter((turn) => !(turn.id === action.id && turn.status === 'pending')) };
     case 'remove':

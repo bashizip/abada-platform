@@ -3,9 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkflowFile, WorkflowNode } from '@/types';
 import { byLabel, click, render, type } from '@/test/render';
 import { parseAPLYaml } from '@/lib/apl/parser';
+import { EngineUnreachableError } from '@/api/authoring';
 
 const generate = vi.fn();
-vi.mock('@/api/authoring', () => ({ AuthoringAPI: { generate: (...args: unknown[]) => generate(...args) } }));
+vi.mock('@/api/authoring', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/authoring')>()),
+  AuthoringAPI: { generate: (...args: unknown[]) => generate(...args) },
+}));
 vi.mock('@/hooks/useAplValidation', () => ({
   useAplValidation: (draft: WorkflowFile | null) => {
     // Stands in for an engine rule: a human step must be assigned to finance.
@@ -176,6 +180,38 @@ describe('AuthoringWorkspace', () => {
     click(buttonNamed(container, 'Try again'));
     expect(generate).toHaveBeenCalledTimes(3);
     expect(generate.mock.calls[2][1]).toBe('Break it');
+  });
+
+  it('asks again by itself while the engine is not reachable, saying so', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = open();
+      await act(async () => { calls[0].reject(new EngineUnreachableError(502)); });
+      expect(turns(container)[0].getAttribute('data-status')).toBe('pending');
+      expect(container.textContent).toContain('The engine is not answering yet');
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(generate).toHaveBeenCalledTimes(2);
+      await answer(1, CREATED);
+      expect(nodeIds(container)).toEqual(['received', 'review', 'paid']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after a few tries with a message about the engine, not the model', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = open();
+      for (let attempt = 0; attempt < 4; attempt++) {
+        await act(async () => { calls[attempt].reject(new EngineUnreachableError(503)); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+      }
+      expect(generate).toHaveBeenCalledTimes(4);
+      expect(container.querySelector('[role="alert"]')?.textContent)
+        .toBe('The engine could not be reached; it may be starting or restarting. Try again in a moment. The draft is unchanged.');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('cancels a pending refinement and ignores its late answer', async () => {
