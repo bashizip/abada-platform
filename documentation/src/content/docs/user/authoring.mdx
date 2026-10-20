@@ -205,6 +205,23 @@ flow:
   Loop limits (turns, tokens, budget), routes, delegates and the inputs and
   outputs of a call-process step are edited in the inspector, with the
   engine's rules checked as you type.
+- **Task forms.** A human task picks its form in the Properties panel. The
+  form's fields are listed there for quick changes (label, required, order);
+  **Open full editor** opens the form designer in a large panel: the field
+  palette on the left, the form in the middle, the selected field's
+  properties on the right. Drag fields into sections and rows of up to four
+  fields; on a selected field, arrow keys move it or change its width and
+  <kbd>Delete</kbd> removes it. A section can start a wizard step. Each field
+  can have rules (required, minimum and maximum, length, a pattern) and a
+  **Show only when** condition such as `vat_registered == true`. **Preview**
+  shows the form as the person filling it sees it, at desktop or phone
+  width: short forms keep generous spacing, long ones tighten and use more
+  columns on a wide screen. <kbd>Esc</kbd> closes the designer and asks first
+  when there are unsaved changes. The engine enforces the form, not only the
+  browser: it takes a copy of the form when you deploy the process and checks
+  every completion against that copy. Editing a form therefore applies to
+  tasks of the next deployment; tasks already open keep the rules they
+  started with.
 - **Undo and redo** cover every edit of the open process (<kbd>⌘Z</kbd> /
   <kbd>Ctrl+Z</kbd>, <kbd>⇧⌘Z</kbd> / <kbd>Ctrl+Y</kbd>), 100 steps per process.
 
