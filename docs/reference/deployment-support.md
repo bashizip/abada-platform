@@ -55,6 +55,24 @@ The authoritative deployment files are `compose.yaml`, `compose.dev.yaml`,
 a versioned release bundle containing those files and every referenced
 configuration asset; a standalone downloaded Compose file is not supported.
 
+## Object storage (RustFS)
+
+From 1.2 the certified self-hosted topology is **engine instances +
+PostgreSQL + RustFS**. RustFS (self-hosted, S3-compatible) keeps the contents
+of files uploaded to task forms; PostgreSQL keeps their metadata and state. The
+dev, prod and server Compose stacks and the public installer start it by
+default (`ABADA_RUSTFS_IMAGE`, pinned to `rustfs/rustfs:1.0.3`) with a
+`rustfs_data` volume, a health check, its console off, no published port and
+only the internal `data` network. The engine creates the bucket, and its
+readiness fails while RustFS cannot be reached or refuses encrypted writes.
+Credentials and the server-side encryption key come from the environment file:
+development defaults in dev, required values in prod, generated on first start
+in the server profile. Engine-to-RustFS traffic stays on the internal network;
+an external RustFS endpoint must use `https` (`ABADA_FILES_REQUIRE_TLS`, on by
+default under the prod profile). Only RustFS is tested and supported; managed
+cloud stores (GCP Cloud Storage, AWS S3) come later behind the same interface.
+See [process files](process-files.md) for backup and restore.
+
 PostgreSQL is the production source of truth. Flyway owns the schema and
 Hibernate validates it at startup. H2 is not used as evidence of PostgreSQL
 concurrency correctness. Mutable workflow state is command-local;

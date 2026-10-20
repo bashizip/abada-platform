@@ -277,6 +277,32 @@ Exactly-once refers to committed workflow state transitions. Calls to external
 systems are at-least-once unless their own idempotency contract prevents a
 duplicate side effect.
 
+## Process files
+
+Since 1.2 (M5 S9) human-task forms take files. The bytes are the one kind of
+state PostgreSQL does not hold: they live in RustFS, the S3-compatible object
+store every self-hosted installation runs. PostgreSQL keeps the `process_files`
+row (metadata and state), so it still decides what a process may see. The
+contract is [process files](../reference/process-files.md).
+
+- **Upload** happens before any workflow command: the engine streams the body
+  to RustFS, then inserts a `PENDING` row in its own short transaction. A row
+  never names an object that was not written; an object without a row is an
+  orphan the sweep removes.
+- **Attach** happens inside the task completion command, after the form
+  check: the file rows are locked with the task and instance, become
+  `ATTACHED`, and the variable gets their references. The command makes no
+  call to RustFS, so invariant 3 holds and an object-store outage cannot block
+  or half-apply a completion.
+- **Read** is a query: authorization on the row, an audit row in its own
+  transaction, then the bytes streamed from RustFS with no transaction open.
+- **Delete** is durable work in the rows (`DELETING`, lease owner, lease
+  expiry, attempts, last error), acquired with `FOR UPDATE SKIP LOCKED`
+  (invariant 5). The object is deleted outside any transaction and the row is
+  removed only by the replica still holding it; deleting an absent object is a
+  success, so the sweep is at-least-once and idempotent. The orphan scan runs
+  under a singleton lease row (`file_sweep_leases`).
+
 ## Cache policy
 
 The sole engine execution cache maps an immutable process-definition deployment

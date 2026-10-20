@@ -222,6 +222,18 @@ flow:
   every completion against that copy. Editing a form therefore applies to
   tasks of the next deployment; tasks already open keep the rules they
   started with.
+- **File fields.** A **File** field takes one document, or several with
+  **Several files** (with a minimum and maximum count). **Accepted files**
+  lists extensions or types such as `.pdf, image/*`, and **Largest file**
+  caps the size within the engine's limit (10 MB unless configured). The
+  person filling the task drops files on the field, sees each upload's
+  progress, previews images and PDFs and can remove a file before
+  submitting. The engine checks each file's actual contents (a picture
+  renamed `.pdf` is refused, programs always are), keeps the file in RustFS
+  and gives the process a reference: name, type, size and checksum, never
+  the bytes. The file appears as a chip in the instance's variables, and
+  people who may see the instance download it through the engine. Details:
+  [process files](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/process-files.md).
 - **Undo and redo** cover every edit of the open process (<kbd>⌘Z</kbd> /
   <kbd>Ctrl+Z</kbd>, <kbd>⇧⌘Z</kbd> / <kbd>Ctrl+Y</kbd>), 100 steps per process.
 

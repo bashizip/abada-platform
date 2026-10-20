@@ -43,8 +43,28 @@ Codes are stable machine contracts. API v1 currently defines:
 `INVALID_REQUEST`, `BPMN_VALIDATION_FAILED`, `ENGINE_COMMAND_REJECTED`,
 `RESOURCE_NOT_FOUND`, `CONCURRENT_MODIFICATION`,
 `AUTHENTICATION_REQUIRED`, `ACCESS_DENIED`, `IDEMPOTENCY_CONFLICT`,
-`WORKER_LOCK_NOT_OWNED`, `WORKER_LOCK_EXPIRED`, and `INTERNAL_ERROR`.
+`WORKER_LOCK_NOT_OWNED`, `WORKER_LOCK_EXPIRED`, and `INTERNAL_ERROR`; 1.1 and
+1.2 added `AGENT_STEP_REJECTED`, `WORK_RETIRED`, `REPLAY_REQUIRED`,
+`AI_PROVIDER_TEST_FAILED`, `FORM_INVALID`, and for process files
+`FILE_REJECTED`, `OBJECT_STORE_UNAVAILABLE` and `FILE_UNAVAILABLE`.
 Messages are for people and may become more precise without a version change.
+
+## Process files
+
+Since 1.2 (M5 S9); the contract is [process files](process-files.md).
+
+| Endpoint | Who | Result |
+| --- | --- | --- |
+| `POST /v1/projects/{projectId}/tasks/{taskId}/files?field=&name=` | a user who may complete the task (`task:write`) | 201 `{ fileId, name, contentType, size, sha256, state: "PENDING", createdAt }`. Body: the file, with `Content-Length`. 400/413/415 `FILE_REJECTED` (`details.reason`), 503 `OBJECT_STORE_UNAVAILABLE` |
+| `GET /v1/projects/{projectId}/files/{fileId}` | the uploader of a pending file; for an attached file, instance readers of the project and the users of the instance's tasks | the bytes, as an attachment; 404 for anyone else; 410 `FILE_UNAVAILABLE` |
+| `GET /v1/projects/{projectId}/files/{fileId}/metadata` | as above | the file's metadata and state |
+| `DELETE /v1/projects/{projectId}/files/{fileId}` | the uploader, while the file is pending | 204; 409 once attached |
+| `GET`, `PUT /v1/projects/{projectId}/file-policy` | members; owners to change | `{ retentionDays }` (null keeps attached files) |
+| `GET /v1/external-tasks/{id}/files/{fileId}?workerId=` | the worker holding the task's lease (`worker:execute`) | the bytes of a file attached to the task's instance |
+
+Completing a task with a file field takes the file ids; the engine replaces
+them by references in the same transaction. Refusals use `FORM_INVALID` with
+the file rules listed in [runtime semantics](runtime-semantics.md#forms).
 
 ## Bounded list filters
 

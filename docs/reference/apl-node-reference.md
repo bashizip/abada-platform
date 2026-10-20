@@ -469,7 +469,7 @@ writes the same JSON.
 | `datetime` | ISO-8601 instant with offset, e.g. `2026-11-27T09:00:00Z` | `min`, `max` |
 | `display` | none: shows the process variable named in `variable` | cannot be submitted or required |
 | `markdown` | none: static help in `text` (bold, italics, lists, links; no HTML) | cannot be submitted or required |
-| `file` | reserved for file upload | refused at deploy until it is released |
+| `file` | the id of a file uploaded to the task (`POST /v1/projects/{p}/tasks/{t}/files`); a list of ids when `multiple` | `accept` (extensions such as `.pdf`, content types such as `image/*`, checked against the file's bytes), `maxSize` in bytes (within the engine's cap, 10 MB by default), `multiple` with `min`/`max` counting files. On completion the variable holds `{ fileId, name, contentType, size, sha256 }`, never the bytes; see [process files](process-files.md) |
 
 Every input field also takes `label`, `required`, `help`, `placeholder`,
 `defaultValue` and `visible_when` (portable CEL subset over form values and

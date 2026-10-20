@@ -93,6 +93,34 @@ Upgrade the engine, Studio and the agent worker together. Before the upgrade:
 Events written before V33 have no sequence number and are not replayed by the
 project event stream; webhook delivery is unchanged.
 
+### Upgrading to 1.2 (V40–V42, RustFS for process files)
+
+From 1.2 a self-hosted installation needs **RustFS**, the S3-compatible object
+store that keeps files uploaded to task forms (see
+[process files](../reference/process-files.md)). Flyway applies `V40`
+(decision-input evidence), `V41` (forms pinned at deploy) and `V42`
+(`process_files`, `projects.file_retention_days`, `file_sweep_leases`); none
+rewrites existing rows. Processes deployed before 1.2 have no file fields and
+run unchanged.
+
+- **One-line installer (dev):** run it again. It keeps your settings, re-pins
+  the images (including `ABADA_RUSTFS_IMAGE`), appends the `ABADA_FILES_*`
+  development values and starts RustFS with a new `abada_rustfs_data` volume.
+- **Production Compose:** before `up`, add to `.env.prod`
+  `ABADA_RUSTFS_IMAGE=rustfs/rustfs:1.0.3`,
+  `ABADA_FILES_ACCESS_KEY` and `ABADA_FILES_SECRET_KEY` (`openssl rand -hex 24`
+  each) and `ABADA_FILES_SSE_MASTER_KEY` (`openssl rand -base64 32`).
+  `doctor prod` refuses the file until they are set. Copy the new
+  `compose.yaml` and `compose.prod.yaml` from the release archive.
+- **Server profile:** `up server` generates the three values on first start of
+  1.2 and adds them to `.env.server`; back that file up again.
+- **External RustFS:** set `ABADA_FILES_ENDPOINT` to its `https` URL and
+  `ABADA_FILES_BUCKET`; the engine creates the bucket if its credentials allow.
+- Back up `abada_rustfs_data` and `ABADA_FILES_SSE_MASTER_KEY` with the
+  database from now on: files cannot be read without that key.
+- After the upgrade, `/api/actuator/health/readiness` includes `objectStore`;
+  it must be `UP` before you send traffic.
+
 ### Updating with the one-line installer (1.1.2 and later)
 
 Run the installer again from the directory that holds the installation (or
