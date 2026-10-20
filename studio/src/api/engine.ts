@@ -206,6 +206,7 @@ import { config } from '@/config/runtime';
 import { keycloak } from '@/auth/keycloakClient';
 import { getUserFromToken } from '@/auth/keycloakClient';
 import { apiError, authenticatedFetch } from '@/api/authenticatedFetch';
+import type { FormSchema, FormViolation } from '@/features/inbox/formSchema';
 
 export interface ProcessDefinitionDTO {
   projectId?: string;
@@ -310,6 +311,31 @@ export interface WorkerHealthDTO {
   lastErrorMessage?: string | null;
   consecutiveFailures: number;
   lastWorkerId?: string | null;
+}
+
+/** A task's form as the engine serves it: `pinned` is false for the project's current, unenforced form. */
+export interface TaskFormDTO {
+  formKey: string;
+  pinned: boolean;
+  revision?: number;
+  schema: FormSchema;
+}
+
+/** A completion the task's pinned form refused (422 FORM_INVALID); nothing was committed. */
+export class FormRejectedError extends Error {
+  constructor(message: string, readonly violations: FormViolation[]) {
+    super(message);
+    this.name = 'FormRejectedError';
+  }
+}
+
+async function taskCommandError(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null) as
+    { message?: string; code?: string; details?: { violations?: FormViolation[] } } | null;
+  if (res.status === 422 && body?.code === 'FORM_INVALID' && Array.isArray(body.details?.violations)) {
+    return new FormRejectedError('The engine refused some form values; fix the highlighted fields', body.details.violations);
+  }
+  return new Error(body?.message || fallback);
 }
 
 export class EngineAPI {
@@ -702,6 +728,17 @@ export class EngineAPI {
     return res.json();
   }
 
+  /** The form the engine enforces for this task (pinned at deploy), or the project's current one; null when none. */
+  static async getTaskForm(taskId: string, projectId: string): Promise<TaskFormDTO | null> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/form`,
+      { headers: this.getHeaders() },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Failed to load the task form: ${res.statusText}`);
+    return res.json();
+  }
+
   static async claimTask(taskId: string, projectId: string): Promise<TaskOperationResultDTO> {
     const res = await authenticatedFetch(
       `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/claim`,
@@ -740,10 +777,7 @@ export class EngineAPI {
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || `Failed to complete task: ${res.statusText}`);
-    }
+    if (!res.ok) throw await taskCommandError(res, `Failed to complete task: ${res.statusText}`);
     return res.json();
   }
 
@@ -763,10 +797,7 @@ export class EngineAPI {
       headers: this.getHeaders(),
       body: JSON.stringify(decision)
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || `Failed to submit the decision: ${res.statusText}`);
-    }
+    if (!res.ok) throw await taskCommandError(res, `Failed to submit the decision: ${res.statusText}`);
     return res.json();
   }
 

@@ -10,12 +10,11 @@ import {
   User,
   XCircle,
 } from 'lucide-react';
-import { EngineAPI, EngineUserTaskDTO } from '@/api/engine';
+import { EngineAPI, EngineUserTaskDTO, FormRejectedError } from '@/api/engine';
 import { decisionError, decisionPayload, humanize, TaskOutcome } from './decision';
 import { ToolApprovalCard } from './ToolApprovalCard';
 import { JsonViewer } from '@/components/json/JsonViewer';
 import { jsonHeight } from '@/components/json/jsonLayout';
-import { ProjectAPI } from '@/api/projects';
 import { useToast } from '@/components/ToastContext';
 import {
   FormRenderer,
@@ -23,7 +22,9 @@ import {
 import {
   FormSchema,
   formValuesFromSchema,
+  submittedValues,
   validateForm,
+  violationMessages,
 } from '@/features/inbox/formSchema';
 
 type Filter = 'all' | 'AVAILABLE' | 'CLAIMED';
@@ -41,14 +42,6 @@ const STATUS_META: Record<string, { label: string; chip: string; dot: string }> 
   FAILED: { label: 'Failed', chip: 'bg-[#E76F51]/10 text-[#E76F51] border-[#E76F51]/30', dot: 'bg-[#E76F51]' },
 };
 
-function decodeBase64(content: string): string {
-  try {
-    return decodeURIComponent(escape(atob(content)));
-  } catch {
-    return atob(content);
-  }
-}
-
 export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { showToast } = useToast();
   const [tasks, setTasks] = useState<EngineUserTaskDTO[]>([]);
@@ -58,6 +51,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const [actionLoading, setActionLoading] = useState(false);
 
   const [schema, setSchema] = useState<FormSchema | null>(null);
+  const [formPinned, setFormPinned] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [comment, setComment] = useState('');
@@ -84,15 +78,19 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   const loadForm = useCallback(async (task: EngineUserTaskDTO) => {
     setSchema(null);
+    setFormPinned(false);
     setFormValues({});
     setFormErrors({});
     if (!task.formKey || !task.projectId) return;
     setFormLoading(true);
     try {
-      const resource = await ProjectAPI.resolveForm(task.projectId, task.formKey);
-      const parsed = JSON.parse(decodeBase64(resource.contentBase64)) as FormSchema;
-      if (parsed && Array.isArray(parsed.fields)) {
+      const form = await EngineAPI.getTaskForm(task.id, task.projectId);
+      const parsed = form?.schema;
+      if (!form) {
+        showToast('error', `Form '${task.formKey}' was not found in the project`);
+      } else if (parsed && Array.isArray(parsed.fields)) {
         setSchema(parsed);
+        setFormPinned(form.pinned);
         setFormValues(formValuesFromSchema(parsed, task.variables ?? {}));
       } else {
         showToast('error', `Form '${task.formKey}' is not a valid form schema`);
@@ -121,6 +119,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
       if (closes && selectedTask) setSelectedTask(null);
       await fetchTasks();
     } catch (err) {
+      // The engine checks the form too: show its refusal on the fields it names.
+      if (err instanceof FormRejectedError && schema) setFormErrors(violationMessages(schema, err.violations));
       showToast('error', err instanceof Error ? err.message : 'Action failed');
     } finally {
       setActionLoading(false);
@@ -146,13 +146,13 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
     if (!selectedTask?.projectId) return;
     let variables: Record<string, unknown> = {};
     if (schema) {
-      const errors = validateForm(schema, formValues);
+      const errors = validateForm(schema, formValues, { variables: selectedTask.variables ?? {} });
       setFormErrors(errors);
       if (Object.keys(errors).length > 0) {
         showToast('error', 'Please fix the highlighted form fields');
         return;
       }
-      variables = { ...formValues };
+      variables = submittedValues(schema, formValues, selectedTask.variables ?? {});
     }
     void runAction(() => EngineAPI.completeTask(selectedTask.id, variables, selectedTask.projectId!), 'Task completed');
   };
@@ -160,7 +160,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const handleDecision = (outcome: TaskOutcome) => {
     if (!selectedTask?.projectId) return;
     if (schema) {
-      const errors = validateForm(schema, formValues);
+      const errors = validateForm(schema, formValues, { variables: selectedTask.variables ?? {} });
       setFormErrors(errors);
       if (Object.keys(errors).length > 0) {
         showToast('error', 'Please fix the highlighted form fields');
@@ -170,7 +170,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
     const problem = decisionError(outcome, comment);
     setCommentError(problem);
     if (problem) return;
-    const decision = decisionPayload(outcome, comment, formValues, schema?.fields.map((field) => field.id) ?? []);
+    const submitted = schema ? submittedValues(schema, formValues, selectedTask.variables ?? {}) : {};
+    const decision = decisionPayload(outcome, comment, submitted, Object.keys(submitted));
     void runAction(() => EngineAPI.decideTask(selectedTask.id, decision, selectedTask.projectId!),
       `Decision recorded: ${humanize(outcome.name)}`);
   };
@@ -363,13 +364,19 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   <h3 className="text-sm font-semibold text-[#F4A261] mb-4 flex items-center gap-2">
                     <FileText className="w-4 h-4" />
                     Task Form
-                    <span className="ml-auto text-[10px] font-mono text-[#A89F91]">{selectedTask.formKey}</span>
+                    <span className="ml-auto text-[10px] font-mono text-[#A89F91]"
+                      title={formPinned ? 'Pinned to this version: the engine checks every value on completion'
+                        : 'The project\'s current form: deployed before forms were pinned, not checked by the engine'}>
+                      {selectedTask.formKey}{formPinned ? ' · checked by the engine' : ''}
+                    </span>
                   </h3>
                   <FormRenderer
                     schema={schema}
                     values={formValues}
                     onChange={setFormValues}
                     errors={formErrors}
+                    onErrors={setFormErrors}
+                    variables={selectedTask.variables ?? {}}
                     readOnly={selectedTask.status !== 'CLAIMED'}
                   />
                   {selectedTask.status === 'CLAIMED' && outcomes.length === 0 && (

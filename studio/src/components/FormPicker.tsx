@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FileJson, Loader2, Plus } from 'lucide-react';
 import { ProjectAPI, ProjectFormDTO } from '@/api/projects';
 import { FormEditor } from '@/features/designer/FormEditor';
+import { FormQuickEdit } from '@/components/FormQuickEdit';
 import { FormSchema } from '@/features/inbox/formSchema';
 import { useToast } from '@/components/ToastContext';
 
@@ -30,7 +31,8 @@ interface FormPickerProps {
 /**
  * Picks the task form referenced by a human node's formKey. Lists the
  * project's FORM resources by bare slug, allows a custom key, and can create a
- * new form (FormEditor) and link it in place.
+ * new form (FormEditor) and link it in place. A linked form can be tweaked
+ * inline (FormQuickEdit) or opened in the full editor.
  */
 export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChange }) => {
   const { showToast } = useToast();
@@ -161,17 +163,16 @@ export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChan
         </p>
       )}
 
+      {value && known && projectId && <FormQuickEdit key={value} projectId={projectId} formKey={value} />}
+
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-7xl h-[90vh]">
-            <FormEditor
-              initialSchema={{ title: 'New Form', fields: [] }}
-              saving={creating}
-              onClose={() => setShowCreate(false)}
-              onSave={(schema) => void handleCreate(schema)}
-            />
-          </div>
-        </div>
+        <FormEditor
+          initialSchema={{ title: 'New form', fields: [] }}
+          location="new form in forms/"
+          saving={creating}
+          onClose={() => setShowCreate(false)}
+          onSave={(schema) => void handleCreate(schema)}
+        />
       )}
     </div>
   );
