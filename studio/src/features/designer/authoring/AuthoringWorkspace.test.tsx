@@ -170,7 +170,8 @@ describe('AuthoringWorkspace', () => {
     await answer(0, CREATED);
     refine(container, 'Break it');
     await fail(1, '409 The model could not produce a valid change within 3 attempts.');
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('The draft is unchanged');
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toBe('The model could not produce a valid change within 3 attempts. The draft is unchanged.');
     expect(nodeIds(container)).toEqual(['received', 'review', 'paid']);
     click(buttonNamed(container, 'Try again'));
     expect(generate).toHaveBeenCalledTimes(3);

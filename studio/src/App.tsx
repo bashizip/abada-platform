@@ -96,7 +96,7 @@ export default function App() {
     workflows, setWorkflows, activeWorkflowId, setActiveWorkflowId,
     currentWorkflow, projects, setProjects, activeProject,
     showProjects, setShowProjects, treeRefreshKey, setTreeRefreshKey,
-    openProject, updateActiveWorkflow, replaceWorkflow, undo, redo, canUndo, canRedo,
+    openProject, updateActiveWorkflow, recordHistory, replaceWorkflow, undo, redo, canUndo, canRedo,
     processesRootId, persistedProcessKeys,
     workspaceStatus, workspaceError, retryWorkspace
   } = useProjectWorkspace(authenticated);
@@ -231,12 +231,13 @@ export default function App() {
     } else if (replaceWorkflow(targetId, appliedWorkflow)) {
       // One undo step restores the process as it was.
     } else {
+      // The empty canvas of a project with no process yet: the applied process becomes its first
+      // draft, and one undo returns to the empty canvas.
       const draftId = `draft-${Date.now()}`;
       activeId = draftId;
-      setWorkflows((items) => [
-        { ...appliedWorkflow, id: draftId, folderId: appliedWorkflow.folderId ?? processesRootId.current },
-        ...items.filter((item) => !item.id.startsWith('draft-')),
-      ]);
+      const draft = { ...appliedWorkflow, id: draftId, folderId: appliedWorkflow.folderId ?? processesRootId.current };
+      recordHistory(draftId, { ...draft, nodes: [], edges: [] }, draft);
+      setWorkflows((items) => [draft, ...items.filter((item) => !item.id.startsWith('draft-'))]);
     }
     setActiveWorkflowId(activeId);
     setSelectedNodeId(appliedWorkflow.nodes[0]?.id || null);

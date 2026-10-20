@@ -29,7 +29,10 @@ function readableError(error: unknown): string {
   if (/\b403\b/.test(message) || /OWNER or MAINTAINER/i.test(message)) {
     return 'Drafting with AI needs the Owner or Maintainer role in this project.';
   }
-  return message || 'The authoring service did not answer.';
+  // The client prefixes the HTTP status; the engine's sentence is what the user needs.
+  const sentence = message.replace(/^\d{3}\s+/, '').trim();
+  if (!sentence) return 'The authoring service did not answer.';
+  return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
 /**

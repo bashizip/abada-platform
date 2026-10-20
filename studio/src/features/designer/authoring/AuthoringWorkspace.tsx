@@ -143,7 +143,9 @@ export const AuthoringWorkspace: React.FC<AuthoringWorkspaceProps> = ({
   const lastLiveId = liveTurns[liveTurns.length - 1]?.id;
   const setAside = state.turns.filter((turn) => turn.setAside).length;
   const firstPrompt = state.turns.find((turn) => turn.kind === 'prompt')?.id;
-  const title = target === 'new' ? 'New process' : origin.name || 'This process';
+  // The draft's own name once there is one (an empty canvas is still "Untitled Process").
+  const title = draft.nodes.length && draft.name ? draft.name
+    : target === 'new' ? 'New process' : origin.name || 'This process';
 
   return (
     <>

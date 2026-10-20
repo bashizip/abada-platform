@@ -54,7 +54,8 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
   const barVariants = useMotionVariants(slideFrom('bottom'));
   const buttonVariants = useMotionVariants(enterExit);
 
-  useEffect(() => { if (!hasActiveWorkflow) setMode('new'); }, [hasActiveWorkflow]);
+  // A process with steps is refined by default; an empty one is filled in.
+  useEffect(() => { setMode(hasActiveWorkflow ? 'refine' : 'new'); }, [hasActiveWorkflow]);
 
   const open = !suspended && (barMode === 'pinned' || peek);
 
