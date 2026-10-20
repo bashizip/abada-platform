@@ -1,0 +1,42 @@
+{
+  "description": "Submissions to apl/forms/supplier-onboarding.json, checked by the engine (FormSubmission) and the Studio (validateForm) with the same violations. Each violation is [field, rule].",
+  "form": "apl/forms/supplier-onboarding.json",
+  "current": { "request_id": "SUP-2026-0418", "requested_by": "Ines Duarte", "sanctions_result": "Clear" },
+  "valid": {
+    "legal_name": "Transportes Ribeira Lda", "registration_no": "PT-514-882", "country": "Portugal",
+    "vat_registered": true, "vat_id": "PT509876543", "website": "https://ribeira-freight.pt",
+    "contact_name": "Marta Lopes", "contact_email": "marta.lopes@ribeira-freight.pt", "phone": "+351 22 340 1187",
+    "preferred_channel": "Email", "category": "Logistics", "services": ["Transport", "Customs"], "regions": ["iberia", "france"],
+    "annual_spend": 420000.5, "payment_terms": "45 days", "start_date": "2026-11-02", "review_at": "2026-10-27T09:30:00.000Z",
+    "iso_certified": false, "insurance_cover": 2500000, "iban": "PT50 0035 0651 0000 1234 5672 3", "account_holder": "Transportes Ribeira Lda",
+    "terms_accepted": true
+  },
+  "cases": [
+    { "name": "the valid submission passes", "set": {}, "violations": [], "discarded": [] },
+    { "name": "a missing required text", "unset": ["legal_name"], "violations": [["legal_name", "required"]], "discarded": [] },
+    { "name": "an empty required text", "set": { "contact_name": "" }, "violations": [["contact_name", "required"]], "discarded": [] },
+    { "name": "a broken pattern", "set": { "vat_id": "PT50987" }, "violations": [["vat_id", "pattern"]], "discarded": [] },
+    { "name": "a pattern matches the whole value", "set": { "registration_no": "PT-514-882 extra" }, "violations": [["registration_no", "pattern"]], "discarded": [] },
+    { "name": "a hidden field is not required and its value is discarded", "set": { "vat_registered": false, "vat_id": "nonsense" }, "violations": [], "discarded": ["vat_id"] },
+    { "name": "a field becomes visible and required", "set": { "iso_certified": true }, "violations": [["certificate_expiry", "required"]], "discarded": [] },
+    { "name": "a malformed email", "set": { "contact_email": "marta at ribeira" }, "violations": [["contact_email", "format"]], "discarded": [] },
+    { "name": "a url without a scheme", "set": { "website": "ribeira-freight.pt" }, "violations": [["website", "format"]], "discarded": [] },
+    { "name": "a value outside the options", "set": { "country": "Atlantis" }, "violations": [["country", "option"]], "discarded": [] },
+    { "name": "a radio value outside the options", "set": { "preferred_channel": "Fax" }, "violations": [["preferred_channel", "option"]], "discarded": [] },
+    { "name": "a multiselect value by label, not value", "set": { "regions": ["Iberia"] }, "violations": [["regions", "option"]], "discarded": [] },
+    { "name": "too many selections", "set": { "regions": ["iberia", "benelux", "dach", "nordics", "france"] }, "violations": [["regions", "max"]], "discarded": [] },
+    { "name": "too few checkboxes", "set": { "services": [] }, "violations": [], "discarded": [] },
+    { "name": "a number below min", "set": { "insurance_cover": 999999 }, "violations": [["insurance_cover", "min"]], "discarded": [] },
+    { "name": "a number above max", "set": { "annual_spend": 6000000 }, "violations": [["annual_spend", "max"]], "discarded": [] },
+    { "name": "too many decimals for EUR", "set": { "annual_spend": 10.555 }, "violations": [["annual_spend", "decimals"]], "discarded": [] },
+    { "name": "a number sent as text", "set": { "annual_spend": "420000" }, "violations": [["annual_spend", "type"]], "discarded": [] },
+    { "name": "a date before min", "set": { "start_date": "2025-12-31" }, "violations": [["start_date", "min"]], "discarded": [] },
+    { "name": "a date in the wrong format", "set": { "start_date": "02/11/2026" }, "violations": [["start_date", "type"]], "discarded": [] },
+    { "name": "a datetime without offset", "set": { "review_at": "2026-10-27T09:30" }, "violations": [["review_at", "type"]], "discarded": [] },
+    { "name": "a required yes/no left unchecked", "set": { "terms_accepted": false }, "violations": [["terms_accepted", "required"]], "discarded": [] },
+    { "name": "a display field cannot be submitted", "set": { "request_view": "SUP-0000" }, "violations": [["request_view", "not_submittable"]], "discarded": [] },
+    { "name": "a text over maxLength", "set": { "legal_name": "LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME_LONGNAME" }, "violations": [["legal_name", "maxLength"]], "discarded": [] },
+    { "name": "variables the form does not declare pass through", "set": { "crm_reference": "OPP-77" }, "violations": [], "discarded": [] },
+    { "name": "several violations at once, in field order", "unset": ["iban"], "set": { "category": "", "phone": "call me" }, "violations": [["phone", "pattern"], ["category", "required"], ["iban", "required"]], "discarded": [] }
+  ]
+}

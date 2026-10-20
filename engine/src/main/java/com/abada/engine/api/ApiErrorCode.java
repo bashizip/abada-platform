@@ -21,5 +21,7 @@ public enum ApiErrorCode {
     REPLAY_REQUIRED,
     /** An AI provider was not saved: a live call with its key, URL and model failed; {@code message} says why. */
     AI_PROVIDER_TEST_FAILED,
+    /** Task completion refused by its pinned form; {@code details.violations} list field ids and rule names (S8). */
+    FORM_INVALID,
     INTERNAL_ERROR
 }
