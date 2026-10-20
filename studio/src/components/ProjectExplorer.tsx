@@ -12,6 +12,7 @@ import {
 import { WorkflowFile } from '@/types';
 import { FormEditor } from '@/features/designer/FormEditor';
 import { FormSchema } from '@/features/inbox/formSchema';
+import { emptyFormSchema, formResourceOf } from '@/lib/forms/formResource';
 import { JsonViewer } from '@/components/json/JsonViewer';
 
 /** The parsed JSON, or undefined when the text is not JSON (it is then shown as text). */
@@ -107,6 +108,8 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
   const [newResource, setNewResource] = useState<NewResourceState | null>(null);
   const [moving, setMoving] = useState<MoveTarget | null>(null);
   const [preview, setPreview] = useState<ProjectResourceContent | null>(null);
+  /** Folder a blank form is being designed for; the file is created on first save. */
+  const [newFormIn, setNewFormIn] = useState<{ folderId: string; path: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const initializedProject = useRef<string | null>(null);
 
@@ -250,6 +253,24 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     }, 'File creation failed');
   };
 
+  const createForm = (folderId: string, schema: FormSchema): void => {
+    const { name, contentBase64 } = formResourceOf(schema);
+    void run(async () => {
+      await ProjectAPI.createResource(projectId, name, 'FORM', 'application/json', contentBase64, folderId);
+      setNewFormIn(null);
+      await refetch();
+      setExpanded((current) => new Set(current).add(folderId));
+    }, 'Form creation failed');
+  };
+
+  const openImport = (node: ProjectTreeNode): void => {
+    const forms = domainOf(node.path) === 'forms';
+    setNewResource({
+      folderId: node.id, name: '', kind: forms ? 'FORM' : 'RESOURCE',
+      contentType: forms ? 'application/json' : 'application/octet-stream',
+      contentBase64: '' });
+  };
+
   const deleteFolder = (node: ProjectTreeNode): void => {
     const affected: string[] = [];
     const collect = (current: ProjectTreeNode): void => {
@@ -361,12 +382,22 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                 className="p-1 rounded hover:bg-charcoal text-sand hover:text-saffron">
                 <Plus className="w-3 h-3" />
               </button>
+            ) : domainOf(node.path) === 'forms' ? (
+              <>
+                <button title="New form" aria-label="New form" disabled={busy}
+                  onClick={(event) => { event.stopPropagation(); setNewFormIn({ folderId: node.id, path: node.path }); }}
+                  className="p-1 rounded hover:bg-charcoal text-sand hover:text-mineral-teal">
+                  <Plus className="w-3 h-3" />
+                </button>
+                <button title="Import form JSON" aria-label="Import form JSON" disabled={busy}
+                  onClick={(event) => { event.stopPropagation(); openImport(node); }}
+                  className="p-1 rounded hover:bg-charcoal text-sand hover:text-mineral-teal">
+                  <FileUp className="w-3 h-3" />
+                </button>
+              </>
             ) : (
               <button title="New file" disabled={busy}
-                onClick={(event) => { event.stopPropagation(); setNewResource({
-                  folderId: node.id, name: '', kind: domainOf(node.path) === 'forms' ? 'FORM' : 'RESOURCE',
-                  contentType: domainOf(node.path) === 'forms' ? 'application/json' : 'application/octet-stream',
-                  contentBase64: '' }); }}
+                onClick={(event) => { event.stopPropagation(); openImport(node); }}
                 className="p-1 rounded hover:bg-charcoal text-sand hover:text-mineral-teal">
                 <Plus className="w-3 h-3" />
               </button>
@@ -566,6 +597,19 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
           })}
         </div>
       </div>
+    );
+  };
+
+  const renderNewForm = (): React.ReactElement | null => {
+    if (!newFormIn) return null;
+    return (
+      <FormEditor
+        initialSchema={emptyFormSchema()}
+        location={`new form in ${newFormIn.path}/`}
+        saving={busy}
+        onClose={() => setNewFormIn(null)}
+        onSave={(schema) => createForm(newFormIn.folderId, schema)}
+      />
     );
   };
 
@@ -847,7 +891,7 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
       )}
 
       {/* Dialogs render on the body: the sidebar's stacking context would put them under the canvas. */}
-      {createPortal(<>{renderMovePicker()}{renderNewResourceModal()}{renderPreview()}</>, document.body)}
+      {createPortal(<>{renderMovePicker()}{renderNewResourceModal()}{renderPreview()}{renderNewForm()}</>, document.body)}
     </div>
   );
 };

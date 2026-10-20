@@ -2,24 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FileJson, Loader2, Plus } from 'lucide-react';
 import { ProjectAPI, ProjectFormDTO } from '@/api/projects';
 import { FormEditor } from '@/features/designer/FormEditor';
+import { emptyFormSchema, formResourceOf } from '@/lib/forms/formResource';
 import { FormQuickEdit } from '@/components/FormQuickEdit';
 import { FormSchema } from '@/features/inbox/formSchema';
 import { useToast } from '@/components/ToastContext';
 
 const slugOf = (name: string): string => name.replace(/\.json$/i, '');
-
-function slugify(value: string): string {
-  const slug = value.toLowerCase().trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
-  return slug || 'new-form';
-}
-
-function b64of(json: string): string {
-  const bytes = new TextEncoder().encode(json);
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)));
-}
 
 interface FormPickerProps {
   projectId?: string;
@@ -94,10 +82,10 @@ export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChan
     }
     setCreating(true);
     try {
-      const slug = slugify(schema.title || 'new-form');
-      const json = JSON.stringify(schema, null, 2);
-      await ProjectAPI.createResource(projectId, `${slug}.json`, 'FORM', 'application/json',
-        b64of(json), formsFolderId);
+      const { name, contentBase64 } = formResourceOf(schema);
+      const slug = slugOf(name);
+      await ProjectAPI.createResource(projectId, name, 'FORM', 'application/json',
+        contentBase64, formsFolderId);
       onChange(slug);
       setCustomMode(false);
       setShowCreate(false);
@@ -167,7 +155,7 @@ export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChan
 
       {showCreate && (
         <FormEditor
-          initialSchema={{ title: 'New form', fields: [] }}
+          initialSchema={emptyFormSchema()}
           location="new form in forms/"
           saving={creating}
           onClose={() => setShowCreate(false)}
