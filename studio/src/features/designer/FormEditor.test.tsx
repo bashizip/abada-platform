@@ -82,14 +82,14 @@ describe('FormEditor', () => {
     unmount();
   });
 
-  it('saves the laid-out schema and refuses the file type for now', () => {
+  it('saves the laid-out schema with a file field', () => {
     const { onSave, unmount } = open();
     act(() => { button('⇪File').click(); });
-    expect(document.body.querySelector('[data-form-cell="file"]')).toBeNull();
-    expect(document.body.textContent).toContain('File upload arrives in a later release');
+    expect(document.body.querySelector('[data-form-cell="file"]')).not.toBeNull();
     act(() => { button('Save form').click(); });
     const saved = onSave.mock.calls[0][0] as FormSchema;
-    expect(saved.fields.map((field) => field.id)).toEqual(['name', 'amount']);
+    expect(saved.fields.map((field) => field.id)).toEqual(['name', 'amount', 'file']);
+    expect(saved.fields[2].type).toBe('file');
     expect(saved.layout?.sections).toHaveLength(1);
     unmount();
   });

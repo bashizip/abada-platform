@@ -209,6 +209,46 @@ export const FormProperties: React.FC<FormPropertiesProps> = ({
               </Prop>
             </div>
           )}
+          {field.type === 'file' && (
+            <>
+              <Prop label="Accepted files" htmlFor="prop-accept"
+                hint="Extensions (.pdf) or types (image/*), comma separated; empty accepts any. The engine reads each file's bytes to check it.">
+                <input id="prop-accept" className={`${inputClass} font-mono`} placeholder=".pdf, image/*"
+                  value={(field.accept ?? []).join(', ')}
+                  onChange={(event) => {
+                    const accept = event.target.value.split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+                    set({ accept: accept.length ? accept : undefined }, 'accept');
+                  }} />
+              </Prop>
+              <div className="grid grid-cols-2 gap-2">
+                <Prop label="Largest file (MB)" htmlFor="prop-maxsize" hint="Within the engine's cap (10 MB unless configured).">
+                  <input id="prop-maxsize" type="number" min={0.1} step={0.1} className={inputClass}
+                    value={field.maxSize ? Math.round(field.maxSize / 104857.6) / 10 : ''}
+                    onChange={(event) => {
+                      const mb = numberOrUndefined(event.target.value);
+                      set({ maxSize: mb && mb > 0 ? Math.round(mb * 1024 * 1024) : undefined }, 'maxSize');
+                    }} />
+                </Prop>
+                <label className="mt-5 flex items-center gap-2 text-[12px] text-linen">
+                  <input type="checkbox" className="h-3.5 w-3.5 accent-mineral-teal" checked={!!field.multiple}
+                    onChange={(event) => set(event.target.checked ? { multiple: true } : { multiple: undefined, min: undefined, max: undefined })} />
+                  Several files
+                </label>
+              </div>
+              {field.multiple && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Prop label="At least" htmlFor="prop-min">
+                    <input id="prop-min" type="number" min={0} className={inputClass} value={field.min ?? ''}
+                      onChange={(event) => set({ min: numberOrUndefined(event.target.value) }, 'min')} />
+                  </Prop>
+                  <Prop label="At most" htmlFor="prop-max">
+                    <input id="prop-max" type="number" min={1} className={inputClass} value={field.max ?? ''}
+                      onChange={(event) => set({ max: numberOrUndefined(event.target.value) }, 'max')} />
+                  </Prop>
+                </div>
+              )}
+            </>
+          )}
           {field.type === 'currency' && (
             <Prop label="Currency (ISO 4217)" htmlFor="prop-currency" hint="Fixed for this field. EUR allows 2 decimals, JPY none.">
               <input id="prop-currency" maxLength={3} className={`${inputClass} font-mono uppercase`} value={field.currency ?? ''}

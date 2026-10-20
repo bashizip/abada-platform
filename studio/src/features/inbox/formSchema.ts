@@ -52,6 +52,12 @@ export interface FormField {
   variable?: string;
   /** For `markdown`: the help text. */
   text?: string;
+  /** For `file`: extensions (`.pdf`) and content types (`image/*`) accepted; empty accepts any. */
+  accept?: string[];
+  /** For `file`: several files (the value is a list); `min`/`max` then count them. */
+  multiple?: boolean;
+  /** For `file`: the largest file in bytes; the engine's own cap still applies. */
+  maxSize?: number;
 }
 
 export interface FormCell {
@@ -88,7 +94,7 @@ export const MAX_ROW_CELLS = 4;
 export const MAX_TEXT_LENGTH = 10_000;
 export const NON_INPUT_TYPES: FormFieldType[] = ['display', 'markdown'];
 export const FIELD_TYPES: FormFieldType[] = ['string', 'textarea', 'number', 'currency', 'email', 'url',
-  'select', 'radio', 'multiselect', 'checkbox-group', 'boolean', 'date', 'datetime', 'display', 'markdown'];
+  'select', 'radio', 'multiselect', 'checkbox-group', 'boolean', 'date', 'datetime', 'display', 'markdown', 'file'];
 const TEXT_TYPES: FormFieldType[] = ['string', 'textarea', 'email', 'url'];
 const CHOICE_TYPES: FormFieldType[] = ['select', 'radio', 'multiselect', 'checkbox-group'];
 const MULTI_TYPES: FormFieldType[] = ['multiselect', 'checkbox-group'];
@@ -96,6 +102,13 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const URL_FORMAT = /^https?:\/\/[^\s/?#.]+\.[^\s]+$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ACCEPT = /^(\.[a-z0-9]{1,16}|[a-z]+\/(\*|[a-z0-9.+-]+))$/;
+const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** A file field's own size limit cannot exceed this (1 GiB); the engine's configured cap still applies. */
+export const MAX_FILE_SIZE = 1024 * 1024 * 1024;
+
+/** A file id as the engine issues it on upload; a form submits ids, never the bytes. */
+export const isFileId = (value: unknown): value is string => typeof value === 'string' && FILE_ID.test(value);
 /** RE2 syntax a browser's RegExp reads differently; the engine refuses the same list. */
 const NON_PORTABLE = ['(?P', '(?i', '(?m', '(?s', '(?U', '\\z', '\\A', '\\C', '\\Q', '[[:'];
 
@@ -181,7 +194,6 @@ export function formProblems(schema: FormSchema): string[] {
     if (!IDENTIFIER.test(field.id ?? '')) problems.push(`${at}: the variable name must be letters, digits and _`);
     else if (ids.has(field.id)) problems.push(`${at}: the variable name '${field.id}' is used twice`);
     ids.add(field.id);
-    if (field.type === 'file') { problems.push(`${at}: file fields arrive with file upload`); return; }
     if (!FIELD_TYPES.includes(field.type)) { problems.push(`${at}: unknown type '${field.type}'`); return; }
     if (field.required && !isInput(field)) problems.push(`${at}: a ${field.type} field cannot be required`);
     if (isChoice(field)) {
@@ -199,12 +211,25 @@ export function formProblems(schema: FormSchema): string[] {
         if (problem) problems.push(`${at}: ${problem}`);
       }
     }
+    if (field.type === 'file') {
+      if (field.accept !== undefined && !Array.isArray(field.accept)) problems.push(`${at}: 'accept' is a list of extensions (.pdf) or content types (image/*)`);
+      (Array.isArray(field.accept) ? field.accept : []).forEach((entry) => {
+        if (typeof entry !== 'string' || !ACCEPT.test(entry.trim().toLowerCase())) problems.push(`${at}: accept entry '${entry}' is not an extension (.pdf) or a content type (image/*)`);
+      });
+      if (field.maxSize != null && (!Number.isInteger(field.maxSize) || field.maxSize < 1 || field.maxSize > MAX_FILE_SIZE)) {
+        problems.push(`${at}: maxSize is a whole number of bytes between 1 and ${MAX_FILE_SIZE}`);
+      }
+    } else {
+      for (const name of ['accept', 'multiple', 'maxSize'] as const) {
+        if (field[name] !== undefined) problems.push(`${at}: '${name}' only applies to file fields`);
+      }
+    }
     if (field.min != null || field.max != null) {
       if (field.type === 'date' || field.type === 'datetime') {
         for (const bound of [field.min, field.max]) {
           if (bound != null && parseTemporal(field.type, String(bound)) === null) problems.push(`${at}: min/max must be ISO ${field.type === 'date' ? 'dates' : 'instants'}`);
         }
-      } else if (!['number', 'currency', ...MULTI_TYPES].includes(field.type)) {
+      } else if (!['number', 'currency', ...MULTI_TYPES].includes(field.type) && !(field.type === 'file' && field.multiple)) {
         problems.push(`${at}: min/max do not apply to a ${field.type} field`);
       } else if (typeof field.min === 'number' && typeof field.max === 'number' && field.min > field.max) {
         problems.push(`${at}: min is larger than max`);
@@ -275,7 +300,8 @@ function layoutProblems(layout: FormLayout, fieldIds: Set<string>): string[] {
 // ---- submission checks (the engine's completion rules) -------------------------------------------------
 
 export type FormRule = 'required' | 'type' | 'format' | 'pattern' | 'minLength' | 'maxLength' | 'min' | 'max'
-  | 'option' | 'decimals' | 'not_submittable';
+  | 'option' | 'decimals' | 'not_submittable'
+  | 'file_unknown' | 'file_not_pending' | 'file_size' | 'file_type' | 'file_total';
 
 export interface FormViolation {
   field: string;
@@ -346,6 +372,13 @@ export function ruleBroken(field: FormField, value: unknown): FormRule | null {
       if (typeof field.max === 'number' && value.length > field.max) return 'max';
       return null;
     }
+    case 'file': {
+      if (!field.multiple) return isFileId(value) ? null : 'type';
+      if (!Array.isArray(value) || value.some((item) => !isFileId(item)) || new Set(value).size !== value.length) return 'type';
+      if (typeof field.min === 'number' && value.length < field.min) return 'min';
+      if (typeof field.max === 'number' && value.length > field.max) return 'max';
+      return null;
+    }
     case 'date': case 'datetime': {
       if (typeof value !== 'string') return 'type';
       const time = parseTemporal(field.type, value);
@@ -406,18 +439,25 @@ export function ruleMessage(field: FormField, rule: FormRule): string {
       if (field.type === 'number' || field.type === 'currency') return `${label} must be a number`;
       if (field.type === 'date') return `${label} must be a date`;
       if (field.type === 'datetime') return `${label} must be a date and time`;
+      if (field.type === 'file') return `Upload the file for ${label} again`;
       return `${label} has the wrong kind of value`;
     case 'format': return field.type === 'email' ? 'Enter an email address like name@company.com' : 'Enter a full address starting with https://';
     case 'pattern': return `${label} is not in the expected format`;
     case 'minLength': return `At least ${field.minLength} characters`;
     case 'maxLength': return `At most ${field.maxLength ?? MAX_TEXT_LENGTH} characters`;
-    case 'min': return isMulti(field) ? `Pick at least ${field.min}` : field.type === 'date' || field.type === 'datetime'
+    case 'min': if (field.type === 'file') return `Add at least ${field.min} file${field.min === 1 ? '' : 's'}`;
+      return isMulti(field) ? `Pick at least ${field.min}` : field.type === 'date' || field.type === 'datetime'
       ? `On or after ${field.min}` : `At least ${unit(field.min)}`;
-    case 'max': return isMulti(field) ? `Pick at most ${field.max}` : field.type === 'date' || field.type === 'datetime'
+    case 'max': if (field.type === 'file') return `At most ${field.max} file${field.max === 1 ? '' : 's'}`;
+      return isMulti(field) ? `Pick at most ${field.max}` : field.type === 'date' || field.type === 'datetime'
       ? `On or before ${field.max}` : `At most ${unit(field.max)}`;
     case 'option': return 'Choose one of the listed options';
     case 'decimals': return `At most ${currencyScale(field.currency)} decimals`;
     case 'not_submittable': return `${label} is shown only`;
+    case 'file_unknown': case 'file_not_pending': return `Upload the file for ${label} again`;
+    case 'file_size': return `A file in ${label} is too large`;
+    case 'file_type': return `A file in ${label} is not an accepted type`;
+    case 'file_total': return 'The files of this task are too large together';
     default: return `${label} is not valid`;
   }
 }
@@ -460,7 +500,11 @@ export function submittedValues(
   const out: Record<string, unknown> = {};
   for (const field of schema.fields ?? []) {
     if (!isInput(field) || !isVisible(field.visible_when, scope)) continue;
-    if (Object.prototype.hasOwnProperty.call(values, field.id) && values[field.id] !== undefined) out[field.id] = values[field.id];
+    if (!Object.prototype.hasOwnProperty.call(values, field.id) || values[field.id] === undefined) continue;
+    // A file field posts the ids of new uploads only; references already in the process stay as they are.
+    if (field.type === 'file' && !(field.multiple ? Array.isArray(values[field.id]) && (values[field.id] as unknown[]).every(isFileId)
+      : isFileId(values[field.id]))) continue;
+    out[field.id] = values[field.id];
   }
   return out;
 }

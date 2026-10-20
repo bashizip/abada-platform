@@ -53,7 +53,7 @@ const PALETTE: { group: string; items: PaletteItem[] }[] = [
   ] },
   { group: 'Content', items: [
     { type: 'display', label: 'Show variable', glyph: '⎘' }, { type: 'markdown', label: 'Help text', glyph: 'M↓' },
-    { type: 'file', label: 'File', glyph: '⇪', disabled: 'File upload arrives in a later release' },
+    { type: 'file', label: 'File', glyph: '⇪' },
   ] },
 ];
 

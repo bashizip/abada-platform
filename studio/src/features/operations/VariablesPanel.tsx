@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import type { ActivityHistoryDTO } from '@/api/engine';
 import { JsonViewer } from '@/components/json/JsonViewer';
+import { FileAccessContext } from '@/components/json/fileAccess';
 import { useVariableChanges } from '@/hooks/useVariableChanges';
 import { unwrapVariable } from '@/lib/run/instanceFormat';
 
@@ -24,7 +25,10 @@ export const VariablesPanel: React.FC<{
   resetKey?: string;
   height?: number;
   className?: string;
-}> = ({ variables, visibleFacts, lag = 0, onJumpToNow, resetKey, height, className = '' }) => {
+  /** The instance's project: file references download from it. */
+  projectId?: string;
+}> = ({ variables, visibleFacts, lag = 0, onJumpToNow, resetKey, height, className = '', projectId }) => {
+  const fileAccess = useMemo(() => (projectId ? { projectId } : null), [projectId]);
   const plain = useMemo(
     () => (variables ? (unwrapVariable(variables) as Record<string, unknown>) : null),
     [variables],
@@ -46,9 +50,11 @@ export const VariablesPanel: React.FC<{
   // The drawers give their body a definite height; the viewer fills it and windows its rows.
   return (
     <div className={`flex h-full min-h-[240px] flex-col ${className}`}>
-      <JsonViewer key={resetKey} data={plain} loading={variables === null} label="variables" height={height}
-        defaultDepth={topLevel > OPEN_FIRST_LEVEL_UP_TO ? 0 : 1}
-        changedPaths={changes.changed} changeKey={changes.key} notice={notice} />
+      <FileAccessContext.Provider value={fileAccess}>
+        <JsonViewer key={resetKey} data={plain} loading={variables === null} label="variables" height={height}
+          defaultDepth={topLevel > OPEN_FIRST_LEVEL_UP_TO ? 0 : 1}
+          changedPaths={changes.changed} changeKey={changes.key} notice={notice} />
+      </FileAccessContext.Provider>
     </div>
   );
 };

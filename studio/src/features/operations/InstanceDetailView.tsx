@@ -194,7 +194,7 @@ export const InstanceDetailView: React.FC<InstanceDetailViewProps> = ({
               ))}
               {drawerTab === 'variables' && (
                 <VariablesPanel variables={data.variables} visibleFacts={playback.frame?.history} lag={playback.lag}
-                  onJumpToNow={playback.jumpToNow} resetKey={instanceId} />
+                  onJumpToNow={playback.jumpToNow} resetKey={instanceId} projectId={projectId} />
               )}
               {drawerTab === 'lineage' && <LineagePanel projectId={projectId} instanceId={instanceId} onOpenInstance={onOpenInstance} embedded />}
               {drawerTab === 'versions' && (
