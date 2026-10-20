@@ -52,7 +52,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
   <text x="72" y="248" font-family="${SANS}" font-size="70" font-weight="700" letter-spacing="-2" fill="${T1}">AI in your critical processes.</text>
   <text x="72" y="330" font-family="${SANS}" font-size="70" font-weight="700" letter-spacing="-2" fill="${SIGNAL}">On infrastructure you control.</text>
 
-  <text x="72" y="398" font-family="${SANS}" font-size="25" fill="${T2}">Self-hosted, with PostgreSQL as the only database, your identity provider</text>
+  <text x="72" y="398" font-family="${SANS}" font-size="25" fill="${T2}">Self-hosted on PostgreSQL and RustFS, with your identity provider</text>
   <text x="72" y="432" font-family="${SANS}" font-size="25" fill="${T2}">and the model endpoint you choose. The engine checks every AI answer.</text>
 
   <line x1="72" y1="516" x2="1128" y2="516" stroke="#ffffff" stroke-opacity="0.08"/>

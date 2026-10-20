@@ -14,7 +14,7 @@ the one-line install command and a link to the repo.
 - What PostgreSQL keeps as evidence for each attempt.
 - Audience: AI engineers, architects. Channels: HN, r/programming, LinkedIn.
 
-### 2. Coming from Camunda 7: a self-hosted, PostgreSQL-only path with governed AI
+### 2. Coming from Camunda 7: a self-hosted path (PostgreSQL, plus RustFS for task files from 1.2) with governed AI
 - Context for Camunda 7 Community Edition users planning a move **[verify current Camunda 7 CE status and dates before publishing]**.
 - What imports today (Camunda 7 profile, `camunda:topic`, `camunda:class` allow-list, `formKey`) and what is rejected (subprocesses, multi-instance, …) — straight from `docs/reference/bpmn-support.md`. Honesty here builds trust.
 - Walkthrough: import `examples/bpmn/camunda-7-assignment.bpmn`, run it, add an agent step.
@@ -41,7 +41,7 @@ the one-line install command and a link to the repo.
 - Audience: AI engineers, architects. Channels: HN (launch week), LinkedIn, r/MachineLearning-adjacent communities.
 
 ### Later topics
-- "PostgreSQL as the only database for a workflow engine: outbox, leases and SKIP LOCKED" **[verify locking approach]**
+- "PostgreSQL as the only state store for a workflow engine (files go to RustFS): outbox, leases and SKIP LOCKED" **[verify locking approach]**
 - "What our release gates check before every RC" (evidence over claims)
 - Use-case posts: KYC onboarding, refund agent, support triage (from `examples/apl/`)
 

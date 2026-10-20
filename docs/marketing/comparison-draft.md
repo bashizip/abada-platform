@@ -11,7 +11,7 @@ factual and generous: say where each alternative is the better choice.
 | Engine-enforced AI output contract (schema, confidence, routes) | Yes | No | **[verify]** | No (in your code) | **[verify]** | In your code |
 | Human approval of agent tool calls with exact arguments | Yes | No | **[verify]** | In your code | **[verify]** | Interrupts, in your code |
 | Human tasks and forms | Yes | Yes | Yes | No (build it) | Limited **[verify]** | No |
-| Storage | PostgreSQL only | Relational DBs | Zeebe + Elasticsearch/OpenSearch **[verify]** | Cassandra / MySQL / PostgreSQL | PostgreSQL / SQLite | Checkpointer of your choice |
+| Storage | PostgreSQL + RustFS (task files), both self-hosted, from 1.2 | Relational DBs | Zeebe + Elasticsearch/OpenSearch **[verify]** | Cassandra / MySQL / PostgreSQL | PostgreSQL / SQLite | Checkpointer of your choice |
 | Self-hosted | Yes, all features | Yes | Licence terms apply **[verify]** | Yes | Fair-code licence **[verify]** | Library |
 | Licence | AGPL-3.0 (SDK Apache-2.0) | Apache-2.0 | **[verify]** | MIT | Sustainable Use **[verify]** | MIT |
 
