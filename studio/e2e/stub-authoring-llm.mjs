@@ -9,6 +9,7 @@
  *   CREATE "invoice …"                       → an invoice approval process
  *   REFINE "… manager …"                     → a condition on the amount and a manager approval
  *   REFINE "… supplier …"                    → a supplier notification before the rejected end
+ *   REFINE "… two-step …"                    → the finance review renamed (an applied process refined again)
  *   anything else                            → an answer the engine rejects (to show the failed state)
  *
  * Usage: node e2e/stub-authoring-llm.mjs [port]   (default 5612)
@@ -73,12 +74,18 @@ const supplierPatch = {
   ],
 };
 
+const renamePatch = {
+  summary: 'Renamed the finance review.',
+  operations: [{ op: 'updateNode', id: 'review', set: { description: 'Finance review (two-step)' } }],
+};
+
 function answer(messages) {
   const user = messages.filter((m) => m.role === 'user').map((m) => String(m.content)).join('\n');
   if (user.startsWith('Request:')) {
     const request = user.slice('Request:'.length).split('\n\n')[0].toLowerCase();
     if (request.includes('manager')) return JSON.stringify(managerPatch);
     if (request.includes('supplier')) return JSON.stringify(supplierPatch);
+    if (request.includes('two-step')) return JSON.stringify(renamePatch);
     return '{"operations": [{"op": "removeNode", "id": "no_such_node"}]}';
   }
   // CREATE (or its repair): the engine states the key and name the process must use.

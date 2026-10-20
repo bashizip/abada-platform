@@ -141,6 +141,26 @@ test('prompt → two refinements → apply: the canvas holds the final draft, as
   await expect(canvasNodes(page)).toHaveCount(0);
   await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(canvasNodes(page)).toHaveCount(finalIds.length);
+
+  // Refining the applied process: Apply tidies the canvas, and that tidy is part of the one undo step.
+  await page.locator('#workflow-prompt').fill('Make the finance review two-step');
+  await page.getByRole('button', { name: 'Draft', exact: true }).click();
+  await waitForTurns(page, 1);
+  await workspace(page).getByRole('tab', { name: 'YAML' }).click();
+  await expect(workspace(page).getByLabel('APL source')).toContainText('Finance review (two-step)');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/s12-workspace-yaml.png` });
+  await workspace(page).getByRole('button', { name: 'Apply to Studio' }).click();
+  await expect(workspace(page)).toBeHidden();
+  const aplSource = page.getByLabel('APL YAML source');
+  await page.getByRole('group', { name: 'Designer view' }).getByRole('button', { name: 'APL YAML' }).click();
+  await expect(aplSource).toHaveValue(/Finance review \(two-step\)/);
+  await page.getByRole('group', { name: 'Designer view' }).getByRole('button', { name: 'Diagram' }).click();
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/s12-applied-tidied.png` });
+  await page.locator('.react-flow__pane').first().click({ position: { x: 20, y: 400 } });
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.getByRole('group', { name: 'Designer view' }).getByRole('button', { name: 'APL YAML' }).click();
+  await expect(aplSource).not.toHaveValue(/two-step/);
+  await expect(aplSource).toHaveValue(/notify_supplier/);
 });
 
 test('a failed refinement leaves the draft as it was, and Discard leaves the canvas untouched', async ({ page }) => {
