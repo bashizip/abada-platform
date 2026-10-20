@@ -59,7 +59,7 @@ export const ViewNav: React.FC<ViewNavProps> = ({ currentView, onViewChange, sho
           data-cuelume-select
           aria-current={active === tab.id ? 'page' : undefined}
           onClick={() => onViewChange?.(tab.id)}
-          className={`relative z-10 text-xs px-4 py-1.5 rounded-lg transition-colors duration-[var(--duration-base)] font-medium whitespace-nowrap border ${
+          className={`relative z-10 text-xs px-2.5 xl:px-4 py-1.5 rounded-lg transition-colors duration-[var(--duration-base)] font-medium whitespace-nowrap border ${
             tab.id === 'administration' ? 'ml-1' : ''} ${
             active === tab.id
               // The sliding highlight paints the background; before it is measured the tab paints its own.

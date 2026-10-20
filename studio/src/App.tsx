@@ -136,6 +136,8 @@ export default function App() {
   const [nlBarOpenSignal, setNlBarOpenSignal] = useState(0);
   /** Bumped when a draft lands on the canvas, so its nodes play the landing once. */
   const [landingUntil, setLandingUntil] = useState(0);
+  /** An applied draft is tidied once on the canvas; that layout is part of the Apply, not an undo step of its own. */
+  const [tidyRequest, setTidyRequest] = useState<{ workflowId: string; seq: number } | null>(null);
 
   const displayedWorkflow = selectedLiveInstance && liveWorkflow ? liveWorkflow : currentWorkflow;
   const isLiveReadOnly = !!selectedLiveInstance;
@@ -242,12 +244,18 @@ export default function App() {
     setActiveWorkflowId(activeId);
     setSelectedNodeId(appliedWorkflow.nodes[0]?.id || null);
     setDesignerMode('diagram');
+    return activeId;
   };
 
   const handleApplyDraft = (draft: WorkflowFile) => {
     if (!authoringWorkspace) return;
-    handleApplyApl(draft, { replaceWorkflowId: authoringWorkspace.replaceWorkflowId,
-      asNew: authoringWorkspace.target === 'new' });
+    // A new draft gets its document id when it is first saved, possibly while the workspace was
+    // open: the process to replace is then the one still open on the canvas.
+    const opened = authoringWorkspace.replaceWorkflowId;
+    const replaceWorkflowId = authoringWorkspace.target === 'replace'
+      ? (workflows.some((item) => item.id === opened) ? opened : activeWorkflowId) : undefined;
+    const appliedId = handleApplyApl(draft, { replaceWorkflowId, asNew: authoringWorkspace.target === 'new' });
+    setTidyRequest({ workflowId: appliedId, seq: Date.now() });
     closeAuthoringWorkspace();
     playCue('success', { emphasis: 'subtle' });
     setLandingUntil(Date.now() + 600);
@@ -259,11 +267,30 @@ export default function App() {
       message: 'AI draft applied to the canvas after review. Not deployed.' }]);
   };
 
+  /** Diagram / APL YAML: drawn in the canvas toolbar row or the YAML editor header, never over them. */
+  const designerModeSwitch = (
+    <div role="group" aria-label="Designer view"
+      className="flex items-center gap-1 rounded-xl border border-hairline bg-mocha/95 p-1 shadow-warm-md">
+      <button type="button" onClick={() => setDesignerMode('diagram')} aria-pressed={designerMode === 'diagram'}
+        className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'diagram' ? 'bg-saffron text-charcoal' : 'text-sand hover:text-linen'}`}>
+        Diagram
+      </button>
+      <button type="button" onClick={() => setDesignerMode('apl')} aria-pressed={designerMode === 'apl'}
+        className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'apl' ? 'bg-mineral-teal text-charcoal' : 'text-sand hover:text-linen'}`}>
+        APL YAML
+      </button>
+    </div>
+  );
+
   const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
-    if (!currentWorkflow.layoutPending) playCue('navigate', { emphasis: 'subtle' });
-    // The automatic first layout of a newly opened process is not an undo step.
+    // Only the layout that answers the request, right after the Apply, is folded into it.
+    const tidyingDraft = tidyRequest?.workflowId === currentWorkflow.id && Date.now() - tidyRequest.seq < 5000;
+    if (tidyRequest) setTidyRequest(null);
+    if (!currentWorkflow.layoutPending && !tidyingDraft) playCue('navigate', { emphasis: 'subtle' });
+    // The automatic first layout of a newly opened process, and the tidy of an applied draft, are
+    // not undo steps: undoing the Apply returns to the process as it was.
     updateActiveWorkflow((wf) => ({ ...wf, nodes: layoutedNodes, layoutPending: false }),
-      currentWorkflow.layoutPending ? null : undefined);
+      currentWorkflow.layoutPending || tidyingDraft ? null : undefined);
   };
 
   const handleUpdateNode = (updatedNode: WorkflowNode) => {
@@ -639,16 +666,6 @@ export default function App() {
         )}
         {currentView === 'designer' && (
           <>
-            {!isLiveReadOnly && <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 rounded-xl border border-[#3A322E] bg-[#25201D]/95 p-1 shadow-warm-md">
-              <button onClick={() => setDesignerMode('diagram')}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'diagram' ? 'bg-[#F4A261] text-[#1A1614]' : 'text-[#A89F91] hover:text-[#EAE3D9]'}`}>
-                Diagram
-              </button>
-              <button onClick={() => setDesignerMode('apl')}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${designerMode === 'apl' ? 'bg-[#2A9D8F] text-[#101816]' : 'text-[#A89F91] hover:text-[#EAE3D9]'}`}>
-                APL YAML
-              </button>
-            </div>}
 
             {isLiveReadOnly && selectedLiveInstance && (
               <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-xl border border-[#2A9D8F]/40 bg-[#15201E]/95 px-3 py-2 shadow-warm-md">
@@ -771,6 +788,9 @@ export default function App() {
                     canUndo={canUndo}
                     canRedo={canRedo}
                     landing={landingUntil > Date.now()}
+                    modeSwitch={designerModeSwitch}
+                    layoutRequest={tidyRequest?.workflowId === displayedWorkflow.id
+                      ? { mode: 'tidy', seq: tidyRequest.seq } : undefined}
                   />
 
                   <SidePanel id="designer-inspector" side="right" label="Properties" bounds={INSPECTOR_PANEL}>
@@ -800,6 +820,7 @@ export default function App() {
               <AplEditor
                 key={currentWorkflow.id}
                 workflow={currentWorkflow}
+                modeSwitch={designerModeSwitch}
                 onApply={(workflow) => handleApplyApl(workflow)}
               />
             )}

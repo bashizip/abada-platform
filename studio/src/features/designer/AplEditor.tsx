@@ -9,6 +9,8 @@ import { WorkflowFile } from '@/types';
 interface AplEditorProps {
   workflow: WorkflowFile;
   onApply: (workflow: WorkflowFile) => void;
+  /** The Diagram / APL YAML switch, shown in the header. */
+  modeSwitch?: React.ReactNode;
 }
 
 type EngineCheck =
@@ -81,7 +83,7 @@ const HighlightedYaml: React.FC<{
   </pre>
 );
 
-export const AplEditor: React.FC<AplEditorProps> = ({ workflow, onApply }) => {
+export const AplEditor: React.FC<AplEditorProps> = ({ workflow, onApply, modeSwitch }) => {
   const canonicalSource = useMemo(() => stringifyAPLYaml(workflowToAPL(workflow)), [workflow]);
   const [source, setSource] = useState(canonicalSource);
   const [error, setError] = useState<string | null>(null);
@@ -186,8 +188,9 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, onApply }) => {
   return (
     <section className="flex-1 min-w-0 h-full bg-charcoal flex flex-col" aria-label="APL YAML editor">
       <div className="h-12 border-b border-hairline px-4 flex items-center justify-between bg-mocha-strip">
-        <div className="flex items-center gap-2">
-          <Code2 className="w-4 h-4 text-saffron" />
+        <div className="flex min-w-0 items-center gap-2">
+          {modeSwitch}
+          <Code2 className="w-4 h-4 shrink-0 text-saffron" />
           <span className="text-xs font-semibold">{workflow.name}</span>
           <span className="text-[10px] font-mono text-mineral-teal bg-mineral-teal/10 border border-mineral-teal/30 px-1.5 py-0.5 rounded">abada.io/v1</span>
           {dirty && <span className="text-[10px] text-saffron">Modified</span>}
