@@ -54,6 +54,13 @@
             <version>0.14.0</version>
         </dependency>
 
+        <!-- Task-form patterns run in linear time (RE2); the same version CEL resolves. -->
+        <dependency>
+            <groupId>com.google.re2j</groupId>
+            <artifactId>re2j</artifactId>
+            <version>1.8</version>
+        </dependency>
+
         <!-- Engine-side validation of agent output contracts (JSON Schema 2020-12). -->
         <dependency>
             <groupId>com.networknt</groupId>

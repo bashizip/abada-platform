@@ -18,6 +18,7 @@ const PRETTY_PRINT_ALLOWED: Record<string, string> = {
   '/src/features/run/DryRunPanel.tsx': 'fills the editable payload textarea',
   '/src/components/inspector/AgentEditor.tsx': 'fills the editable output-schema textarea',
   '/src/components/FormPicker.tsx': 'saves a form resource',
+  '/src/components/FormQuickEdit.tsx': 'saves a form resource',
   '/src/components/ProjectExplorer.tsx': 'saves a form resource',
   '/src/lib/starter/leadTriage.ts': 'writes the starter form resource',
   '/src/features/operations/instance/useInstanceData.ts': 'exports the execution trace as a file',

@@ -78,13 +78,37 @@ should use external tasks and an idempotent worker operation.
   to a FORM project resource by bare slug (e.g. `loan-approval` →
   `forms/loan-approval.json`). The key is copied verbatim onto the created task
   and exposed as `TaskDetailsDto.formKey` alongside the owning `projectId`.
-- Forms are live project resources: task clients resolve the current revision
-  at render time, so editing a form affects tasks already in flight.
-- `GET /v1/projects/{projectId}/forms` lists FORM resources (id, name, kind,
+- Since 1.2 (V41) a form is pinned when the definition is deployed: the
+  resolved FORM resource is validated (an invalid one fails the deployment
+  with `ABADA-FORM-001`) and its schema, revision and sha256 are stored with
+  the version. Editing a form affects only versions deployed after the edit;
+  a rollback redeploys and pins the current form.
+- Completing or deciding a task with a pinned form validates the submitted
+  values against it after the claim and outcome checks and before any
+  variable is written, in the same transaction. Any broken rule refuses the
+  whole command: HTTP 422 `FORM_INVALID` with `details.violations` listing
+  `{ field, rule }` (rules: `required`, `type`, `format`, `pattern`,
+  `minLength`, `maxLength`, `min`, `max`, `option`, `decimals`,
+  `not_submittable`). Values are never echoed or logged. The task stays open;
+  no history, outbox event or variable is written.
+- `visible_when` (portable CEL subset, APL specification §2.9) is evaluated
+  over the process variables overlaid with the submitted values. A hidden
+  field is never required and a value submitted for it is discarded; the
+  `TASK_COMPLETED` history entry names the form, its revision and the
+  discarded field ids. Variables the form does not declare pass through; a
+  required field may be satisfied by the variable's current value.
+- Versions deployed before V41, and form keys that resolved to no FORM
+  resource at deploy, have no pinned form: completion is not checked and
+  clients render the current revision, as in 1.1.
+- `GET /v1/projects/{projectId}/tasks/{taskId}/form` returns
+  `{ formKey, pinned, revision, schema }` to the task's candidates and
+  assignee: the pinned form, or the current one with `pinned: false`.
+  `GET /v1/projects/{projectId}/forms` lists FORM resources (id, name, kind,
   revision, updatedAt); `GET /v1/projects/{projectId}/forms/{formKey}`
-  resolves a key to its decoded schema JSON. Both require project visibility.
+  resolves a key to its schema JSON. These require project visibility.
 - Deployment never fails on an unresolvable form key; it is logged as a
-  warning so authors can add the form after publishing the process.
+  warning so authors can add the form after publishing the process (that
+  version then has no pinned form).
 - `camunda:formKey` in BPMN maps to the canonical `formKey` (see
   [bpmn-support.md](bpmn-support.md)).
 

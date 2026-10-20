@@ -581,10 +581,9 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
       }
 
       return (
-        <div className="fixed inset-0 z-40 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-7xl h-[90vh]">
             <FormEditor
               initialSchema={schema}
+              location={`forms/${preview.name}`}
               saving={busy}
               onClose={() => setPreview(null)}
               onSave={async (newSchema) => {
@@ -601,8 +600,6 @@ export const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                 }, 'Failed to save form');
               }}
             />
-          </div>
-        </div>
       );
     }
 

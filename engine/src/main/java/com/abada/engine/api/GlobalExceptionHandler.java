@@ -61,6 +61,15 @@ public class GlobalExceptionHandler {
                 request));
     }
 
+    /** The submitted values break the task's pinned form; nothing was committed. Values are never echoed. */
+    @ExceptionHandler(com.abada.engine.forms.FormSubmission.RejectedException.class)
+    public ResponseEntity<ErrorResponse> handleFormRejected(com.abada.engine.forms.FormSubmission.RejectedException ex,
+            HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(ApiErrors.response(
+                HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.FORM_INVALID, ex.getMessage(), request.getRequestURI(),
+                Map.of("form", ex.formKey(), "violations", ex.violations())));
+    }
+
     @ExceptionHandler(ProcessEngineException.class)
     public ResponseEntity<ErrorResponse> handleProcessEngineException(ProcessEngineException ex,
             HttpServletRequest request) {

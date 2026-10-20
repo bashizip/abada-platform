@@ -345,6 +345,55 @@ declares, and the engine checks the choice:
 
 ---
 
+### 2.9 Task forms
+
+A `human-input` node's `formKey` names a FORM project resource
+(`forms/<key>.json`). The form is part of the contract, and the engine
+enforces it, not only the browser:
+
+- **Pinned at deploy.** Deploying the definition resolves the key, validates
+  the form and stores its schema with that version
+  (`process_definitions.form_snapshots`). Editing the form later changes only
+  versions deployed after the edit; tasks already open keep their rules.
+  A rollback redeploys and pins the current form. A key that resolves to no
+  FORM resource is not an error (the task then has no engine-checked form).
+- **Checked on completion.** Completing or deciding the task validates the
+  submitted values against the pinned schema inside the completion
+  transaction. A broken rule refuses the whole command (HTTP 422,
+  `FORM_INVALID`, `details.violations: [{ field, rule }]`; values are never
+  echoed or logged). A field hidden by `visible_when` is never required and a
+  value submitted for it is discarded. Variables the form does not declare
+  pass through. A required field may be satisfied by the variable's current
+  value.
+- **Schema.** `fields` (the flat list; `id` is the variable written) and an
+  optional `layout` of `sections` → `rows` (1–4 fields, `span` 1–4, widths
+  add up to at most 4) and optional wizard `steps` (each section in exactly
+  one step, in order). Field types, rules and `visible_when` are listed in
+  [`apl-node-reference.md`](apl-node-reference.md#task-form-schema).
+- **`visible_when`** is a portable CEL subset (identifiers, literals, lists,
+  `== != < <= > >=`, `in`, `&& || !`, unary `-`, parentheses, `size(x)`)
+  that the Studio and the engine evaluate identically: a missing variable is
+  `null`, ordering anything but two numbers or two strings is `false`, and a
+  field is shown only when the result is `true`. Member access and other
+  functions are refused at deploy.
+- **Patterns** are RE2 (linear time) and must match the whole value; RE2
+  syntax a browser reads differently (`(?i)`, `(?P<…>)`, `\z`, `[[:alpha:]]`,
+  look-around, back-references) is refused at deploy.
+
+```json
+{
+  "title": "Supplier onboarding",
+  "fields": [
+    { "id": "vat_registered", "type": "boolean", "label": "Registered for VAT" },
+    { "id": "vat_id", "type": "string", "label": "VAT number", "required": true,
+      "pattern": "[A-Z]{2}[0-9A-Z]{8,12}", "visible_when": "vat_registered == true" },
+    { "id": "annual_spend", "type": "currency", "currency": "EUR", "label": "Expected annual spend", "min": 0 }
+  ],
+  "layout": { "sections": [ { "id": "company", "title": "Company",
+    "rows": [ ["vat_registered", { "field": "vat_id", "span": 2 }, "annual_spend"] ] } ] }
+}
+```
+
 ## 3. Node Types & Primitives Reference
 
 The current APL node vocabulary (Studio `lib/apl/types.ts`):
@@ -1222,6 +1271,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
+| `ABADA-FORM-001` | task form refused | a human node's `formKey` resolves to a FORM resource that is not valid JSON, uses an unknown or reserved (`file`) type, breaks a rule or layout constraint, has a non-portable `pattern` or a `visible_when` outside the portable subset (§2.9) |
 | `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, invalid `outcomes` (count, name, target, comment rule, or `outcomes` together with `next`), invalid agent `routes` (count, name, target, description, a `when` that is not valid CEL, `routes` together with `next`, or an `output_schema` that is not an object or declares `route`), an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;

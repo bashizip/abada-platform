@@ -413,7 +413,7 @@ new documents (Studio always writes `human-input`).
  | Property | Type | Required | What it does |
  | --- | --- | --- | --- |
  | `assignees` | string[] | yes | The candidate groups whose members may claim the task, e.g. `[risk-officers]`. Values are group names, not usernames. At least one is required. |
- | `formKey` | string | no | Form key for task-form rendering (BPMN `camunda:formKey`). Resolved by bare slug to a project FORM resource. `formId` is a deprecated alias. |
+ | `formKey` | string | no | The task form (BPMN `camunda:formKey`), resolved by bare slug to a project FORM resource. It is pinned when the process is deployed and the engine checks every completion against it; see [Task form schema](#task-form-schema). `formId` is a deprecated alias. |
  | `mode` | `serial` \| `parallel` | no | Authoring hint only. The engine does not enforce serial or parallel sign-off. |
  | `sla_hours` | number | no | Service level in hours (e.g. 24). When it passes with the task still open, the engine escalates the task in place: it stays open, `escalate_to` groups are added and `TASK_SLA_BREACHED` is emitted. `slaHours` is a deprecated alias. |
  | `escalate_to` | string[] | no | Groups added as candidates when the task misses `sla_hours`. Requires `sla_hours`. |
@@ -447,6 +447,43 @@ that the agent reads on its next attempt as `${review_comment}`:
     approve: { next: done }
     reject: { next: draft, comment: required }
 ```
+
+#### Task form schema
+
+A FORM resource is JSON: `title`, `fields` and an optional `layout`. A
+field's `id` is the process variable it writes. The engine pins the form at
+deploy (refusing an invalid one with `ABADA-FORM-001`) and checks each
+completion against it (APL specification §2.9); the Studio form designer
+writes the same JSON.
+
+| Type | Value submitted | Rules |
+| --- | --- | --- |
+| `string`, `textarea` | string | `minLength`, `maxLength`, `pattern` (RE2, whole value) |
+| `email`, `url` | string | built-in format (`url` needs `http://` or `https://`), `minLength`, `maxLength` |
+| `number` | number | `min`, `max` |
+| `currency` | number in the field's fixed `currency` (ISO 4217) | `min`, `max`, no more decimals than the currency allows (EUR 2, JPY 0) |
+| `select`, `radio` | one option value | must be one of `options` |
+| `multiselect`, `checkbox-group` | list of option values | each one of `options`, no repeats; `min`/`max` count selections |
+| `boolean` | `true` / `false` | `required` means it must be `true` |
+| `date` | `YYYY-MM-DD` | `min`, `max` (ISO dates) |
+| `datetime` | ISO-8601 instant with offset, e.g. `2026-11-27T09:00:00Z` | `min`, `max` |
+| `display` | none: shows the process variable named in `variable` | cannot be submitted or required |
+| `markdown` | none: static help in `text` (bold, italics, lists, links; no HTML) | cannot be submitted or required |
+| `file` | reserved for file upload | refused at deploy until it is released |
+
+Every input field also takes `label`, `required`, `help`, `placeholder`,
+`defaultValue` and `visible_when` (portable CEL subset over form values and
+process variables). `options` entries are strings or `{ "value", "label" }`;
+the value is what is stored.
+
+`layout.sections[]` have an `id`, optional `title`, `description` and
+`collapsible`, and `rows`: each row is a list of 1–4 cells, a cell being a
+field id or `{ "field", "span" }` on a 4-column grid (widths add up to at
+most 4). Every field is placed exactly once. Optional `layout.steps[]`
+(`title`, `sections`) turn the form into a wizard; each section belongs to
+exactly one step, in order. A form without `layout` lays itself out: one
+column for a short form, two or three for a long one on a wide screen, one
+on a phone.
 
 ---
 
