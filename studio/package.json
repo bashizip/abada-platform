@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "preview": "vite preview",
     "generate:apl-types": "tsx --tsconfig tsconfig.app.json scripts/generate-apl-types.mts",
     "verify:apl-types": "tsx --tsconfig tsconfig.app.json scripts/generate-apl-types.mts --check",
@@ -31,6 +32,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

@@ -747,6 +747,31 @@ opens on submit, refinement updates the preview, discard leaves the
 workflow unchanged, apply is a single undo step; Playwright with the stub LLM:
 prompt → two refinements → apply → canvas matches the final draft.
 
+**As built.** Reviewed from a clickable mock. Today's path from the bar was
+the APL editor's candidate review, not `AIDiffModal` (that is the Insight
+proposal review); the editor's candidate review is gone and the diff modal's
+read-only diagram became `DraftDiagram`, shared by both. The bar's mode
+(pinned, collapsed, hidden) is kept per user in this browser
+(`abada.nlBar.<sub>`): the engine has no store for user preferences.
+`⌘K`/`Ctrl+K`, the canvas toolbar and *Use prompt* open it. The workspace
+(`STUDIO/features/designer/authoring/`) keeps the conversation in the Studio:
+the authoring service is stateless and answers whole (no streaming), so the
+diagram updates once per answer, the model sees the current draft (with the
+user's edits) and the latest prompt but not the thread, and *Cancel* only
+stops waiting (the engine finishes its call). Direct edits use the
+Properties inspector; consecutive edits of one step are one turn. *Apply*
+replaces the process with one undo step (`replaceWorkflow`), or on an empty
+canvas with no saved process makes it the first draft with one undo step back
+to empty; the applied nodes land with a 400 ms fade and glow. The draft lives
+in the page; leaving with one asks first. Drafting needs Owner or Maintainer
+in the project; global administration does not count. No engine change.
+Playwright (`studio/e2e`, `npm run test:e2e`, not in CI yet): a deterministic
+OpenAI-compatible stub behind a scratch engine (H2, OIDC against the dev
+realm), prompt → two refinements → apply → canvas node ids equal the final
+draft's, one undo and redo; a failed refinement and discard; the collapsed
+bar across a reload and `⌘K`. Checked on the dev stack with its real model:
+one refinement, diff view, discard left the process unchanged.
+
 ---
 
 ## S13 — Documentation: what is new and which version

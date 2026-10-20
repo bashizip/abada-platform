@@ -14,8 +14,12 @@ export interface AplGenerationCandidate {
 }
 
 export class AuthoringAPI {
+  /**
+   * One model call in the authoring service. The answer comes whole (no streaming); aborting the
+   * signal only stops waiting for it, the engine still finishes the call it started.
+   */
   static async generate(projectId: string, prompt: string, mode: 'new' | 'refine',
-    baseAplSource?: string): Promise<AplGenerationCandidate> {
+    baseAplSource?: string, signal?: AbortSignal): Promise<AplGenerationCandidate> {
     const response = await authenticatedFetch(`${config.apiUrl}/v1/projects/${projectId}/authoring/generate`, {
       method: 'POST',
       headers: {
@@ -26,6 +30,7 @@ export class AuthoringAPI {
         mode: mode === 'new' ? 'CREATE' : 'REFINE',
         baseAplSource: mode === 'refine' ? baseAplSource : undefined,
       }),
+      signal,
     });
     if (!response.ok) throw await apiError(response);
     return response.json();

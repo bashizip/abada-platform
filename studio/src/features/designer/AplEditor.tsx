@@ -1,6 +1,5 @@
-import type { NodeChange } from '@/lib/apl/nodeChanges';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Code2, Loader2, Minus, Plus, RotateCcw, Type, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Code2, Loader2, Minus, Plus, RotateCcw, Type } from 'lucide-react';
 import { AplAPI, type AplValidationIssue, type AplValidationResult } from '@/api/apl';
 import { issueLine, sortIssues } from '@/lib/apl/issues';
 import type { APLDocument } from '@/lib/apl/types';
@@ -9,18 +8,7 @@ import { WorkflowFile } from '@/types';
 
 interface AplEditorProps {
   workflow: WorkflowFile;
-  initialSource?: string;
-  candidate?: {
-    provider: 'LLM';
-    model?: string;
-    attempts: number;
-    warnings: string[];
-    /** For a refinement: what the model says it changed, and the nodes it added, changed or removed. */
-    summary?: string;
-    changes?: NodeChange[];
-  };
   onApply: (workflow: WorkflowFile) => void;
-  onDiscard?: () => void;
 }
 
 type EngineCheck =
@@ -93,9 +81,8 @@ const HighlightedYaml: React.FC<{
   </pre>
 );
 
-export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, candidate, onApply, onDiscard }) => {
-  const canonicalSource = useMemo(() => initialSource || stringifyAPLYaml(workflowToAPL(workflow)),
-    [initialSource, workflow]);
+export const AplEditor: React.FC<AplEditorProps> = ({ workflow, onApply }) => {
+  const canonicalSource = useMemo(() => stringifyAPLYaml(workflowToAPL(workflow)), [workflow]);
   const [source, setSource] = useState(canonicalSource);
   const [error, setError] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
@@ -203,11 +190,6 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
           <Code2 className="w-4 h-4 text-saffron" />
           <span className="text-xs font-semibold">{workflow.name}</span>
           <span className="text-[10px] font-mono text-mineral-teal bg-mineral-teal/10 border border-mineral-teal/30 px-1.5 py-0.5 rounded">abada.io/v1</span>
-          {candidate && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border text-amethyst border-amethyst/30 bg-amethyst/10">
-              {`${candidate.model || 'LLM'} · ${candidate.attempts} attempt(s)`}
-            </span>
-          )}
           {dirty && <span className="text-[10px] text-saffron">Modified</span>}
         </div>
         <div className="flex items-center gap-2">
@@ -239,12 +221,6 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
               <Plus className="w-3 h-3" />
             </button>
           </div>
-          {onDiscard && (
-            <button onClick={onDiscard}
-              className="px-2.5 py-1.5 rounded-lg border border-hairline text-[11px] text-sand hover:text-desert-rose flex items-center gap-1.5">
-              <X className="w-3 h-3" /> Discard
-            </button>
-          )}
           <button onClick={() => { setSource(canonicalSource); setError(null); }}
             className="px-2.5 py-1.5 rounded-lg border border-hairline text-[11px] text-sand hover:text-linen flex items-center gap-1.5">
             <RotateCcw className="w-3 h-3" /> Reset
@@ -329,36 +305,7 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
         </ul>
       )}
 
-      {candidate?.warnings.length ? (
-        <div role="status" aria-label="Generation warnings"
-          className="border-t border-saffron/40 bg-saffron/10 px-4 py-2 text-[11px] text-saffron">
-          <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle className="w-3.5 h-3.5" />Check this candidate against your request before applying
-          </p>
-          <ul className="mt-1 list-disc pl-5 text-linen">
-            {candidate.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
-          </ul>
-        </div>
-      ) : null}
 
-      {candidate?.summary && (
-        <div aria-label="Proposed change" className="border-t border-hairline bg-mocha-strip px-4 py-2 text-[11px] text-linen">
-          <p>{candidate.summary}</p>
-          {candidate.changes && (
-            <ul className="mt-1 flex flex-wrap gap-1.5">
-              {candidate.changes.length === 0 && <li className="text-sand">No node changed.</li>}
-              {candidate.changes.map((change) => (
-                <li key={`${change.kind}-${change.id}`}
-                  className={`rounded border px-1.5 py-0.5 font-mono ${change.kind === 'added'
-                    ? 'border-mineral-teal/40 text-mineral-teal' : change.kind === 'removed'
-                      ? 'border-desert-rose/40 text-desert-rose' : 'border-saffron/40 text-saffron'}`}>
-                  {change.kind} {change.id}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
       <div className="h-10 px-4 border-t border-hairline flex items-center gap-3 text-[11px]">
         {error ? <span className="text-desert-rose flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{error}</span>
           : check.state === 'checking' ? <span className="text-sand flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Validating with the engine…</span>

@@ -322,3 +322,49 @@
 .react-flow__edge:hover .react-flow__edge-path {
   stroke-width: 3px !important;
 }
+
+/*
+ * AI draft workspace (M5 S12): successive drafts animate. Nodes that stay glide to their new
+ * place, added ones fade in, removed ones fade out; edges step back while nodes move, then
+ * return at their new route. Reduced motion keeps the fades and drops the glide.
+ */
+.abada-draft-glide .react-flow__node {
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+.abada-draft-diagram .react-flow__edges {
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.abada-draft-moving .react-flow__edges {
+  opacity: 0.15;
+}
+.abada-draft-enter {
+  animation: abadaDraftEnter var(--duration-base) var(--ease-standard) both;
+}
+.abada-draft-exit {
+  animation: abadaDraftExit var(--duration-base) var(--ease-standard) both;
+  pointer-events: none;
+}
+@keyframes abadaDraftEnter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes abadaDraftExit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/*
+ * A draft applied to the canvas (M5 S12): its nodes land once, a fade with a short amethyst glow.
+ * Opacity and filter only: React Flow places nodes with transform.
+ */
+.abada-land-node {
+  animation: abadaLandNode 400ms var(--ease-standard) both;
+}
+@keyframes abadaLandNode {
+  0% { opacity: 0; filter: drop-shadow(0 0 0 transparent); }
+  45% { opacity: 1; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--color-amethyst) 70%, transparent)); }
+  100% { opacity: 1; filter: drop-shadow(0 0 0 transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .abada-land-node { animation: abadaArriveFade var(--duration-base) linear both; }
+}

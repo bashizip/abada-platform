@@ -30,10 +30,12 @@ import {
   Redo2,
   Trash2,
   Undo2,
+  Sparkles,
   Unlock,
   Wand2,
   Workflow,
 } from 'lucide-react';
+import { NL_BAR_SHORTCUT_LABEL } from '@/lib/authoring/nlBarPrefs';
 import '@xyflow/react/dist/style.css';
 import { canvasNodeTypes, outcomeKindsBySource, toCanvasNode } from './nodes';
 import { AbadaEdge, type AbadaEdgeData } from './EdgeRenderer';
@@ -83,6 +85,8 @@ interface CanvasProps {
   onAddNode: (kind: NodeKind, at?: { x: number; y: number }) => void;
   onOpenAplEditor: () => void;
   onFocusPrompt: () => void;
+  /** The nodes of a draft just applied from the AI workspace play their landing once. */
+  landing?: boolean;
   onToast?: (message: string) => void;
   processKey?: string;
   isSimulating: boolean;
@@ -164,6 +168,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
   onAddNode,
   onOpenAplEditor,
   onFocusPrompt,
+  landing = false,
   onToast,
   processKey,
   isSimulating,
@@ -238,7 +243,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
     layout.displayNodes.map((node) => {
       const visits = path?.visits[node.id];
       const now = path?.now[node.id];
-      return toCanvasNode(node, {
+      const canvasNode = toCanvasNode(node, {
         status: executionStatuses[node.id] || 'idle',
         isActiveSim: activeSimulationNodeId === node.id,
         // On an instance path only a running token glows; waiting and incidents have their own ring.
@@ -263,8 +268,10 @@ const CanvasInner: React.FC<CanvasProps> = ({
         } : {}),
         selected: selectedNodeId === node.id,
       });
+      // A draft just applied from the AI workspace lands once (M5 S12).
+      return landing ? { ...canvasNode, className: 'abada-land-node' } : canvasNode;
     }),
-  [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
+  [landing, layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
     loops, issueCounts, path, showFullDiagram, arrivals, incidentPulses, retryPhases, highlightNodeId]);
 
   const reactFlowEdges: Edge<AbadaEdgeData>[] = useMemo(() =>
@@ -492,6 +499,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
                 onLayout={layout.runLayout}
                 showLayout={rawNodes.length > 0}
                 history={!readOnly && onUndo && onRedo ? { onUndo, onRedo, canUndo, canRedo } : undefined}
+                onDraft={readOnly ? undefined : onFocusPrompt}
               />
             )}
             {path && (
@@ -615,7 +623,9 @@ const LayoutToolbar: React.FC<{
   onLayout: (mode: LayoutMode) => void;
   showLayout: boolean;
   history?: { onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean };
-}> = ({ mode, busy, onLayout, showLayout, history }) => (
+  /** Opens the natural-language bar, whatever its display mode (M5 S12). */
+  onDraft?: () => void;
+}> = ({ mode, busy, onLayout, showLayout, history, onDraft }) => (
   <Panel position="top-left">
     <div
       role="group"
@@ -631,6 +641,16 @@ const LayoutToolbar: React.FC<{
           <button type="button" onClick={history.onRedo} disabled={!history.canRedo} title={REDO_HINT} aria-label="Redo"
             className="flex items-center rounded-lg px-1.5 py-1 text-sand transition-colors hover:bg-mocha-hover hover:text-linen disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-sand">
             <Redo2 className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          {showLayout && <span className="mx-1 h-4 w-px bg-hairline" aria-hidden="true" />}
+        </>
+      )}
+      {onDraft && (
+        <>
+          <button type="button" onClick={onDraft} title={`Draft with AI (${NL_BAR_SHORTCUT_LABEL})`}
+            aria-label={`Draft with AI (${NL_BAR_SHORTCUT_LABEL})`}
+            className="flex items-center rounded-lg px-1.5 py-1 text-amethyst transition-colors hover:bg-mocha-hover hover:text-amethyst-light">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           {showLayout && <span className="mx-1 h-4 w-px bg-hairline" aria-hidden="true" />}
         </>

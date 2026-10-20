@@ -13,6 +13,7 @@ import { ProjectDialog } from '@/components/ProjectDialog';
 import { SignInGate } from '@/components/SignInGate';
 import { switchDirection, type StudioView } from '@/lib/studioViews';
 import { AIDiffModal } from '@/features/designer/AIDiffModal';
+import { AuthoringWorkspace } from '@/features/designer/authoring/AuthoringWorkspace';
 import { InsightReviewDialog } from '@/features/designer/InsightReviewDialog';
 import { TaskInbox } from '@/features/inbox/TaskInbox';
 import { ProjectAdmin } from '@/features/admin/ProjectAdmin';
@@ -95,7 +96,7 @@ export default function App() {
     workflows, setWorkflows, activeWorkflowId, setActiveWorkflowId,
     currentWorkflow, projects, setProjects, activeProject,
     showProjects, setShowProjects, treeRefreshKey, setTreeRefreshKey,
-    openProject, updateActiveWorkflow, recordHistory, undo, redo, canUndo, canRedo,
+    openProject, updateActiveWorkflow, recordHistory, replaceWorkflow, undo, redo, canUndo, canRedo,
     processesRootId, persistedProcessKeys,
     workspaceStatus, workspaceError, retryWorkspace
   } = useProjectWorkspace(authenticated);
@@ -128,9 +129,13 @@ export default function App() {
   };
 
   const {
-    authoringCandidate, setAuthoringCandidate, isGenerating, handleGenerateWorkflow,
+    workspace: authoringWorkspace, closeWorkspace: closeAuthoringWorkspace, handleGenerateWorkflow,
     authoringError, setAuthoringError
-  } = useAplAuthoringState(activeProject, currentWorkflow, setSimulationLogs, setDesignerMode);
+  } = useAplAuthoringState(activeProject, currentWorkflow, setSimulationLogs);
+  /** Bumped to open the NL bar from the canvas toolbar or the empty-canvas card. */
+  const [nlBarOpenSignal, setNlBarOpenSignal] = useState(0);
+  /** Bumped when a draft lands on the canvas, so its nodes play the landing once. */
+  const [landingUntil, setLandingUntil] = useState(0);
 
   const displayedWorkflow = selectedLiveInstance && liveWorkflow ? liveWorkflow : currentWorkflow;
   const isLiveReadOnly = !!selectedLiveInstance;
@@ -200,8 +205,12 @@ export default function App() {
     setSelectedNodeId((current) => current === id ? current : id);
   }, []);
 
-  const handleApplyApl = (workflow: WorkflowFile) => {
-    const targetId = authoringCandidate?.replaceWorkflowId || activeWorkflowId;
+  /**
+   * Applies APL to the canvas: the YAML editor's source, or an AI draft from the workspace
+   * (`asNew` opens it as a new process). Replacing a process is one undo step.
+   */
+  const handleApplyApl = (workflow: WorkflowFile, authoring?: { replaceWorkflowId?: string; asNew: boolean }) => {
+    const targetId = authoring?.replaceWorkflowId || activeWorkflowId;
     const persistedTarget = workflows.find((item) => item.id === targetId && item.documentId);
     const immutableProcessKey = persistedTarget?.documentId
       ? persistedProcessKeys.current.get(persistedTarget.documentId) || persistedTarget.processKey
@@ -217,24 +226,37 @@ export default function App() {
       description: persistedTarget.description,
     } : workflow;
     let activeId = appliedWorkflow.id;
-    if (authoringCandidate && !authoringCandidate.replaceWorkflowId) {
+    if (authoring?.asNew) {
       setWorkflows((items) => [appliedWorkflow, ...items]);
-    } else if (workflows.some((item) => item.id === targetId)) {
-      const before = workflows.find((item) => item.id === targetId)!;
-      recordHistory(targetId, before, appliedWorkflow);
-      setWorkflows((items) => items.map((item) => item.id === targetId ? appliedWorkflow : item));
+    } else if (replaceWorkflow(targetId, appliedWorkflow)) {
+      // One undo step restores the process as it was.
     } else {
+      // The empty canvas of a project with no process yet: the applied process becomes its first
+      // draft, and one undo returns to the empty canvas.
       const draftId = `draft-${Date.now()}`;
       activeId = draftId;
-      setWorkflows((items) => [
-        { ...appliedWorkflow, id: draftId, folderId: appliedWorkflow.folderId ?? processesRootId.current },
-        ...items.filter((item) => !item.id.startsWith('draft-')),
-      ]);
+      const draft = { ...appliedWorkflow, id: draftId, folderId: appliedWorkflow.folderId ?? processesRootId.current };
+      recordHistory(draftId, { ...draft, nodes: [], edges: [] }, draft);
+      setWorkflows((items) => [draft, ...items.filter((item) => !item.id.startsWith('draft-'))]);
     }
     setActiveWorkflowId(activeId);
     setSelectedNodeId(appliedWorkflow.nodes[0]?.id || null);
-    setAuthoringCandidate(null);
     setDesignerMode('diagram');
+  };
+
+  const handleApplyDraft = (draft: WorkflowFile) => {
+    if (!authoringWorkspace) return;
+    handleApplyApl(draft, { replaceWorkflowId: authoringWorkspace.replaceWorkflowId,
+      asNew: authoringWorkspace.target === 'new' });
+    closeAuthoringWorkspace();
+    playCue('success', { emphasis: 'subtle' });
+    setLandingUntil(Date.now() + 600);
+    showToast('success', authoringWorkspace.target === 'new'
+      ? 'Draft opened as a new process. Nothing is deployed.'
+      : 'Draft applied as one change (⌘Z to undo). Nothing is deployed.');
+    setSimulationLogs((logs) => [...logs, { id: `gen-${Date.now()}-applied`, timestamp: new Date().toLocaleTimeString(),
+      nodeId: 'system', nodeTitle: 'APL Authoring', nodeType: 'event', status: 'success',
+      message: 'AI draft applied to the canvas after review. Not deployed.' }]);
   };
 
   const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
@@ -485,7 +507,6 @@ export default function App() {
     const draft: WorkflowFile = { ...seeded, id: `draft-${Date.now()}`, name: seeded.name || fileName, fileName, processKey: seeded.processKey || fileName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `process_${Date.now()}` };
     if (folderId) draft.folderId = folderId;
     setWorkflows((prev) => [draft, ...prev.filter((item) => !item.id.startsWith('draft-'))]);
-    setAuthoringCandidate(null);
     setActiveWorkflowId(draft.id);
     setSelectedNodeId(draft.nodes[0]?.id || null);
     setDesignerMode('diagram');
@@ -494,7 +515,6 @@ export default function App() {
   const handleActivateDocument = (workflow: WorkflowFile) => {
     if (!workflow.documentId) return setActiveWorkflowId(workflow.id);
     setWorkflows((prev) => prev.some((item) => item.documentId === workflow.documentId) ? prev : [workflow, ...prev]);
-    setAuthoringCandidate(null);
     clearLiveInstanceState();
     setActiveWorkflowId(workflow.id);
     setSelectedNodeId(workflow.nodes[0]?.id || null);
@@ -593,8 +613,7 @@ export default function App() {
             workflows={workflows}
             activeWorkflowId={activeWorkflowId}
             onSelectWorkflow={(id) => {
-              setAuthoringCandidate(null);
-              clearLiveInstanceState();
+                        clearLiveInstanceState();
               setSidebarTab('files');
               setActiveWorkflowId(id);
               const wf = workflows.find((w) => w.id === id);
@@ -682,7 +701,7 @@ export default function App() {
                       onAutoLayout={handleAutoLayout}
                       onAddNode={handleAddNode}
                       onOpenAplEditor={() => setDesignerMode('apl')}
-                      onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
+                      onFocusPrompt={() => setNlBarOpenSignal((n) => n + 1)}
                       isSimulating={isSimulating}
                       activeSimulationNodeId={activeSimulationNodeId}
                       executionStatuses={executionStatuses}
@@ -736,7 +755,7 @@ export default function App() {
                     onAutoLayout={handleAutoLayout}
                     onAddNode={handleAddNode}
                     onOpenAplEditor={() => setDesignerMode('apl')}
-                    onFocusPrompt={() => document.getElementById('workflow-prompt')?.focus()}
+                    onFocusPrompt={() => setNlBarOpenSignal((n) => n + 1)}
                     onToast={(msg) => showToast('success', msg)}
                     processKey={currentWorkflow.processKey}
                     isSimulating={isSimulating}
@@ -751,6 +770,7 @@ export default function App() {
                     onRedo={redoEdit}
                     canUndo={canUndo}
                     canRedo={canRedo}
+                    landing={landingUntil > Date.now()}
                   />
 
                   <SidePanel id="designer-inspector" side="right" label="Properties" bounds={INSPECTOR_PANEL}>
@@ -767,8 +787,10 @@ export default function App() {
 
                   <NLInputBar
                     onGenerateWorkflow={handleGenerateWorkflow}
-                    isGenerating={isGenerating}
-                    hasActiveWorkflow={!!activeProject}
+                    isGenerating={false}
+                    hasActiveWorkflow={currentWorkflow.nodes.length > 0}
+                    suspended={!!authoringWorkspace}
+                    openSignal={nlBarOpenSignal}
                     error={authoringError}
                     onDismissError={() => setAuthoringError(null)}
                   />
@@ -776,22 +798,9 @@ export default function App() {
               )
             ) : (
               <AplEditor
-                key={`${currentWorkflow.id}-${authoringCandidate ? 'candidate' : 'source'}`}
-                workflow={authoringCandidate?.workflow || currentWorkflow}
-                initialSource={authoringCandidate?.aplSource}
-                candidate={authoringCandidate ? {
-                  provider: authoringCandidate.provider,
-                  model: authoringCandidate.model,
-                  attempts: authoringCandidate.attempts,
-                  warnings: authoringCandidate.warnings,
-                  summary: authoringCandidate.summary,
-                  changes: authoringCandidate.changes,
-                } : undefined}
-                onApply={handleApplyApl}
-                onDiscard={authoringCandidate ? () => {
-                  setAuthoringCandidate(null);
-                  setDesignerMode('diagram');
-                } : undefined}
+                key={currentWorkflow.id}
+                workflow={currentWorkflow}
+                onApply={(workflow) => handleApplyApl(workflow)}
               />
             )}
 
@@ -911,6 +920,23 @@ export default function App() {
         definitionKey={currentWorkflow.processKey || currentWorkflow.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}
         projectId={activeProject?.id}
       />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+      {authoringWorkspace && (
+        <AuthoringWorkspace
+          key={authoringWorkspace.key}
+          projectId={activeProject?.id}
+          origin={authoringWorkspace.origin}
+          target={authoringWorkspace.target}
+          initialPrompt={authoringWorkspace.prompt}
+          onApply={handleApplyDraft}
+          onDiscard={() => {
+            closeAuthoringWorkspace();
+            showToast('success', 'Draft discarded. The canvas is unchanged.');
+          }}
+        />
+      )}
       </AnimatePresence>
 
       {diffSnapshot && (

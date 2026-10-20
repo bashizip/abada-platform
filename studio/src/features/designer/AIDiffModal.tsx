@@ -1,23 +1,9 @@
-import React, { useEffect, useId, useMemo, useState } from 'react';
-import {
-  ReactFlow,
-  Background,
-  BackgroundVariant,
-  ConnectionMode,
-  Node,
-  Edge,
-} from '@xyflow/react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sparkles, X, CheckCircle2, XCircle, Tags, GitBranch } from 'lucide-react';
-import '@xyflow/react/dist/style.css';
 import { WorkflowDiffSnapshot, getChangeKindForNode, getAnnotationForNode, getChangeKindForEdge } from '@/lib/aiDiff/types';
 import { workflowToAPL, stringifyAPLYaml } from '@/lib/apl/parser';
 import { WorkflowFile } from '@/types';
-import { canvasNodeTypes, outcomeKindsBySource, toCanvasNode } from './nodes';
-import { AbadaEdge } from './EdgeRenderer';
-import { CanvasMarkers } from './CanvasMarkers';
-import { CanvasViewContext, MarkerPrefixProvider, type CanvasView } from './canvasContext';
-import { edgeKindOf, inferDirection, outcomeSlots, parallelLanes } from '@/lib/layout/edgeGeometry';
-import { type LayoutResult, applyPositions, computeLayout } from '@/lib/layout/elkLayout';
+import { DraftDiagram } from './DraftDiagram';
 
 interface AIDiffModalProps {
   snapshot: WorkflowDiffSnapshot;
@@ -72,61 +58,9 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [onExit]);
 
-  const edgeTypes = useMemo(() => ({ abadaEdge: AbadaEdge }), []);
-  const markerPrefix = `abada-diff-${useId().replace(/:/g, '')}`;
-  // Proposals add nodes wherever the generator put them: the review graph is
-  // auto-laid-out for reading (view only — nothing is saved from here).
-  const [laid, setLaid] = useState<LayoutResult | null>(null);
-  useEffect(() => {
-    let live = true;
-    computeLayout(proposedNodes, proposedEdges, inferDirection(proposedNodes, proposedEdges))
-      .then((result) => { if (live) setLaid(result); })
-      .catch(() => { if (live) setLaid(null); });
-    return () => { live = false; };
-  }, [proposedNodes, proposedEdges]);
-
-  const view: CanvasView = useMemo(
-    () => ({
-      direction: laid?.direction ?? inferDirection(proposedNodes, proposedEdges),
-      readOnly: true,
-      layout: laid ? { positions: laid.positions, routes: laid.routes } : null,
-    }),
-    [laid, proposedNodes, proposedEdges],
-  );
-
-  const graphNodes: Node[] = useMemo(() => {
-    const outcomeKinds = outcomeKindsBySource(proposedEdges);
-    const nodes = laid ? applyPositions(proposedNodes, laid.positions) : proposedNodes;
-    return nodes.map((node) => {
-      const diffKind = getChangeKindForNode(snapshot, node.id);
-      return toCanvasNode(node, {
-        isActiveSim: false,
-        diffKind,
-        diffAnnotation: diffKind ? getAnnotationForNode(snapshot, node.id) : undefined,
-        outcomeKinds: outcomeKinds.get(node.id),
-        selectable: false,
-      });
-    });
-  }, [snapshot, proposedNodes, proposedEdges, laid]);
-
-  const graphEdges: Edge[] = useMemo(() => {
-    const slots = outcomeSlots(proposedEdges);
-    const lanes = parallelLanes(proposedEdges);
-    return proposedEdges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: 'abadaEdge',
-      data: {
-        label: edge.label,
-        kind: edgeKindOf(edge),
-        outcomeSlot: slots.get(edge.id),
-        lane: lanes.get(edge.id),
-        isFlowing: false,
-        diffKind: getChangeKindForEdge(snapshot, edge.id),
-      },
-    }));
-  }, [snapshot, proposedEdges]);
+  const nodeDiffKind = useCallback((id: string) => getChangeKindForNode(snapshot, id), [snapshot]);
+  const nodeDiffAnnotation = useCallback((id: string) => getAnnotationForNode(snapshot, id), [snapshot]);
+  const edgeDiffKind = useCallback((id: string) => getChangeKindForEdge(snapshot, id), [snapshot]);
 
   const baseYaml = useMemo(
     () => stringifyAPLYaml(workflowToAPL({ ...baseWorkflow, nodes: baseNodes, edges: baseEdges })),
@@ -238,28 +172,13 @@ export const AIDiffModal: React.FC<AIDiffModalProps> = ({
 
             {tab === 'graph' ? (
               <div className="flex-1 relative mt-2">
-                <CanvasMarkers prefix={markerPrefix} />
-                <MarkerPrefixProvider value={markerPrefix}>
-                <CanvasViewContext.Provider value={view}>
-                <ReactFlow
-                  key={laid ? 'laid-out' : 'as-proposed'}
-                  nodes={graphNodes}
-                  edges={graphEdges}
-                  nodeTypes={canvasNodeTypes}
-                  connectionMode={ConnectionMode.Loose}
-                  edgeTypes={edgeTypes}
-                  fitView
-                  minZoom={0.2}
-                  maxZoom={2}
-                  nodesDraggable={false}
-                  nodesConnectable={false}
-                  elementsSelectable={false}
-                  proOptions={{ hideAttribution: true }}
-                >
-                  <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(168, 159, 145, 0.12)" />
-                </ReactFlow>
-                </CanvasViewContext.Provider>
-                </MarkerPrefixProvider>
+                <DraftDiagram
+                  nodes={proposedNodes}
+                  edges={proposedEdges}
+                  nodeDiffKind={nodeDiffKind}
+                  nodeDiffAnnotation={nodeDiffAnnotation}
+                  edgeDiffKind={edgeDiffKind}
+                />
               </div>
             ) : (
               <div className="flex-1 min-h-0 mt-2 grid grid-cols-2 gap-3 px-4 pb-4">

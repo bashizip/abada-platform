@@ -155,14 +155,10 @@ flow:
   pasted APL. Documents live in the project's `processes/` folder and save
   automatically; a stale save is refused instead of overwriting someone
   else's edit.
-- **Describe it.** The bar at the bottom of the canvas drafts or refines a
-  process from plain language through the configured AI provider. Each step
-  becomes its own node: extraction goes to an agent, "if … otherwise" to a
-  condition, approval by a role to a human task, and actions to engine tasks.
-  When no provider is configured, or no valid process comes back, the bar says
-  why and nothing is generated. A candidate that still misses a branch or a
-  human step the request asked for opens with a warning naming what is
-  missing. You review the result before it applies.
+- **Describe it.** The bar at the bottom of the canvas drafts a process, or a
+  change to the open one, from plain language. Your prompt opens the AI draft
+  workspace; nothing reaches the canvas until you apply. See
+  [Drafting with AI](#drafting-with-ai).
 - **The palette** draws every step exactly as the canvas does: circles for
   events, diamonds for gateways, cards for work. Type in **Find a node** to
   filter (by name, purpose or APL type, so `dmn` finds the decision table);
@@ -236,6 +232,48 @@ flow:
   [process files](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/process-files.md).
 - **Undo and redo** cover every edit of the open process (<kbd>⌘Z</kbd> /
   <kbd>Ctrl+Z</kbd>, <kbd>⇧⌘Z</kbd> / <kbd>Ctrl+Y</kbd>), 100 steps per process.
+
+## Drafting with AI
+
+The bar at the bottom of the canvas turns a description into a draft. Pin it
+open, collapse it to a small **Draft with AI** button, or hide it; the choice
+is remembered for you in this browser. <kbd>⌘K</kbd> (<kbd>Ctrl</kbd>+<kbd>K</kbd>
+on Windows and Linux) opens it whatever its setting, and so do the ✦ button
+in the canvas toolbar and **Use prompt** on an empty canvas; <kbd>Esc</kbd>
+puts it back.
+
+On a process that has steps, the bar refines that process; choose **New
+process** to start another one. When you send the prompt, the **AI draft
+workspace** opens over the Studio:
+
+- **The draft** in the centre is drawn as the canvas draws it, and updates with
+  each answer: new steps fade in, removed ones fade out, the others move to
+  their new place. **YAML** shows the APL source, and **Diff vs current** marks
+  what the draft adds, changes or removes compared with the process on the
+  canvas. Engine validation is badged on the steps, with the count in the
+  header.
+- **The conversation** on the right keeps your prompt and each refinement, with
+  the model's one-line account of what it changed. **Undo to here** returns the
+  draft to an earlier turn; the later turns are set aside until you restore
+  them or send a new refinement.
+- **Your own edits.** Click a step to change its properties. Your edit becomes
+  part of the draft, and the next refinement starts from it.
+- **While the model works** you can read the draft, switch views or cancel. If
+  no valid change comes back, the turn says why and the draft is unchanged;
+  **Try again** or **Edit prompt**.
+
+**Apply to Studio** puts the draft on the canvas as one change: one undo
+(<kbd>⌘Z</kbd>) restores the process as it was. **Discard** leaves the canvas
+untouched. Nothing is deployed from the workspace; deploying stays a separate
+step.
+
+What the model sees: the authoring service sends it the current draft and your
+latest prompt, not the conversation. It runs in the engine's authoring service,
+never inside a running process. The answer comes whole (no streaming), and
+**Cancel** stops waiting for it; the engine still finishes the call it started.
+The draft lives in the page only, so leaving the page asks first. Drafting
+needs the **Owner** or **Maintainer** role in the project and a configured AI
+provider; without one, the workspace says so and nothing is drafted.
 
 ## Validation
 
