@@ -89,8 +89,10 @@ S14 documentation, screenshots, 1.2.0 gate
 ```
 
 S1 first, then S2 and S7/S8 in parallel. S2 adds the taken flow to history
-events (engine, no schema change); S9 (`V40`) and S10 (`V41`) are the only
-tasks with a schema change.
+events (engine, no schema change). Schema changes: S7 follow-up `V40`
+(decision input evidence, done), S8 `V41` (forms pinned at deploy), S9 `V42`
+(file metadata), S10 `V43` (admin audit). S9 also makes RustFS required
+object storage for self-hosted installations.
 
 ---
 
@@ -499,47 +501,99 @@ widgets.
 **Goal.** A form field can take one or more files; the process receives a
 reference it can route on and hand to a worker, never the bytes.
 
-**Files.** New `ENGINE/files/` (entity, repository, service, controller),
-Flyway `V40__process_files.sql`, task completion validation, `STUDIO/api/`,
-`FormRenderer.tsx`, `docs/reference/runtime-semantics.md`,
-`docs/architecture/runtime-state.md`.
+**Decision (2026-10-20).** File contents go to **RustFS**, a self-hosted,
+S3-compatible object store, not into PostgreSQL. PostgreSQL keeps only the
+metadata and the state of each file, so it stays the source of truth for what
+a process may see; RustFS holds the bytes. Most serious processes have file
+fields, so **RustFS is mandatory for self-hosted installations** from 1.2:
+the certified self-hosted topology becomes engine instances + PostgreSQL +
+RustFS. Managed cloud deployments (GCP Cloud Storage, AWS S3) will plug into
+the same `ObjectStore` interface later; they are not part of this release.
+
+**Files.** New `ENGINE/files/` (entity, repository, service, controller, an
+`ObjectStore` interface with an S3-API implementation targeting RustFS), Flyway
+`V42__process_files.sql` (after S8's `V41`), task completion validation,
+`STUDIO/api/`, `FormRenderer.tsx`; `compose.yaml` / `compose.dev.yaml` /
+release Compose (a `rustfs` service, volume, health check, bucket bootstrap),
+`release/.env.*.example`, the public installer; `docs/reference/runtime-semantics.md`,
+`docs/architecture/runtime-state.md`, `docs/reference/deployment-support.md`,
+backup and upgrade guides; every "PostgreSQL only" claim: `AGENTS.md`, README,
+`abada-site/claims.json`, `abada-site/.../vs-camunda.tsx`, the curated
+documentation and `docs/marketing/` drafts.
 
 **Changes.**
-- **Storage in PostgreSQL** (still the only required infrastructure):
-  `process_files` (id, project, uploaded_by, content_type, size, sha256, name,
-  bytes, state `PENDING|ATTACHED`, instance_id, task_id, created_at). Size cap
-  configurable (default 10 MB per file, 50 MB per task); content type checked
-  against the field's `accept` list by sniffing, not by extension.
-- `POST /api/v1/files` (multipart) creates a `PENDING` file owned by the
-  uploader; `GET /api/v1/files/{id}` streams it to users allowed to see the
-  instance; responses set `Content-Disposition: attachment` and `nosniff`.
-- Completing a task with a `file` field: the engine checks each id exists, is
+- **Metadata in PostgreSQL**: `process_files` (id, project, uploaded_by,
+  content_type, size, sha256, name, object_key, state
+  `PENDING|ATTACHED|DELETING`, instance_id, task_id, created_at). No bytes.
+- **Bytes in RustFS** under a random object key (`<project>/<fileId>`, never the
+  file name), one bucket per installation, server-side encryption on, TLS in
+  production. Credentials come from the environment and are never logged.
+- **Upload** `POST /api/v1/files` (multipart): the engine streams the body to
+  RustFS while computing size and sha256, sniffs the content type against the
+  field's `accept` list, then inserts the `PENDING` row. If the insert fails,
+  the object is deleted (best effort; the cleanup job catches the rest). Size
+  cap configurable (default 10 MB per file, 50 MB per task).
+- **Completing a task** with a `file` field: the engine checks each id exists, is
   `PENDING`, belongs to the completing user and matches the field constraints,
-  then marks it `ATTACHED` to the instance and task **in the completion
-  transaction**. The variable stores `{ fileId, name, contentType, size, sha256 }`.
-- A durable job removes `PENDING` files older than 24 h. Attached files follow
-  the instance retention policy.
+  then marks it `ATTACHED` **in the completion transaction**. Only metadata
+  changes there: no call to RustFS inside the transaction (`AGENTS.md`). The
+  variable stores `{ fileId, name, contentType, size, sha256 }`.
+- **Download** `GET /api/v1/files/{id}` is proxied by the engine, so RBAC and
+  audit apply to every read; `Content-Disposition: attachment`, `nosniff`.
+  Presigned URLs are not used in this release.
+- **Deletion and cleanup** are durable jobs (cluster-safe acquisition, leases):
+  `PENDING` files older than 24 h, objects with no row (orphans from failed
+  uploads), and attached files past the instance retention policy. A delete
+  marks the row `DELETING`, removes the object, then removes the row;
+  deleting an absent object counts as success, so retries are safe.
+- **RustFS is required infrastructure for self-hosted installations.** The
+  dev, prod and release Compose stacks and the public installer start it by
+  default, create the bucket and generate its credentials (stored like the
+  other generated secrets). The engine checks the object store at startup and
+  exposes it in its health/readiness endpoint; a missing or unreachable store
+  fails readiness loudly instead of accepting uploads it cannot keep.
+- **Upgrade from 1.1.x**: re-running the installer adds RustFS to an existing
+  installation; the upgrade guide covers manual Compose upgrades. Existing
+  processes are unaffected (they have no file fields).
+- **The claim changes with the code**: "PostgreSQL is the only required
+  infrastructure" becomes "PostgreSQL and RustFS, both self-hosted" in
+  `AGENTS.md`, README, the claims register (`abada-site/claims.json`, checked by
+  the site build), the site, the curated documentation, the deployment matrix
+  and the marketing drafts, in the same change that ships S9.
 - External workers and agents receive the reference; a worker downloads the
-  bytes with its own credentials. Agent inputs remain default-deny (T6): a file
-  reaches a model only if the agent declares it.
-- Audit: upload, attach, download are audit events (actor, file id, instance);
-  file contents and names are not logged.
+  bytes through the engine with its own credentials. Agent inputs remain
+  default-deny (T6): a file reaches a model only if the agent declares it.
+- Audit: upload, attach, download and delete are audit events (actor, file id,
+  instance); file contents and names are not logged.
+- **Backup**: the backup and upgrade guides cover RustFS alongside PostgreSQL
+  and say what a restore of one without the other means (rows whose object is
+  missing show as "file unavailable"; orphan objects are cleaned up).
 - Studio: drop zone with progress, type/size feedback before upload, preview
   for images and PDFs, remove before submit; file chips in the instance
   variables view with download.
 
-**Acceptance tests.** PostgreSQL Testcontainers: fresh migration and upgrade
-from every supported prior schema; completion attaches files atomically and a
-failed completion leaves them `PENDING`; another user cannot attach or download;
-oversize and wrong-type rejected; cleanup job is cluster-safe (two replicas, one
-deletion); negative security tests (no token, expired token, other project).
+**Acceptance tests.** PostgreSQL and RustFS Testcontainers: fresh migration and
+upgrade from every supported prior schema; completion attaches files atomically
+and a failed completion leaves them `PENDING`; RustFS down during upload gives
+a typed error and no row; RustFS down during completion does not block it (no
+remote call); another user cannot attach or download; oversize and wrong-type
+rejected; cleanup and orphan jobs are cluster-safe (two replicas, one deletion)
+and idempotent; object store unreachable at startup → readiness fails; negative
+security tests (no token, expired token, other project). Compose validation
+(`docker compose ... config --quiet` and
+`scripts/test/validate-platform-deployment.sh`) covers dev, prod and the
+release archive with RustFS; the public installer is tested on a fresh install
+and on an upgrade of a 1.1.2 installation (`curl | bash` from
+install.abadaplatform.com, not a local `up dev`).
 
-**Invariants.** No bytes in process variables, outbox events or webhooks. No
-remote call inside the completion transaction.
+**Invariants.** No bytes in PostgreSQL, process variables, outbox events or
+webhooks. No remote call inside the completion transaction. Object deletion is
+at-least-once and idempotent.
 
-**Out of scope.** Object storage (S3) backend — an interface is introduced, the
-only implementation is PostgreSQL; virus scanning (documented as an operator
-responsibility via a worker hook).
+**Out of scope.** Presigned URLs; GCP Cloud Storage and AWS S3 implementations
+for managed cloud deployments (later, behind the same `ObjectStore` interface);
+other S3-compatible stores (may work, only RustFS is tested and supported);
+virus scanning (documented as an operator responsibility via a worker hook).
 
 ---
 
@@ -550,7 +604,7 @@ audit trail of administrative actions, as `AGENTS.md` requires for
 security-relevant mutations.
 
 **Files.** New `ENGINE/audit/` (entity, repository, recorder, controller),
-Flyway `V41__admin_audit_events.sql`, `AdminController`, `AiProviderController`,
+Flyway `V43__admin_audit_events.sql`, `AdminController`, `AiProviderController`,
 `ProjectController`, `InsightPolicyController`, evidence-policy and project
 access endpoints; `STUDIO/features/admin/AdministrationView.tsx` (split the
 audit tab into `AdminAuditTrail.tsx`), `STUDIO/api/admin.ts`;
@@ -735,5 +789,6 @@ new pages.
   playback pace, forms and files, with fresh screenshots (isolated capture
   stack).
 - Release notes `docs/release-notes/1.2.0-release-notes.md`, upgrade note for
-  `V40`, gate report per `1.0-rc-publication-gates.md`.
+  `V41`–`V43` and the new required RustFS service, gate report per
+  `1.0-rc-publication-gates.md`.
 - Exit demo recorded (see roadmap).

@@ -19,7 +19,7 @@ Abada is the governed runtime for AI-driven business processes:
 - Every AI decision leaves evidence an auditor can read later. Every
   AI-proposed change to a process is backed by replay evidence and approved by
   people under a review policy. Nothing auto-applies.
-- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure.
+- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure up to 1.1; from 1.2, self-hosted installations also require RustFS (self-hosted S3-compatible object storage) for process files. Managed cloud deployments will use GCP Cloud Storage or AWS S3 later.
 
 Target users: regulated and sovereignty-sensitive organisations (banks,
 telcos, public sector) that must run on their own infrastructure.
@@ -110,8 +110,8 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [ ] S6 Operations redesign (design mock first; KPIs, live list, canvas-centred instance view, split of the 900-line files)
 - [ ] S7 Node properties and palette: every node kind fully editable in the properties panel (decision tables first: rules, reorder, rule-level engine validation), the palette drawn in the canvas shapes, the matched rule in Operations
 - [ ] S8 Form designer: compact controls whose density adapts to the form size; a large editor panel; sections, columns and steps; richer field types; validation and `visible_when` enforced by the engine
-- [ ] S9 File upload in human tasks: PostgreSQL storage (Flyway `V40`), references in variables, attach in the completion transaction, RBAC and audit
-- [ ] S10 Administration audit trail: append-only `admin_audit_events` (Flyway `V41`) written in the mutation's transaction, denied attempts included, no secrets; filterable table with live updates and CSV export
+- [ ] S9 File upload in human tasks: bytes in RustFS (self-hosted S3-compatible object storage, required for self-hosted installations, started by Compose and the installer), metadata in PostgreSQL (Flyway `V42`), references in variables, attach in the completion transaction, RBAC and audit
+- [ ] S10 Administration audit trail: append-only `admin_audit_events` (Flyway `V43`) written in the mutation's transaction, denied attempts included, no secrets; filterable table with live updates and CSV export
 - [ ] S11 Execution variables and JSON everywhere: same small font for keys and values, collapsible tree with search for many/nested variables, JSON view; one highlighted `JsonViewer` replaces every raw JSON block
 - [ ] S12 NL authoring workspace: pinnable/collapsible NL bar; on submit a large dialog to refine the draft with a live diagram, YAML and diff, then apply to the Studio as one undoable change
 - [ ] S13 Documentation: Studio version on every page, "New" sidebar badges driven by `since:` frontmatter, user-friendly release notes and a *What's new* entry
@@ -140,7 +140,7 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 
 ## Deferred (1.2 or later)
 
-TypeScript and Python worker SDKs; Abada MCP
+GCP Cloud Storage and AWS S3 object-store backends for managed cloud deployments; TypeScript and Python worker SDKs; Abada MCP
 server; SaaS track (multi-tenancy, billing); BPMN coverage beyond import;
 `tenda/` and `orun/` (archive); identity-administration UI beyond the IdP;
 infrastructure certification (Track B of the former 1.1 roadmap) — kept as a
