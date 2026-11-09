@@ -1,0 +1,57 @@
+
+---
+title: "Glossary"
+description: "Short definitions of key terms used throughout Abada documentation."
+---
+
+# Glossary
+
+This glossary defines key terms used in Abada. Each definition is brief and links to the relevant documentation where more detail is available.
+
+## APL
+
+APL is the domain-specific language used to describe business processes, their tasks, decisions, and execution flow.
+
+## Node
+
+A node is an individual step in a process definition. It represents a task, decision, event, or other unit of work.
+
+## Agent node
+
+An agent node is a process step where an AI agent proposes a result for the engine to validate against the applicable contract.
+
+## Result variable
+
+A result variable stores the output produced by a task so that later steps in the process can use it.
+
+## Output schema
+
+An output schema defines the expected structure and types of data returned by a task or agent.
+
+## Confidence threshold
+
+A confidence threshold is a configured minimum confidence level used when evaluating whether a result meets a required standard.
+
+## Human-input task
+
+A human-input task pauses a process until a person provides the required information or decision.
+
+## External worker
+
+An external worker is a separate service that performs work requested by the process engine and returns its result.
+
+## Lease
+
+A lease is a time-limited grant to a worker to perform a particular unit of work. It helps the system manage ownership and recovery when work is interrupted.
+
+## Transactional outbox
+
+A transactional outbox records events in the same database transaction as the state change they describe, allowing those events to be published reliably.
+
+## Definition version
+
+A definition version identifies a particular version of a process definition so that executions can be associated with the correct definition.
+
+## Insight proposal
+
+An Insight proposal is a suggested improvement or observation that can be reviewed before it is accepted or applied.

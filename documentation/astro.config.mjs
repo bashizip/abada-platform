@@ -40,6 +40,7 @@ export default defineConfig({
             { label: 'Documentation home', slug: 'index' },
             { label: 'Concepts', slug: 'concepts' },
             { label: 'Guide scope and contracts', slug: 'scope' },
+            { label: 'Glossary', slug: 'glossary' },
           ],
         },
         {
