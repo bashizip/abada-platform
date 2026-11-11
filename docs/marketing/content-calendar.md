@@ -53,6 +53,9 @@ the one-line install command and a link to the repo.
 | 2 | 8 min | Write a process in APL from scratch, deploy, break the schema on purpose, show the route to a person |
 | 3 | 10 min | Agent with MCP tools: approval-required write, exact arguments, crash mid-call, no duplicate write |
 | 4 | 5 min | Import a Camunda 7 BPMN file and add an agent step |
+| 5 | ~2 min | "Abada universe" film, FR and EN cuts (done 2026-11-10): the public opener for LinkedIn, the website and the README |
+| 6 | 2 min | CNSS video 1, "Lire un processus en deux minutes": BPMN in five symbols on the employer declaration (done 2026-11-11, FR, voice). Names the CNSS: not for public posting; publish the generic cut |
+| 7 | 2.5 min | CNSS video 2, "La déclaration employeur dans Abada": real Studio on the demo deployment, Gemini resists a manipulative letter, a demonstration agent proposes "valider", the engine refuses, the chef de service decides (done 2026-11-11, FR, captions; voice pending). Same rule; the generic cut keeps the sentence saying the veto scene uses a demonstration agent, and the on-screen note that figures are indicative |
 | Monthly | 60 min | Livestream "office hours": build a process live, answer questions, review a community PR |
 
 Cut each video into 30–60 s clips for X, LinkedIn and YouTube Shorts. Reuse the docs
@@ -70,7 +73,18 @@ screenshot stack (isolated OIDC + stub LLM + Playwright) for reproducible record
 
 Cadence: 3 per week, alternating educational / demo / community.
 
-## 12-week calendar
+## Calendar from 2026-11-16 (replaces the 12-week calendar below)
+
+| Week of | Decision-makers (LinkedIn FR) | Developers | Product |
+| --- | --- | --- | --- |
+| 16 Nov | — | Universe film on YouTube, the website and the README | 1.2.0: S10 admin audit |
+| 23 Nov | Universe film (FR cut) | Remove the `hacktoberfest` topic; seed the good-first issues | 1.2.0: S14 docs and gate, release by 27 Nov |
+| 30 Nov | Clip from the generic declaration video ("l'IA propose, la règle décide") | Post 1 on the blog; r/selfhosted soft launch; LinkedIn EN: universe film | 1.2.x fixes; S15 if kept |
+| 7 Dec | Generic video 1 (BPMN in five symbols) | **Launch week:** Show HN (Tue), Product Hunt (Wed), Reddit (Thu), newsletters (Fri) | — |
+| 14 Dec | Field-notes post: rebuilding a declaration process by hand | Answer every thread; Post 5 (replay); CFP 1 | — |
+| 21 Dec → | One post a week from the post bank | Weeks 7–12 of the original plan, shifted by six weeks | M6 planning |
+
+## 12-week calendar (2026-10-13, superseded)
 
 | Week | Long-form | Video | Outreach |
 | --- | --- | --- | --- |
