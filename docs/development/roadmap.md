@@ -116,6 +116,7 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [ ] S12 NL authoring workspace: pinnable/collapsible NL bar; on submit a large dialog to refine the draft with a live diagram, YAML and diff, then apply to the Studio as one undoable change
 - [ ] S13 Documentation: Studio version on every page, "New" sidebar badges driven by `since:` frontmatter, user-friendly release notes and a *What's new* entry
 - [ ] S14 User guide, screenshots, 1.2.0 release notes and gate report
+- [ ] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
 
 ## Parallel track — design partners
 
@@ -136,7 +137,7 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 | M2 | E6 polish | E2, E3 |
 | M3 | E13, E12 SSE (keep polling), then agent-proposed delegation in E20 (keep plain call-process) | E9, E10 |
 | M4 | E21, E17, E18 Astro migration | E14, E15 |
-| M5 | S8 `steps` and `visible_when`, S6 keyboard and KPIs needing new endpoints, S13 in-Studio "What's new" card | S2, S3, S4, S5, S9, S10 |
+| M5 | S15 Studio *Files* section (keep APL + worker), S8 `steps` and `visible_when`, S6 keyboard and KPIs needing new endpoints, S13 in-Studio "What's new" card | S2, S3, S4, S5, S9, S10 |
 
 ## Deferred (1.2 or later)
 
