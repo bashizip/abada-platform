@@ -1,0 +1,20 @@
+{
+  "title": "Monthly declaration",
+  "fields": [
+    { "id": "employer", "type": "string", "label": "Employer", "required": true },
+    { "id": "employer_number", "type": "string", "label": "Employer number", "required": true },
+    { "id": "period", "type": "select", "label": "Period", "required": true,
+      "options": ["2026-09", "2026-10", "2026-11"] },
+    { "id": "headcount_declared", "type": "number", "label": "Headcount" },
+    { "id": "declaration_scan", "type": "file", "label": "Signed declaration (scan)", "required": true,
+      "accept": [".pdf", "image/*"], "maxSize": 5000000 },
+    { "id": "notes", "type": "textarea", "label": "Notes for the officer" }
+  ],
+  "layout": {
+    "sections": [
+      { "id": "employer", "title": "Employer", "rows": [["employer", "employer_number"], ["period", "headcount_declared"]] },
+      { "id": "document", "title": "Document", "description": "The signed declaration, scanned or photographed.",
+        "rows": [["declaration_scan"], ["notes"]] }
+    ]
+  }
+}

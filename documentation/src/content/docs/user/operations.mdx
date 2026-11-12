@@ -35,7 +35,7 @@ its instance on the failing step; **All incidents** lists every open incident
 with its actions. **Workers** shows each worker topic: online, failing (with
 its last error) or offline, and when it was last seen.
 
-![Operations: instance counters, the agent worker online, and the instance list with status, process, version, duration and starter](../../../assets/screens/tutorial/21-operations.webp)
+![Operations: instance counters, an open incident under Needs attention, the agent worker, and the instance list with state, step, duration and starter](../../../assets/screens/1.2/operations-overview.webp)
 
 Then the instances, newest first. Filter with the chips: state (with counts),
 process and, once a process is chosen, its version; or pick a start-time range
@@ -138,7 +138,9 @@ touched. The same layers appear during a **Dry Run** in the designer.
   up. The trail follows them while you are at the bottom; scroll up and it
   stays put, with a **new entries** button to come back.
 
-![A completed instance: the taken path, including the way back to Draft, and the audit trail](../../../assets/screens/tutorial/22-instance-history.webp)
+![A completed instance: the numbered path it took, the step it never reached faded, and the audit trail with the decision rule that matched](../../../assets/screens/1.2/instance-path-audit.webp)
+
+![An agent step in the Step tab: the model call, its tokens and cost, and the file it read as a chip with its sha256](../../../assets/screens/1.2/agent-step-files.webp)
 
 The same viewer shows every other piece of JSON in the Studio: an agent
 step's request and result, a tool call awaiting approval, a task's process
@@ -165,6 +167,8 @@ The pace control in the header sets how long each step stays on screen:
 **Calm** (0.7 s, the default), **Brisk** (0.25 s) or **Instant** (every step
 as it happens, the pre-1.2 behaviour). Your choice is kept in this browser and
 also applies to the designer's live view and to **Dry Run**.
+
+![A running instance waiting at Verification, with the Calm, Brisk and Instant pace control and the Live badge in the header](../../../assets/screens/1.2/instance-pace.webp)
 
 While the canvas is replaying, the header says so (**replaying — 3 steps
 behind**). Click **Jump to now** to see the current state. The replay only
@@ -256,7 +260,9 @@ incidents without the actions; the engine enforces the same rule on the API.
 When an incident opens, the failing step pulses once, then keeps a red ring and
 a warning badge. The canvas moves to it, unless you panned or zoomed in the
 last few seconds. A card next to the step shows the kind of incident, how many
-attempts failed, the model of an agent step and the engine's message, with the
+attempts failed, ![An agent step that could not read its file: the incident card on the node with Retry on another model, Retry, View details and Cancel instance](../../../assets/screens/1.2/incident-retry.webp)
+
+the model of an agent step and the engine's message, with the
 actions:
 
 | Action | Shown for | Who |
