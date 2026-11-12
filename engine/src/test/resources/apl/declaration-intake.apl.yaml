@@ -1,0 +1,41 @@
+version: abada.io/v1
+metadata:
+  key: declaration_intake
+  name: Employer declaration intake (S15)
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: depot
+    - id: depot
+      type: human-input
+      description: Upload the scanned monthly declaration
+      assignees:
+        - declarations
+      formKey: declaration-depot
+      next: lecture
+    - id: lecture
+      type: agent
+      model: gemini-3.6-flash
+      prompt: Read the scanned declaration and extract the declared payroll and headcount.
+      files:
+        bordereau: bordereau_scan
+      result_variable: lecture
+      confidence_threshold: 80
+      output_schema:
+        type: object
+        required: [payroll, headcount]
+        properties:
+          payroll: { type: number }
+          headcount: { type: integer }
+      on_low_confidence: saisie
+      next: done
+    - id: saisie
+      type: human-input
+      description: Enter the declaration by hand
+      assignees:
+        - declarations
+      next: done
+    - id: done
+      type: end

@@ -10,6 +10,7 @@ import com.abada.engine.dto.AgentStepRequest;
 import com.abada.engine.dto.FetchAndLockRequest;
 import com.abada.engine.dto.LockedExternalTask;
 import com.abada.engine.persistence.repository.ActivityHistoryRepository;
+import com.abada.engine.persistence.repository.DecisionInputEvidenceRepository;
 import com.abada.engine.util.DatabaseTestHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
@@ -47,6 +48,7 @@ class EvidenceAccessApiTest {
     @Autowired private AgentStepService steps;
     @Autowired private ActivityHistoryRepository history;
     @Autowired private DatabaseTestHelper database;
+    @Autowired private DecisionInputEvidenceRepository decisionInputs;
 
     private String projectId;
     private String instanceId;
@@ -113,6 +115,61 @@ class EvidenceAccessApiTest {
     }
 
     @Test
+    void decisionInputsNeedTheEvidenceRoleAndMembershipAndEveryReadIsRecorded() {
+        engine.deploy(projectId, new ByteArrayInputStream("""
+                version: abada.io/v1
+                metadata: { key: decision_case, name: Decision case }
+                flow:
+                  entry: start
+                  nodes:
+                    - { id: start, type: webhook, next: route }
+                    - id: route
+                      type: decision-table
+                      decisionKey: ROUTE
+                      inputs:
+                        - name: score
+                      rules:
+                        - when: score >= 700
+                          then: { lane: "fast" }
+                        - otherwise:
+                            then: { lane: "manual" }
+                      next: done
+                    - { id: done, type: end }
+                """.getBytes(StandardCharsets.UTF_8)));
+        String decided = engine.startProcess(projectId, "decision_case", "alice", Map.of("score", 7213)).getId();
+        String evidenceId = decisionInputs.findAll().stream().filter(row -> row.getInstanceId().equals(decided))
+                .findFirst().orElseThrow().getId();
+        String url = "/v1/projects/" + projectId + "/instances/" + decided + "/decisions/" + evidenceId + "/inputs";
+
+        assertThat(get(url, "alice", "customers").getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(get(url, "root", "abada-admin").getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(get(url, "mallory", "abada-evidence-reader").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        // Another instance's evidence id is not found through this instance.
+        assertThat(get("/v1/projects/" + projectId + "/instances/" + instanceId + "/decisions/" + evidenceId
+                + "/inputs", "alice", "abada-evidence-reader").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(history.findByProcessInstanceIdOrderByOccurredAtAsc(decided))
+                .noneMatch(event -> event.getEventType().equals("EVIDENCE_READ"));
+
+        ResponseEntity<String> read = get(url, "alice", "abada-evidence-reader");
+        assertThat(read.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(read.getBody()).contains("\"score\":7213", "\"payloadMode\":\"redacted\"",
+                "\"decisionKey\":\"ROUTE\"");
+        assertThat(read.getHeaders().getCacheControl()).contains("no-store");
+        assertThat(history.findByProcessInstanceIdOrderByOccurredAtAsc(decided))
+                .filteredOn(event -> event.getEventType().equals("EVIDENCE_READ")).singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getActor()).isEqualTo("alice");
+                    assertThat(event.getDetailsJson()).contains(evidenceId, "decision-inputs").doesNotContain("7213");
+                });
+
+        var row = decisionInputs.findById(evidenceId).orElseThrow();
+        row.setInputsEnc(null);
+        row.setPurgedAt(java.time.Instant.now());
+        decisionInputs.save(row);
+        assertThat(get(url, "alice", "abada-evidence-reader").getStatusCode()).isEqualTo(HttpStatus.GONE);
+    }
+
+    @Test
     void onlyOwnersChangeTheEvidencePolicy() {
         HttpHeaders owner = headers("alice", "customers");
         owner.setContentType(MediaType.APPLICATION_JSON);
@@ -129,6 +186,10 @@ class EvidenceAccessApiTest {
         assertThat(rest.exchange("/v1/projects/" + projectId + "/evidence-policy", HttpMethod.PUT,
                 new HttpEntity<>(Map.of("payloads", "everything", "retentionDays", 7), owner), String.class)
                 .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    private ResponseEntity<String> get(String url, String user, String groups) {
+        return rest.exchange(url, HttpMethod.GET, new HttpEntity<>(headers(user, groups)), String.class);
     }
 
     private ResponseEntity<String> payloads(String user, String groups) {

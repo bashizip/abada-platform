@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TaskRepository extends JpaRepository<TaskEntity, String> {
+    List<TaskEntity> findByProcessInstanceId(String processInstanceId);
+
     List<TaskEntity> findByProcessInstanceIdAndStatusNotIn(
             String processInstanceId, Collection<TaskStatus> terminalStatuses);
 

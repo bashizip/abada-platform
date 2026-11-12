@@ -11,6 +11,7 @@ import App from './App.tsx'
 import { initKeycloak } from '@/auth/keycloakClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/ToastContext';
+import { MotionProvider } from '@/components/ui';
 import { initSound } from '@/lib/sound';
 
 async function renderApp() {
@@ -24,9 +25,11 @@ async function renderApp() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ErrorBoundary>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
+        <MotionProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </MotionProvider>
       </ErrorBoundary>
     </StrictMode>,
   )

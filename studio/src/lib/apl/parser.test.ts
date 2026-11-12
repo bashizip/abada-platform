@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aplToWorkflow, workflowToAPL } from './parser';
+import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from './parser';
 import { APLDocument } from './types';
 
 describe('aplToWorkflow', () => {
@@ -645,5 +645,190 @@ describe('APL round trip: call-process', () => {
       on_timeout: { after: 'PT1H', then: 'manual' },
       next: 'done',
     });
+  });
+});
+
+describe('APL YAML round trip: gateway rule conditions', () => {
+  // Deploy & Start saves the document through this round trip, so a lost `if`
+  // turns a valid document into one the engine rejects.
+  const roundTrip = (yaml: string) =>
+    parseAPLYaml(stringifyAPLYaml(workflowToAPL(aplToWorkflow(parseAPLYaml(yaml)))));
+  const rulesOf = (doc: APLDocument, id: string) =>
+    (doc.flow.nodes.find((n) => n.id === id) as { rules?: { if?: string; then?: string; else?: unknown }[] }).rules
+      ?.map((r) => ({ if: r.if, then: r.then, else: r.else }));
+
+  const yaml = (type: 'condition' | 'inclusive') => `
+version: abada.io/v1
+metadata:
+  key: path_demo
+  name: Path demo
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: gate
+    - id: gate
+      type: ${type}
+      rules:
+        - if: risk == "low"
+          then: archive
+        - if: \${score > 75}
+          then: review
+        - else: escalate
+    - id: archive
+      type: end
+    - id: review
+      type: end
+    - id: escalate
+      type: end
+`;
+
+  it.each(['condition', 'inclusive'] as const)('keeps bare CEL, ${…} and the else rule on a %s node', (type) => {
+    expect(rulesOf(roundTrip(yaml(type)), 'gate')).toEqual([
+      { if: 'risk == "low"', then: 'archive', else: undefined },
+      { if: '${score > 75}', then: 'review', else: undefined },
+      { if: undefined, then: 'escalate', else: 'escalate' },
+    ]);
+  });
+});
+
+describe('APL round trip: properties the panel edits (M5 S7)', () => {
+  const source = `version: abada.io/v1
+metadata: { key: props, name: Props }
+flow:
+  entry: start
+  nodes:
+    - { id: start, type: webhook, next: triage }
+    - id: triage
+      type: agent
+      model: gemini-3.6-flash
+      prompt: Triage
+      evidence: { payloads: none, retention_days: 7 }
+      next: gate
+    - { id: gate, type: approval-gate, assignees: [risk, legal], mode: serial, next: review }
+    - { id: review, type: human-input, assignees: [ops], formId: claim-form, requireDoubleSignOff: true, next: done }
+    - { id: done, type: end }
+`;
+  const roundTrip = () => parseAPLYaml(stringifyAPLYaml(workflowToAPL(aplToWorkflow(parseAPLYaml(source)))));
+  const node = (doc: APLDocument, id: string) => doc.flow.nodes.find((n) => n.id === id) as any;
+
+  it('maps evidence, mode and the approval-gate kind onto the canvas model', () => {
+    const wf = aplToWorkflow(parseAPLYaml(source));
+    const byId = (id: string) => wf.nodes.find((n) => n.id === id)!;
+    expect(byId('triage').agentConfig!.evidence).toEqual({ payloads: 'none', retentionDays: 7 });
+    expect(byId('gate').humanConfig).toMatchObject({ kind: 'approval-gate', mode: 'serial' });
+    expect(byId('review').humanConfig!.formKey).toBe('claim-form');
+    expect(byId('review').aplExtras).toEqual({ requireDoubleSignOff: true });
+  });
+
+  it('saves them back: the gate stays a gate, formId becomes formKey, reserved keys are kept', () => {
+    const doc = roundTrip();
+    expect(node(doc, 'triage').evidence).toEqual({ payloads: 'none', retention_days: 7 });
+    expect(node(doc, 'gate')).toMatchObject({ type: 'approval-gate', mode: 'serial', assignees: ['risk', 'legal'] });
+    expect(node(doc, 'gate')).not.toHaveProperty('formKey');
+    expect(node(doc, 'review')).toMatchObject({ type: 'human-input', formKey: 'claim-form', requireDoubleSignOff: true });
+    expect(node(doc, 'review')).not.toHaveProperty('formId');
+  });
+
+  it('converts an approval gate to a human task when its kind is cleared', () => {
+    const wf = aplToWorkflow(parseAPLYaml(source));
+    const converted = { ...wf, nodes: wf.nodes.map((n) => (n.id === 'gate' ? { ...n, humanConfig: { ...n.humanConfig!, kind: undefined } } : n)) };
+    expect(node(workflowToAPL(converted), 'gate').type).toBe('human-input');
+  });
+});
+
+describe('APL round trip: process metadata', () => {
+  const documented: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: {
+      key: 'refunds',
+      name: 'Refunds',
+      description: 'Refund requests under review',
+      owner: 'payments-team',
+      category: 'payments',
+      variables: [
+        { name: 'amount', type: 'number', required: true, description: 'Refund amount' },
+        { name: 'iban', type: 'string', sensitive: true },
+      ],
+    },
+    flow: { entry: 'start', nodes: [{ id: 'start', type: 'webhook', next: 'done' }, { id: 'done', type: 'end' }] },
+  };
+
+  it('maps every metadata field Studio edits and keeps the rest verbatim', () => {
+    const withExtra = structuredClone(documented);
+    (withExtra.metadata as unknown as Record<string, unknown>).labels = { tier: 'gold' };
+    const workflow = aplToWorkflow(withExtra);
+
+    expect(workflow).toMatchObject({
+      processKey: 'refunds', name: 'Refunds', category: 'payments', owner: 'payments-team',
+      processDescription: 'Refund requests under review', metadataExtras: { labels: { tier: 'gold' } },
+    });
+    expect(workflow.variables).toEqual(documented.metadata.variables);
+    expect(workflowToAPL(workflow).metadata).toEqual(withExtra.metadata);
+  });
+
+  it('saves edits and leaves cleared fields out instead of inventing values', () => {
+    const workflow = aplToWorkflow(documented);
+    const metadata = workflowToAPL({
+      ...workflow,
+      owner: undefined,
+      category: '',
+      processDescription: 'Refunds over the limit',
+      variables: [{ ...workflow.variables![0], type: 'integer' }],
+    }).metadata;
+
+    expect(metadata).toEqual({
+      key: 'refunds',
+      name: 'Refunds',
+      description: 'Refunds over the limit',
+      variables: [{ name: 'amount', type: 'integer', required: true, description: 'Refund amount' }],
+    });
+  });
+
+  it('writes no owner, category or variables a document never had', () => {
+    const bare = aplToWorkflow({ ...documented, metadata: { key: 'refunds', name: 'Refunds' } });
+    expect(workflowToAPL(bare).metadata).toEqual({ key: 'refunds', name: 'Refunds' });
+  });
+});
+
+describe('APL round trip: files as agent input (S15)', () => {
+  const intake: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: { key: 'declaration_intake', name: 'Declaration intake' },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'lecture' },
+        {
+          id: 'lecture',
+          type: 'agent',
+          model: 'gemini-3.6-flash',
+          prompt: 'Extract the declared payroll.',
+          files: { bordereau: 'bordereau_scan', annexes: 'annex_files' },
+          max_files: 3,
+          next: 'done',
+        },
+        { id: 'plain', type: 'agent', model: 'gemini-3.6-flash', prompt: 'No files.', next: 'done' },
+        { id: 'done', type: 'end' },
+      ],
+    },
+  };
+
+  it('keeps files and max_files through the canvas and a save', () => {
+    const workflow = aplToWorkflow(intake);
+    const lecture = workflow.nodes.find((node) => node.id === 'lecture');
+    expect(lecture?.agentConfig?.files).toEqual({ bordereau: 'bordereau_scan', annexes: 'annex_files' });
+    expect(lecture?.agentConfig?.maxFiles).toBe(3);
+
+    const saved = workflowToAPL(workflow).flow.nodes;
+    expect(saved.find((node) => node.id === 'lecture')).toMatchObject({
+      files: { bordereau: 'bordereau_scan', annexes: 'annex_files' },
+      max_files: 3,
+    });
+    const plain = saved.find((node) => node.id === 'plain') as unknown as Record<string, unknown>;
+    expect(plain.files).toBeUndefined();
+    expect(plain.max_files).toBeUndefined();
+    expect(stringifyAPLYaml(workflowToAPL(workflow))).toContain('bordereau: bordereau_scan');
   });
 });

@@ -1,7 +1,9 @@
 import type { LoopProblem } from '@/lib/apl/loopAnalysis';
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCcw, UserRound, XCircle } from 'lucide-react';
+import type { NowState } from '@/lib/run/instancePath';
+import type { RetryPhase } from '@/lib/run/retryPhase';
 import type { DiffChangeKind } from '@/lib/aiDiff/types';
 import {
   OUTSIDE_LABEL_GAP,
@@ -9,7 +11,11 @@ import {
   type FlowDirection,
   type Size,
 } from '@/lib/layout/nodeGeometry';
-import { DIFF_COLORS, LIVE_COLOR, type NodeRunStatus } from './nodeState';
+import { DIFF_COLORS, LIVE_COLOR, RETRY_COLORS, type NodeRunStatus } from './nodeState';
+import { palette } from '@/lib/tokens';
+import { EDGE_COLORS } from '../edgeStyle';
+
+const EDGE_PATH_COLOR = EDGE_COLORS.path;
 
 /**
  * One connection handle per side, all of type `source`: a flow rendering
@@ -26,19 +32,32 @@ export const NodeHandles: React.FC = () => (
   </>
 );
 
-/** Real run state from the engine (never guessed), as a corner badge. */
-export const StatusBadge: React.FC<{ status?: NodeRunStatus; live?: boolean; x: number; y: number }> = ({ status, live, x, y }) => {
-  const badge = status && status !== 'idle' ? STATUS_BADGES[status] : null;
+/**
+ * Real run state from the engine (never guessed), as a corner badge. Where
+ * the instance is now wins: a human waiting shows a person, an incident a
+ * warning sign (shape and icon, never colour alone).
+ */
+export const StatusBadge: React.FC<{
+  status?: NodeRunStatus; live?: boolean; now?: NowState; retry?: RetryPhase; x: number; y: number;
+}> = ({
+  status, live, now, retry, x, y,
+}) => {
+  const badge = retry ? RETRY_BADGES[retry]
+    : now === 'incident' ? NOW_BADGES.incident
+    : now === 'waiting' ? NOW_BADGES.waiting
+      : status && status !== 'idle' ? STATUS_BADGES[status] : null;
   if (!badge && !live) return null;
   return (
     <span
       className="pointer-events-none absolute z-30 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
       style={{ left: x, top: y }}
       title={badge?.label ?? 'Current live activity'}
+      role="img"
+      aria-label={badge?.label ?? 'Current live activity'}
     >
-      {live && <span className="absolute h-full w-full rounded-full bg-[#9D4EDD]/50 animate-ping" />}
+      {live && !retry && <span className="absolute h-full w-full rounded-full bg-amethyst/50 animate-ping" />}
       <span
-        className="relative flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-[#1A1614]"
+        className="relative flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-charcoal"
         style={{ background: badge?.color ?? LIVE_COLOR }}
       >
         {badge?.icon}
@@ -47,11 +66,132 @@ export const StatusBadge: React.FC<{ status?: NodeRunStatus; live?: boolean; x: 
   );
 };
 
+const RETRY_BADGES: Record<RetryPhase, { label: string; color: string; icon: React.ReactNode }> = {
+  retrying: { label: 'Retrying — the work is reopened', color: RETRY_COLORS.retrying, icon: <RefreshCcw className="h-3 w-3 animate-spin text-charcoal motion-reduce:animate-none" /> },
+  active: { label: 'Retry running', color: RETRY_COLORS.active, icon: <Loader2 className="h-3 w-3 animate-spin text-linen motion-reduce:animate-none" /> },
+  completed: { label: 'Retry completed', color: RETRY_COLORS.completed, icon: <CheckCircle2 className="h-3 w-3 text-charcoal" /> },
+  failed: { label: 'Retry failed', color: RETRY_COLORS.failed, icon: <XCircle className="h-3 w-3 text-charcoal" /> },
+};
+
+const NOW_BADGES: Record<'incident' | 'waiting', { label: string; color: string; icon: React.ReactNode }> = {
+  incident: { label: 'Incident — stopped here', color: palette.desertRose, icon: <AlertTriangle className="h-3 w-3 text-charcoal" /> },
+  waiting: { label: 'Waiting for a person', color: palette.saffron, icon: <UserRound className="h-3 w-3 text-charcoal" /> },
+};
+
+/**
+ * Path facts on a node of an instance: its visit number(s) on the path
+ * (`2`, `2 ×3` when it ran three times), how many branches a join received
+ * (`2/2`) and the child results of a delegation (`3 ✓ · 1 ✗`).
+ */
+export const PathBadges: React.FC<{
+  visits?: number[];
+  join?: { arrived: number; expected: number };
+  childResults?: { ok: number; failed: number };
+  width: number;
+  height: number;
+}> = ({ visits, join, childResults: children, width, height }) => (
+  <>
+    {visits && visits.length > 0 && (
+      <span
+        className="pointer-events-none absolute z-30 flex h-[18px] min-w-[18px] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-0.5 rounded-full border-2 border-charcoal px-1 text-[10px] font-bold leading-none text-charcoal"
+        style={{ left: 2, top: 2, background: EDGE_PATH_COLOR }}
+        title={visits.length > 1 ? `Ran ${visits.length} times — steps ${visits.join(', ')}` : `Step ${visits[0]} of the path`}
+        aria-label={visits.length > 1 ? `Steps ${visits.join(', ')}` : `Step ${visits[0]}`}
+      >
+        {visits[0]}
+        {visits.length > 1 && <span className="font-semibold">×{visits.length}</span>}
+      </span>
+    )}
+    {join && (
+      <span
+        className="pointer-events-none absolute z-30 -translate-x-1/2 rounded-full border bg-charcoal px-1.5 text-[9px] font-semibold leading-4"
+        style={{
+          // Above the shape: its title sits below it.
+          left: width / 2, top: -18,
+          color: join.arrived >= join.expected ? EDGE_PATH_COLOR : palette.saffron,
+          borderColor: join.arrived >= join.expected ? EDGE_PATH_COLOR : palette.saffron,
+        }}
+        title={`${join.arrived} of ${join.expected} branches arrived`}
+      >
+        {join.arrived}/{join.expected}
+      </span>
+    )}
+    {children && (children.ok > 0 || children.failed > 0) && (
+      <span
+        className="pointer-events-none absolute z-30 rounded-full border border-hairline bg-charcoal px-1.5 text-[9px] font-semibold leading-4 text-linen"
+        style={{ right: 6, top: height - 8 }}
+        title={`${children.ok} child run(s) succeeded, ${children.failed} failed`}
+      >
+        {children.ok} ✓{children.failed > 0 && <> · <span className="text-desert-rose">{children.failed} ✗</span></>}
+      </span>
+    )}
+  </>
+);
+
 const STATUS_BADGES: Record<Exclude<NodeRunStatus, 'idle'>, { label: string; color: string; icon: React.ReactNode }> = {
-  completed: { label: 'Completed', color: '#90A955', icon: <CheckCircle2 className="h-3 w-3 text-[#1A1614]" /> },
-  failed: { label: 'Failed', color: '#E76F51', icon: <XCircle className="h-3 w-3 text-[#1A1614]" /> },
-  waiting: { label: 'Waiting', color: '#F4A261', icon: <Clock className="h-3 w-3 text-[#1A1614]" /> },
-  running: { label: 'Running', color: '#9D4EDD', icon: <Loader2 className="h-3 w-3 animate-spin text-[#EAE3D9]" /> },
+  completed: { label: 'Completed', color: palette.sageGreen, icon: <CheckCircle2 className="h-3 w-3 text-charcoal" /> },
+  failed: { label: 'Failed', color: palette.desertRose, icon: <XCircle className="h-3 w-3 text-charcoal" /> },
+  waiting: { label: 'Waiting', color: palette.saffron, icon: <Clock className="h-3 w-3 text-charcoal" /> },
+  running: { label: 'Running', color: palette.amethyst, icon: <Loader2 className="h-3 w-3 animate-spin text-linen" /> },
+};
+
+/**
+ * Paced playback (M5 S3): the node a revealed step entered pulses once in the
+ * path colour, then rests. Keyed by the arrival so a loop re-entry pulses again.
+ */
+export const ArrivalPulse: React.FC<{ seq?: number; shape: 'rect' | 'circle' | 'diamond' }> = ({ seq, shape }) => {
+  if (!seq) return null;
+  return (
+    <span key={seq} className="abada-arrive-node pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+      <span
+        className={`absolute inset-0 border-2 ${shape === 'rect' ? 'rounded-xl' : shape === 'circle' ? 'rounded-full' : ''}`}
+        style={{
+          borderColor: EDGE_PATH_COLOR,
+          // A diamond is a square turned a quarter: its corners touch the shape's box.
+          transform: shape === 'diamond' ? 'rotate(45deg) scale(0.7071)' : undefined,
+        }}
+      />
+    </span>
+  );
+};
+
+/**
+ * A new incident on the node (M5 S4): one attention pulse in the incident
+ * colour, keyed by the incident so a later incident on the same node pulses again.
+ */
+export const IncidentPulse: React.FC<{ seq?: string; shape: 'rect' | 'circle' | 'diamond' }> = ({ seq, shape }) => {
+  if (!seq) return null;
+  return (
+    <span key={seq} className="abada-incident-node pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+      <span
+        className={`absolute inset-0 border-[3px] ${shape === 'rect' ? 'rounded-xl' : shape === 'circle' ? 'rounded-full' : ''}`}
+        style={{
+          borderColor: palette.desertRose,
+          transform: shape === 'diamond' ? 'rotate(45deg) scale(0.7071)' : undefined,
+        }}
+      />
+    </span>
+  );
+};
+
+/**
+ * A ring around the node an audit-trail entry is about, while the user points
+ * at the entry (M5 S5). Outside the node, so it never hides the state outline.
+ */
+export const TrailHighlight: React.FC<{ on?: boolean; shape: 'rect' | 'circle' | 'diamond' }> = ({ on, shape }) => {
+  if (!on) return null;
+  return (
+    <span className="abada-trail-highlight pointer-events-none absolute -inset-1.5 z-20" aria-hidden="true">
+      <span
+        className={`absolute inset-0 border-2 ${shape === 'rect' ? 'rounded-2xl' : shape === 'circle' ? 'rounded-full' : ''}`}
+        style={{
+          borderColor: palette.saffron,
+          boxShadow: `0 0 14px ${palette.saffron}66`,
+          transform: shape === 'diamond' ? 'rotate(45deg) scale(0.7071)' : undefined,
+        }}
+      />
+    </span>
+  );
 };
 
 /** AI-diff marking above the node. */
@@ -60,7 +200,7 @@ export const DiffBadge: React.FC<{ kind?: DiffChangeKind | null }> = ({ kind }) 
   const color = DIFF_COLORS[kind];
   return (
     <span
-      className="pointer-events-none absolute -top-3 left-3 z-30 rounded-full border bg-[#1A1614] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+      className="pointer-events-none absolute -top-3 left-3 z-30 rounded-full border bg-charcoal px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
       style={{ color, borderColor: `${color}80` }}
     >
       {kind}
@@ -79,7 +219,7 @@ export const OutsideLabel: React.FC<{ text: string; size: Size; direction: FlowD
     : { top: size.height + OUTSIDE_LABEL_GAP, left: size.width / 2, transform: 'translateX(-50%)', width: OUTSIDE_LABEL_MAX_WIDTH, textAlign: 'center' };
   return (
     <span
-      className="pointer-events-none absolute line-clamp-2 text-[11px] font-medium leading-[14px] text-[#EAE3D9]"
+      className="pointer-events-none absolute line-clamp-2 text-[11px] font-medium leading-[14px] text-linen"
       style={style}
     >
       {text}
@@ -104,8 +244,8 @@ export const NodeBadges: React.FC<{
         <span
           className="rounded-full border px-1.5 text-[9px] font-semibold leading-4"
           style={loopState === 'bounded'
-            ? { borderColor: '#F4A261', color: '#F4A261', background: '#1A1614' }
-            : { borderColor: '#E76F51', color: '#1A1614', background: '#E76F51' }}
+            ? { borderColor: palette.saffron, color: palette.saffron, background: palette.charcoal }
+            : { borderColor: palette.desertRose, color: palette.charcoal, background: palette.desertRose }}
           title={loopState === 'bounded' ? `Repeats at most ${maxIterations} times` : 'Cycle without a usable repeat limit'}
         >
           ↻ {loopState === 'bounded' ? maxIterations : '!'}
@@ -113,7 +253,7 @@ export const NodeBadges: React.FC<{
       )}
       {!!issueCount && (
         <span
-          className="rounded-full border border-[#E76F51] bg-[#1A1614] px-1.5 text-[9px] font-semibold leading-4 text-[#E76F51]"
+          className="rounded-full border border-desert-rose bg-charcoal px-1.5 text-[9px] font-semibold leading-4 text-desert-rose"
           title={`${issueCount} validation issue${issueCount > 1 ? 's' : ''}`}
         >
           ⚠ {issueCount}

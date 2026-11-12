@@ -45,6 +45,7 @@ public class ExternalTaskCommandService {
     private final com.abada.engine.persistence.repository.AgentStepRepository agentStepRepository;
     private final com.abada.engine.llm.ModelPriceService prices;
     private final com.abada.engine.observability.EngineMetrics metrics;
+    private final com.abada.engine.core.agent.AgentFileResolver agentFiles;
 
     /** Rate-limit waits allowed before one counts as a failed attempt, so waiting stays bounded. */
     private final int maxDeferrals;
@@ -60,7 +61,9 @@ public class ExternalTaskCommandService {
             com.abada.engine.core.agent.AgentStepService agentSteps,
             com.abada.engine.persistence.repository.AgentStepRepository agentStepRepository,
             com.abada.engine.llm.ModelPriceService prices,
-            com.abada.engine.observability.EngineMetrics metrics) {
+            com.abada.engine.observability.EngineMetrics metrics,
+            com.abada.engine.core.agent.AgentFileResolver agentFiles) {
+        this.agentFiles = agentFiles;
         this.agentSteps = agentSteps;
         this.agentStepRepository = agentStepRepository;
         this.prices = prices;
@@ -105,8 +108,27 @@ public class ExternalTaskCommandService {
                     acquired = true;
                     continue;
                 }
-                history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(),
-                        lockDetails(task, request.workerId(), topic, serviceTask));
+                Map<String, Object> lockedDetails = lockDetails(task, request.workerId(), topic, serviceTask);
+                if (work != null && !work.files().isEmpty()) {
+                    // S15: the files the call may read, checked in this transaction (database only).
+                    try {
+                        work = work.withResolvedFiles(agentFiles.resolve(work, instance));
+                    } catch (com.abada.engine.core.agent.AgentFileResolver.AgentFileException refused) {
+                        failAtLock(task, instance, refused.code(), refused.getMessage());
+                        acquired = true;
+                        continue;
+                    }
+                    lockedDetails.put("files", work.resolvedFiles().stream().map(file -> {
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("name", file.name());
+                        entry.put("fileId", file.fileId());
+                        entry.put("contentType", file.contentType());
+                        entry.put("size", file.sizeBytes());
+                        entry.put("sha256", file.sha256());
+                        return entry;
+                    }).toList());
+                }
+                history.record("EXTERNAL_TASK_LOCKED", instance, task.getActivityId(), lockedDetails);
                 if (work != null && task.getModelOverride() != null) {
                     // An operator retried this task on another model; the definition is unchanged.
                     work = work.withModel(task.getModelOverride());
@@ -240,6 +262,29 @@ public class ExternalTaskCommandService {
             recordExternalTaskFact(task, false);
             exhausted(task, failure.errorMessage(), failure.isFinal() ? failure.errorCode().strip() : null);
         }
+    }
+
+    /**
+     * S15: the work cannot run because its files break the contract (a reference to
+     * another instance's file, a file not attached or deleted, too many files or bytes).
+     * That will not change on a retry: the work fails for good with the typed code, and
+     * an {@code on_error} boundary or a {@code WORK_FAILED} incident takes over.
+     */
+    private void failAtLock(ExternalTaskEntity task, ProcessInstance instance, String code, String message) {
+        task.setExceptionMessage(message);
+        task.setRetries(0);
+        task.setStatus(ExternalTaskEntity.Status.FAILED);
+        task.setLockExpirationTime(null);
+        task.setWorkerId(null);
+        repository.save(task);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("externalTaskId", task.getId());
+        details.put("errorCode", code);
+        details.put("errorMessage", message);
+        details.put("retries", 0);
+        history.record("EXTERNAL_TASK_FAILED", instance, task.getActivityId(), details);
+        recordExternalTaskFact(task, false);
+        exhausted(task, message, code);
     }
 
     /**

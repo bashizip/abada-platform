@@ -8,6 +8,9 @@ import { agentModelGuardMessage, invalidAgentModels, hasAgentNodes } from '@/lib
 import { AiProvidersAPI } from '@/api/aiProviders';
 import { agentModelsOf, missingProviderMessage } from '@/lib/aiProviders';
 import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
+import { buildPathView, type PathView } from '@/lib/run/instancePath';
+import { PACE_DWELL_MS, usePlaybackPace } from '@/lib/run/playbackPace';
+import { PlaybackControl } from '@/components/PlaybackControl';
 
 type PauseState =
   | { kind: 'agent'; node: WorkflowNode; edges: WorkflowEdge[] }
@@ -25,6 +28,8 @@ interface DryRunPanelProps {
     statuses: Record<string, NodeRunStatus>,
     activeNodeId: string | null,
     running: boolean,
+    /** The path the dry run took so far, drawn like an instance's (undefined before a run or once cancelled). */
+    path?: PathView,
   ) => void;
 }
 
@@ -46,6 +51,8 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
   const continuation = useRef<((edges: WorkflowEdge[]) => void) | null>(null);
   const statuses = useRef<Record<string, NodeRunStatus>>(initialStatuses(workflow));
   const variables = useRef<Record<string, unknown>>({});
+  /** The run's path: its start, the edges it took in order, and how it ended. */
+  const trail = useRef<{ entry?: string; steps: { edge: WorkflowEdge }[]; phase: 'ACTIVE' | 'COMPLETED' | 'FAILED' } | null>(null);
 
   useEffect(() => {
     setPayloadText(JSON.stringify(deriveDefaultPayload(workflow), null, 2));
@@ -53,6 +60,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
     setPause(null);
     setMessages([]);
     statuses.current = initialStatuses(workflow);
+    trail.current = null;
     onOverlayChange(statuses.current, null, false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow.id]);
@@ -65,10 +73,22 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
     if (aiProvidersVersion > 0) setPayloadError((current) => (current?.includes('AI provider') ? null : current));
   }, [aiProvidersVersion]);
 
+  // The run advances at the user's playback pace (M5 S3), so a simulation is watchable like a live instance.
+  const [pace, setPace] = usePlaybackPace();
+  const paceRef = useRef(pace);
+  useEffect(() => { paceRef.current = pace; }, [pace]);
+
   if (!isOpen) return null;
 
   const emit = (activeNodeId: string | null, isRunning = true) => {
-    onOverlayChange({ ...statuses.current }, activeNodeId, isRunning);
+    const run = trail.current;
+    const failed = Object.keys(statuses.current).filter((id) => statuses.current[id] === 'failed');
+    const path = run ? buildPathView(workflow, {
+      entry: run.entry, steps: run.steps, statuses: statuses.current,
+      activeNodeIds: activeNodeId ? [activeNodeId] : [], incidentNodeIds: failed, status: run.phase,
+      source: 'recorded',
+    }) : undefined;
+    onOverlayChange({ ...statuses.current }, activeNodeId, isRunning, path);
   };
 
   const outgoing = (nodeId: string) => workflow.edges.filter((edge) => edge.source === nodeId);
@@ -133,6 +153,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
     let steps = 0;
     variables.current = { ...payload };
     statuses.current = initialStatuses(workflow);
+    trail.current = { entry: start.id, steps: [], phase: 'ACTIVE' };
     setMessages(['Dry Run started — no engine, LLM or external side effect is called.']);
     setRunning(true);
     emit(start.id);
@@ -152,16 +173,20 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
           : `Loop at ${node.title} reached ${node.loop!.maxIterations} pass(es) with no on_exhausted route: `
             + 'the engine would open an incident.']);
         if (exhausted) {
+          const route = outgoing(nodeId).find((edge) => edge.label === 'on_exhausted' && edge.target === exhausted);
+          if (route) trail.current?.steps.push({ edge: route });
           queue.push(exhausted);
           continue;
         }
         statuses.current[nodeId] = 'failed';
+        if (trail.current) trail.current.phase = 'FAILED';
         emit(nodeId, false);
         setRunning(false);
         return;
       }
       if (steps > 100 || (!node.loop && visitCount > 10)) {
         statuses.current[nodeId] = 'failed';
+        if (trail.current) trail.current.phase = 'FAILED';
         setMessages((items) => [...items, `Stopped at ${node.title}: loop protection reached.`]);
         emit(nodeId, false);
         setRunning(false);
@@ -171,7 +196,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
       statuses.current[nodeId] = 'running';
       emit(nodeId);
       setMessages((items) => [...items, `Token entered ${node.title}.`]);
-      await sleep(450);
+      await sleep(PACE_DWELL_MS[paceRef.current]);
       if (currentRun !== runId.current) return;
 
       // on_exhausted is only taken when the loop limit is reached (above).
@@ -190,11 +215,15 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
       if (currentRun !== runId.current) return;
 
       statuses.current[nodeId] = 'completed';
+      chosen.forEach((edge) => {
+        trail.current?.steps.push({ edge });
+        queue.push(edge.target);
+      });
       emit(null);
-      chosen.forEach((edge) => queue.push(edge.target));
     }
 
     if (currentRun !== runId.current) return;
+    if (trail.current) trail.current.phase = 'COMPLETED';
     setRunning(false);
     setMessages((items) => [...items, 'Dry Run completed successfully.']);
     emit(null, false);
@@ -208,6 +237,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
     setPause(null);
     setRunning(false);
     statuses.current = initialStatuses(workflow);
+    trail.current = null;
     emit(null, false);
   };
 
@@ -246,6 +276,7 @@ export const DryRunPanel: React.FC<DryRunPanelProps> = ({
           <FlaskConical className="w-4 h-4 text-[#F4A261]" />
           <div><strong className="text-xs">Dry Run</strong><p className="text-[10px] text-[#A89F91]">Local · mocked · non-persistent</p></div>
         </div>
+        <PlaybackControl pace={pace} onPaceChange={setPace} className="ml-auto mr-2" />
         <button onClick={() => { cancel(); onClose(); }} aria-label="Close Dry Run"><X className="w-4 h-4" /></button>
       </div>
 

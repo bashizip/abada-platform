@@ -21,8 +21,10 @@ import {
   outcomePortPoint,
   sizeOfShape,
 } from '@/lib/layout/nodeGeometry';
-import { EDGE_COLORS, type EdgeVariant } from './edgeStyle';
+import { EDGE_COLORS, PATH_STROKE, type EdgeVariant } from './edgeStyle';
+import { pathLabel } from '@/lib/run/instancePath';
 import { type CanvasLayoutSnapshot, useCanvasView, useCompactZoom, useMarkerUrl } from './canvasContext';
+import { palette } from '@/lib/tokens';
 
 export type AbadaEdgeData = {
   label?: string;
@@ -42,6 +44,16 @@ export type AbadaEdgeData = {
   /** Another node is selected and this edge is not incident to it. */
   isDimmed?: boolean;
   diffKind?: DiffChangeKind | null;
+  /**
+   * Instance views: the path took this edge (drawn thick, solid, on top) or
+   * never did (thin, dashed, faded). Undefined outside instance views, and for
+   * untaken edges while the full diagram is shown.
+   */
+  pathLayer?: 'taken' | 'unreached';
+  /** Instance views: times the path took this edge (a loop's back-edge shows ×N). */
+  takenCount?: number;
+  /** Paced playback: set (to the arrival's sequence number) while a revealed step just took this edge. */
+  arrivalSeq?: number;
 };
 
 type AbadaEdgeType = Edge<AbadaEdgeData, 'abadaEdge'>;
@@ -92,6 +104,8 @@ function resolveRoute(
 
 function variantOf(data: AbadaEdgeData | undefined, selected: boolean | undefined): EdgeVariant {
   if (data?.diffKind) return data.diffKind;
+  if (data?.pathLayer === 'taken') return 'path';
+  if (data?.pathLayer === 'unreached' && !data.isFlowing) return 'unreached';
   if (data?.isFlowing || data?.isTakenPath) return 'active';
   if (selected || data?.isHighlighted) return 'selected';
   if (data?.kind === 'outcome-error') return 'error';
@@ -117,27 +131,39 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
   const isFlowing = data?.isFlowing;
   const hasToken = data?.hasToken;
   const strokeColor = EDGE_COLORS[variant];
-  const strokeWidth = variant === 'default' || variant === 'error' || variant === 'warn' ? 1.75 : 2.5;
-  const dash = data?.diffKind === 'removed' ? '6 4' : isOutcomeKind(kind) && !isFlowing ? '5 4' : undefined;
-  const opacity = data?.isDimmed ? 0.3 : 1;
+  const taken = variant === 'path';
+  const arriving = taken && !!data?.arrivalSeq;
+  const unreached = variant === 'unreached';
+  const strokeWidth = taken ? PATH_STROKE.taken.width : unreached ? PATH_STROKE.unreached.width
+    : variant === 'default' || variant === 'error' || variant === 'warn' ? 1.75 : 2.5;
+  const dash = data?.diffKind === 'removed' ? '6 4' : taken ? PATH_STROKE.taken.dash
+    : unreached ? PATH_STROKE.unreached.dash : isOutcomeKind(kind) && !isFlowing ? '5 4' : undefined;
+  const opacity = data?.isDimmed ? 0.3 : unreached ? 0.6 : 1;
+  const labelOpacity = unreached ? 0.35 : opacity;
 
-  const fullLabel = cleanEdgeLabel(data?.label);
-  const shortLabel = truncateLabel(fullLabel);
+  const count = data?.takenCount ?? 0;
+  // On the path, a decision reads as a sentence: "✓ score ≥ 750"; a repeated edge says how often.
+  const baseLabel = data?.pathLayer ? pathLabel(data.label) : cleanEdgeLabel(data?.label);
+  const fullLabel = taken && (baseLabel || count > 1)
+    ? [baseLabel && `✓ ${baseLabel}`, count > 1 && `×${count}`].filter(Boolean).join(' ')
+    : baseLabel;
+  const shortLabel = taken && count > 1 && baseLabel
+    ? `${truncateLabel(`✓ ${baseLabel}`)} ×${count}` : truncateLabel(fullLabel);
 
   return (
     <>
       {isFlowing && (
-        <path d={edgePath} fill="none" stroke="#9D4EDD" strokeWidth="6" opacity="0.3" className="blur-xs" />
+        <path d={edgePath} fill="none" stroke={palette.amethyst} strokeWidth="6" opacity="0.3" className="blur-xs" />
       )}
       {hasToken && (
         <g>
           <path id={`abada-token-ref-${id}`} d={edgePath} fill="none" stroke="none" pointerEvents="none" />
-          <circle r="7" fill="#9D4EDD" opacity="0.3">
+          <circle r="7" fill={palette.amethyst} opacity="0.3">
             <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin="0s">
               <mpath href={`#abada-token-ref-${id}`} />
             </animateMotion>
           </circle>
-          <circle r="2.5" fill="#EAE3D9">
+          <circle r="2.5" fill={palette.linen}>
             <animateMotion dur={`${TOKEN_DURATION_S}s`} repeatCount="indefinite" begin="0s">
               <mpath href={`#abada-token-ref-${id}`} />
             </animateMotion>
@@ -145,6 +171,9 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
         </g>
       )}
       <BaseEdge
+        // A revealed step draws the stroke once from source to target (M5 S3); the key replays it on a loop.
+        key={arriving ? `arrive-${data?.arrivalSeq}` : 'edge'}
+        pathLength={arriving ? 1 : undefined}
         path={edgePath}
         markerEnd={markerEnd}
         style={{
@@ -155,7 +184,8 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
           opacity,
           transition: 'opacity 150ms ease-out',
         }}
-        className={isFlowing ? 'animate-flow-dash' : ''}
+        // The path stays solid; the token dot shows the arrival.
+        className={arriving ? 'abada-arrive-edge' : isFlowing && !taken ? 'animate-flow-dash' : ''}
       />
       {fullLabel && (
         <path d={edgePath} fill="none" stroke="transparent" strokeWidth="14">
@@ -176,7 +206,7 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
             className="nodrag nopan pointer-events-none"
           >
             <span
-              className="inline-block rounded-full border bg-[#1A1614] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+              className="inline-block rounded-full border bg-charcoal px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
               style={{ color: strokeColor, borderColor: `${strokeColor}80` }}
             >
               {data.diffKind}
@@ -192,16 +222,18 @@ export const AbadaEdge = memo(({ id, source, target, data, selected }: EdgeProps
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelAt.x}px,${labelAt.y}px)`,
-              opacity,
+              opacity: labelOpacity,
             }}
             className="nodrag nopan"
             title={fullLabel !== shortLabel ? fullLabel : undefined}
           >
             <span
-              className="block whitespace-nowrap rounded-full border bg-[#1A1614] px-2 py-0.5 font-mono text-[10px] shadow-warm-md"
+              className="block whitespace-nowrap rounded-full border bg-charcoal px-2 py-0.5 font-mono text-[10px] shadow-warm-md"
               style={{
-                color: isOutcomeKind(kind) ? strokeColor : '#C9C0B4',
-                borderColor: variant === 'default' ? '#3A322E' : `${strokeColor}66`,
+                color: taken ? strokeColor : isOutcomeKind(kind) ? strokeColor : palette.linenMuted,
+                borderColor: taken ? strokeColor
+                  : variant === 'default' || unreached ? palette.hairline : `${strokeColor}66`,
+                fontWeight: taken ? 600 : undefined,
               }}
             >
               {shortLabel}

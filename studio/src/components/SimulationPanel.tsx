@@ -70,48 +70,48 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
   const getNodeIcon = (type: NodeType) => {
     switch (type) {
       case 'agent':
-        return <Bot className="w-3.5 h-3.5 text-[#9D4EDD]" />;
+        return <Bot className="w-3.5 h-3.5 text-amethyst" />;
       case 'human':
-        return <UserCheck className="w-3.5 h-3.5 text-[#E76F51]" />;
+        return <UserCheck className="w-3.5 h-3.5 text-desert-rose" />;
       case 'dmn':
-        return <Table className="w-3.5 h-3.5 text-[#2A9D8F]" />;
+        return <Table className="w-3.5 h-3.5 text-mineral-teal" />;
       case 'engine-task':
-        return <Zap className="w-3.5 h-3.5 text-[#90A955]" />;
+        return <Zap className="w-3.5 h-3.5 text-sage-green" />;
       case 'call-process':
-        return <Workflow className="w-3.5 h-3.5 text-[#F4A261]" />;
+        return <Workflow className="w-3.5 h-3.5 text-saffron" />;
       case 'script':
-        return <Terminal className="w-3.5 h-3.5 text-[#2A9D8F]" />;
+        return <Terminal className="w-3.5 h-3.5 text-mineral-teal" />;
       case 'gateway':
-        return <GitFork className="w-3.5 h-3.5 text-[#F4A261]" />;
+        return <GitFork className="w-3.5 h-3.5 text-saffron" />;
       case 'event':
       default:
-        return <Circle className="w-3.5 h-3.5 text-[#F4A261]" />;
+        return <Circle className="w-3.5 h-3.5 text-saffron" />;
     }
   };
 
   return (
     <div
       ref={panelRef}
-      className="absolute z-30 w-[480px] max-h-[360px] bg-[#25201D] border border-[#3A322E] rounded-2xl shadow-warm-lg flex flex-col overflow-hidden animate-in slide-in-from-bottom-5"
+      className="absolute z-30 w-[480px] max-h-[360px] bg-mocha border border-hairline rounded-2xl shadow-warm-lg flex flex-col overflow-hidden animate-in slide-in-from-bottom-5"
       style={{ left: 0, top: 0, transform: `translate(${pos.x}px, ${pos.y}px)` }}
     >
       {/* Drawer Header — drag handle */}
       <div
-        className="p-3 bg-[#1A1614] border-b border-[#3A322E] flex items-center justify-between cursor-grab active:cursor-grabbing select-none touch-none"
+        className="p-3 bg-charcoal border-b border-hairline flex items-center justify-between cursor-grab active:cursor-grabbing select-none touch-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
         <div className="flex items-center space-x-2">
-          <GripVertical className="w-3.5 h-3.5 text-[#A89F91] shrink-0" />
-          <Terminal className="w-4 h-4 text-[#9D4EDD]" />
-          <span className="font-bold text-xs text-[#EAE3D9] tracking-wide">
+          <GripVertical className="w-3.5 h-3.5 text-sand shrink-0" />
+          <Terminal className="w-4 h-4 text-amethyst" />
+          <span className="font-bold text-xs text-linen tracking-wide">
             Real-Time Audit Stream & Simulation Logs
           </span>
           {isSimulating && (
-            <span className="text-[10px] bg-[#9D4EDD]/20 text-[#9D4EDD] px-2 py-0.5 rounded-full font-mono animate-pulse flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#9D4EDD]" />
+            <span className="text-[10px] bg-amethyst/20 text-amethyst px-2 py-0.5 rounded-full font-mono animate-pulse flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amethyst" />
               Active
             </span>
           )}
@@ -120,13 +120,13 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
         <div className="flex items-center space-x-2">
           <button
             onClick={onClearLogs}
-            className="text-[11px] text-[#A89F91] hover:text-[#EAE3D9] px-2 py-0.5 rounded hover:bg-[#25201D]"
+            className="text-[11px] text-sand hover:text-linen px-2 py-0.5 rounded hover:bg-mocha"
           >
             Clear Stream
           </button>
           <button
             onClick={onClose}
-            className="text-[#A89F91] hover:text-[#EAE3D9] p-1 rounded hover:bg-[#25201D]"
+            className="text-sand hover:text-linen p-1 rounded hover:bg-mocha"
           >
             <X className="w-4 h-4" />
           </button>
@@ -136,38 +136,38 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
       {/* Logs Stream Body */}
       <div className="p-3 flex-1 overflow-y-auto space-y-2 font-mono text-xs">
         {logs.length === 0 ? (
-          <div className="py-8 text-center text-[#A89F91] text-xs">
-            <Clock className="w-6 h-6 mx-auto mb-2 opacity-40 text-[#F4A261]" />
+          <div className="py-8 text-center text-sand text-xs">
+            <Clock className="w-6 h-6 mx-auto mb-2 opacity-40 text-saffron" />
             <p>No execution events logged.</p>
-            <p className="text-[10px] text-[#A89F91]">Use Dry Run for a local mocked walkthrough, or Deploy &amp; Start for a durable engine instance.</p>
+            <p className="text-[10px] text-sand">Use Dry Run for a local mocked walkthrough, or Deploy &amp; Start for a durable engine instance.</p>
           </div>
         ) : (
           logs.map((log) => (
             <div
               key={log.id}
-              className="p-2.5 rounded-xl bg-[#1A1614] border border-[#3A322E] space-y-1 text-xs"
+              className="p-2.5 rounded-xl bg-charcoal border border-hairline space-y-1 text-xs"
             >
-              <div className="flex items-center justify-between text-[10px] text-[#A89F91]">
+              <div className="flex items-center justify-between text-[10px] text-sand">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[#9D4EDD]">{log.timestamp}</span>
-                  <div className="flex items-center gap-1 bg-[#25201D] px-1.5 py-0.5 rounded border border-[#3A322E]">
+                  <span className="text-amethyst">{log.timestamp}</span>
+                  <div className="flex items-center gap-1 bg-mocha px-1.5 py-0.5 rounded border border-hairline">
                     {getNodeIcon(log.nodeType)}
-                    <span className="text-[#EAE3D9] font-medium">{log.nodeTitle}</span>
+                    <span className="text-linen font-medium">{log.nodeTitle}</span>
                   </div>
                 </div>
 
                 {log.confidence !== undefined && (
-                  <span className="text-[#90A955] font-bold">
+                  <span className="text-sage-green font-bold">
                     Confidence: {log.confidence}%
                   </span>
                 )}
               </div>
 
               <div className="flex items-start gap-1.5 pt-0.5">
-                {log.status === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-[#90A955] shrink-0 mt-0.5" />}
-                {log.status === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-[#E76F51] shrink-0 mt-0.5" />}
-                {log.status === 'info' && <Info className="w-3.5 h-3.5 text-[#F4A261] shrink-0 mt-0.5" />}
-                <p className="text-[#EAE3D9] text-[11px] leading-relaxed">
+                {log.status === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-sage-green shrink-0 mt-0.5" />}
+                {log.status === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-desert-rose shrink-0 mt-0.5" />}
+                {log.status === 'info' && <Info className="w-3.5 h-3.5 text-saffron shrink-0 mt-0.5" />}
+                <p className="text-linen text-[11px] leading-relaxed">
                   {log.message}
                 </p>
               </div>
@@ -177,7 +177,7 @@ export const SimulationPanel: React.FC<SimulationPanelProps> = ({
                   {log.outputs.map((output, i) => (
                     <span
                       key={`${output.name}-${i}`}
-                      className="text-[10px] font-mono bg-[#2A9D8F]/15 text-[#2A9D8F] border border-[#2A9D8F]/30 px-1.5 py-0.5 rounded"
+                      className="text-[10px] font-mono bg-mineral-teal/15 text-mineral-teal border border-mineral-teal/30 px-1.5 py-0.5 rounded"
                     >
                       {output.name} = {output.value}
                     </span>

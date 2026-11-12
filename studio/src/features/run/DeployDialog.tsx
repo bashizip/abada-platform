@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Braces, Lightbulb, Rocket, RotateCcw, X } from 'lucide-react';
 import { WorkflowFile } from '@/types';
 import { useAiProvidersVersion } from '@/lib/aiProviderEvents';
+import { MotionBackdrop, MotionPanel } from '@/components/ui';
 
 interface DeployDialogProps {
   workflow: WorkflowFile;
@@ -48,8 +49,8 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#141110]/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-[#3A322E] bg-[#25201D] shadow-warm-xl overflow-hidden">
+    <MotionBackdrop className="fixed inset-0 z-50 flex items-center justify-center bg-[#141110]/80 backdrop-blur-sm p-4">
+      <MotionPanel className="w-full max-w-lg rounded-2xl border border-[#3A322E] bg-[#25201D] shadow-warm-xl overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[#3A322E] bg-[#1A1614]">
           <Rocket className="w-4 h-4 text-[#2A9D8F]" />
           <div><h2 className="text-sm font-semibold">Deploy & Start</h2><p className="text-[10px] text-[#A89F91]">{workflow.name}</p></div>
@@ -115,7 +116,7 @@ export const DeployDialog: React.FC<DeployDialogProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </MotionPanel>
+    </MotionBackdrop>
   );
 };

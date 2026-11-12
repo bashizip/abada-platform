@@ -1,110 +1,72 @@
 import { useState, useCallback } from 'react';
-import { AuthoringAPI, AplGenerationCandidate } from '@/api/authoring';
 import { Project } from '@/api/projects';
 import { WorkflowFile, SimulationLog } from '@/types';
-import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
-import { nodeChanges, type NodeChange } from '@/lib/apl/nodeChanges';
 import { playCue } from '@/lib/sound';
 
-export interface AuthoringCandidate extends AplGenerationCandidate {
-  workflow: WorkflowFile;
+/** An open AI draft workspace (M5 S12): what it refines and how its result lands. */
+export interface AuthoringWorkspaceRequest {
+  key: string;
+  prompt: string;
+  /** The process the draft starts from and is compared with. */
+  origin: WorkflowFile;
+  /** Apply replaces the open process (`replaceWorkflowId`), or opens the draft as a new one. */
+  target: 'replace' | 'new';
   replaceWorkflowId?: string;
-  /** For a refinement: the nodes it added, changed or removed. */
-  changes?: NodeChange[];
 }
 
+/**
+ * Opens the AI draft workspace from the natural-language bar. Model calls happen in the
+ * workspace, through the authoring service; nothing reaches the canvas until the user applies.
+ */
 export function useAplAuthoringState(
   activeProject: Project | undefined,
   currentWorkflow: WorkflowFile,
   setSimulationLogs: React.Dispatch<React.SetStateAction<SimulationLog[]>>,
-  setDesignerMode: (mode: 'diagram' | 'apl') => void
 ) {
-  const [authoringCandidate, setAuthoringCandidate] = useState<AuthoringCandidate | null>(null);
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  /** Why the last request produced no candidate, shown where the request was typed. */
+  const [workspace, setWorkspace] = useState<AuthoringWorkspaceRequest | null>(null);
+  /** Why a prompt could not open a draft, shown where it was typed. */
   const [authoringError, setAuthoringError] = useState<string | null>(null);
 
-  const handleGenerateWorkflow = useCallback(async (promptText: string, mode: 'new' | 'refine' = 'new') => {
+  const handleGenerateWorkflow = useCallback((promptText: string, mode: 'new' | 'refine' = 'new') => {
     if (!activeProject) {
+      setAuthoringError('Open a project before drafting a process with AI.');
       setSimulationLogs((logs) => [...logs, { id: `gen-${Date.now()}-project`,
         timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'APL Authoring',
         nodeType: 'event', status: 'error', message: 'Open a project before generating APL.' }]);
       return;
     }
-    setIsGenerating(true);
     setAuthoringError(null);
     playCue('loading', { emphasis: 'subtle' });
-    const timestamp = () => new Date().toLocaleTimeString();
-
-    setSimulationLogs(prev => [
-      ...prev,
-      {
-        id: `gen-${Date.now()}-1`,
-        timestamp: timestamp(),
-        nodeId: 'system',
-        nodeTitle: 'APL Authoring',
-        nodeType: 'agent',
-        status: 'info',
-        message: `${mode === 'new' ? 'Creating' : 'Refining'} a native APL candidate for human review.`,
-      }
-    ]);
-
-    try {
-      const candidate = await AuthoringAPI.generate(activeProject.id, promptText, mode,
-        mode === 'refine' ? stringifyAPLYaml(workflowToAPL(currentWorkflow)) : undefined);
-      const parsed = aplToWorkflow(parseAPLYaml(candidate.aplSource));
-      const replaceCurrent = mode === 'refine' || (!currentWorkflow.documentId && currentWorkflow.nodes.length === 0);
-      const candidateWorkflow: WorkflowFile = replaceCurrent ? {
-        ...parsed, id: currentWorkflow.id,
-        documentId: currentWorkflow.documentId, revision: currentWorkflow.revision,
-        version: currentWorkflow.version, updatedAt: currentWorkflow.updatedAt,
-      } : { ...parsed, id: `draft-generated-${Date.now()}` };
-      setAuthoringCandidate({ ...candidate, workflow: candidateWorkflow,
-        replaceWorkflowId: replaceCurrent ? currentWorkflow.id : undefined,
-        changes: mode === 'refine' ? nodeChanges(currentWorkflow, candidateWorkflow) : undefined });
-      setDesignerMode('apl');
-      // A candidate is there to review; nothing is confirmed yet.
-      playCue('ready', { emphasis: 'subtle' });
-
-      setSimulationLogs(prev => [
-        ...prev,
-        {
-          id: `gen-${Date.now()}-3`,
-          timestamp: timestamp(),
-          nodeId: 'system',
-          nodeTitle: 'Studio Compiler',
-          nodeType: 'event',
-          status: 'success',
-          message: `${candidate.model || 'LLM'} produced validated APL in ${candidate.attempts} attempt(s)${candidate.warnings.length ? ' with warnings' : ''}. Review before applying.`,
-        }
-      ]);
-    } catch (err: any) {
-      playCue('error');
-      setAuthoringError(err.message);
-      setSimulationLogs(prev => [
-        ...prev,
-        {
-          id: `gen-${Date.now()}-err`,
-          timestamp: timestamp(),
-          nodeId: 'system',
-          nodeTitle: 'Generation Error',
-          nodeType: 'event',
-          status: 'error',
-          message: err.message,
-        }
-      ]);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [activeProject, currentWorkflow, setSimulationLogs, setDesignerMode]);
+    // An empty unsaved process is simply filled in; otherwise "New process" opens a new draft.
+    const emptyDraft = !currentWorkflow.documentId && currentWorkflow.nodes.length === 0;
+    const replace = (mode === 'refine' && currentWorkflow.nodes.length > 0) || emptyDraft;
+    const origin: WorkflowFile = replace ? currentWorkflow : {
+      ...currentWorkflow,
+      id: `draft-generated-${Date.now()}`,
+      name: 'New process',
+      fileName: undefined,
+      documentId: undefined,
+      revision: undefined,
+      version: '1.0.0',
+      updatedAt: new Date().toISOString(),
+      processKey: undefined,
+      nodes: [],
+      edges: [],
+    };
+    setWorkspace({ key: `workspace-${Date.now()}`, prompt: promptText, origin, target: replace ? 'replace' : 'new',
+      replaceWorkflowId: replace ? currentWorkflow.id : undefined });
+    setSimulationLogs((prev) => [...prev, {
+      id: `gen-${Date.now()}-1`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'APL Authoring',
+      nodeType: 'agent', status: 'info',
+      message: `${replace && currentWorkflow.nodes.length ? 'Refining' : 'Drafting'} a native APL candidate for human review.`,
+    }]);
+  }, [activeProject, currentWorkflow, setSimulationLogs]);
 
   return {
-    authoringCandidate,
-    setAuthoringCandidate,
-    isGenerating,
-    setIsGenerating,
+    workspace,
+    closeWorkspace: useCallback(() => setWorkspace(null), []),
     authoringError,
     setAuthoringError,
-    handleGenerateWorkflow
+    handleGenerateWorkflow,
   };
 }

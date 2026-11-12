@@ -1,6 +1,7 @@
 ---
 title: Users, groups and project access
-description: Create users, assign platform groups, and give people roles and task groups in a project — from the Studio Admin tab, without opening the Keycloak console.
+description: Create users, assign platform groups, give people roles and task groups in a project, and read the audit trail of every administrative change — from the Studio Admin tab, without opening the Keycloak console.
+updated: 1.2.0
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -81,11 +82,48 @@ Project owners can do the same through
 `PUT /api/v1/projects/{projectId}/members/{principalId}` with `roles`,
 `reviewLanes` and `taskGroups`.
 
+## The audit trail
+
+<Aside type="tip" title="New in 1.2">
+**Administration → Audit** lists every administrative change and every refused
+attempt, newest first.
+</Aside>
+
+Each line says **when**, **who** (with their roles), **what** (the action),
+**on what** (the target) and whether it **succeeded or was denied**. New events
+slide in at the top while you watch. Click a line to open its details: the
+values before and after the change, the project, the client address and the
+trace ID.
+
+![Administration → Audit: the filters and the events, newest first, with a refused change opened in the details drawer](../../../assets/screens/1.2/admin-audit-details.webp)
+
+What is recorded:
+
+- users and groups (created, changed, added to or removed from a group);
+- projects (created, renamed, archived, restored), members and worker bindings;
+- AI providers and tool credentials: that they changed, **never the key or
+  the secret**;
+- evidence, file and Insight policies;
+- deployments, rollbacks, and reviews and adoptions of Insight proposals;
+- every refused attempt, including someone outside a project trying to change
+  it.
+
+Filter by person, action, target, project, outcome or dates, then
+**Export CSV** to hand the filtered events to an auditor (up to 10 000 rows).
+
+The trail cannot be edited: an event is written in the same transaction as the
+change it describes, so a change that failed leaves no success line, and
+PostgreSQL refuses to update or delete an event, even for the database owner.
+Only administrators can read it; a refused read is itself recorded.
+
+The same events are available to scripts through
+`GET /api/v1/admin/audit` and `/api/v1/admin/audit/export`.
+
 ## Limitations
 
 - No bulk import (CSV or SCIM) in the UI; script `POST /api/v1/admin/users`.
-- The **Audit** sub-tab is a placeholder. Admin changes are recorded on the
-  server with the caller, action, target and trace ID.
+- The audit trail has no retention policy and no SIEM export yet; it keeps
+  every event and exports CSV.
 
 ## Reference
 

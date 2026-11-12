@@ -9,11 +9,12 @@ import {
 } from '@/api/engine';
 import { deriveLiveExecutionOverlay, NodeRunStatus } from '@/lib/run/liveRun';
 import { deriveBusinessLabel, statusOf, unwrapVariable } from '@/lib/run/instanceFormat';
+import { buildPathView, edgeOfFlow, recordedFlows, type PathView } from '@/lib/run/instancePath';
 
 export interface InstancePath {
   statuses: Record<string, NodeRunStatus>;
   activeNodeIds: string[];
-  /** Edge ids on the taken execution path (both endpoints touched by events/tokens). */
+  /** Edge ids on the taken execution path. */
   activePathEdgeIds: string[];
   /**
    * Taken edges whose target is a currently active node — the token arriving
@@ -26,57 +27,137 @@ export interface InstancePath {
    * with the animated flow dash (dry-run style), without a token dot.
    */
   nextEdgeIds: string[];
+  /** The three layers the canvas draws: path taken, where it is now, not reached. */
+  path: PathView;
+}
+
+export interface InstancePathOptions {
+  /** Nodes with an open incident (their token is stopped, so it is not among the waiting activities). */
+  incidentNodeIds?: string[];
 }
 
 /**
- * Derives the execution overlay strictly from engine-visible facts: node
- * statuses from history/active tokens, and the taken path as edges whose both
- * endpoints were touched (completed, active or failed). Unchosen branches keep
- * their dimmed default styling. Token motion is anchored at the current
- * position only — the taken history stays a static highlight.
+ * Derives the execution overlay from engine facts. Since 1.2 the engine
+ * records every sequence flow a token takes (`FLOW_TAKEN`): the path is read
+ * from those facts, in order, with each loop pass and branch decision. Only an
+ * instance whose history predates them (started before the upgrade) falls
+ * back to inferring the path from the activities it touched, and says so
+ * (`path.source === 'reconstructed'`).
  */
 export function deriveInstancePath(
   workflow: WorkflowFile,
   instance: ProcessInstanceDTO,
   activities: ActivityInstanceDTO[],
   history: ActivityHistoryDTO[],
+  options: InstancePathOptions = {},
 ): InstancePath {
   const overlay = deriveLiveExecutionOverlay(workflow, instance, activities, history);
+  const flows = recordedFlows(history);
+  const startEvent = history.find((event) => event.eventType === 'PROCESS_STARTED')?.activityId
+    ?? workflow.nodes.find((node) => node.type === 'event' && node.subtype === 'start')?.id;
+  // Complete only when the first hop left the start: otherwise the instance ran before the upgrade.
+  const complete = flows.length > 0 && flows[0].from === startEvent;
+  const recordedSteps = flows
+    .map((flow) => ({ flow, edge: edgeOfFlow(workflow.edges, flow) }))
+    .filter((step): step is { flow: typeof step.flow; edge: WorkflowEdge } => !!step.edge);
+
+  const statuses = { ...overlay.statuses };
+  const activeIds = new Set(overlay.activeNodeIds);
+  let activePathEdgeIds: string[];
+  let tokenEdgeIds: string[];
+  let path: PathView;
+  if (complete) {
+    activePathEdgeIds = [...new Set(recordedSteps.map((step) => step.edge.id))];
+    // The edge each active token arrived by: the last recorded flow into it.
+    tokenEdgeIds = [...new Set(overlay.activeNodeIds.flatMap((nodeId) => {
+      const last = [...recordedSteps].reverse().find((step) => step.edge.target === nodeId);
+      return last ? [last.edge.id] : [];
+    }))];
+    path = buildPathView(workflow, {
+      entry: startEvent, steps: recordedSteps, statuses, activeNodeIds: overlay.activeNodeIds,
+      incidentNodeIds: options.incidentNodeIds ?? [], status: instance.status, source: 'recorded', history,
+    });
+    // Every node the path left is done; an end the path never reached is not.
+    for (const nodeId of Object.keys(path.visits)) {
+      if (!activeIds.has(nodeId) && statuses[nodeId] === 'idle') statuses[nodeId] = 'completed';
+    }
+    workflow.nodes.filter((node) => node.type === 'event' && node.subtype === 'end' && !path.visits[node.id])
+      .forEach((node) => { if (statuses[node.id] === 'completed') statuses[node.id] = 'idle'; });
+  } else {
+    const inferred = inferTakenEdges(workflow, instance, activities, history);
+    // Facts recorded after the upgrade still count.
+    activePathEdgeIds = [...new Set([...inferred, ...recordedSteps.map((step) => step.edge.id)])];
+    const takenIds = new Set(activePathEdgeIds);
+    tokenEdgeIds = overlay.activeNodeIds.flatMap((activeNodeId) => {
+      const incoming = workflow.edges.filter((edge) => edge.target === activeNodeId);
+      const takenIncoming = incoming.filter((edge) => takenIds.has(edge.id));
+      // Gateways may advance synchronously without producing an activity event.
+      // A sole incoming edge is still unambiguous evidence of the arrival path.
+      const tokenEdges = takenIncoming.length > 0
+        ? takenIncoming
+        : incoming.length === 1
+          ? incoming
+          : [];
+      return tokenEdges.map((edge) => edge.id);
+    });
+    const edgesById = new Map(workflow.edges.map((edge) => [edge.id, edge]));
+    path = buildPathView(workflow, {
+      entry: startEvent,
+      steps: activePathEdgeIds.map((id) => ({ edge: edgesById.get(id)! })),
+      touchedOrder: touchedInOrder(instance, activities, history),
+      statuses, activeNodeIds: overlay.activeNodeIds, incidentNodeIds: options.incidentNodeIds ?? [],
+      status: instance.status, source: 'reconstructed', history,
+    });
+  }
+  const tokenIds = new Set(tokenEdgeIds);
+  const nextEdgeIds = workflow.edges
+    .filter((edge) => activeIds.has(edge.source) && !tokenIds.has(edge.id))
+    .map((edge) => edge.id);
+  return {
+    statuses,
+    activeNodeIds: overlay.activeNodeIds,
+    activePathEdgeIds,
+    tokenEdgeIds,
+    nextEdgeIds,
+    path,
+  };
+}
+
+/** Activities in the order history first touched them (reconstructed paths). */
+function touchedInOrder(
+  instance: ProcessInstanceDTO,
+  activities: ActivityInstanceDTO[],
+  history: ActivityHistoryDTO[],
+): string[] {
+  const order: string[] = [];
+  const add = (id: string | undefined) => { if (id && !order.includes(id)) order.push(id); };
+  history.forEach((event) => add(event.activityId));
+  activities.forEach((activity) => add(activity.activityId));
+  add(instance.currentActivityId);
+  return order;
+}
+
+/**
+ * Pre-1.2 inference: edges whose both endpoints were touched (completed,
+ * active or failed). Ambiguous with parallel branches, loops and two flows
+ * between the same nodes — which is why recorded flows replace it.
+ */
+function inferTakenEdges(
+  workflow: WorkflowFile,
+  instance: ProcessInstanceDTO,
+  activities: ActivityInstanceDTO[],
+  history: ActivityHistoryDTO[],
+): string[] {
   const touched = new Set<string>();
   if (instance.currentActivityId) touched.add(instance.currentActivityId);
   activities.forEach((activity) => touched.add(activity.activityId));
   history.forEach((event) => {
     if (event.activityId) touched.add(event.activityId);
   });
-  const activePathEdgeIds = workflow.edges
+  return workflow.edges
     .filter((edge) => touched.has(edge.source) && touched.has(edge.target))
     .filter((edge) => !isOutcomeRouteEdge(edge) || outcomeRouteTaken(edge, history))
     .map((edge) => edge.id);
-  const takenIds = new Set(activePathEdgeIds);
-  const activeIds = new Set(overlay.activeNodeIds);
-  const tokenEdgeIds = overlay.activeNodeIds.flatMap((activeNodeId) => {
-    const incoming = workflow.edges.filter((edge) => edge.target === activeNodeId);
-    const takenIncoming = incoming.filter((edge) => takenIds.has(edge.id));
-    // Gateways may advance synchronously without producing an activity event.
-    // A sole incoming edge is still unambiguous evidence of the arrival path.
-    const tokenEdges = takenIncoming.length > 0
-      ? takenIncoming
-      : incoming.length === 1
-        ? incoming
-        : [];
-    return tokenEdges.map((edge) => edge.id);
-  });
-  const tokenIds = new Set(tokenEdgeIds);
-  const nextEdgeIds = workflow.edges
-    .filter((edge) => activeIds.has(edge.source) && !tokenIds.has(edge.id))
-    .map((edge) => edge.id);
-  return {
-    statuses: overlay.statuses,
-    activeNodeIds: overlay.activeNodeIds,
-    activePathEdgeIds,
-    tokenEdgeIds,
-    nextEdgeIds,
-  };
 }
 
 /** Boundary kind the engine records in BOUNDARY_TAKEN for each route label. */
@@ -155,6 +236,7 @@ export const EVENT_META: Record<string, { label: string; tone: AuditTone }> = {
   TASK_SLA_BREACHED: { label: 'SLA missed, task escalated', tone: 'warning' },
   LOOP_EXHAUSTED: { label: 'Loop limit reached', tone: 'warning' },
   INCIDENT_RETRIED: { label: 'Incident retried', tone: 'warning' },
+  FLOW_TAKEN: { label: 'Flow taken', tone: 'info' },
 };
 
 /** One line for a BOUNDARY_TAKEN event: which route left the step, e.g. `outcome reject → draft`. */

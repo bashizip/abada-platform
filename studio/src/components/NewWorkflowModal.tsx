@@ -5,6 +5,7 @@ import { WorkflowFile } from '@/types';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { transpileBPMNToAPL } from '@/lib/bpmn/transpiler';
 import { LANGUAGE_VERSION_ABADA_IO_V1 } from '@/types';
+import { MotionBackdrop, MotionPanel } from '@/components/ui';
 
 type CreateMode = 'empty' | 'bpmn' | 'apl';
 
@@ -149,14 +150,14 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl w-full max-w-lg p-5 shadow-warm-lg space-y-4 animate-in zoom-in-95">
-        <div className="flex items-center justify-between border-b border-[#3A322E] pb-3">
-          <div className="flex items-center gap-2 text-[#F4A261]">
+    <MotionBackdrop className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <MotionPanel className="bg-mocha border border-hairline rounded-2xl w-full max-w-lg p-5 shadow-warm-lg space-y-4 animate-in zoom-in-95">
+        <div className="flex items-center justify-between border-b border-hairline pb-3">
+          <div className="flex items-center gap-2 text-saffron">
             <FileText className="w-5 h-5" />
-            <h2 className="font-bold text-sm text-[#EAE3D9]">New Process</h2>
+            <h2 className="font-bold text-sm text-linen">New Process</h2>
           </div>
-          <button onClick={onClose} className="text-[#A89F91] hover:text-[#EAE3D9]">
+          <button onClick={onClose} className="text-sand hover:text-linen">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -165,10 +166,10 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
           {modes.map(({ id, label, hint, icon: Icon }) => (
             <button key={id} type="button" onClick={() => { setMode(id); setError(null); }}
               className={`rounded-xl border p-2.5 text-left transition-colors ${
-                mode === id ? 'border-[#F4A261] bg-[#1A1614]' : 'border-[#3A322E] hover:border-[#A89F91]/50'}`}>
-              <Icon className={`w-4 h-4 mb-1 ${mode === id ? 'text-[#F4A261]' : 'text-[#A89F91]'}`} />
-              <span className="block text-[11px] font-semibold text-[#EAE3D9]">{label}</span>
-              <span className="block text-[9px] text-[#A89F91] leading-snug mt-0.5">{hint}</span>
+                mode === id ? 'border-saffron bg-charcoal' : 'border-hairline hover:border-sand/50'}`}>
+              <Icon className={`w-4 h-4 mb-1 ${mode === id ? 'text-saffron' : 'text-sand'}`} />
+              <span className="block text-[11px] font-semibold text-linen">{label}</span>
+              <span className="block text-[9px] text-sand leading-snug mt-0.5">{hint}</span>
             </button>
           ))}
         </div>
@@ -176,10 +177,10 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
         <div className="space-y-4">
           {mode === 'empty' && (
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block font-medium">Domain Category</label>
+              <label className="text-xs text-sand block font-medium">Domain Category</label>
               <select value={category}
                 onChange={(e) => setCategory(e.target.value as WorkflowFile['category'])}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]">
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2.5 text-xs text-linen focus:outline-none focus:border-saffron">
                 <option value="finance">Finance & Payment Settlement</option>
                 <option value="onboarding">Corporate Onboarding & KYC</option>
                 <option value="claims">Insurance Claims & Underwriting</option>
@@ -191,8 +192,8 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
 
           {mode === 'bpmn' && (
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block font-medium">BPMN 2.0 File</label>
-              <label className="flex items-center justify-center gap-2 px-3 py-6 rounded-xl bg-[#1A1614] border border-dashed border-[#3A322E] text-[11px] text-[#A89F91] cursor-pointer hover:border-[#F4A261]">
+              <label className="text-xs text-sand block font-medium">BPMN 2.0 File</label>
+              <label className="flex items-center justify-center gap-2 px-3 py-6 rounded-xl bg-charcoal border border-dashed border-hairline text-[11px] text-sand cursor-pointer hover:border-saffron">
                 <Upload className="w-4 h-4" />
                 {bpmnSource ? bpmnFileName : 'Click to select a .bpmn / .xml file'}
                 <input type="file" accept=".bpmn,.xml,text/xml" className="hidden"
@@ -206,30 +207,30 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
 
           {mode === 'apl' && (
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block font-medium">APL YAML Source</label>
+              <label className="text-xs text-sand block font-medium">APL YAML Source</label>
               <textarea value={aplSource} onChange={(e) => setAplSource(e.target.value)}
                 placeholder={'version: abada.io/v1\n\nmetadata:\n  key: my_process\n  name: My Process\n\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: end\n    - id: end\n      type: end'}
                 rows={10}
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#F4A261] resize-y" />
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2.5 text-xs font-mono text-linen focus:outline-none focus:border-saffron resize-y" />
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block font-medium">Process File Name</label>
+              <label className="text-xs text-sand block font-medium">Process File Name</label>
               <input value={fileName}
                 onChange={(e) => setFileName(e.target.value)}
                 placeholder="e.g. international_trade_clearance"
-                className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]" />
-              <p className="text-[10px] text-[#A89F91]">Stored as <span className="font-mono text-[#90A955]">*.apl.yaml</span> under <span className="font-mono">processes/</span></p>
+                className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2.5 text-xs text-linen focus:outline-none focus:border-saffron" />
+              <p className="text-[10px] text-sand">Stored as <span className="font-mono text-sage-green">*.apl.yaml</span> under <span className="font-mono">processes/</span></p>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-[#A89F91] block font-medium">Target Folder</label>
+              <label className="text-xs text-sand block font-medium">Target Folder</label>
               <div className="relative">
-                <FolderTree className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A89F91]" />
+                <FolderTree className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-sand" />
                 <select value={folderId}
                   onChange={(e) => setFolderId(e.target.value)}
-                  className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#F4A261]">
+                  className="w-full bg-charcoal border border-hairline rounded-xl pl-9 pr-3 py-2.5 text-xs text-linen focus:outline-none focus:border-saffron">
                   {processFolders.map((entry) => (
                     <option key={entry.folder.id} value={entry.folder.id}>
                       {entry.path}/
@@ -242,22 +243,22 @@ export const NewWorkflowModal: React.FC<NewWorkflowModalProps> = ({
         </div>
 
         {error && (
-          <div className="text-[11px] text-[#E76F51] bg-[#E76F51]/10 border border-[#E76F51]/30 rounded-lg px-3 py-2">
+          <div className="text-[11px] text-desert-rose bg-desert-rose/10 border border-desert-rose/30 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
 
         <div className="pt-1 flex justify-end space-x-2">
           <button type="button" onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#1A1614] hover:bg-[#2F2926] text-[#A89F91] hover:text-[#EAE3D9] border border-[#3A322E]">
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-charcoal hover:bg-mocha-hover text-sand hover:text-linen border border-hairline">
             Cancel
           </button>
           <button type="button" onClick={submit} disabled={busy}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#F4A261] hover:bg-[#f5ad73] text-[#1A1614] active:scale-95 shadow-warm-md disabled:opacity-50">
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-saffron hover:bg-saffron-bright text-charcoal active:scale-95 shadow-warm-md disabled:opacity-50">
             {busy ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : 'Create Process'}
           </button>
         </div>
-      </div>
-    </div>
+      </MotionPanel>
+    </MotionBackdrop>
   );
 };

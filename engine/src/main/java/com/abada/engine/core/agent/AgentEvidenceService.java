@@ -7,9 +7,11 @@ import com.abada.engine.core.ActivityHistoryService;
 import com.abada.engine.core.ProcessInstance;
 import com.abada.engine.dto.AgentStepEvidenceDto;
 import com.abada.engine.persistence.entity.AgentStepEntity;
+import com.abada.engine.persistence.entity.DecisionInputEvidenceEntity;
 import com.abada.engine.persistence.entity.ProjectEntity;
 import com.abada.engine.persistence.entity.ProjectMemberEntity.Role;
 import com.abada.engine.persistence.repository.AgentStepRepository;
+import com.abada.engine.persistence.repository.DecisionInputEvidenceRepository;
 import com.abada.engine.persistence.repository.ProjectRepository;
 import com.abada.engine.project.ProjectAccessService;
 import com.abada.engine.security.AesEncryption;
@@ -26,14 +28,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Reading agent evidence and setting a project's evidence policy. Project
- * members see step summaries (digests, tokens, cost); payloads need the
- * evidence-reader role and every read is recorded in history.
+ * members see step summaries (digests, tokens, cost); payloads, and the
+ * resolved inputs of decision-table applications, need the evidence-reader
+ * role and every read is recorded in history.
  */
 @Service
 public class AgentEvidenceService {
     public record Payloads(String stepId, String payloadMode, JsonNode request, JsonNode result) {}
 
     public record PolicyView(String payloads, int retentionDays) {}
+
+    /** What a decision-table application read, as the evidence policy kept it; {@code inputs} is null under none. */
+    public record DecisionInputs(String evidenceId, String activityId, String decisionKey, String payloadMode,
+            boolean redacted, JsonNode inputs) {}
 
     private final AgentStepRepository steps;
     private final ProjectRepository projects;
@@ -42,9 +49,14 @@ public class AgentEvidenceService {
     private final AesEncryption encryption;
     private final ObjectMapper json;
     private final ActivityHistoryService history;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
+    private final DecisionInputEvidenceRepository decisionInputs;
 
     public AgentEvidenceService(AgentStepRepository steps, ProjectRepository projects, ProjectAccessService access,
-            AbadaEngine engine, AesEncryption encryption, ObjectMapper json, ActivityHistoryService history) {
+            AbadaEngine engine, AesEncryption encryption, ObjectMapper json, ActivityHistoryService history,
+            DecisionInputEvidenceRepository decisionInputs, com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
+        this.decisionInputs = decisionInputs;
         this.steps = steps;
         this.projects = projects;
         this.access = access;
@@ -84,6 +96,29 @@ public class AgentEvidenceService {
                 decrypt(step.getEvidenceResultEnc()));
     }
 
+    /** The resolved inputs of one decision-table application, for an evidence reader of the project; audited. */
+    @Transactional
+    public DecisionInputs decisionInputs(String projectId, String instanceId, String evidenceId) {
+        access.requireEvidenceReader(projectId);
+        ProcessInstance instance = requireInstance(projectId, instanceId);
+        DecisionInputEvidenceEntity row = decisionInputs.findById(evidenceId)
+                .filter(found -> found.getInstanceId().equals(instanceId))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND,
+                        "Decision input evidence not found"));
+        if (row.getPurgedAt() != null) {
+            throw new ApiException(HttpStatus.GONE, ApiErrorCode.WORK_RETIRED,
+                    "The inputs of this decision were purged after their retention period");
+        }
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("kind", "decision-inputs");
+        details.put("evidenceId", evidenceId);
+        details.put("decisionKey", row.getDecisionKey());
+        details.put("payloadMode", row.getPayloadMode());
+        history.record("EVIDENCE_READ", instance, row.getActivityId(), details);
+        return new DecisionInputs(evidenceId, row.getActivityId(), row.getDecisionKey(), row.getPayloadMode(),
+                row.isRedacted(), decrypt(row.getInputsEnc()));
+    }
+
     @Transactional(readOnly = true)
     public PolicyView policy(String projectId) {
         ProjectEntity project = access.requireVisible(projectId);
@@ -110,6 +145,11 @@ public class AgentEvidenceService {
         project.setUpdatedAt(Instant.now());
         projects.save(project);
         history.record("EVIDENCE_POLICY_CHANGED", null, null, null, details);
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.EVIDENCE_POLICY_UPDATE,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROJECT, projectId, projectId,
+                com.abada.engine.audit.AdminAuditDetails.create()
+                        .change("payloads", details.get("fromPayloads"), details.get("toPayloads"))
+                        .change("retentionDays", details.get("fromRetentionDays"), details.get("toRetentionDays")));
         return new PolicyView(project.getEvidencePayloads(), project.getEvidenceRetentionDays());
     }
 
@@ -131,6 +171,18 @@ public class AgentEvidenceService {
         }
     }
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper FILES_JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private static com.fasterxml.jackson.databind.JsonNode files(AgentStepEntity step) {
+        if (step.getFilesJson() == null) return null;
+        try {
+            return FILES_JSON.readTree(step.getFilesJson());
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
     private static AgentStepEvidenceDto summary(AgentStepEntity step) {
         return new AgentStepEvidenceDto(step.getId(), step.getExternalTaskId(), step.getActivityId(),
                 step.getAttempt(), step.getSequence(), step.getKind().name(), step.getToolRef(), step.getPolicy(),
@@ -138,7 +190,7 @@ public class AgentEvidenceService {
                 step.getModel(), step.getPromptVersion(), step.getPromptTokens(), step.getCompletionTokens(),
                 step.getCostUsd(), step.isCostUnpriced(), step.getPayloadMode(), step.getResolvedBy(),
                 step.getStartedAt(), step.getFinishedAt(), step.getPurgedAt(), step.getDecidedAt(),
-                step.getChildInstanceId());
+                step.getChildInstanceId(), files(step));
     }
 
     private static ApiException invalid(String message) {

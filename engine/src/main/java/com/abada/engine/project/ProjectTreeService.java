@@ -406,6 +406,15 @@ public class ProjectTreeService {
     @Transactional(readOnly = true)
     public Optional<ProjectResourceEntity> findFormByKey(String projectId, String formKey) {
         access.requireVisible(projectId);
+        return lookupForm(projectId, formKey);
+    }
+
+    /**
+     * {@link #findFormByKey} without the caller's visibility check, for the
+     * engine pinning forms while a deployment its caller authorized runs.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ProjectResourceEntity> lookupForm(String projectId, String formKey) {
         if (formKey == null || formKey.isBlank()) {
             return Optional.empty();
         }

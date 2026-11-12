@@ -15,12 +15,15 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http,
-            @Value("${abada.security.mode:disabled}") String mode, ObjectMapper objectMapper) throws Exception {
+            @Value("${abada.security.mode:disabled}") String mode, ObjectMapper objectMapper,
+            org.springframework.beans.factory.ObjectProvider<com.abada.engine.audit.AdminAuditRecorder> audit)
+            throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .cors(cors -> {})
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint(ApiSecurityHandlers.authenticationEntryPoint(objectMapper))
-                        .accessDeniedHandler(ApiSecurityHandlers.accessDeniedHandler(objectMapper)));
+                        .accessDeniedHandler(ApiSecurityHandlers.accessDeniedHandler(objectMapper,
+                                audit.getIfAvailable())));
 
         if ("oidc".equalsIgnoreCase(mode)) {
             authorize(http);
@@ -59,7 +62,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/tasks/**")
                         .hasAnyAuthority("SCOPE_task:write", AbadaRoles.TASK_USER, AbadaRoles.ADMIN)
                 // Evidence payloads: evidence readers only, never implied by administration.
-                .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/*/agent-steps/*/payloads")
+                .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/*/agent-steps/*/payloads",
+                                "/v1/projects/*/instances/*/decisions/*/inputs")
                         .hasAnyAuthority(AbadaRoles.EVIDENCE_READ_SCOPE, AbadaRoles.EVIDENCE_READER)
                 .requestMatchers(HttpMethod.GET, "/v1/projects/*/instances/**")
                         .hasAnyAuthority("SCOPE_operations:read", AbadaRoles.OPERATOR, AbadaRoles.ADMIN)

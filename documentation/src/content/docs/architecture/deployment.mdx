@@ -20,6 +20,7 @@ flowchart LR
     end
     subgraph Data[data network - internal]
       DB[(PostgreSQL)]
+      FS[(RustFS - process files)]
       KD[(Keycloak PostgreSQL - development only)]
     end
     subgraph Telemetry[telemetry network - internal and optional]
@@ -35,6 +36,7 @@ flowchart LR
   T --> E
   T --> K
   E <--> DB
+  E <--> FS
   K <--> KD
   E -. bounded OTLP export .-> C
   E -. named JSON log volume .-> L
@@ -49,7 +51,7 @@ flowchart LR
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
-| `compose.yaml` | PostgreSQL, Engine, Studio, the Agent Worker, Docs, internal data and edge networks, persistent workflow/log volumes | Identity provider, TLS policy, telemetry backends, LLM credentials |
+| `compose.yaml` | PostgreSQL, RustFS (object storage for the files of task forms, since 1.2), Engine, Studio, the Agent Worker, Docs, internal data and edge networks, persistent workflow, file and log volumes | Identity provider, TLS policy, telemetry backends, LLM credentials |
 | `compose.dev.yaml` | Local HTTP routing, bundled Keycloak, safe evaluation credentials, automatic Agent Worker provisioning | Production identity or certificates |
 | `compose.prod.yaml` | Exact application version, TLS/ACME routing, required external OIDC and CORS values, production restart/resources | Bundled production Keycloak or default secrets |
 | `compose.telemetry.yaml` | Collector, metrics, traces, logs and Grafana | Database authority, engine readiness or workflow transactions |

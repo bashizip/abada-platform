@@ -209,6 +209,8 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `max_attempts` | integer | no | Durable retries before the job fails. Default 3. A rate-limited attempt that never ran does not count. |
 | `retry_backoff_ms` | integer | no | Pause between retries. Default 2 000. |
 | `fallback_models` | string[] | no | Up to 3 allowed models tried in order while the model before is rate-limited or unavailable — never because of an answer the engine rejected. |
+| `files` | map name → expression | no | Files the model reads (1.2): each expression gives a file reference or a list of them, usually a file field of an earlier task form (`bordereau: bordereau_scan`). Only these files reach a model, as images or PDF; a name cannot also be an input. The engine checks each file belongs to this instance when the work is locked. See process files. |
+| `max_files` | integer | no | 1–20, default 5. Most files one call may carry; more fails the step with `AGENT_FILE_LIMIT`. Only with `files`. |
 | `on_low_confidence` | nodeId | no | Where to go when the result's `_confidence` is missing or below `confidence_threshold`. |
 | `on_invalid_output` | nodeId | no | Where to go when the result does not match `output_schema`. |
 | `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the worker reports an error code, or when the last attempt fails (code `WORK_FAILED`). Without it a last failure opens an incident. |
@@ -413,7 +415,7 @@ new documents (Studio always writes `human-input`).
  | Property | Type | Required | What it does |
  | --- | --- | --- | --- |
  | `assignees` | string[] | yes | The candidate groups whose members may claim the task, e.g. `[risk-officers]`. Values are group names, not usernames. At least one is required. |
- | `formKey` | string | no | Form key for task-form rendering (BPMN `camunda:formKey`). Resolved by bare slug to a project FORM resource. `formId` is a deprecated alias. |
+ | `formKey` | string | no | The task form (BPMN `camunda:formKey`), resolved by bare slug to a project FORM resource. It is pinned when the process is deployed and the engine checks every completion against it; see [Task form schema](#task-form-schema). `formId` is a deprecated alias. |
  | `mode` | `serial` \| `parallel` | no | Authoring hint only. The engine does not enforce serial or parallel sign-off. |
  | `sla_hours` | number | no | Service level in hours (e.g. 24). When it passes with the task still open, the engine escalates the task in place: it stays open, `escalate_to` groups are added and `TASK_SLA_BREACHED` is emitted. `slaHours` is a deprecated alias. |
  | `escalate_to` | string[] | no | Groups added as candidates when the task misses `sla_hours`. Requires `sla_hours`. |
@@ -447,6 +449,43 @@ that the agent reads on its next attempt as `${review_comment}`:
     approve: { next: done }
     reject: { next: draft, comment: required }
 ```
+
+#### Task form schema
+
+A FORM resource is JSON: `title`, `fields` and an optional `layout`. A
+field's `id` is the process variable it writes. The engine pins the form at
+deploy (refusing an invalid one with `ABADA-FORM-001`) and checks each
+completion against it (APL specification §2.9); the Studio form designer
+writes the same JSON.
+
+| Type | Value submitted | Rules |
+| --- | --- | --- |
+| `string`, `textarea` | string | `minLength`, `maxLength`, `pattern` (RE2, whole value) |
+| `email`, `url` | string | built-in format (`url` needs `http://` or `https://`), `minLength`, `maxLength` |
+| `number` | number | `min`, `max` |
+| `currency` | number in the field's fixed `currency` (ISO 4217) | `min`, `max`, no more decimals than the currency allows (EUR 2, JPY 0) |
+| `select`, `radio` | one option value | must be one of `options` |
+| `multiselect`, `checkbox-group` | list of option values | each one of `options`, no repeats; `min`/`max` count selections |
+| `boolean` | `true` / `false` | `required` means it must be `true` |
+| `date` | `YYYY-MM-DD` | `min`, `max` (ISO dates) |
+| `datetime` | ISO-8601 instant with offset, e.g. `2026-11-27T09:00:00Z` | `min`, `max` |
+| `display` | none: shows the process variable named in `variable` | cannot be submitted or required |
+| `markdown` | none: static help in `text` (bold, italics, lists, links; no HTML) | cannot be submitted or required |
+| `file` | the id of a file uploaded to the task (`POST /v1/projects/{p}/tasks/{t}/files`); a list of ids when `multiple` | `accept` (extensions such as `.pdf`, content types such as `image/*`, checked against the file's bytes), `maxSize` in bytes (within the engine's cap, 10 MB by default), `multiple` with `min`/`max` counting files. On completion the variable holds `{ fileId, name, contentType, size, sha256 }`, never the bytes; see [process files](process-files.md) |
+
+Every input field also takes `label`, `required`, `help`, `placeholder`,
+`defaultValue` and `visible_when` (portable CEL subset over form values and
+process variables). `options` entries are strings or `{ "value", "label" }`;
+the value is what is stored.
+
+`layout.sections[]` have an `id`, optional `title`, `description` and
+`collapsible`, and `rows`: each row is a list of 1–4 cells, a cell being a
+field id or `{ "field", "span" }` on a 4-column grid (widths add up to at
+most 4). Every field is placed exactly once. Optional `layout.steps[]`
+(`title`, `sections`) turn the form into a wizard; each section belongs to
+exactly one step, in order. A form without `layout` lays itself out: one
+column for a short form, two or three for a long one on a wide screen, one
+on a phone.
 
 ---
 
@@ -492,6 +531,13 @@ external DMN-table binding with a native in-transaction table.
 | `then` | map | yes | The outputs written to instance variables, e.g. `{ riskLevel: LOW, autoApprove: true }`. |
 
 \* required unless the rule is the `otherwise` fallback.
+
+**Checked at deployment**, each on the rule it is about: an empty `when`, a
+`when` that is not valid CEL, a `when` reading a name that is not one of the
+`inputs` (conditions see only the inputs), a second `otherwise` rule, and,
+under `UNIQUE`, two rules with the same condition. Overlapping but different
+conditions under `UNIQUE` can only be caught when the table runs. Details:
+[APL specification §4.4a](apl-specification.md#44a-rule-checks-at-deployment).
 
 **Example.**
 

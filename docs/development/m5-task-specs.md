@@ -1,0 +1,977 @@
+# M5 — Studio experience: task specifications
+
+- Milestone: M5 (2026-10-19 → 2026-11-27), release `1.2.0`
+- Roadmap: [`roadmap.md`](roadmap.md)
+- Audience: human contributors and coding agents. Execute one task per branch/PR.
+  Read `AGENTS.md` first; its runtime invariants override anything here.
+- Status: **draft for review.**
+
+Every task lists **Goal**, **Files**, **Changes**, **Acceptance tests**,
+**Invariants**, and **Out of scope**, as in [`m4-task-specs.md`](m4-task-specs.md).
+`STUDIO` means `studio/src`, `ENGINE` means `engine/src/main/java/com/abada/engine`,
+`ENGINE_TEST` means `engine/src/test/java/com/abada/engine`.
+
+## Why this milestone
+
+The engine is ahead of the Studio. Operators and buyers judge Abada by what
+they see while a process runs, and today:
+
+- The Operations view is functional but abrupt: dense panels, hard-coded hex
+  colours repeated across files (`#1A1614`, `#3A322E`, `#2A9D8F`…), no loading
+  or empty states worth the name, and two files over 600 lines
+  (`ProcessOperations.tsx` 922, `InstanceDetailView.tsx` 649).
+- Execution is shown as fast as events arrive. A run that takes 300 ms in the
+  engine is a flash on screen: nobody can see which step ran, in what order, or
+  why it went where it went.
+- The diagram of a running or finished instance does not make the path taken
+  obvious. `deriveInstancePath` (`STUDIO/lib/run/instanceDetail.ts`) rebuilds
+  it from activity history, which records the activity but not the sequence
+  flow taken (`ActivityHistoryEntity` has no flow id), so the path is guessed
+  between consecutive activities and is ambiguous with parallel branches, loops
+  and two flows between the same nodes.
+- When an incident occurs, the failing node is not obvious on the canvas and the
+  retry action lives in a separate panel (`IncidentsPanel`).
+- The audit trail is a tab the user must open, and it renders all at once.
+- `motion` (12.x) is a dependency but nothing imports it.
+- A `decision-table` node shows only an icon in the properties panel.
+  `STUDIO/features/dmn/DmnRuleInspector.tsx` exists but is not mounted anywhere.
+- The Administration panel has an *Audit* tab that only shows "Audit trail
+  coming soon" (`AdminAuditPlaceholder` in `AdministrationView.tsx`). The engine
+  records no audit event for administrative mutations (`AdminController`,
+  `AiProviderController`, project and policy changes).
+- The execution-variables panel renders values in a larger font than keys,
+  copes poorly with many or nested variables, and JSON is shown as plain
+  `JSON.stringify` text in about ten places (agent steps, tool approvals,
+  dry run, deploy dialog, task inbox…), never highlighted.
+- The NL → APL bar is fixed on screen and its result lands straight on the
+  canvas through a diff modal; there is no place to refine a draft while
+  seeing it.
+- The documentation does not say which Studio version it describes and gives
+  no hint of what is new.
+- Forms support six flat field types (`string`, `number`, `boolean`, `select`,
+  `textarea`, `date`, see `STUDIO/features/inbox/formSchema.ts`), no layout and
+  no file upload. The engine has no file storage.
+
+## The rule for "slow enough to see"
+
+Observation pace is a **presentation** concern. The engine keeps executing at
+full speed; nothing in this milestone adds delays, sleeps or throttling to the
+engine, the worker or the outbox (doctrine: do not weaken the durable state
+machine). The Studio buffers the event stream and plays it back at a human pace,
+and it always tells the truth about the gap:
+
+- Each visible step transition holds for a minimum dwell (default *calm*,
+  ≈ 700 ms per node; *brisk* ≈ 250 ms; *instant* = today's behaviour).
+- When playback is behind the real state, the Studio shows it ("replaying —
+  4 steps behind", with a *Jump to now* control). It never shows a state the
+  instance is not in or was never in.
+- Incidents, terminal states and human tasks waiting on the current user are
+  never held back behind the queue: they are announced immediately, and the
+  playback catches up to them. One bounded exception (S4): the facts of a
+  retry (`INCIDENT_RETRIED` up to the fact that completes or fails it) are
+  each shown for one dwell before the catch-up, so a retry that ends the
+  instance is still seen; the header status changes at once.
+- `prefers-reduced-motion` disables movement (not the pacing itself; steps still
+  appear in order, with fades instead of motion).
+- The pace setting is per user (local preference), default *calm*.
+
+## Order and dependencies
+
+```
+S1 motion foundation ──┬── S2 path taken ── S3 paced playback ──┬── S4 incident on the node
+                       │                                         └── S5 live audit trail
+                       └── S6 Operations redesign (uses S2–S5 components)
+S7 decision-table inspector   (independent)
+S8 form layout + field types ── S9 file upload (engine + Studio)
+S10 admin audit trail (engine + Studio)   S11 variables + JSON viewer (after S1)
+S12 NL authoring workspace (after S1)     S13 documentation discovery
+S14 documentation, screenshots, 1.2.0 gate
+S15 files as agent input (after S9)
+```
+
+S1 first, then S2 and S7/S8 in parallel. S2 adds the taken flow to history
+events (engine, no schema change). Schema changes: S7 follow-up `V40`
+(decision input evidence, done), S8 `V41` (forms pinned at deploy), S9 `V42`
+(file metadata), S10 `V43` (admin audit). S9 also makes RustFS required
+object storage for self-hosted installations.
+
+---
+
+## S1 — Motion foundation and design tokens
+
+**Goal.** One shared vocabulary for colour, spacing and motion, so every later
+task animates the same way and the Studio stops repeating hex values.
+
+**Files.** `STUDIO/index.css`, new `STUDIO/lib/motion.ts`, `STUDIO/components/ui.tsx`,
+Tailwind config.
+
+**Changes.**
+- Colour, radius, shadow and elevation tokens as CSS custom properties; replace
+  the repeated hex literals in `features/operations`, `components/` and
+  `features/designer` with tokens (mechanical, no visual change in this step).
+- `lib/motion.ts`: duration tokens (`fast` 150 ms, `base` 240 ms, `calm` 700 ms),
+  two easings (standard, emphasised), shared `motion` variants (enter, exit,
+  list stagger, state change pulse, layout shift), and a `useReducedMotion`
+  wrapper.
+- Primitives in `ui.tsx`: `Skeleton`, `EmptyState`, `StatusPill` (animated
+  state change), `Drawer`, `AnimatedNumber`.
+- Page and panel transitions (route change, side panel open/close, modal
+  enter/exit, toast) use the shared variants.
+
+**Motion rules.** Animation must carry meaning: a state change, where something
+came from or went, what is live. No decorative loops except a live indicator.
+Nothing above 400 ms except the playback dwell. Layout animations must not
+shift content the user is reading or typing into.
+
+**Acceptance tests.** Unit tests for the reduced-motion wrapper; lint rule or
+test that fails on new raw hex colours in `features/operations`; `npm run build`
+unchanged bundle budget (+ ≤ 40 kB gzip).
+
+**Out of scope.** Light theme; rebranding.
+
+---
+
+## S2 — The path taken, at a glance
+
+**Goal.** On the diagram of a running or finished instance, anyone sees without
+effort how the process got where it is: which steps ran, in what order, which
+branch each decision took, and what was never reached.
+
+**Files.** `ENGINE/core/` (where tokens leave a node), history event details,
+`STUDIO/lib/run/instanceDetail.ts` (`deriveInstancePath`),
+`STUDIO/hooks/useLiveInstanceOverlay.ts`, `STUDIO/features/designer/nodes/*`,
+`EdgeRenderer.tsx`, `edgeStyle.ts`, `CanvasMarkers.tsx`.
+
+**Changes — truth first (engine).**
+- When a token leaves a node, the history event records the flow it took:
+  `detailsJson.flow = { id, from, to, tokenId, loopIteration }`, plus for
+  conditions the matched rule (`condition` text or `else`) and for routing
+  agents / outcomes the chosen route. No schema change (`details_json` exists);
+  written in the same transaction as the move.
+- `GET` instance history exposes these fields in the DTO (additive, `/api/v1`
+  compatible). `deriveInstancePath` uses them and only falls back to today's
+  inference for instances started before the upgrade, labelled "path
+  reconstructed" in the UI.
+
+**Changes — the picture (Studio).** Three clearly different visual layers:
+
+| Layer | Nodes | Edges |
+| --- | --- | --- |
+| **Path taken** | Full opacity, solid fill in the node's colour, a small check for completed, an order badge (`1`, `2`, `3`…) in the corner | Saturated accent colour, 3 px, solid, filled arrowhead, drawn above all other edges |
+| **Where it is now** | Accent ring with a slow live glow (running), amber with a person icon (waiting for a human), red ring (incident), filled end marker (finished) | The edge into the current node animates its stroke once on arrival (S3) |
+| **Not reached** | ~30 % opacity, desaturated, thin outline, no shadow | 1 px, light grey, dashed, small open arrowhead |
+
+- **Decisions read like sentences.** On a condition or routing node, the taken
+  branch keeps its label in full colour, prefixed with ✓ (e.g. "✓ score ≥ 750");
+  untaken branch labels fade with their edge. Hovering the gateway shows the
+  values that decided it (redacted per evidence policy).
+- **Loops and repeats.** A node visited more than once shows `×3`; the back-edge
+  is drawn in the path colour with its iteration count. Order badges list every
+  visit on hover ("2, 5, 8").
+- **Parallel branches.** All taken branches are highlighted; the join shows how
+  many arrived (`2/2`).
+- **Delegation and for-each.** A `call-process` / `for_each` node on the path
+  shows its child results (`3 ✓ · 1 ✗`) and links to the children (E20/E21).
+- **Hover to explore.** Hovering a faded node brings it back to full opacity
+  with a tooltip ("not reached — the `else` branch was taken at *Check score*").
+  Hovering a path node highlights its audit entry (S5).
+- **A "Show full diagram" toggle** turns dimming off; a three-item legend
+  (taken / now / not reached) sits in the canvas corner, collapsible.
+- **Colour is not the only cue** (accessibility): taken = solid + thick +
+  numbered, not reached = dashed + faded, incident = icon + ring. Contrast of
+  the path colour ≥ 3:1 against the canvas; checked in dark theme.
+- **Same rendering everywhere** the diagram shows an instance: Operations
+  instance view, Dry Run, the task form's process context, and exported
+  screenshots.
+
+**Acceptance tests.** Engine (PostgreSQL): history records the flow for
+sequential, condition, parallel split/join, bounded loop, outcome routing and
+boundary-event exits; a rolled-back command leaves no flow record. Studio:
+`deriveInstancePath` unit tests for each shape using recorded flows, and the
+fallback for pre-upgrade history; visual regression screenshots for a finished
+happy path, a rejected-then-approved rework loop, a parallel run, and an
+incident mid-path; a five-second test with two people unfamiliar with the
+process ("which branch did it take, and why?") recorded in the PR.
+
+**Invariants.** The path shown is derived from recorded facts, never guessed
+when facts exist. No sensitive values in tooltips beyond what the audit trail
+already shows.
+
+**Out of scope.** Heat-map overlay across many instances (Insight, 1.3
+candidate).
+
+---
+
+## S3 — Paced playback of a running instance
+
+**Goal.** The user watches the process execute step by step, at a pace a human
+can follow, without the UI lying about the real state.
+
+**Files.** New `STUDIO/hooks/usePacedPlayback.ts`, `STUDIO/hooks/useLiveInstanceOverlay.ts`,
+`STUDIO/hooks/useInstanceEvents.ts`, canvas node components in
+`STUDIO/features/designer/nodes/`, `EdgeRenderer.tsx`.
+
+**Changes.**
+- `usePacedPlayback(events, pace)` turns the SSE event stream (E12) into an
+  ordered queue and emits one visible transition per dwell. It exposes
+  `{ visibleState, lag, jumpToNow(), pace, setPace }`. Ordering is by outbox
+  event id; duplicates (at-least-once delivery) are dropped by event id.
+- Canvas: the active token travels along the taken edge (animated stroke),
+  the node entering `active` pulses once, then settles into the S2 "path taken"
+  style; the S2 layers build up step by step instead of appearing at once.
+  Parallel branches advance together.
+- Pace control (calm / brisk / instant) and the lag badge in the instance
+  header; *Jump to now* flushes the queue.
+- The same hook drives Dry Run (`DryRunPanel`) so simulations are watchable too.
+- Exceptions from the pacing rule above (incident, terminal, my task) bypass the
+  queue.
+
+**Acceptance tests.** Hook tests with a fake clock: events arriving in 50 ms are
+shown one per dwell, in order; duplicate event ids shown once; an incident event
+jumps the queue; *instant* reproduces current behaviour; reduced motion keeps
+order without transforms. Playwright: start the lead-triage example and assert
+each node becomes active in sequence.
+
+**Invariants.** No change to engine timing or APIs. The visible state is always
+a prefix of the real event sequence.
+
+**Out of scope.** Rewinding a finished instance (a "replay scrubber" is a 1.3
+candidate); server-side throttling.
+
+---
+
+## S4 — Incident on the node, with the action in place
+
+**Goal.** When an instance fails, the user sees *where* at a glance and fixes it
+from there, then watches the fix happen.
+
+**Files.** Canvas nodes, `STUDIO/features/operations/IncidentsPanel.tsx`,
+`ErrorDetailsDialog.tsx`, new `STUDIO/features/operations/NodeIncidentCard.tsx`.
+
+**Changes.**
+- The failing node gets an incident state: red ring with a single attention
+  pulse, an incident badge, and the canvas pans/zooms to it when the incident
+  arrives (unless the user is interacting with the canvas).
+- A card anchored to the node shows the error summary, attempts and the
+  available actions from the existing incident API: *Retry*, *Retry on another
+  model* (agent nodes, E4), *View details* (stack trace dialog), *Cancel
+  instance*. Permissions decide which buttons render; the backend still
+  enforces them.
+- After *Retry*, the node passes visibly through `retrying → active →
+  completed/failed` with the S3 dwell, so the user sees the retry happen even if
+  the engine resolves it in milliseconds. The incident card collapses into a
+  "resolved" toast with a link to the audit entry.
+- `IncidentsPanel` lists incidents across instances and clicking one opens the
+  instance focused on the node.
+
+**Acceptance tests.** Component tests for the card per node type and
+permission set; Playwright: deploy a process whose engine task fails, observe
+the node in incident state, retry with a fixed input, observe completion.
+
+**Invariants.** Actions call the existing commands; no new retry semantics.
+The word "Replay" stays reserved for E15 replay-before-approval; the incident
+action is labelled *Retry*.
+
+**As built.** Retry phases are read from recorded facts only: *retrying* =
+`INCIDENT_RETRIED`; *active* = `EXTERNAL_TASK_LOCKED`, a claimed task, a
+started child, or a token waiting at the step again; *completed* = the work
+completed or a flow left the step; *failed* = the last attempt failed again.
+The instance view reads its incidents with the additive
+`processInstanceId` filter on `GET /v1/projects/{projectId}/incidents` and
+refreshes them with each stream event. A retry takes no input: the
+instance's current variables are used (fix one with the variables `PATCH`
+first). The Playwright scenario was run as a scripted browser check on the
+dev stack; a committed end-to-end harness is a separate task.
+
+---
+
+## S5 — Live audit trail, opened at start
+
+**Goal.** The audit trail tells the story of the run as it happens, entry by
+entry, from the moment the instance starts.
+
+**Files.** `STUDIO/features/operations/InstanceDetailView.tsx`,
+`instanceTelemetry.tsx` (`AuditTimeline`).
+
+**Changes.**
+- Starting an instance from the Studio (or opening a running one) opens the
+  instance view with the audit trail visible by default, beside the canvas.
+- New entries enter one at a time through the S3 queue (slide + fade, short
+  stagger), in sync with the canvas: the entry for a node appears when the node
+  becomes active on screen, not before.
+- Each entry: actor (engine, agent with model and prompt version, human),
+  action, node, time, duration; agent entries expand to the agent-step inspector
+  (E12), decision-table entries show the matched rule (S7), human entries the
+  outcome and comment.
+- Hovering an entry highlights its node on the canvas; clicking a node filters
+  the trail.
+- The trail auto-scrolls while the user is at the bottom and stops when they
+  scroll up (with a "new entries" pill).
+
+**Acceptance tests.** Component tests: entries appear in event order under a
+fake clock; scroll-lock behaviour; node ↔ entry highlight. No sensitive values:
+audit entries render the same redacted fields as today (`AGENTS.md`, evidence
+over claims).
+
+**As built.** One entry per pass of a token through a node (from the flow
+that entered it to the flow that left it), plus the facts about the instance
+as a whole; built in the Studio from recorded facts only
+(`STUDIO/lib/run/auditTrail.ts`). Synchronous nodes record nothing but their
+flows, so this is where they appear. The engine writes a command's flows
+before its other facts, so the trail shows the visible playback prefix
+extended to the next step: a task created at a node arrives with the step
+that entered it. Agent entries show `promptVersion` from the agent-step
+journal when the worker reports one (the first-party worker does not), else
+`#` and 8 characters of the prompt hash. Human entries show the outcome and
+the comment length, never the comment. Decision-table entries show the
+matched rule numbers; S7 adds the rule itself. Deploy & Start now opens the
+instance view and plays the new run from its first fact (a second bounded
+exception to "the state at opening is shown at once"; urgent facts still
+catch up). Rows only append, so `domAnimation` suffices (+4.0 kB gzip). The
+designer's live view keeps the static `AuditTimeline`.
+
+---
+
+## S6 — Operations redesign
+
+**Goal.** An Operations view that feels premium: calm, legible, fast, and
+built around the running process rather than around tables.
+
+**Files.** `STUDIO/features/operations/*`, split `ProcessOperations.tsx` and
+`InstanceDetailView.tsx` into focused components (< 300 lines each).
+
+**Changes.**
+- **Design pass first**: a clickable mock (Artifact or Figma) of the overview
+  and the instance view, reviewed before implementation.
+- **Overview**: header KPIs with animated numbers and 24 h sparklines
+  (running, completed, incidents, awaiting humans, p95 duration, AI cost);
+  filter chips by state and version; instance list with live state pills that
+  animate on change; skeletons while loading; designed empty states.
+- **Instance view**: the canvas is the hero (S3/S4 overlay), the audit trail
+  on the right (S5), variables, lineage (E20) and versions in a tabbed drawer;
+  sticky header with state, version, started by, elapsed time ticking, pace
+  control and actions.
+- **Worker health** and **incidents** as compact cards with clear severity,
+  not raw tables.
+- Keyboard: `j/k` to move in the list, `Enter` to open, `Esc` to close the
+  drawer.
+- Consistent typography scale and spacing from S1 tokens.
+
+**Acceptance tests.** Existing operations tests pass after the split; visual
+regression screenshots for overview, instance running, instance with incident,
+empty project; Lighthouse accessibility ≥ 95 on the operations route; first
+contentful render of the list ≤ 1 s with 1 000 instances (virtualised list).
+
+**Out of scope.** New backend aggregations beyond what `/api/v1` already
+returns; if a KPI needs a new endpoint, cut the KPI, not the redesign.
+
+**As built.** Reviewed from a clickable mock. The KPIs come from the existing
+lists only: running is exact; completed and AI cost come from the instances
+started in the last 24 h, read newest first up to 1 000 (then shown as ≥) and
+refreshed every minute; p95 from the last 100 completed; open incidents from
+the incident list (up to 100). "Awaiting humans" became **Waiting on you**:
+the task list only returns the caller's tasks, so a project-wide count would
+need a new endpoint. The version chip filters the loaded rows (the list API has
+no version filter). The list is hand-windowed (fixed 52 px rows, no new
+dependency) and keeps its filters and cursor across a visit to an instance.
+The instance view keeps the S5 trail docked right; the inspector tabs became a
+drawer over the canvas (Step, Variables, Lineage, Versions), and the incident
+strip became a header chip. Suspend, cancel and force fail are offered to
+Operators and Owners only. Visual checks were screenshots on the dev stack (no
+Playwright harness in the repo); the empty project and Lighthouse score were
+not captured there.
+
+---
+
+## S7 — Decision-table properties in the properties panel (widened: every node, and the palette)
+
+**Goal.** Selecting a `decision-table` node shows and edits its full definition
+in the properties panel, like agent and human nodes.
+
+**Files.** `STUDIO/components/PropertiesInspector.tsx`,
+`STUDIO/features/dmn/DmnRuleInspector.tsx` (exists, unmounted),
+`STUDIO/lib/apl/parser.ts`.
+
+**Changes.**
+- Mount `DmnRuleInspector` for `dmn` nodes: `decisionKey`, `hitPolicy`
+  (schema-generated labels), `inputs` (name → expression), ordered `rules`
+  (`when`, `then` outputs, the single `otherwise` fallback), drag to reorder.
+- A compact rule grid in the panel; an *Expand* action opens the full table in
+  a wide drawer for large tables.
+- Live validation through `POST /v1/apl/validate`: unknown inputs, invalid CEL,
+  two `otherwise` rules, `UNIQUE` overlaps that can be detected statically are
+  shown inline on the offending rule.
+- Edits round-trip to YAML (`AplEditor`) and undo/redo.
+- In Operations, the decision-table audit entry and the node card show which
+  rule matched and the resolved inputs (redacted per evidence policy).
+
+**Acceptance tests.** Component tests for edit, reorder, validation errors and
+YAML round trip; the Studio kitchen-sink parity check covers every
+`decision-table` property.
+
+**Widened scope (agreed at planning).** The same treatment for every node
+kind: the palette draws each kind in its canvas shape, and every APL property
+of every node is editable in the panel.
+
+**As built.** One node catalog (`features/designer/nodes/nodeCatalog.ts`)
+names, colours and creates every kind; the event circle, gateway diamond and
+activity card are one drawing (`shapes.tsx`) used by the canvas, the palette
+and the panel header. The palette gains search (name, purpose, APL type,
+keywords), arrow keys, drag onto the canvas and the call-process and for-each
+kinds; `approval-gate` is not offered because it is a deprecated alias. The
+panel is a frame over one editor per kind (`components/inspector/`), built
+from collapsible sections (open state remembered per kind) and fields that
+show the APL key and the engine issue for that field (`issuesAt`, by issue
+path). The decision-table editor replaces the unmounted `DmnRuleInspector`
+(removed): output columns are derived from the rules' `then` keys (APL has no
+output declarations), values are typed in place (`"42"` keeps text), the
+fallback is shown and saved last (the engine applies it wherever it is
+written), reorder works by drag, buttons and Alt+arrows; Expand opens a
+portalled drawer. Newly editable: for-each fields, agent `evidence`, human
+`mode`. Kept as written instead of edited: an `approval-gate` stays one (the
+panel offers the conversion; it used to be saved as `human-input`), `formId`
+reads as `formKey`, `requireDoubleSignOff` is kept and labelled reserved (it
+has no runtime effect). The engine gained `DecisionTableRules`: empty `when`,
+invalid CEL, a name that is not an input (previously a warning from
+`AplVariables`), a second `otherwise`, and identical conditions under
+`UNIQUE`, each at `/flow/nodes/<i>/rules/<j>`, on deployment and authoring
+only. Narrowed from the text above: overlapping but different `UNIQUE`
+conditions stay a run-time failure, and Operations shows the matched rule
+(condition and outputs, from the instance's own definition version) and the
+input *names*, because the engine recorded no input values. Follow-up done:
+the resolved inputs are now kept as decision-input evidence under the evidence
+policy (V40, `decision_input_evidence`) and open on demand next to the rule
+for evidence readers. Verified on the dev stack with
+screenshots; Cmd+Z did not reach the app inside the desktop browser pane, the
+toolbar Undo did.
+
+---
+
+## S8 — Form designer: layout and richer fields
+
+**Goal.** Human-input forms that are pleasant to fill: organised in sections and
+columns, with the field types real business forms need.
+
+**Files.** `STUDIO/features/designer/FormEditor.tsx`, `STUDIO/features/inbox/formSchema.ts`,
+`FormRenderer.tsx`, `STUDIO/components/FormPicker.tsx`; engine form schema
+validation; `docs/reference/apl-specification.md`, `apl-node-reference.md`.
+
+**Changes.**
+- **Layout model** in the form schema: `sections` (title, description,
+  collapsible) containing `rows`; a row holds 1–4 fields with a `span`; mobile
+  collapses to one column. Optional `steps` to split a long form into a wizard
+  with a progress indicator. Forms without layout keep rendering as today.
+- **Field types**: `email`, `url`, `currency` (with ISO code), `multiselect`,
+  `radio`, `checkbox-group`, `datetime`, `file` (S9), read-only `display` (shows
+  a process variable), and static `markdown` help text.
+- **Validation**: `required`, `min`/`max`, `minLength`/`maxLength`, `pattern`,
+  checked in the renderer **and by the engine on task completion** (the engine
+  enforces the contract; the UI is a convenience).
+- **Conditional visibility** `visible_when` as a CEL expression over form values
+  and process variables, evaluated in the browser for display and re-checked by
+  the engine: a hidden field is never required and its value is discarded.
+- **Compact by default.** Inputs, labels and spacing follow a compact scale
+  (32 px controls, 12–13 px labels, tight vertical rhythm) instead of today's
+  oversized fields. Density adapts to the form: a short form (≤ 6 fields)
+  uses comfortable spacing, a long one (> 15 fields) switches to compact
+  spacing and multi-column rows on wide screens, so a long form fits without
+  endless scrolling. A field never grows wider than its content needs
+  (`span` and sensible max widths per type: a date is not full-width).
+- **A large editor for working calmly.** The form designer opens in a large
+  panel (near full screen, `Esc` to close, unsaved-changes guard): palette on
+  the left, the form canvas in the middle, field properties on the right, and a
+  live preview toggle (desktop / mobile). The small inline editor stays for
+  quick tweaks with an *Open full editor* action.
+- **Designer UX**: drag fields from a palette into sections and rows, resize
+  span, reorder by drag or keyboard, undo/redo shared with the Studio.
+
+**Acceptance tests.** Visual regression of a 4-field and a 25-field form at
+desktop and mobile widths (density switch, no horizontal scroll); schema tests
+for every type and layout rule; engine tests
+rejecting a completion that violates required/pattern/visibility rules; renderer
+tests at desktop and mobile widths; APL parser validation test, executable
+fixture under `engine/src/test/resources/apl/`, Studio round trip.
+
+**Out of scope.** Repeatable groups (line items) — 1.3 candidate; custom
+widgets.
+
+---
+
+## S9 — File upload in human tasks
+
+**Goal.** A form field can take one or more files; the process receives a
+reference it can route on and hand to a worker, never the bytes.
+
+**Decision (2026-10-20).** File contents go to **RustFS**, a self-hosted,
+S3-compatible object store, not into PostgreSQL. PostgreSQL keeps only the
+metadata and the state of each file, so it stays the source of truth for what
+a process may see; RustFS holds the bytes. Most serious processes have file
+fields, so **RustFS is mandatory for self-hosted installations** from 1.2:
+the certified self-hosted topology becomes engine instances + PostgreSQL +
+RustFS. Managed cloud deployments (GCP Cloud Storage, AWS S3) will plug into
+the same `ObjectStore` interface later; they are not part of this release.
+
+**Files.** New `ENGINE/files/` (entity, repository, service, controller, an
+`ObjectStore` interface with an S3-API implementation targeting RustFS), Flyway
+`V42__process_files.sql` (after S8's `V41`), task completion validation,
+`STUDIO/api/`, `FormRenderer.tsx`; `compose.yaml` / `compose.dev.yaml` /
+release Compose (a `rustfs` service, volume, health check, bucket bootstrap),
+`release/.env.*.example`, the public installer; `docs/reference/runtime-semantics.md`,
+`docs/architecture/runtime-state.md`, `docs/reference/deployment-support.md`,
+backup and upgrade guides; every "PostgreSQL only" claim: `AGENTS.md`, README,
+`abada-site/claims.json`, `abada-site/.../vs-camunda.tsx`, the curated
+documentation and `docs/marketing/` drafts.
+
+**Changes.**
+- **Metadata in PostgreSQL**: `process_files` (id, project, uploaded_by,
+  content_type, size, sha256, name, object_key, state
+  `PENDING|ATTACHED|DELETING`, instance_id, task_id, created_at). No bytes.
+- **Bytes in RustFS** under a random object key (`<project>/<fileId>`, never the
+  file name), one bucket per installation, server-side encryption on, TLS in
+  production. Credentials come from the environment and are never logged.
+- **Upload** `POST /api/v1/files` (multipart): the engine streams the body to
+  RustFS while computing size and sha256, sniffs the content type against the
+  field's `accept` list, then inserts the `PENDING` row. If the insert fails,
+  the object is deleted (best effort; the cleanup job catches the rest). Size
+  cap configurable (default 10 MB per file, 50 MB per task).
+- **Completing a task** with a `file` field: the engine checks each id exists, is
+  `PENDING`, belongs to the completing user and matches the field constraints,
+  then marks it `ATTACHED` **in the completion transaction**. Only metadata
+  changes there: no call to RustFS inside the transaction (`AGENTS.md`). The
+  variable stores `{ fileId, name, contentType, size, sha256 }`.
+- **Download** `GET /api/v1/files/{id}` is proxied by the engine, so RBAC and
+  audit apply to every read; `Content-Disposition: attachment`, `nosniff`.
+  Presigned URLs are not used in this release.
+- **Deletion and cleanup** are durable jobs (cluster-safe acquisition, leases):
+  `PENDING` files older than 24 h, objects with no row (orphans from failed
+  uploads), and attached files past the instance retention policy. A delete
+  marks the row `DELETING`, removes the object, then removes the row;
+  deleting an absent object counts as success, so retries are safe.
+- **RustFS is required infrastructure for self-hosted installations.** The
+  dev, prod and release Compose stacks and the public installer start it by
+  default, create the bucket and generate its credentials (stored like the
+  other generated secrets). The engine checks the object store at startup and
+  exposes it in its health/readiness endpoint; a missing or unreachable store
+  fails readiness loudly instead of accepting uploads it cannot keep.
+- **Upgrade from 1.1.x**: re-running the installer adds RustFS to an existing
+  installation; the upgrade guide covers manual Compose upgrades. Existing
+  processes are unaffected (they have no file fields).
+- **The claim changes with the code**: "PostgreSQL is the only required
+  infrastructure" becomes "PostgreSQL and RustFS, both self-hosted" in
+  `AGENTS.md`, README, the claims register (`abada-site/claims.json`, checked by
+  the site build), the site, the curated documentation, the deployment matrix
+  and the marketing drafts, in the same change that ships S9.
+- External workers and agents receive the reference; a worker downloads the
+  bytes through the engine with its own credentials. Agent inputs remain
+  default-deny (T6): a file reaches a model only if the agent declares it.
+- Audit: upload, attach, download and delete are audit events (actor, file id,
+  instance); file contents and names are not logged.
+- **Backup**: the backup and upgrade guides cover RustFS alongside PostgreSQL
+  and say what a restore of one without the other means (rows whose object is
+  missing show as "file unavailable"; orphan objects are cleaned up).
+- Studio: drop zone with progress, type/size feedback before upload, preview
+  for images and PDFs, remove before submit; file chips in the instance
+  variables view with download.
+
+**Acceptance tests.** PostgreSQL and RustFS Testcontainers: fresh migration and
+upgrade from every supported prior schema; completion attaches files atomically
+and a failed completion leaves them `PENDING`; RustFS down during upload gives
+a typed error and no row; RustFS down during completion does not block it (no
+remote call); another user cannot attach or download; oversize and wrong-type
+rejected; cleanup and orphan jobs are cluster-safe (two replicas, one deletion)
+and idempotent; object store unreachable at startup → readiness fails; negative
+security tests (no token, expired token, other project). Compose validation
+(`docker compose ... config --quiet` and
+`scripts/test/validate-platform-deployment.sh`) covers dev, prod and the
+release archive with RustFS; the public installer is tested on a fresh install
+and on an upgrade of a 1.1.2 installation (`curl | bash` from
+install.abadaplatform.com, not a local `up dev`).
+
+**Invariants.** No bytes in PostgreSQL, process variables, outbox events or
+webhooks. No remote call inside the completion transaction. Object deletion is
+at-least-once and idempotent.
+
+**Out of scope.** Presigned URLs; GCP Cloud Storage and AWS S3 implementations
+for managed cloud deployments (later, behind the same `ObjectStore` interface);
+other S3-compatible stores (may work, only RustFS is tested and supported);
+virus scanning (documented as an operator responsibility via a worker hook).
+
+---
+
+## S10 — Administration audit trail
+
+**Goal.** Replace the "coming soon" placeholder with a real, tamper-evident
+audit trail of administrative actions, as `AGENTS.md` requires for
+security-relevant mutations.
+
+**Files.** New `ENGINE/audit/` (entity, repository, recorder, controller),
+Flyway `V43__admin_audit_events.sql`, `AdminController`, `AiProviderController`,
+`ProjectController`, `InsightPolicyController`, evidence-policy and project
+access endpoints; `STUDIO/features/admin/AdministrationView.tsx` (split the
+audit tab into `AdminAuditTrail.tsx`), `STUDIO/api/admin.ts`;
+`docs/architecture/runtime-state.md`.
+
+**Changes.**
+- `admin_audit_events` (id, occurred_at, actor, actor_roles, action, target_type,
+  target_id, project_id nullable, outcome `SUCCESS|DENIED`, trace_id,
+  client_ip, details_json). Append-only: no update or delete path in code, and
+  the application role gets `INSERT, SELECT` only in the migration.
+- Recorded **in the same transaction** as the mutation it describes: users,
+  groups and memberships, project create/rename/delete and access, AI provider
+  keys (create, rotate, delete — never the key), evidence and insight
+  policies, deployments, rollbacks, proposal adoption. Denied attempts (403)
+  are recorded too, in their own transaction.
+- `details_json` holds what changed as a before/after of non-sensitive fields;
+  secrets, tokens and key material are never written (`AGENTS.md`).
+- `GET /api/v1/admin/audit` — cursor pagination, filters by time range, actor,
+  action, target, project, outcome; admin role only. CSV export of the
+  filtered set.
+- Studio: a dense, filterable table (time, actor, action, target, outcome),
+  live updates sliding in at the top (S1 motion), a details drawer with the
+  before/after diff in the JSON viewer (S11), and the trace ID linking to the
+  instance or deployment when there is one.
+
+**Acceptance tests.** PostgreSQL: fresh migration and upgrade from every
+supported schema; a failed mutation leaves no `SUCCESS` event; a denied call
+leaves a `DENIED` event; no secret value appears in any event (test inserts a
+provider key and scans the table); non-admin gets 403 on the read endpoint;
+invalid/expired JWT and forged proxy headers rejected; pagination stable under
+concurrent inserts. Studio component tests for filters and the details drawer.
+
+**Out of scope.** Retention policy and external SIEM export (documented as a
+1.3 candidate; the table is queryable and exportable as CSV now).
+
+**As built (2026-11-12).**
+- Append-only is enforced by a PostgreSQL trigger that refuses UPDATE, DELETE
+  and TRUNCATE for every role, the owner included, instead of `GRANT INSERT,
+  SELECT`: the engine connects as the role that owns its tables, so a grant
+  would not restrict it. V43 is a Java migration because the trigger is
+  PostgreSQL only; on H2 (development) the table has no trigger.
+- Users and groups are changed in the identity provider, outside the engine's
+  database: their `SUCCESS` event is written in its own transaction after the
+  provider accepted the change.
+- A project role check answers 404 to outsiders; it is still recorded as
+  `DENIED` (`NOT_A_MEMBER` or `PROJECT_ROLE_REQUIRED`).
+- Live updates poll `GET /api/v1/admin/audit?after=<newest id>` every 5 s while
+  the first page is shown. `GET /api/v1/admin/audit/catalog` lists the actions;
+  `/export` returns CSV (at most 10,000 rows, formula-safe cells).
+- The trace ID is shown and copyable in the details drawer; it does not link to
+  an instance, because administrative actions do not run in one.
+
+---
+
+## S11 — Execution variables and JSON everywhere
+
+**Goal.** Variables are readable even when there are many and they are deeply
+nested, and every piece of JSON in the Studio is highlighted and easy to scan.
+
+**Files.** New `STUDIO/components/json/JsonViewer.tsx` and `JsonTree.tsx`;
+`VariablesTab` in `InstanceDetailView.tsx` / `instanceTelemetry.tsx`; every
+`JSON.stringify` display in `AgentStepInspector`, `ToolApprovalCard`,
+`TaskInbox`, `DryRunPanel`, `DeployDialog`, `ProcessOperations`,
+`PropertiesInspector`, `FormPicker`, `ProjectExplorer`.
+
+**Changes.**
+- **One typography for keys and values**: the same small monospace size
+  (12 px), keys in a muted colour, values coloured by type (string, number,
+  boolean, null). Fixes today's larger value font.
+- **Tree view** (default): collapsible objects and arrays with item counts
+  (`{4}`, `[12]`), expand/collapse all, expand to a given depth, long strings
+  truncated with *show more*, copy value / copy path (`applicant.address.city`).
+- **Search and filter** across keys and values, matches highlighted and their
+  parents auto-expanded; sticky search box for long lists.
+- **JSON view** toggle: the whole set as formatted, syntax-highlighted JSON with
+  line numbers, folding and *Copy*. Highlighting uses a small dependency-free
+  tokenizer (or a lazy-loaded highlighter kept under the S1 bundle budget).
+- **Variables that changed** in the last visible step (S3) flash once; file
+  references (S9) render as file chips; redacted values render as a
+  `redacted` badge, never as their raw content.
+- **Everywhere**: `JsonViewer` replaces every raw `JSON.stringify` block, and the
+  APL/YAML editor and AI diff keep their existing highlighting.
+
+**Acceptance tests.** Component tests: 500 variables with 6 levels of nesting
+render under 100 ms (virtualised), search expands matches, copy path is exact,
+redacted values are never in the DOM; a test fails if a `<pre>` renders
+`JSON.stringify` output outside `JsonViewer`.
+
+**As built.** Reviewed from a clickable mock. `STUDIO/components/json/`:
+a pure model (`jsonModel`: nodes with exact paths, masks and S9 file
+references as their own kinds), search, windowed rows and a dependency-free
+tokenizer whose lines join back to `JSON.stringify(data, null, 2)`, under
+`JsonViewer` (Tree / JSON view, search with match navigation, expand all,
+collapse all, expand to level, copy value / path / all, *show more* past
+120 characters, WAI-ARIA tree keys on one focusable element). The rows use
+the S6 windowing hook, moved to `STUDIO/hooks/useVirtualRows`. The
+`VariablesTab` became `VariablesPanel` in the instance drawer, the
+Operations Variables drawer and the designer's live inspector. Changed
+variables come from facts only (`useVariableChanges`): two reads of the
+variables endpoint are compared, and the difference is held while the S3
+playback lags and shown when it catches up. A `VARIABLES_UPDATED` or
+decision fact names its variables as it becomes visible. Task and work
+completions record no variable names, so the label is "Changed in the last
+update", not "in the last step". The engine's mask (`****`, whole or inside a
+string) renders as a `redacted` badge and is never written to the DOM. The
+variables endpoint does not mask variables declared `sensitive`; that is an
+engine change for a separate task. File references render as chips without
+a download until S9. Migrated: audit fact details (live trail and static
+timeline), agent step payloads, tool approval arguments, task inbox
+variables, JSON resource preview, decision "Applied outputs" (no more
+`[object Object]`). The Deploy and Dry Run payloads and the agent output
+schema stay plain textareas (editing is out of scope). A guard test fails on
+a `<pre>` holding `JSON.stringify` and on a pretty-print outside an
+allowlist of editors and saved files. The bundle grows by 8.3 kB gzip (js +
+css). A lazy chunk would not lower that total, so the viewer loads with the
+app. 500 variables six levels deep, all expanded, render in under 100 ms in
+the component test with at most 80 rows in the DOM. Checked on the dev stack
+with a live S5 run: the drawer marked the variables the Review approval
+wrote.
+
+---
+
+## S12 — NL authoring workspace
+
+**Goal.** Natural-language authoring that gets out of the way when not used,
+and gives a calm, large space to refine a draft with live feedback before it
+reaches the canvas.
+
+**Files.** `STUDIO/components/NLInputBar.tsx`, `STUDIO/features/designer/AIDiffModal.tsx`,
+new `STUDIO/features/designer/AuthoringWorkspace.tsx`, `STUDIO/api/authoring.ts`
+(E17 patch-mode refine).
+
+**Changes.**
+- **Pinnable bar.** The NL bar can be pinned (stays open), collapsed to a small
+  floating button, or hidden; shortcut `⌘K` / `Ctrl+K` reopens it. The choice is
+  remembered per user.
+- **Workspace on confirm.** When the user submits a prompt, a large dialog
+  opens (near full screen):
+  - centre: the generated diagram, rendered with the real canvas and ELK
+    layout, updating as each refinement arrives (S1 transitions: added nodes
+    fade in, removed ones fade out, moved ones glide);
+  - right: a conversation thread of prompts and refinements (E17 patch-mode),
+    each turn with *undo to here*;
+  - toggle between diagram, YAML and the diff against the current process;
+  - live validation from `POST /v1/apl/validate` shown inline on nodes;
+  - the user can also edit directly (select a node, change a property) and the
+    next refinement starts from that edit.
+- **Confirm and land.** *Apply to Studio* closes the workspace and installs the
+  diagram on the canvas as one undoable change, with a short "landing"
+  animation; *Discard* leaves the canvas untouched. Nothing is deployed:
+  deployment remains an explicit, separate step (doctrine: humans own change).
+- Model calls happen in the authoring service as today; errors and slow
+  responses show a calm progress state, never a frozen dialog.
+
+**Acceptance tests.** Component tests: pin/collapse persistence, workspace
+opens on submit, refinement updates the preview, discard leaves the
+workflow unchanged, apply is a single undo step; Playwright with the stub LLM:
+prompt → two refinements → apply → canvas matches the final draft.
+
+**As built.** Reviewed from a clickable mock. Today's path from the bar was
+the APL editor's candidate review, not `AIDiffModal` (that is the Insight
+proposal review); the editor's candidate review is gone and the diff modal's
+read-only diagram became `DraftDiagram`, shared by both. The bar's mode
+(pinned, collapsed, hidden) is kept per user in this browser
+(`abada.nlBar.<sub>`): the engine has no store for user preferences.
+`⌘K`/`Ctrl+K`, the canvas toolbar and *Use prompt* open it. The workspace
+(`STUDIO/features/designer/authoring/`) keeps the conversation in the Studio:
+the authoring service is stateless and answers whole (no streaming), so the
+diagram updates once per answer, the model sees the current draft (with the
+user's edits) and the latest prompt but not the thread, and *Cancel* only
+stops waiting (the engine finishes its call). Direct edits use the
+Properties inspector; consecutive edits of one step are one turn. *Apply*
+replaces the process with one undo step (`replaceWorkflow`), or on an empty
+canvas with no saved process makes it the first draft with one undo step back
+to empty; the applied nodes land with a 400 ms fade and glow. The draft lives
+in the page; leaving with one asks first. Drafting needs Owner or Maintainer
+in the project; global administration does not count. No engine change.
+Playwright (`studio/e2e`, `npm run test:e2e`, not in CI yet): a deterministic
+OpenAI-compatible stub behind a scratch engine (H2, OIDC against the dev
+realm), prompt → two refinements → apply → canvas node ids equal the final
+draft's, one undo and redo; a failed refinement and discard; the collapsed
+bar across a reload and `⌘K`. Checked on the dev stack with its real model:
+one refinement, diff view, discard left the process unchanged.
+
+---
+
+## S13 — Documentation: what is new and which version
+
+**Goal.** A reader of the documentation knows which Studio version it describes
+and finds what is new without searching.
+
+**Files.** `documentation/astro.config.mjs`, `documentation/src/content/docs/**`,
+new `documentation/src/content/docs/release-notes/` pages, a small version
+component, `documentation/scripts/check-links.mjs` if needed.
+
+**Changes.**
+- **Version shown** in the header of every page ("Documentation for Abada
+  Studio 1.2.0"), read at build time from the Maven/Studio version so it cannot
+  drift; the build fails if `studio/package.json` and the engine version
+  disagree.
+- **"New" markers** in the sidebar with Starlight's native `badge`
+  (`{ text: 'New', variant: 'tip' }`, or *Updated*), set from page frontmatter
+  (`since: 1.2.0`). A badge shows while the page's `since`/`updated` equals the
+  current minor version and disappears automatically on the next minor.
+  Inside a page, a small *New in 1.2* aside marks new sections.
+- **Readable release notes** in the site: one page per minor release, newest
+  first, written for users (what you can now do, with a screenshot or short
+  clip, and what to watch out for when upgrading), linking to the full
+  technical notes in `docs/release-notes/`. A *What's new* entry sits at the
+  top of the sidebar.
+- Studio links to the matching documentation version from its help menu and
+  shows a dismissible "What's new in 1.2" card after an upgrade.
+
+**Acceptance tests.** `npm run check` and `npm run build` pass; a build check
+fails when a page has `since` greater than the current version, or when the
+displayed version differs from the release version; link checker covers the
+new pages.
+
+**As built (2026-11-12).**
+- `dev` stays on the last release's version until the release gate bumps it,
+  so the version cannot simply be read from the build: it would announce 1.1.2
+  while describing 1.2. `documentation/release.json` names the release the
+  pages describe and its status. The build (`scripts/check-release.mjs`, with
+  `node --test` cases) fails unless the engine, Studio and documentation
+  versions agree with each other and with it: still on the previous release
+  while `in-development`, equal to `documents` once `released` (S14 flips it
+  with the version bump). It also fails when a page's `since` or `updated` is
+  later than `documents`, and when the documented minor has no release notes
+  page.
+- The version shows next to the site title on every page ("1.2.0 · in
+  development" until release), linking to the release notes.
+- Badges: `since` gives *New*, `updated` gives *Updated*, computed in the
+  Astro config from frontmatter; a *What's new in 1.2* entry (with a
+  *Preview* badge until release) heads the sidebar.
+- Release notes pages are `release-notes/1-2.mdx` and `1-1.mdx` (Starlight
+  drops dots from slugs), with an index. Screenshots for the 1.2 page come
+  with S14.
+- Studio: the engine info panel shows the Studio version with *Documentation*
+  and *What's new* links (`docsUrl` in the runtime configuration, default
+  `https://docs.abadaplatform.com`); a dismissible *What's new* card appears
+  once per browser for a minor release that has highlights, so it appears
+  when the Studio version becomes 1.2.0.
+- The documentation and Studio audits were clean again: DOMPurify, fast-uri,
+  undici, Vite and zod pinned to fixed versions in the docs; vitest, Vite and
+  fast-xml-parser raised within their majors in the Studio.
+
+---
+
+## S14 — Documentation, screenshots and the 1.2.0 gate
+
+- Update the curated user guide (`documentation/`) for Operations, incidents,
+  playback pace, forms and files, with fresh screenshots (isolated capture
+  stack).
+- Release notes `docs/release-notes/1.2.0-release-notes.md`, upgrade note for
+  `V41`–`V43` and the new required RustFS service, gate report per
+  `1.0-rc-publication-gates.md`.
+- Exit demo recorded (see roadmap).
+
+## S15 — Files as agent input (multimodal)
+
+**Goal.** An agent node can read a file the process holds — a scanned form, a
+PDF, a photo — instead of only text. The model sees the document; the engine
+keeps the same contract: declared inputs, schema-checked output, confidence
+threshold, routes and vetoes, evidence and cost.
+
+**Why now.** S9 already stores files in RustFS and gives the process a
+reference. Today the agent worker passes that reference to the model as JSON
+text (see `docs/reference/process-files.md`), so a scanned document cannot be
+read without an OCR worker in front. Most serious intake processes (employer
+declarations, claims, KYC, invoices) start from a document.
+
+**APL.** A new optional agent field, `files`, separate from `inputs`:
+
+```yaml
+- id: lecture
+  type: agent
+  model: gemini-3.6-flash
+  prompt: Extract the declared payroll, headcount and contributions.
+  files:
+    bordereau: bordereau_scan        # CEL: a file reference or a list of them
+  output_schema: { ... }
+```
+
+- Each entry is a name and a CEL expression that must evaluate to a file
+  reference `{ fileId, ... }` or a list of them. Checked at deploy (valid
+  expression, name pattern, no clash with `inputs`) and at run time (each id
+  exists, is `ATTACHED` to this instance, is not `DELETING`).
+- Default-deny holds: a file reaches a model only if it is listed in `files`.
+  Listing a file reference in `inputs` keeps today's behaviour (metadata as
+  text, no bytes).
+- Limits per node: `max_files` (default 5) and the installation cap
+  `abada.agent.files.max-bytes` (default 20 MB per call). Over the limit is a
+  typed failure, never a silent truncation.
+
+**Engine.** The agent work descriptor carries the resolved file references
+(id, name, content type, size, sha256), never bytes. Resolution happens when
+the task is created, in the same transaction as today's input resolution; no
+call to RustFS inside a transaction.
+
+**Agent worker.**
+- Downloads each declared file through the engine with its lease
+  (`GET /api/v1/external-tasks/{id}/files/{fileId}`), checks size and sha256
+  against the descriptor, and keeps the bytes in memory only for the call
+  (nothing written to disk or logs).
+- Sends them to the model in the form the provider expects (content parts
+  for OpenAI-compatible providers, inline data for Gemini). A provider
+  capability table states which content types each gateway can send
+  (images, PDF); an unsupported type or a model without vision is a typed
+  configuration error that routes through `on_error` / incident, never a call
+  without the file.
+- `fallback_models` only falls back to models that support every declared
+  content type.
+- The system prompt treats document content as data, like `<input>` text:
+  instructions inside a document do not change the agent's contract, and the
+  engine's veto on routes still applies.
+
+**Evidence and cost.** The step journal records, per file, the id, content
+type, size and sha256 the model was given — so an auditor can prove which
+document the agent saw — never the bytes, whatever the `evidence.payloads`
+policy. Token usage from the provider is recorded as today; image/PDF tokens
+are included in the cost per instance.
+
+**Studio.** The agent properties panel gets a *Files* section (pick a file
+variable, see accepted types); the agent-step inspector shows the file chips
+(download through the engine, with the usual RBAC) next to the prompt and
+output.
+
+**Not in scope.** Audio and video; files produced by an agent (agents still
+return JSON); a separate OCR engine (an operator can still put an OCR worker
+step before the agent — documented as the option for installations that may
+not send documents to an external model); presigned URLs.
+
+**Acceptance tests.** Engine (PostgreSQL + RustFS Testcontainers): deploy
+rejects a bad `files` expression or a name clash; a reference to a file of
+another instance, a `PENDING` or a deleted file fails the step with a typed
+error; the descriptor never contains bytes. Worker: stub providers receive
+the image and the PDF in the right wire format for the OpenAI-compatible and
+Gemini gateways; sha256 mismatch, oversize and unsupported type are typed
+errors; fallback skips a model without vision; no file content in logs.
+End to end: a scanned declaration uploaded in a human task is read by an
+agent, its output passes `output_schema`, low confidence routes to manual
+entry, and the evidence shows the file's sha256. Documentation:
+`process-files.md` (the "reference, not the bytes" sentence changes with the
+code), the APL reference for `files`, and one example process.
+
+**As built (2026-11-12).**
+- Files are resolved when the work is **locked**, in the transaction that
+  resolves `inputs` today (inputs are resolved at lock, not at task creation),
+  so a file deleted between creation and lock is caught. A breach fails the
+  work at lock with `AGENT_FILE_INVALID` or `AGENT_FILE_LIMIT`; a null value
+  (optional upload left empty) is no file.
+- Worker error codes: `AGENT_FILE_INTEGRITY` (size or sha256 differ) and
+  `AGENT_FILE_UNSUPPORTED` (no model of the chain reads a declared type). A
+  model that answers HTTP 400 about images or files is a configuration error.
+- Wire forms, all on the OpenAI-compatible endpoint the gateways already use:
+  Gemini takes images and PDF as `image_url` data URIs; OpenAI and OpenRouter
+  take images as `image_url` and PDF as a `file` part (`file_data`); Anthropic
+  and other OpenAI-compatible endpoints take images (PNG, JPEG, WebP); DeepSeek
+  none. The table is `ProviderFileSupport` in the worker.
+- Evidence: V44 `agent_steps.files_json`. The worker names the files of each
+  model call (`request.files`: fileId, sha256); the engine checks them against
+  the node's resolved files and stores the metadata from `process_files`.
+  `EXTERNAL_TASK_LOCKED` history also lists the files handed out.
+- The worker download endpoint now serves an agent task only the files its
+  node declares, and checks the worker principal like the other worker
+  endpoints.
+- Studio: a *Files* section in the agent properties (suggestions from the file
+  fields of the process's task forms, `max_files`, accepted types) and file
+  chips with the sha256 on model-call steps in the agent-step inspector.

@@ -23,11 +23,12 @@ specific line format. Submit one per week rather than all at once.
 `Abada - Runtime for governed AI-driven business processes: agents advise, engine-enforced rules decide, humans approve, PostgreSQL stores state and audit. (Source Code) AGPL-3.0 Docker/Java`
 
 **awesome-workflow-engines style:**
-`* [Abada](https://github.com/bashizip/abada-platform) - Self-hosted process engine for AI agents, rules and human approval. Processes in YAML (APL) or imported BPMN 2.0; PostgreSQL only; Java/Spring Boot.`
+`* [Abada](https://github.com/bashizip/abada-platform) - Self-hosted process engine for AI agents, rules and human approval. Processes in YAML (APL) or imported BPMN 2.0; PostgreSQL and RustFS, both self-hosted; Java/Spring Boot.`
 
 **Directory description (≈60 words):**
 Abada is an open-source, self-hosted runtime for business processes in which AI agents,
 deterministic rules and people work together. The engine validates every model answer
 against a declared schema and confidence threshold before it can change state, routes weak
-answers to people, and runs agent tool calls under approval policies. PostgreSQL is the
-only database; sign-in is through your OIDC provider.
+answers to people, and runs agent tool calls under approval policies. It stores process
+state in PostgreSQL and, from 1.2, task files in RustFS, both self-hosted; sign-in is through
+your OIDC provider.

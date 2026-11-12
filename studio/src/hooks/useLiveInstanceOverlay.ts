@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { EngineAPI, ProcessInstanceDTO } from '@/api/engine';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { ActivityHistoryDTO, ActivityInstanceDTO, EngineAPI, ProcessInstanceDTO } from '@/api/engine';
 import { Project } from '@/api/projects';
 import { WorkflowFile, SimulationLog } from '@/types';
 import { deriveLiveExecutionOverlay, NodeRunStatus } from '@/lib/run/liveRun';
 import { deriveInstancePath } from '@/lib/run/instanceDetail';
+import { useInstancePlayback } from '@/hooks/useInstancePlayback';
 import { aplToWorkflow, parseAPLYaml } from '@/lib/apl/parser';
 import { applyPreferredLayout } from '@/lib/run/layoutPrefs';
 import { useInstanceEvents } from '@/hooks/useInstanceEvents';
@@ -14,6 +15,9 @@ import { readInspectorPanelPinned, readInspectorPanelWidth, useInspectorPanelPre
  * stays visible, but marching dots are suppressed).
  */
 const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED'];
+
+const NO_FACTS = { activities: [], history: [] };
+const EMPTY: string[] = [];
 
 export function useLiveInstanceOverlay(
   activeProject: Project | undefined,
@@ -26,15 +30,18 @@ export function useLiveInstanceOverlay(
 ) {
   const [selectedLiveInstance, setSelectedLiveInstance] = useState<ProcessInstanceDTO | null>(null);
   const [liveWorkflow, setLiveWorkflow] = useState<WorkflowFile | null>(null);
-  const [activeLiveNodeIds, setActiveLiveNodeIds] = useState<string[]>([]);
   const [liveSelectedNodeId, setLiveSelectedNodeId] = useState<string | null>(null);
-  const [executionStatuses, setExecutionStatuses] = useState<Record<string, NodeRunStatus>>({});
-  const [activePathEdges, setActivePathEdges] = useState<string[]>([]);
-  const [activeTokenEdges, setActiveTokenEdges] = useState<string[]>([]);
-  const [nextPathEdges, setNextPathEdges] = useState<string[]>([]);
+  /** Statuses a Dry Run paints on the designer canvas; a live instance derives its own. */
+  const [dryRunStatuses, setExecutionStatuses] = useState<Record<string, NodeRunStatus>>({});
+  /** The engine facts of the live instance, as last fetched. */
+  const [facts, setFacts] = useState<{ activities: ActivityInstanceDTO[]; history: ActivityHistoryDTO[] }>(NO_FACTS);
   const [instancesRefreshKey, setInstancesRefreshKey] = useState(0);
   const [instancePanelOpen, setInstancePanelOpen] = useState(true);
   const [detailInstance, setDetailInstance] = useState<ProcessInstanceDTO | null>(null);
+  /** Step the instance view opens focused on (an incident's node, M5 S4). */
+  const [detailFocusNodeId, setDetailFocusNodeId] = useState<string | undefined>(undefined);
+  /** The instance the user just started from the Studio: its view plays it from the first fact (M5 S5). */
+  const [detailStartedId, setDetailStartedId] = useState<string | null>(null);
 
   const {
     panelWidth: livePanelWidth,
@@ -43,44 +50,17 @@ export function useLiveInstanceOverlay(
     setPinned: setLivePanelPinned,
   } = useInspectorPanelPrefs();
 
-  /**
-   * Content-stable cache: polls return new object identities for the same
-   * engine facts. Serializing and comparing prevents state updates (and SMIL
-   * animation restarts) when nothing actually changed.
-   */
-  const stablePathRef = useRef<string | null>(null);
-
-  const applyPathOverlay = useCallback((
-    workflow: WorkflowFile,
-    instance: ProcessInstanceDTO,
-    activities: import('@/api/engine').ActivityInstanceDTO[],
-    history: import('@/api/engine').ActivityHistoryDTO[],
-  ) => {
-    const path = deriveInstancePath(workflow, instance, activities, history);
-    const serialized = JSON.stringify(path);
-    if (stablePathRef.current === serialized) return;
-    stablePathRef.current = serialized;
-    setActivePathEdges(path.activePathEdgeIds);
-    const isTerminal = TERMINAL_STATUSES.includes(
-      (instance.status || '').toUpperCase(),
-    );
-    const frozen = isTerminal || instance.suspended;
-    setActiveTokenEdges(frozen ? [] : path.tokenEdgeIds);
-    setNextPathEdges(frozen ? [] : path.nextEdgeIds);
-  }, []);
-
-  const openInstanceDetail = useCallback((instance: ProcessInstanceDTO) => {
+  const openInstanceDetail = useCallback((instance: ProcessInstanceDTO, focusNodeId?: string,
+    options: { justStarted?: boolean } = {}) => {
     setSelectedLiveInstance(null);
     setLiveWorkflow(null);
-    setActiveLiveNodeIds([]);
     setLiveSelectedNodeId(null);
     setExecutionStatuses({});
-    setActivePathEdges([]);
-    setActiveTokenEdges([]);
-    setNextPathEdges([]);
-    stablePathRef.current = null;
+    setFacts(NO_FACTS);
     setInstancePanelOpen(false);
     setDetailInstance(instance);
+    setDetailFocusNodeId(focusNodeId);
+    setDetailStartedId(options.justStarted ? instance.id : null);
     setCurrentView('instance');
   }, [setCurrentView]);
 
@@ -93,7 +73,7 @@ export function useLiveInstanceOverlay(
     setDesignerMode('diagram');
     setShowRunPanel(false);
     setInstancePanelOpen(true);
-    stablePathRef.current = null;
+    setFacts(NO_FACTS);
 
     try {
       const definition = await EngineAPI.getDefinitionForInstance(instance, activeProject.id);
@@ -118,10 +98,7 @@ export function useLiveInstanceOverlay(
       ]);
       setSelectedLiveInstance(fresh);
       setLiveSelectedNodeId(fresh.currentActivityId ?? instanceWorkflow.nodes[0]?.id ?? null);
-      const overlay = deriveLiveExecutionOverlay(instanceWorkflow, fresh, activities, history);
-      setExecutionStatuses(overlay.statuses);
-      setActiveLiveNodeIds(overlay.activeNodeIds);
-      applyPathOverlay(instanceWorkflow, fresh, activities, history);
+      setFacts({ activities, history });
     } catch (reason) {
       setSimulationLogs((logs) => [...logs, {
         id: `instance-view-${Date.now()}`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system',
@@ -129,7 +106,7 @@ export function useLiveInstanceOverlay(
         message: reason instanceof Error ? reason.message : String(reason),
       }]);
     }
-  }, [activeProject, workflows, setLivePanelWidth, setLivePanelPinned, setSidebarTab, setDesignerMode, setShowRunPanel, setSimulationLogs, applyPathOverlay]);
+  }, [activeProject, workflows, setLivePanelWidth, setLivePanelPinned, setSidebarTab, setDesignerMode, setShowRunPanel, setSimulationLogs]);
 
   const selectedLiveInstanceId = selectedLiveInstance?.id;
   const selectedLiveInstanceStatus = selectedLiveInstance?.status;
@@ -153,10 +130,7 @@ export function useLiveInstanceOverlay(
         ]);
         if (cancelled) return;
         setSelectedLiveInstance(fresh);
-        const overlay = deriveLiveExecutionOverlay(liveWorkflow, fresh, activities, history);
-        setExecutionStatuses(overlay.statuses);
-        setActiveLiveNodeIds(overlay.activeNodeIds);
-        applyPathOverlay(liveWorkflow, fresh, activities, history);
+        setFacts({ activities, history });
       } catch {
         // Keep the last authoritative snapshot visible; the next poll retries.
       }
@@ -167,37 +141,60 @@ export function useLiveInstanceOverlay(
       if (!TERMINAL_STATUSES.includes(terminal)) void refresh();
     }, streamLive ? 15_000 : 1500);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [activeProject, liveWorkflow, selectedLiveInstanceId, selectedLiveInstanceStatus, applyPathOverlay,
-    streamLive, eventTick]);
+  }, [activeProject, liveWorkflow, selectedLiveInstanceId, selectedLiveInstanceStatus, streamLive, eventTick]);
+
+  /* ---- The canvas plays the instance back one flow at a time (M5 S3) ---- */
+  const playback = useInstancePlayback(liveWorkflow, selectedLiveInstance, facts.activities, facts.history);
+  const frame = playback.frame;
+  const overlay = useMemo(() => {
+    if (!liveWorkflow || !frame || facts.history.length === 0) return null;
+    return {
+      live: deriveLiveExecutionOverlay(liveWorkflow, frame.instance, frame.activities, frame.history),
+      path: deriveInstancePath(liveWorkflow, frame.instance, frame.activities, frame.history),
+    };
+  }, [liveWorkflow, frame, facts.history.length]);
+
+  /**
+   * Content-stable projection: polls return new object identities for the
+   * same engine facts. Keeping the identity when nothing changed prevents
+   * Canvas re-renders (and SMIL animation restarts).
+   */
+  const stableOverlay = useRef<{ serialized: string; value: typeof overlay }>({ serialized: 'null', value: null });
+  const serialized = JSON.stringify(overlay);
+  if (stableOverlay.current.serialized !== serialized) stableOverlay.current = { serialized, value: overlay };
+  const view = stableOverlay.current.value;
+  const status = (selectedLiveInstance?.status || '').toUpperCase();
+  const frozen = TERMINAL_STATUSES.includes(status) || !!selectedLiveInstance?.suspended;
+  const executionStatuses = view ? view.live.statuses : dryRunStatuses;
 
   const clearLiveInstanceState = useCallback(() => {
     setSelectedLiveInstance(null);
     setLiveWorkflow(null);
-    setActiveLiveNodeIds([]);
     setLiveSelectedNodeId(null);
     setExecutionStatuses({});
-    setActivePathEdges([]);
-    setActiveTokenEdges([]);
-    setNextPathEdges([]);
-    stablePathRef.current = null;
+    setFacts(NO_FACTS);
   }, []);
 
   return {
     selectedLiveInstance,
     liveWorkflow,
-    activeLiveNodeIds,
+    activeLiveNodeIds: view?.live.activeNodeIds ?? EMPTY,
     liveSelectedNodeId,
     setLiveSelectedNodeId,
     executionStatuses,
-    activePathEdges,
-    activeTokenEdges,
-    nextPathEdges,
+    activePathEdges: view?.path.activePathEdgeIds ?? EMPTY,
+    activeTokenEdges: !view || frozen ? EMPTY : view.path.tokenEdgeIds,
+    nextPathEdges: !view || frozen ? EMPTY : view.path.nextEdgeIds,
+    instancePath: view?.path.path,
+    playback,
     setExecutionStatuses,
     instancesRefreshKey,
     setInstancesRefreshKey,
     instancePanelOpen,
     setInstancePanelOpen,
     detailInstance,
+    detailFocusNodeId,
+    detailStartedId,
     setDetailInstance,
     livePanelWidth,
     setLivePanelWidth,

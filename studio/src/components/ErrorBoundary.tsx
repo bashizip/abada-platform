@@ -32,19 +32,19 @@ export class ErrorBoundary extends Component<Props, State> {
   public render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="flex h-screen w-screen items-center justify-center bg-[#1A1614] text-[#EAE3D9] p-6">
-          <div className="max-w-md rounded-2xl border border-[#E76F51]/40 bg-[#25201D] p-6 shadow-2xl text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[#E76F51]/30 bg-[#E76F51]/10 text-[#E76F51]">
+        <div className="flex h-screen w-screen items-center justify-center bg-charcoal text-linen p-6">
+          <div className="max-w-md rounded-2xl border border-desert-rose/40 bg-mocha p-6 shadow-2xl text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-desert-rose/30 bg-desert-rose/10 text-desert-rose">
               <AlertTriangle className="h-7 w-7" />
             </div>
-            <h2 className="text-xl font-bold text-[#EAE3D9] mb-2">Unexpected UI Error</h2>
-            <p className="text-xs text-[#A89F91] mb-4">
+            <h2 className="text-xl font-bold text-linen mb-2">Unexpected UI Error</h2>
+            <p className="text-xs text-sand mb-4">
               {this.state.error?.message || 'An unhandled rendering exception occurred in Abada Studio.'}
             </p>
             <button
               type="button"
               onClick={this.handleReset}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#F4A261] px-4 py-2 text-sm font-semibold text-[#1A1614] hover:bg-[#e7924f] transition-all"
+              className="inline-flex items-center gap-2 rounded-xl bg-saffron px-4 py-2 text-sm font-semibold text-charcoal hover:bg-[#e7924f] transition-all"
             >
               <RefreshCw className="h-4 w-4" /> Reload Studio
             </button>

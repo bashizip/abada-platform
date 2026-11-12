@@ -34,11 +34,14 @@ public class ProjectDocumentService {
     private final AbadaEngine engine;
     private final ProjectTreeService trees;
     private final AplParser aplParser;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
 
     public ProjectDocumentService(ProjectProcessDocumentRepository documents,
             ProjectFolderRepository folders, ProjectAccessService access, AbadaEngine engine,
             ProjectTreeService trees,
-            @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels) {
+            @Value("${abada.agent.allowed-models:" + AplParser.DEFAULT_ALLOWED_AGENT_MODELS + "}") String allowedAgentModels,
+            com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.documents = documents;
         this.folders = folders;
         this.access = access;
@@ -189,6 +192,10 @@ public class ProjectDocumentService {
         document.setLastDeployedChecksum(deployed.getChecksum());
         document.setUpdatedAt(Instant.now());
         documents.save(document);
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.PROCESS_DEPLOY,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROCESS, deployed.getProcessKey(), projectId,
+                com.abada.engine.audit.AdminAuditDetails.create().put("version", deployed.getVersion())
+                        .put("deploymentId", deployed.getDeploymentId()).put("documentId", documentId));
         return deployed;
     }
 

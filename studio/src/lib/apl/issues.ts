@@ -77,3 +77,28 @@ export const issuesByNode = (issues: AplValidationIssue[], nodeIds: string[]): M
   }
   return grouped;
 };
+
+/** An issue's path relative to its node: `/flow/nodes/3/rules/1/when` gives `/rules/1/when`; empty when none. */
+export const nodeRelativePath = (issue: Pick<AplValidationIssue, 'path'>): string => {
+  const match = /^\/flow\/nodes\/\d+(\/.*)?$/.exec(issue.path ?? '');
+  return match?.[1] ?? '';
+};
+
+/** The issues about one field of a node (or a part of it): `issuesAt(issues, 'rules', 1)` for the second rule. */
+export const issuesAt = (issues: AplValidationIssue[], ...segments: (string | number)[]): AplValidationIssue[] => {
+  const prefix = `/${segments.join('/')}`;
+  return issues.filter((issue) => {
+    const path = nodeRelativePath(issue);
+    return path === prefix || path.startsWith(`${prefix}/`);
+  });
+};
+
+/** Engine issues about no node: the process itself (`/metadata/…`, `/flow/entry`, the document as a whole). */
+export const processIssues = (issues: AplValidationIssue[], nodeIds: string[]): AplValidationIssue[] =>
+  sortIssues(issues).filter((issue) => !issueNodeId(issue, nodeIds));
+
+/** The issues about one process field: `metadataIssuesAt(issues, 'variables', 2)` for the third variable. */
+export const metadataIssuesAt = (issues: AplValidationIssue[], ...segments: (string | number)[]): AplValidationIssue[] => {
+  const prefix = ['/metadata', ...segments].join('/');
+  return issues.filter((issue) => issue.path === prefix || (issue.path ?? '').startsWith(`${prefix}/`));
+};

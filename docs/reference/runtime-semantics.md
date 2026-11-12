@@ -78,15 +78,61 @@ should use external tasks and an idempotent worker operation.
   to a FORM project resource by bare slug (e.g. `loan-approval` →
   `forms/loan-approval.json`). The key is copied verbatim onto the created task
   and exposed as `TaskDetailsDto.formKey` alongside the owning `projectId`.
-- Forms are live project resources: task clients resolve the current revision
-  at render time, so editing a form affects tasks already in flight.
-- `GET /v1/projects/{projectId}/forms` lists FORM resources (id, name, kind,
+- Since 1.2 (V41) a form is pinned when the definition is deployed: the
+  resolved FORM resource is validated (an invalid one fails the deployment
+  with `ABADA-FORM-001`) and its schema, revision and sha256 are stored with
+  the version. Editing a form affects only versions deployed after the edit;
+  a rollback redeploys and pins the current form.
+- Completing or deciding a task with a pinned form validates the submitted
+  values against it after the claim and outcome checks and before any
+  variable is written, in the same transaction. Any broken rule refuses the
+  whole command: HTTP 422 `FORM_INVALID` with `details.violations` listing
+  `{ field, rule }` (rules: `required`, `type`, `format`, `pattern`,
+  `minLength`, `maxLength`, `min`, `max`, `option`, `decimals`,
+  `not_submittable`, and for file fields `file_unknown`, `file_not_pending`,
+  `file_size`, `file_type`, `file_total`). Values are never echoed or logged. The task stays open;
+  no history, outbox event or variable is written.
+- `visible_when` (portable CEL subset, APL specification §2.9) is evaluated
+  over the process variables overlaid with the submitted values. A hidden
+  field is never required and a value submitted for it is discarded; the
+  `TASK_COMPLETED` history entry names the form, its revision and the
+  discarded field ids. Variables the form does not declare pass through; a
+  required field may be satisfied by the variable's current value.
+- Versions deployed before V41, and form keys that resolved to no FORM
+  resource at deploy, have no pinned form: completion is not checked and
+  clients render the current revision, as in 1.1.
+- `GET /v1/projects/{projectId}/tasks/{taskId}/form` returns
+  `{ formKey, pinned, revision, schema }` to the task's candidates and
+  assignee: the pinned form, or the current one with `pinned: false`.
+  `GET /v1/projects/{projectId}/forms` lists FORM resources (id, name, kind,
   revision, updatedAt); `GET /v1/projects/{projectId}/forms/{formKey}`
-  resolves a key to its decoded schema JSON. Both require project visibility.
+  resolves a key to its schema JSON. These require project visibility.
 - Deployment never fails on an unresolvable form key; it is logged as a
-  warning so authors can add the form after publishing the process.
+  warning so authors can add the form after publishing the process (that
+  version then has no pinned form).
 - `camunda:formKey` in BPMN maps to the canonical `formKey` (see
   [bpmn-support.md](bpmn-support.md)).
+
+## Files in human tasks
+
+Since 1.2 (V42) a `file` form field takes uploaded files; the full contract is
+[process files](process-files.md).
+
+- Files are uploaded before completion
+  (`POST /v1/projects/{p}/tasks/{t}/files?field=…&name=…`) and stay `PENDING`.
+  The bytes go to RustFS, outside any workflow transaction; PostgreSQL gets
+  only the metadata row.
+- Completing the task with the file ids attaches them **in the completion
+  transaction**: the rows become `ATTACHED` and the field's variable gets the
+  reference `{ fileId, name, contentType, size, sha256 }` (a list for a
+  `multiple` field). No remote call is made in that transaction; a refused
+  completion leaves the files `PENDING` and attaches nothing.
+- The process never holds bytes: variables, history, outbox events and
+  webhooks carry references and ids only. Workers download through the engine
+  with the lease of their external task.
+- `PENDING` files expire after 24 hours; attached files follow the project's
+  file retention after the instance ends (kept by default). Deletion is a
+  durable, idempotent, at-least-once sweep.
 
 ## Process control
 
@@ -252,8 +298,22 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   A `COLLECT` evaluation merges outputs in rule order, later outputs
   overwriting earlier ones on key collision.
 - Each applied evaluation appends `DECISION_TABLE_APPLIED` history and a
-  matching outbox event carrying the decision key, matched rule indexes and
-  input/output names — never the values themselves.
+  matching outbox event carrying the decision key, matched rule indexes,
+  input/output names and an `evidenceId` — never the values themselves.
+- The resolved input values are kept apart, as decision-input evidence, in
+  the same transaction (`decision_input_evidence`, one row per application,
+  keyed by `evidenceId`). The project's evidence policy governs them as it
+  governs agent payloads: nothing under `none`, sensitive variables masked by
+  name and by value under `redacted`, as evaluated under `full`; always
+  AES-GCM encrypted and cleared by the retention sweep after
+  `retention_days`. A node-level `evidence` override applies to agent nodes
+  only. A failed evaluation rolls back with the command and leaves no
+  evidence. History recorded before 1.2.0 has no `evidenceId`.
+- Evidence readers (`abada-evidence-reader` or `agent-evidence:read`, project
+  members only, not implied by administration) read one application's
+  inputs with `GET /api/v1/projects/{projectId}/instances/{instanceId}/decisions/{evidenceId}/inputs`
+  (`no-store`; `410` once purged). Every read is recorded as `EVIDENCE_READ`
+  with `kind: decision-inputs`, without the values.
 
 ## Events and timers
 
@@ -496,6 +556,31 @@ In-process consumers receive `PublishedLifecycleEvent` through Spring's event
 publisher. Optional comma-separated webhook targets are configured with
 `abada.outbox.webhook-urls`; each POST includes the stable event identifier in
 `X-Abada-Event-Id`. Any non-success response leaves the outbox event retryable.
+
+### The path taken (`FLOW_TAKEN`, since 1.2)
+
+Every sequence flow a token takes is recorded as one `FLOW_TAKEN` history
+event, in the same transaction as the move: a rolled-back command leaves none.
+The event's `activityId` is the node the token left, and
+`details.flow = { id, from, to, tokenId, loopIteration }`, plus:
+
+- `condition`: the rule of an exclusive or inclusive gateway that matched, or
+  `else: true` when its default branch was taken;
+- `route = { kind, code }`: the route that sent the token, for review outcomes
+  (`OUTCOME`), agent routes (`ROUTE`), errors, timeouts, low confidence,
+  invalid output and an exhausted loop (`LOOP_EXHAUSTED`, the only flow with a
+  null `id`);
+- `loopIteration`: the pass the token started at `to` when it is a loop step.
+
+Events of one command carry strictly increasing timestamps, so history read in
+`occurredAt` order replays the path in the order it was taken: sequential hops,
+each parallel branch with its own `tokenId`, each arrival at a join, each loop
+pass. No variable value is recorded, only the condition text of the definition.
+The instance history endpoints expose the same fact typed as `flow`
+(`FlowTakenDto`, additive). `FLOW_TAKEN` is a history fact, not a lifecycle
+event: it is not written to the outbox, so webhooks and stream consumers see no
+extra traffic. Instances started before 1.2 have no `FLOW_TAKEN` for their
+earlier steps; the Studio then labels their diagram path "reconstructed".
 
 ## Definition versions and caches
 

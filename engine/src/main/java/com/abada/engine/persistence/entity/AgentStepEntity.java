@@ -125,6 +125,12 @@ public class AgentStepEntity {
     private Instant purgeAfter;
     @Column(name = "purged_at")
     private Instant purgedAt;
+    /** S15: the files the model call was given, verified by the engine (metadata JSON, never bytes). */
+    @Column(name = "files_json", columnDefinition = "TEXT")
+    private String filesJson;
+
+    public String getFilesJson() { return filesJson; }
+    public void setFilesJson(String filesJson) { this.filesJson = filesJson; }
     @Version
     @Column(name = "entity_version", nullable = false)
     private long entityVersion;

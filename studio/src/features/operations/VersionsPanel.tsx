@@ -14,14 +14,20 @@ interface VersionsPanelProps {
   /** Operator, maintainer or owner; the engine still enforces it. */
   canRollBack: boolean;
   onRolledBack?: (processKey: string, version: number) => void;
+  /** Inside a drawer: open, without the collapsible header. */
+  embedded?: boolean;
+  /** Marks the version an instance runs on. */
+  instanceVersion?: number;
 }
 
 /**
  * Version history of a process with a source diff against the current version and a one-step rollback. A rollback
  * deploys the old source as the next version: running instances stay on the version they started on.
  */
-export const VersionsPanel: React.FC<VersionsPanelProps> = ({ projectId, processKeys, canRollBack, onRolledBack }) => {
-  const [collapsed, setCollapsed] = useState(true);
+export const VersionsPanel: React.FC<VersionsPanelProps> = ({
+  projectId, processKeys, canRollBack, onRolledBack, embedded = false, instanceVersion,
+}) => {
+  const [collapsed, setCollapsed] = useState(!embedded);
   const [processKey, setProcessKey] = useState(processKeys[0] ?? '');
   const [versions, setVersions] = useState<DefinitionVersionDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -81,37 +87,33 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ projectId, process
     }
   };
 
-  return (
-    <section className="mx-6 mt-4 rounded-xl border border-[#3A322E] bg-[#25201D]">
-      <button type="button" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-semibold text-[#EAE3D9]">
-        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        <History className="h-3.5 w-3.5 text-[#F4A261]" /> Versions and rollback
-      </button>
-      {!collapsed && (
-        <div className="space-y-3 border-t border-[#3A322E] p-4">
-          <select aria-label="Process" value={processKey} onChange={(event) => { setProcessKey(event.target.value); setDiff(null); setTarget(null); }}
-            className="rounded-lg border border-[#3A322E] bg-[#1A1614] px-2 py-1 text-xs text-[#EAE3D9]">
+  const content = (
+        <div className={embedded ? 'space-y-3' : 'space-y-3 border-t border-hairline p-4'}>
+          {processKeys.length > 1 && <select aria-label="Process" value={processKey} onChange={(event) => { setProcessKey(event.target.value); setDiff(null); setTarget(null); }}
+            className="rounded-lg border border-hairline bg-charcoal px-2 py-1 text-xs text-linen">
             {processKeys.map((key) => <option key={key} value={key}>{key}</option>)}
-          </select>
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-[#A89F91]" />}
-          {error && <p className="text-[11px] text-[#E76F51]">{error}</p>}
+          </select>}
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-sand" />}
+          {error && <p className="text-[11px] text-desert-rose">{error}</p>}
           <ul className="space-y-1.5">
             {versions.map((version) => (
-              <li key={version.deploymentId} className="flex flex-wrap items-center gap-3 rounded-lg border border-[#3A322E] px-3 py-2 text-[11px] text-[#EAE3D9]">
+              <li key={version.deploymentId} className="flex flex-wrap items-center gap-3 rounded-lg border border-hairline px-3 py-2 text-[11px] text-linen">
                 <span className="font-mono font-semibold">v{version.version}{version.current ? ' (current)' : ''}</span>
+                {version.version === instanceVersion && (
+                  <span className="rounded-full border border-amethyst/40 px-1.5 text-[10px] text-amethyst-light">this instance</span>
+                )}
                 <span>{ORIGIN[version.origin]}{version.rollbackOf ? ` v${version.rollbackOf}` : ''}</span>
-                <span className="text-[#A89F91]">{version.deployedBy ?? 'unknown'} · {formatWhen(version.createdAt)}</span>
-                <span className="text-[#A89F91]">{version.runningInstances} running</span>
-                {version.comment && <span className="italic text-[#A89F91]">“{version.comment}”</span>}
+                <span className="text-sand">{version.deployedBy ?? 'unknown'} · {formatWhen(version.createdAt)}</span>
+                <span className="text-sand">{version.runningInstances} running</span>
+                {version.comment && <span className="italic text-sand">“{version.comment}”</span>}
                 {!version.current && (
                   <span className="ml-auto flex gap-2">
-                    <button type="button" onClick={() => void showDiff(version.version)} className="text-[#9D4EDD] hover:underline">
+                    <button type="button" onClick={() => void showDiff(version.version)} className="text-amethyst hover:underline">
                       Diff vs current
                     </button>
                     {canRollBack && (
                       <button type="button" onClick={() => setTarget(version.version)}
-                        className="inline-flex items-center gap-1 text-[#F4A261] hover:underline">
+                        className="inline-flex items-center gap-1 text-saffron hover:underline">
                         <Undo2 className="h-3 w-3" /> Roll back
                       </button>
                     )}
@@ -121,30 +123,41 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ projectId, process
             ))}
           </ul>
           {diff && (
-            <pre aria-label="Source diff" className="max-h-72 overflow-auto rounded-lg bg-[#1A1614] p-3 font-mono text-[10px] text-[#EAE3D9]">
+            <pre aria-label="Source diff" className="max-h-72 overflow-auto rounded-lg bg-charcoal p-3 font-mono text-[10px] text-linen">
               {diff.tooLarge ? 'The sources are too large to compare here.' : diff.identical ? 'The sources are identical.' : diff.unified}
             </pre>
           )}
           {target !== null && current && (
-            <div className="space-y-2 rounded-lg border border-[#F4A261]/40 p-3">
-              <p className="text-[11px] text-[#EAE3D9]">
+            <div className="space-y-2 rounded-lg border border-saffron/40 p-3">
+              <p className="text-[11px] text-linen">
                 Deploy the source of v{target} as v{current.version + 1}. {current.runningInstances} running
                 instance{current.runningInstances === 1 ? '' : 's'} on v{current.version} keep running there; new starts use v{current.version + 1}.
               </p>
               <input type="text" aria-label="Reason" value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1000}
                 placeholder="Why are you rolling back? (recorded in the audit history)"
-                className="w-full rounded-lg border border-[#3A322E] bg-[#1A1614] p-2 text-[11px] text-[#EAE3D9]" />
+                className="w-full rounded-lg border border-hairline bg-charcoal p-2 text-[11px] text-linen" />
               <div className="flex gap-2">
                 <button type="button" disabled={busy || comment.trim() === ''} onClick={() => void rollBack()}
-                  className="rounded-lg bg-[#F4A261] px-3 py-1 text-[11px] font-semibold text-[#1A1614] disabled:opacity-50">
+                  className="rounded-lg bg-saffron px-3 py-1 text-[11px] font-semibold text-charcoal disabled:opacity-50">
                   Roll back to v{target}
                 </button>
-                <button type="button" onClick={() => setTarget(null)} className="text-[11px] text-[#A89F91]">Cancel</button>
+                <button type="button" onClick={() => setTarget(null)} className="text-[11px] text-sand">Cancel</button>
               </div>
             </div>
           )}
         </div>
-      )}
+  );
+
+  if (embedded) return <section aria-label="Versions">{content}</section>;
+
+  return (
+    <section className="mx-6 mt-4 rounded-xl border border-hairline bg-mocha">
+      <button type="button" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-semibold text-linen">
+        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        <History className="h-3.5 w-3.5 text-saffron" /> Versions and rollback
+      </button>
+      {!collapsed && content}
     </section>
   );
 };

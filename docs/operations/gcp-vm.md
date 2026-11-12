@@ -75,7 +75,7 @@ the stack's memory limits (about 6 GB with the agent worker); use
 `e2-standard-4` if you add `--telemetry`.
 
 ```bash
-gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags "$TAGS" --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.1.2
+gcloud compute instances create "$VM" --project "$PROJECT" --zone "$ZONE" --machine-type e2-standard-2 --image-family debian-12 --image-project debian-cloud --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$VM-ip" --tags "$TAGS" --metadata-from-file startup-script=deployment/gcp/startup.sh --metadata abada-domain="$DOMAIN",abada-acme-email="$EMAIL",abada-version=1.2.0
 ```
 
 On every boot, [`deployment/gcp/startup.sh`](../../deployment/gcp/startup.sh)
@@ -257,7 +257,7 @@ gcloud compute instances reset "$VM" --project "$PROJECT" --zone "$ZONE"
 
 ## Backup and upgrade
 
-Back up both databases and the environment file (it holds the only copy of the
+Back up both databases, the RustFS volume and the environment file (it holds the only copy of the
 generated secrets, including `ABADA_ENCRYPTION_KEY`, without which the AI
 provider keys saved in Studio cannot be read):
 
@@ -267,6 +267,14 @@ cd /opt/abada && sudo docker compose --env-file .env.server -f compose.yaml -f c
 
 ```bash
 cd /opt/abada && sudo docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml exec -T keycloak-db pg_dump -U keycloak -Fc keycloak > keycloak.dump
+```
+
+From 1.2, also back up the RustFS volume that holds the files of task forms,
+after the database dump (`.env.server` holds `ABADA_FILES_SSE_MASTER_KEY`,
+without which those files cannot be read):
+
+```bash
+cd /opt/abada && sudo docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml exec -T rustfs tar -C /data -cf - . > abada-files.tar
 ```
 
 A scheduled persistent-disk snapshot of the boot disk is a simple complement.

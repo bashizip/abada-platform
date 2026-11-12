@@ -9,9 +9,9 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-34d399)](CONTRIBUTING.md)
 
 Abada is an open-source runtime for business processes in which AI agents, deterministic
-rules and people work together. It runs on your servers with PostgreSQL as its only
-database, signs users in through your OIDC provider and calls only the model endpoint you
-configure. The engine — not the model, the worker or the UI — decides what an AI answer
+rules and people work together. It runs on your servers — PostgreSQL for process state and,
+from 1.2, RustFS (self-hosted, S3-compatible) for the files people attach to tasks — signs users
+in through your OIDC provider and calls only the model endpoint you configure. The engine — not the model, the worker or the UI — decides what an AI answer
 is allowed to change.
 
 **Agents advise. Rules decide. Humans approve. PostgreSQL remembers.**
@@ -66,8 +66,8 @@ Docker is the only prerequisite.
 curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
 
-The installer pulls the published images and starts Studio, the engine, the agent worker
-and PostgreSQL, then prints the local URLs and development accounts. A Gemini key is
+The installer pulls the published images and starts Studio, the engine, the agent worker,
+PostgreSQL and (from 1.2) RustFS for task-form files, then prints the local URLs and development accounts. A Gemini key is
 optional at install time; you can add a model provider later in Studio.
 
 From a clone of this repository:
@@ -159,6 +159,7 @@ flowchart LR
     studio["Studio<br/>design · tasks · operations"]
     engine["Engine<br/>processes · rules · agent contract"]
     db[("PostgreSQL")]
+    files[("RustFS<br/>task-form files (1.2)")]
     worker["Agent worker"]
     workers["Your workers<br/>(Java SDK)"]
     idp["Your OIDC provider"]
@@ -166,6 +167,7 @@ flowchart LR
   end
   studio --> engine
   engine --- db
+  engine --- files
   worker -- "fetch · complete" --> engine
   workers -- "fetch · complete" --> engine
   worker --> model
@@ -207,31 +209,29 @@ only through an engine command that validates it — see
 
 ---
 
+## When to use Abada
+
+**Use Abada when** an AI step must be checked before it changes any data; people must
+approve some decisions; you need an audit record of every model call; and you want all
+of it in your own PostgreSQL, behind your own identity provider.
+
+**Use something else when** you need very high throughput of pure code workflows
+(Temporal); full BPMN 2.0, CMMN and DMN coverage (Flowable, Camunda); a no-code
+integration tool (n8n); or a hosted service with an SLA today.
+
+---
+
 ## Status
 
-The current release is **`1.1.2`**, an evaluation release
-([release notes](docs/release-notes/1.1.2-release-notes.md)): re-running the one-line
-installer now updates an existing installation to the new release. It ships the
-`1.1.1` features ([release notes](docs/release-notes/1.1.1-release-notes.md),
-[gate report](docs/development/1.1.1-gate-report-2026-10-16.md)): live AI providers. A key is
-tested before it is saved, each provider's models are read from the provider (so a new model
-works the day it is published), prices come from a public catalog when you have not set
-one, and Studio updates everywhere as soon as a provider works. It also fixes a 500 on a
-user's first sign-in and an installer that stopped before its final instructions.
-`1.1.0` ([release notes](docs/release-notes/1.1.0-release-notes.md)) brought governed improvement. The
-Insight loop notices that people keep overruling an agent, proposes a small change, shows what
-that change would have done on recorded cases before anyone approves it (a policy can require
-it), and one click returns to the previous version; a `for-each` step runs a governed child per
-item of a list, and refinements are applied as validated patches. It builds on `1.1.0-rc.2`
-(agents that act: tools from your MCP servers under read, write and approval-required policies,
-crash-safe writes, bounded and engine-priced cost, routing agents, call-process and agent
-delegation) and `1.1.0-rc.1` (bounded loops, error and timeout routes, service levels, model
-fallback, review decisions). It targets self-hosted Docker Compose deployments with one or more
-engine instances on PostgreSQL.
-
-Public-cloud production certification and an independent security review are not yet scheduled;
-see the [deployment support matrix](docs/reference/deployment-support.md) and the
-[roadmap](docs/development/roadmap.md) for what is deferred.
+- **Current release:** [`1.2.0`](docs/release-notes/1.2.0-release-notes.md), an
+  evaluation release. Past releases and what each one added are in the
+  [release notes](docs/release-notes/).
+- **Supported setup:** self-hosted Docker Compose, with one or more engine instances on
+  PostgreSQL. From 1.2, self-hosted installations also run RustFS for files uploaded to
+  task forms (PostgreSQL keeps their metadata).
+- **Not yet:** public-cloud production certification and an independent security review.
+  See the [deployment support matrix](docs/reference/deployment-support.md) and the
+  [roadmap](docs/development/roadmap.md).
 
 ---
 

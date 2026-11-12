@@ -220,6 +220,18 @@ export function useProjectWorkspace(authenticated: boolean) {
     setWorkflows((prev) => prev.map((wf) => (wf.id === targetId ? updater(wf) : wf)));
   }, [activeWorkflowId, workflows, recordHistory]);
 
+  /**
+   * Replaces a whole process document as one undo step (the YAML editor's apply, an applied AI
+   * draft). Returns false when the document is not open.
+   */
+  const replaceWorkflow = useCallback((id: string, after: WorkflowFile): boolean => {
+    const before = workflows.find((wf) => wf.id === id);
+    if (!before) return false;
+    recordHistory(id, before, after);
+    setWorkflows((prev) => prev.map((wf) => (wf.id === id ? after : wf)));
+    return true;
+  }, [workflows, recordHistory]);
+
   const stepHistory = useCallback((direction: 'undo' | 'redo') => {
     const target = workflows.find((wf) => wf.id === currentWorkflow.id);
     if (!target) return;
@@ -255,6 +267,7 @@ export function useProjectWorkspace(authenticated: boolean) {
     openProject,
     updateActiveWorkflow,
     recordHistory,
+    replaceWorkflow,
     undo,
     redo,
     canUndo,

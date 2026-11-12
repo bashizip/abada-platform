@@ -87,8 +87,9 @@ metadata:                 # required — authoring metadata
   variables:              # optional — declared instance variables (§5.3)
     - name: <identifier>  #   required — [A-Za-z_][A-Za-z0-9_]*
       type: <type>        #   optional — string|number|integer|boolean|object|list|any (default any)
-      required: <bool>    #   optional — default false
+      required: <bool>    #   optional — default false (documentation; not checked on the start payload yet)
       description: <string>
+      sensitive: <bool>   #   optional — default false; masked in redacted agent evidence
 flow:                     # required — the executable graph
   entry: <nodeId>         # required — id of the start node
   nodes: [ <APLNode>, ... ]  # required — at least one node
@@ -98,7 +99,7 @@ flow:                     # required — the executable graph
 payload and anything written by an `engine-task`, `script` or `human-input`
 node. Declarations are checked statically (§6.1); the engine does **not** yet
 enforce them on the start payload. A declaration with `sensitive: true` is
-masked in redacted agent evidence (§3.2.2): fields with that name and the
+masked in redacted agent and decision-input evidence (§3.2.2, §4.5): fields with that name and the
 variable's value wherever it appears.
 
 - `version` is currently `abada.io/v1`. It is the APL language version, not a
@@ -250,6 +251,19 @@ it fires, inside the command that observes the condition.
   unavailable the attempt is *deferred*: it does not consume `max_attempts`
   and is retried after the provider's `Retry-After`, with a growing delay
   (see runtime semantics).
+- **Files.** `files` maps names to CEL expressions that give a file
+  reference or a list of them (from a `file` field of a task form). It is
+  default-deny like `inputs`: only these files reach the model, which reads
+  them as images or PDF. At deployment each expression must compile, names
+  match `[A-Za-z_][A-Za-z0-9_]{0,63}` (at most 10) and none is also an input;
+  `max_files` (1–20, default 5) needs `files`. When the work is locked the
+  engine checks every referenced file is attached to this instance and within
+  `max_files` and `abada.agent.files.max-bytes`; otherwise the step fails with
+  `AGENT_FILE_INVALID` or `AGENT_FILE_LIMIT`. A value that is null (an
+  optional upload left empty) is no file. The worker's typed errors are
+  `AGENT_FILE_INTEGRITY` (bytes differ from the engine's sha256) and
+  `AGENT_FILE_UNSUPPORTED` (no model of the chain reads a declared type).
+  Instructions inside a document are data, never a change of the contract.
 - **Loops.** A boundary may return to an earlier step; that cycle needs a
   `loop` bound like any other (§2.3).
 - Boundaries replace the synthetic `<id>__outcome` gateway used before 1.1;
@@ -344,6 +358,55 @@ declares, and the engine checks the choice:
 
 ---
 
+### 2.9 Task forms
+
+A `human-input` node's `formKey` names a FORM project resource
+(`forms/<key>.json`). The form is part of the contract, and the engine
+enforces it, not only the browser:
+
+- **Pinned at deploy.** Deploying the definition resolves the key, validates
+  the form and stores its schema with that version
+  (`process_definitions.form_snapshots`). Editing the form later changes only
+  versions deployed after the edit; tasks already open keep their rules.
+  A rollback redeploys and pins the current form. A key that resolves to no
+  FORM resource is not an error (the task then has no engine-checked form).
+- **Checked on completion.** Completing or deciding the task validates the
+  submitted values against the pinned schema inside the completion
+  transaction. A broken rule refuses the whole command (HTTP 422,
+  `FORM_INVALID`, `details.violations: [{ field, rule }]`; values are never
+  echoed or logged). A field hidden by `visible_when` is never required and a
+  value submitted for it is discarded. Variables the form does not declare
+  pass through. A required field may be satisfied by the variable's current
+  value.
+- **Schema.** `fields` (the flat list; `id` is the variable written) and an
+  optional `layout` of `sections` → `rows` (1–4 fields, `span` 1–4, widths
+  add up to at most 4) and optional wizard `steps` (each section in exactly
+  one step, in order). Field types, rules and `visible_when` are listed in
+  [`apl-node-reference.md`](apl-node-reference.md#task-form-schema).
+- **`visible_when`** is a portable CEL subset (identifiers, literals, lists,
+  `== != < <= > >=`, `in`, `&& || !`, unary `-`, parentheses, `size(x)`)
+  that the Studio and the engine evaluate identically: a missing variable is
+  `null`, ordering anything but two numbers or two strings is `false`, and a
+  field is shown only when the result is `true`. Member access and other
+  functions are refused at deploy.
+- **Patterns** are RE2 (linear time) and must match the whole value; RE2
+  syntax a browser reads differently (`(?i)`, `(?P<…>)`, `\z`, `[[:alpha:]]`,
+  look-around, back-references) is refused at deploy.
+
+```json
+{
+  "title": "Supplier onboarding",
+  "fields": [
+    { "id": "vat_registered", "type": "boolean", "label": "Registered for VAT" },
+    { "id": "vat_id", "type": "string", "label": "VAT number", "required": true,
+      "pattern": "[A-Z]{2}[0-9A-Z]{8,12}", "visible_when": "vat_registered == true" },
+    { "id": "annual_spend", "type": "currency", "currency": "EUR", "label": "Expected annual spend", "min": 0 }
+  ],
+  "layout": { "sections": [ { "id": "company", "title": "Company",
+    "rows": [ ["vat_registered", { "field": "vat_id", "span": 2 }, "annual_spend"] ] } ] }
+}
+```
+
 ## 3. Node Types & Primitives Reference
 
 The current APL node vocabulary (Studio `lib/apl/types.ts`):
@@ -422,6 +485,8 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `budget_usd` | number | no | engine-computed cost for the whole task; fails closed for an unpriced model |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |
 | `fallback_models` | string[] | no | up to 3 allowed models tried while the model before is unavailable (§2.6) |
+| `files` | map name → CEL | no | files the model reads, each a file reference or a list (§2.6, 1.2) |
+| `max_files` | integer | no | 1–20, default 5; only with `files` |
 | `on_low_confidence` | nodeId | no | route when `_confidence` is missing or below `confidence_threshold` |
 | `on_invalid_output` | nodeId | no | route when the result violates `output_schema` or the completion shape |
 | `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error (optionally per code) or the last failed attempt (`WORK_FAILED`) |
@@ -1059,6 +1124,26 @@ these three.
   never guesses a decision.
 - More than one `otherwise` rule in a table is a deployment error.
 
+### 4.4a Rule checks at deployment
+
+Deployment and `POST /v1/apl/validate` check every rule and report each
+problem with `ABADA-APL-VALIDATION-001` at the rule's own path
+(`/flow/nodes/<i>/rules/<j>`, or `…/rules/<j>/when`), so an editor can show it
+on that rule. Every broken rule of a table is reported at once.
+
+| Check | Why |
+| --- | --- |
+| A rule that is not the fallback has an empty `when` | It could never match. |
+| `when` is not valid CEL | It would fail on every run. |
+| `when` reads a name that is not a declared input | Conditions see only the table's inputs, so the name never has a value; the rule fails whenever its result depends on it. |
+| A second `otherwise` rule | Only one fallback can apply. |
+| Under `UNIQUE`, two rules with the same condition (whitespace ignored) | They always match together, so the table always fails. |
+
+Overlaps between *different* conditions under `UNIQUE` (`score > 600` and
+`score > 700`) cannot be decided statically: they remain a run-time failure
+of the command, as described in §4.3. Definitions that were deployed before
+these checks existed still load and run unchanged.
+
 ### 4.5 Transactional execution and audit
 
 - Inputs are resolved from instance variables at evaluation time (`${...}` or
@@ -1066,8 +1151,16 @@ these three.
 - Outputs are written to **top-level instance variables** inside the same
   transaction that advances the process.
 - Every application is recorded as a `DECISION_TABLE_APPLIED` history event
-  carrying `decisionKey`, `matchedRuleIndexes`, `inputNames` and
-  `outputNames` — identifiers only, never values.
+  carrying `decisionKey`, `matchedRuleIndexes`, `inputNames`, `outputNames`
+  and `evidenceId` — identifiers only, never values.
+- The resolved input values are kept as evidence under the project's evidence
+  policy (§3.2.2: `none`, `redacted` or `full`, encrypted,
+  purged after `retention_days`). Under `redacted`, variables declared
+  `sensitive: true` are masked by name and wherever their value was read
+  under another input name. Evidence readers fetch them with `GET
+  .../instances/{id}/decisions/{evidenceId}/inputs`; every read is recorded
+  as `EVIDENCE_READ`. A node-level `evidence` override does not apply to
+  decision tables.
 - Because execution is in-transaction, a decision that fails evaluation
   (UNIQUE ambiguity or no-match/no-otherwise) rolls back the entire step —
   this is the property the Studio Run panel proves end-to-end.
@@ -1193,6 +1286,7 @@ validation path. Failures abort the deployment transaction.
 | `ABADA-BPMN-PROFILE-001` | unknown compatibility profile | unrecognized profile name |
 | `ABADA-BPMN-ASSIGNMENT-001..004` | assignment conflicts | conflicting/invalid assignee, candidate user/group |
 | `ABADA-BPMN-MIGRATION-001` | uncertain migration | explicit migration when semantics cannot be preserved |
+| `ABADA-FORM-001` | task form refused | a human node's `formKey` resolves to a FORM resource that is not valid JSON, uses an unknown type, breaks a rule or layout constraint, has a non-portable `pattern` or a `visible_when` outside the portable subset (§2.9) |
 | `ABADA-APL-VALIDATION-001` | native APL rejection | unsupported node type, broken `next`/`rules.then`/`branches` targets, `branches`+`next` combination, a cycle without a loop bound (§2.3), non-webhook entry, an expression that is not valid CEL, a script task while scripts are disabled, invalid `outcomes` (count, name, target, comment rule, or `outcomes` together with `next`), invalid agent `routes` (count, name, target, description, a `when` that is not valid CEL, `routes` together with `next`, or an `output_schema` that is not an object or declares `route`), an agent model or fallback model outside `abada.agent.allowed-models`, a boundary on a node type that cannot have one, an `on_timeout.after` outside `PT1S`–`P365D`, `escalate_to` without `sla_hours`, invalid or duplicate `metadata.variables` |
 
 The `strict` parse option escalates vendor-directive warnings to errors;

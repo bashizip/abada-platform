@@ -60,3 +60,9 @@ abada:
   security:
     mode: ${ABADA_SECURITY_MODE:proxy}
     allowed-origins: ${ABADA_ALLOWED_ORIGINS:http://localhost:5602,http://localhost:5603,http://tenda.localhost,http://orun.localhost}
+  # Local development: the RustFS of the dev Compose stack (scripts/dev/up.sh), on
+  # the credentials of release/.env.dev.example. Readiness fails while it is not running.
+  files:
+    endpoint: ${ABADA_FILES_ENDPOINT:http://localhost:9000}
+    access-key: ${ABADA_FILES_ACCESS_KEY:abada-dev-files}
+    secret-key: ${ABADA_FILES_SECRET_KEY:abada-dev-files-secret}

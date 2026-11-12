@@ -65,7 +65,7 @@ class ExampleGalleryTest {
         for (String file : List.of("fraud-check.apl.yaml", "refund-payout.apl.yaml", "support-triage.apl.yaml",
                 "refund-agent.apl.yaml", "complaint-reply.apl.yaml", "lead-triage-demo.apl.yaml",
                 "kyc-onboarding.apl.yaml", "document-check.apl.yaml", "document-batch.apl.yaml",
-                "review-triage.apl.yaml")) {
+                "review-triage.apl.yaml", "scanned-invoice.apl.yaml")) {
             try (InputStream source = Files.newInputStream(EXAMPLES.resolve(file))) {
                 engine().deploy(PROJECT, source);
             }
@@ -87,7 +87,7 @@ class ExampleGalleryTest {
                     .containsExactlyInAnyOrder("fraud-check.apl.yaml", "refund-payout.apl.yaml",
                             "support-triage.apl.yaml", "refund-agent.apl.yaml", "complaint-reply.apl.yaml",
                             "lead-triage-demo.apl.yaml", "kyc-onboarding.apl.yaml", "document-check.apl.yaml",
-                            "document-batch.apl.yaml", "review-triage.apl.yaml");
+                            "document-batch.apl.yaml", "review-triage.apl.yaml", "scanned-invoice.apl.yaml");
         }
     }
 
@@ -163,6 +163,16 @@ class ExampleGalleryTest {
         assertThat(triage.getActiveTokens()).containsExactly("triage");
         assertThat(triage.getDefinition().getReviewOf("triage").reviewNode()).isEqualTo("review");
         assertThat(triage.getDefinition().getReviewOf("triage").accept()).isEqualTo("approve");
+    }
+
+    @Test
+    void theScannedInvoiceAgentReadsOnlyTheDeclaredFile() {
+        ProcessInstance invoice = start("scanned_invoice", Map.of());
+        assertThat(invoice.getActiveTokens()).containsExactly("upload");
+        var work = invoice.getDefinition().getServiceTask("read").agentWork();
+        assertThat(work.files()).containsExactly(Map.entry("invoice", "invoice_scan"));
+        assertThat(work.effectiveMaxFiles()).isEqualTo(1);
+        assertThat(work.inputs()).doesNotContainKey("invoice_scan");
     }
 
     @Test
@@ -267,7 +277,6 @@ class ExampleGalleryTest {
                         "spring.datasource.hikari.maximum-pool-size=6",
                         "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
                         "spring.jpa.hibernate.ddl-auto=validate",
-                        "spring.jpa.open-in-view=false",
                         "spring.flyway.enabled=true",
                         "spring.task.scheduling.enabled=false",
                         "abada.outbox.dispatcher.enabled=false",

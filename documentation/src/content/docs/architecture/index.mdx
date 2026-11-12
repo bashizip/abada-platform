@@ -93,6 +93,7 @@ and humans govern every executable change.
 | Agent and external tasks | PostgreSQL external-task rows (attempt metadata included) | Acquired through fetch-and-lock leases |
 | Insight facts, findings and proposals | PostgreSQL (facts commit with their command) | Analyzer works from durable windows |
 | Audit history and lifecycle events | PostgreSQL | Lifecycle delivery originates from the outbox |
+| Files of task forms (since 1.2) | Metadata and state in PostgreSQL; contents in RustFS | Uploaded and deleted outside workflow transactions; attached in the completion transaction by metadata only |
 
 <Aside type="note" title="H2 is not the production reference">
   H2 exists for local convenience. PostgreSQL Testcontainers provide the

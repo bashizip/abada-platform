@@ -107,6 +107,11 @@ public final class AgentWorkerMain {
             throw new io.abada.worker.WorkerProtocolException(404, "NOT_FOUND", "No tool credentials");
         }
 
+        /** The bytes of a file the locked task may read (S15), at most {@code maxBytes}. */
+        default byte[] downloadFile(LockedExternalTask task, String fileId, long maxBytes) {
+            throw new io.abada.worker.WorkerProtocolException(404, "NOT_FOUND", "No file download");
+        }
+
         /** A final, routable failure: never retried, routed by its code. */
         default void failWithCode(LockedExternalTask task, String code, String message, String details,
                 AgentAttemptMetadata agent, RequestOptions options) {
@@ -151,6 +156,11 @@ public final class AgentWorkerMain {
                 @Override
                 public io.abada.worker.ToolCredential toolCredential(LockedExternalTask task, String server) {
                     return client.toolCredential(task.id(), config.workerId(), server);
+                }
+
+                @Override
+                public byte[] downloadFile(LockedExternalTask task, String fileId, long maxBytes) {
+                    return client.downloadFile(task.id(), config.workerId(), fileId, maxBytes);
                 }
 
                 @Override
@@ -351,11 +361,16 @@ public final class AgentWorkerMain {
                 AgentLoop.Outcome outcome;
                 long startedNanos = System.nanoTime();
                 AgentLoop.Journal journal = journalFor(task);
+                java.util.function.Function<String, AgentGateway> gatewayFor =
+                        candidate -> gateways.apply(candidate.equals(requestedModel) ? work : work.withModel(candidate));
+                // S15: the files of this call, downloaded with the lease and checked against the engine's
+                // reference; only models whose provider can read every file type stay in the chain.
+                List<AgentFiles.AgentFile> files = AgentFiles.download(work.resolvedFiles(),
+                        ref -> engine.downloadFile(task, ref.fileId(), ref.sizeBytes()));
+                List<String> chain = fileCapableChain(modelChain(work, requestedModel), work, gatewayFor);
                 try (io.abada.agent.mcp.McpSessionPool sessions = new io.abada.agent.mcp.McpSessionPool(
                         server -> openToolClient(task, work, server))) {
-                    outcome = loop.run(task, work, modelChain(work, requestedModel),
-                            candidate -> gateways.apply(candidate.equals(requestedModel) ? work : work.withModel(candidate)),
-                            journal, sessions);
+                    outcome = loop.run(task, work, chain, gatewayFor, journal, sessions, files);
                 } catch (AgentLoop.AwaitingChild waiting) {
                     // The engine started the child and parked the work with the delegation: report nothing.
                     heartbeat.stop();
@@ -536,6 +551,24 @@ public final class AgentWorkerMain {
         }
     }
 
+    /**
+     * S15: the models of the chain whose provider can carry every declared file type, in
+     * order. None left is a typed, final failure: a call is never made without a file.
+     */
+    static List<String> fileCapableChain(List<String> chain, AgentWorkDescriptor work,
+            java.util.function.Function<String, AgentGateway> gatewayFor) throws AgentLoop.CodedFailure {
+        if (work.resolvedFiles() == null || work.resolvedFiles().isEmpty()) return chain;
+        Set<String> types = AgentFiles.contentTypes(work.resolvedFiles());
+        List<String> capable = chain.stream()
+                .filter(model -> ProviderFileSupport.acceptsAll(gatewayFor.apply(model).provider(), types))
+                .toList();
+        if (capable.isEmpty()) {
+            throw new AgentLoop.CodedFailure(AgentFiles.UNSUPPORTED_CODE, "No model of " + chain
+                    + " can read " + String.join(", ", types) + "; declare a model whose provider reads them");
+        }
+        return capable;
+    }
+
     /** Clamps a descriptor's model-call timeout to the worker maximum. */
     static AgentWorkDescriptor withBoundedTimeout(AgentWorkDescriptor work, Duration maximum) {
         long max = maximum.toMillis();
@@ -545,7 +578,7 @@ public final class AgentWorkerMain {
                 work.resultVariable(), work.outputSchema(), work.tools(), work.confidenceThreshold(),
                 work.temperature(), work.maxTokens(), bounded, work.maxAttempts(), work.retryBackoffMs(),
                 work.fallbackModels(), work.toolPolicies(), work.toolBindings(), work.prices(), work.limits(),
-                work.delegates());
+                work.delegates(), work.files(), work.maxFiles(), work.resolvedFiles());
     }
 
     static Map<String, Object> localAcknowledgement(LockedExternalTask task) {

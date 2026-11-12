@@ -10,7 +10,6 @@ import {
   FileText,
   Settings,
   FolderKanban,
-  Sparkles,
 } from 'lucide-react';
 import { Project } from '@/api/projects';
 import { WorkflowFile } from '@/types';
@@ -18,6 +17,8 @@ import { keycloak } from '@/auth/keycloakClient';
 import { getGroupsFromToken } from '@/auth/keycloakClient';
 import { IconButton, TooltipProvider, UITooltip } from '@/components/ui';
 import { SoundToggle } from '@/components/SoundToggle';
+import { ViewNav } from '@/components/ViewNav';
+import type { NavTab, StudioView } from '@/lib/studioViews';
 
 interface HeaderProps {
   currentWorkflow: WorkflowFile;
@@ -33,8 +34,8 @@ interface HeaderProps {
   onOpenProcessDetails?: () => void;
   onOpenSettings?: () => void;
   nodeCount: number;
-  currentView?: 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
-  onViewChange?: (view: 'designer' | 'inbox' | 'operations' | 'administration' | 'insight') => void;
+  currentView?: StudioView;
+  onViewChange?: (view: NavTab) => void;
   activeProject?: Project;
   onOpenProjects?: () => void;
   readOnlyInstance?: boolean;
@@ -66,82 +67,51 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <TooltipProvider delayDuration={0}>
-      <header className="h-14 bg-[#25201D] border-b border-[#3A322E] px-4 flex items-center gap-3 z-20 shrink-0">
-        {/* Brand + clean file identifier (left, never shrinks) */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-2">
+      <header className="h-14 bg-mocha border-b border-hairline px-4 flex items-center gap-3 z-20 shrink-0">
+        {/* Brand + clean file identifier (left): the names truncate first, so nothing overlaps. */}
+        <div className="flex min-w-0 flex-1 basis-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             <img src="/abada-app-icon.svg" alt="" className="w-8 h-8 rounded-[7px] glow-amethyst-subtle" />
-            <span className="font-bold text-sm tracking-wide text-[#EAE3D9] hidden lg:inline">
+            <span className="font-bold text-sm tracking-wide text-linen hidden lg:inline">
               ABADA
             </span>
           </div>
 
-          <div className="h-4 w-px bg-[#3A322E]" />
+          <div className="h-4 w-px shrink-0 bg-hairline" />
 
           <button type="button" onClick={onOpenProjects}
-            className="flex items-center gap-1.5 text-xs text-[#A89F91] hover:text-[#F4A261] max-w-[180px]"
+            className="flex min-w-0 shrink items-center gap-1.5 text-xs text-sand hover:text-saffron max-w-[180px]"
             title="New project / Open project">
             <FolderKanban className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">{activeProject?.name || 'Open project'}</span>
           </button>
 
-          <div className="h-4 w-px bg-[#3A322E]" />
+          <div className="h-4 w-px shrink-0 bg-hairline" />
 
           <button
             type="button"
             onClick={onOpenProcessDetails}
-            className="flex items-center gap-1.5 text-xs font-mono text-[#EAE3D9] hover:text-[#F4A261] transition-colors max-w-[240px] truncate"
+            className="flex min-w-0 shrink-[2] items-center gap-1.5 text-xs font-mono text-linen hover:text-saffron transition-colors max-w-[240px]"
             title="View process details"
             aria-label="Open process details"
           >
-            <FileText className="w-3.5 h-3.5 text-[#2A9D8F] shrink-0" />
+            <FileText className="w-3.5 h-3.5 text-mineral-teal shrink-0" />
             <span className="truncate">{cleanName(currentWorkflow.name)}</span>
           </button>
         </div>
 
-        {/* Global View Navigation (isolated, always centered) */}
-        <div className="flex-1 flex items-center justify-center min-w-0">
-          <div className="flex items-center bg-[#1A1614] rounded-xl border border-[#3A322E] p-1 shrink-0">
-            {(['designer', 'inbox', 'operations', 'insight'] as const).map(view => (
-              <button
-                key={view}
-                data-cuelume-select
-                onClick={() => onViewChange?.(view)}
-                className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ${
-                  currentView === view
-                    ? 'bg-[#25201D] text-[#EAE3D9] border border-[#3A322E]'
-                    : 'text-[#A89F91] hover:text-[#EAE3D9] border border-transparent'
-                }`}
-              >
-                {view === 'designer' ? 'Canvas'
-                  : view === 'inbox' ? 'Task Inbox'
-                  : view === 'operations' ? 'Operations'
-                  : <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />Insight</span>}
-              </button>
-            ))}
-            {getGroupsFromToken().includes('abada-admin') && (
-              <button
-                key="administration"
-                data-cuelume-select
-                onClick={() => onViewChange?.('administration')}
-                className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ml-1 ${
-                  currentView === 'administration'
-                    ? 'bg-[#25201D] text-[#EAE3D9] border border-[#3A322E]'
-                    : 'text-[#A89F91] hover:text-[#EAE3D9] border border-transparent'
-                }`}
-              >
-                Admin
-              </button>
-            )}
-          </div>
+        {/* Global View Navigation: never shrinks below its tabs */}
+        <div className="flex flex-none items-center justify-center">
+          <ViewNav currentView={currentView} onViewChange={onViewChange}
+            showAdmin={getGroupsFromToken().includes('abada-admin')} />
         </div>
 
-        {/* Action Controls (right, never shrinks) */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Action Controls (right): labels fold to icons on narrower screens; tooltips keep the text */}
+        <div className="flex flex-1 basis-0 items-center justify-end gap-2 xl:gap-3 shrink-0">
           {currentView === 'designer' && !readOnlyInstance && (
             <>
               <IconButton
-                icon={<ShieldCheck className="w-4 h-4 text-[#9D4EDD]" />}
+                icon={<ShieldCheck className="w-4 h-4 text-amethyst" />}
                 label="Audit Stream"
                 tooltip="Audit Stream — deploy/run/event log of the active workspace"
                 onClick={onToggleLogPanel}
@@ -149,14 +119,14 @@ export const Header: React.FC<HeaderProps> = ({
               />
 
               <IconButton
-                icon={<Download className="w-4 h-4 text-[#2A9D8F]" />}
+                icon={<Download className="w-4 h-4 text-mineral-teal" />}
                 label="Export APL"
                 tooltip="Export APL — download the canonical abada.io/v1 YAML process document"
                 onClick={onExportJSON}
               />
 
               <IconButton
-                icon={<GitCompare className="w-4 h-4 text-[#9D4EDD]" />}
+                icon={<GitCompare className="w-4 h-4 text-amethyst" />}
                 label="Review AI Optimization"
                 tooltip="Review AI Optimization — inspect, approve or reject the pending governed Insight proposal"
                 onClick={onOpenAiDiff}
@@ -169,14 +139,15 @@ export const Header: React.FC<HeaderProps> = ({
                   data-cuelume-tap
                   onClick={onRunSimulation}
                   disabled={isSimulating}
-                  className={`text-xs font-semibold px-4 py-1.5 rounded-xl transition-all flex items-center gap-2 shadow-warm-md ${
+                  aria-label="Dry Run"
+                  className={`text-xs font-semibold px-2.5 xl:px-4 py-1.5 rounded-xl transition-all flex shrink-0 items-center gap-2 shadow-warm-md ${
                     isSimulating
-                      ? 'bg-[#F4A261]/50 text-[#1A1614] cursor-not-allowed'
-                      : 'bg-[#F4A261] hover:bg-[#f5ad73] text-[#1A1614] active:scale-95'
+                      ? 'bg-saffron/50 text-charcoal cursor-not-allowed'
+                      : 'bg-saffron hover:bg-saffron-bright text-charcoal active:scale-95'
                   }`}
                 >
-                  {isSimulating ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Dry Running…</span></>
-                    : <><Play className="w-3.5 h-3.5 fill-[#1A1614]" /><span>Dry Run</span></>}
+                  {isSimulating ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span className="hidden xl:inline">Dry Running…</span></>
+                    : <><Play className="w-3.5 h-3.5 fill-charcoal" /><span className="hidden xl:inline">Dry Run</span></>}
                 </button>
               </UITooltip>
 
@@ -186,14 +157,15 @@ export const Header: React.FC<HeaderProps> = ({
                   data-cuelume-tap
                   onClick={onDeploy}
                   disabled={isDeploying}
-                  className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
+                  aria-label="Deploy & Start"
+                  className={`text-xs font-semibold px-2.5 xl:px-4 py-1.5 rounded-lg transition-all flex shrink-0 items-center gap-2 ${
                     isDeploying
-                      ? 'bg-[#2A9D8F]/50 text-[#1A1614] cursor-not-allowed'
-                      : 'bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] active:scale-95'
+                      ? 'bg-mineral-teal/50 text-charcoal cursor-not-allowed'
+                      : 'bg-mineral-teal hover:bg-mineral-teal-bright text-charcoal active:scale-95'
                   }`}
                 >
-                  {isDeploying ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span>Starting…</span></>
-                    : <><CheckCircle2 className="w-3.5 h-3.5" /><span>Deploy & Start</span></>}
+                  {isDeploying ? <><RotateCcw className="w-3.5 h-3.5 animate-spin" /><span className="hidden xl:inline">Starting…</span></>
+                    : <><CheckCircle2 className="w-3.5 h-3.5" /><span className="hidden xl:inline">Deploy & Start</span></>}
                 </button>
               </UITooltip>
             </>
@@ -227,8 +199,8 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all shrink-0 ${
               keycloak.authenticated
-                ? 'text-[#A89F91] border-[#3A322E] bg-[#1A1614]'
-                : 'text-white border-transparent bg-[#9D4EDD] hover:bg-[#b56ef2]'
+                ? 'text-sand border-hairline bg-charcoal'
+                : 'text-white border-transparent bg-amethyst hover:bg-amethyst-bright'
             }`}
           >
             {keycloak.authenticated ? 'Sign Out' : 'Sign In'}

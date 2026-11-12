@@ -4,7 +4,7 @@ import { RELEASE_VERSION } from "../../lib/release";
 import { Reveal, Section, SectionHead } from "./primitives";
 
 const READY = [
-  "Self-hosted deployment with PostgreSQL",
+  "Self-hosted deployment with PostgreSQL and RustFS",
   "Multiple engine replicas with durable work leases",
   "OIDC sign-in and backend role-based permissions",
   "APL processes: AI agents, rules, decision tables, human tasks",

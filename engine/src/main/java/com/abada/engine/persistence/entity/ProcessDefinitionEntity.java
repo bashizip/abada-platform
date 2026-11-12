@@ -69,6 +69,10 @@ public class ProcessDefinitionEntity {
     @Column(name = "call_targets", columnDefinition = "TEXT")
     private String callTargets;
 
+    /** Task forms pinned by human nodes at deployment (JSON by node id); null when none (V41). */
+    @Column(name = "form_snapshots", columnDefinition = "TEXT")
+    private String formSnapshots;
+
     /** The version this one restores when it was created by a rollback (V35); null otherwise. */
     @Column(name = "rollback_of")
     private Integer rollbackOf;
@@ -87,6 +91,9 @@ public class ProcessDefinitionEntity {
     public void setDeployedBy(String value) { this.deployedBy = value; }
     public String getDeployComment() { return deployComment; }
     public void setDeployComment(String value) { this.deployComment = value; }
+
+    public String getFormSnapshots() { return formSnapshots; }
+    public void setFormSnapshots(String value) { this.formSnapshots = value; }
 
     public String getCallTargets() { return callTargets; }
     public void setCallTargets(String value) { this.callTargets = value; }

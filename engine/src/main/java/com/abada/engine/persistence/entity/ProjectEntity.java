@@ -55,6 +55,13 @@ public class ProjectEntity {
     public int getEvidenceRetentionDays() { return evidenceRetentionDays; }
     public void setEvidenceRetentionDays(int value) { evidenceRetentionDays = value; }
 
+    /** Days a finished instance keeps its attached files (V42); null keeps them. */
+    @Column(name = "file_retention_days")
+    private Integer fileRetentionDays;
+
+    public Integer getFileRetentionDays() { return fileRetentionDays; }
+    public void setFileRetentionDays(Integer value) { fileRetentionDays = value; }
+
     public String getId() { return id; }
     public void setId(String value) { id = value; }
     public String getSlug() { return slug; }

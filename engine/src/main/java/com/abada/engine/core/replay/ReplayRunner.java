@@ -110,6 +110,13 @@ public final class ReplayRunner {
                     }
                     moved = true;
                     break;
+                } else if (service != null && service.agentWork() != null
+                        && !service.agentWork().files().isEmpty()) {
+                    // S15: a replay calls the model without the case's documents, so its answer would not
+                    // show what the agent does; the case stops here instead of guessing.
+                    stop = Stop.first(stop, End.NEEDS_EXTERNAL, "agent '" + activityId
+                            + "' reads files, which replays do not send", activityId);
+                    continue;
                 } else if (service != null && service.agentWork() != null) {
                     AgentWorkDescriptor work = service.agentWork();
                     if (!work.tools().isEmpty()) toolsSkipped.add(activityId);
@@ -263,5 +270,6 @@ public final class ReplayRunner {
         }
         instance.takeParked();
         instance.takeLoopExhaustions();
+        instance.takeFlowsTaken();
     }
 }

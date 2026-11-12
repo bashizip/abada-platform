@@ -186,6 +186,32 @@ class ProjectIncidentApiTest {
         assertThat(denied.getBody()).doesNotContain(instanceId);
     }
 
+    @Test
+    void theListNarrowsToOneInstanceOfTheProject() {
+        String other = engine.startProcess(projectId, "once_only", "alice", Map.of()).getId();
+
+        assertThat(instanceIncidents("alice", instanceId, true).getBody()).singleElement()
+                .satisfies(incident -> assertThat(incident.processInstanceId()).isEqualTo(instanceId));
+        assertThat(instanceIncidents("alice", other, true).getBody()).isEmpty();
+        assertThat(instanceIncidents("alice", "not-an-instance", true).getBody()).isEmpty();
+
+        engine.cancelProcessInstance(instanceId, "stop");
+
+        assertThat(instanceIncidents("alice", instanceId, true).getBody()).isEmpty();
+        assertThat(instanceIncidents("alice", instanceId, false).getBody()).singleElement()
+                .satisfies(incident -> assertThat(incident.resolution()).isEqualTo("INSTANCE_CANCELLED"));
+        ResponseEntity<String> denied = rest.exchange(
+                "/v1/projects/{projectId}/incidents?processInstanceId={instanceId}", HttpMethod.GET,
+                new HttpEntity<>(headers("mallory")), String.class, projectId, instanceId);
+        assertThat(denied.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    private ResponseEntity<List<IncidentDTO>> instanceIncidents(String user, String instance, boolean open) {
+        return rest.exchange("/v1/projects/{projectId}/incidents?open={open}&processInstanceId={instance}",
+                HttpMethod.GET, new HttpEntity<>(headers(user)), new ParameterizedTypeReference<>() {}, projectId,
+                open, instance);
+    }
+
     private ResponseEntity<List<IncidentDTO>> incidents(String user, boolean open) {
         return rest.exchange("/v1/projects/{projectId}/incidents?open={open}", HttpMethod.GET,
                 new HttpEntity<>(headers(user)), new ParameterizedTypeReference<>() {}, projectId, open);

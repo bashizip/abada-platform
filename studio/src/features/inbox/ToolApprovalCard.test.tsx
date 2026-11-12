@@ -16,7 +16,7 @@ const approval: ToolApprovalDTO = {
   attempt: 1,
   sequence: 2,
   argumentsDigest: 'a'.repeat(64),
-  arguments: { order: 'A-7', amount: 40, iban: '[REDACTED]' },
+  arguments: { order: 'A-7', amount: 40, iban: '****' },
   payloadMode: 'redacted',
   state: 'PROPOSED',
 };
@@ -32,12 +32,15 @@ function render(value: ToolApprovalDTO): HTMLDivElement {
 
 describe('ToolApprovalCard', () => {
   it('shows the tool, the proposing agent, the arguments and the digest the decision binds to', () => {
-    const text = render(approval).textContent ?? '';
+    const container = render(approval);
+    const text = container.textContent ?? '';
     expect(text).toContain('refund');
     expect(text).toContain('payments');
     expect(text).toContain('triage');
-    expect(text).toContain('"amount": 40');
-    expect(text).toContain('[REDACTED]');
+    expect(text).toContain('amount:40');
+    // The engine's mask shows as a badge, never as text.
+    expect(text).toContain('redacted');
+    expect(container.innerHTML).not.toContain('****');
     expect(text).toContain('sensitive values redacted');
     expect(text).toContain('a'.repeat(16));
   });

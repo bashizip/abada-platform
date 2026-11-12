@@ -35,6 +35,30 @@ import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 Use components for navigation, steps, tabs and materially important notices.
 Keep ordinary explanation in Markdown so pages remain easy to review.
 
+## Versions, New badges and release notes
+
+The site says which release it describes, on every page, and marks what is new.
+
+- **`documentation/release.json`** names the release the pages describe and
+  whether it is out: `{ "documents": "1.2.0", "status": "in-development" }`.
+  The build fails unless the engine (`engine/pom.xml`), Studio
+  (`studio/package.json`) and documentation versions agree with it: still on
+  the previous release while `in-development`, equal to `documents` once
+  `released`. The release gate sets `released` in the same change as the
+  version bump.
+- **Frontmatter `since: 1.2.0`** marks a new page; **`updated: 1.2.0`** a page
+  that changed. The sidebar shows *New* or *Updated* while that version's
+  minor is the documented one, and the badge disappears on the next minor with
+  no edit. A page cannot claim a version later than `documents`.
+- **Inside a page**, mark a new section with
+  `<Aside type="tip" title="New in 1.2">…</Aside>`.
+- **Release notes**: one page per minor release under `release-notes/`, named
+  `1-2.mdx` for 1.2, written for users (what you can now do, what to check
+  before upgrading) and linking to the technical notes in
+  `docs/release-notes/`. The build fails when the documented minor has no page.
+  The *What's new* entry at the top of the sidebar points to it, and Studio's
+  help links and *What's new* card open it.
+
 ## Mermaid diagrams
 
 Use a fenced `mermaid` block. `astro-mermaid` renders it during the site build

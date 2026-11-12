@@ -13,6 +13,7 @@ import { WorkflowFile, WorkflowNode, WorkflowEdge, DMNConfig } from '@/types';
 import { getDefaultAgentModel } from '@/lib/agentModels';
 import { seedMissingPositions } from '@/lib/layout/seedLayout';
 import { isOutcomeRouteEdge, routeEdges } from './routes';
+import { edgeCondition, isElseBranch } from './gatewayRules';
 
 /**
  * Parses an APL YAML string into an APLDocument object.
@@ -208,6 +209,8 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           temperature: aplNode.temperature ?? 0.2,
           tools: aplNode.tools || [],
           inputs: aplNode.inputs,
+          files: aplNode.files,
+          maxFiles: aplNode.max_files,
           resultVariable: aplNode.result_variable,
           outputSchema: aplNode.output_schema,
           maxTokens: aplNode.max_tokens,
@@ -225,6 +228,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           budgetUsd: aplNode.budget_usd,
           delegates: aplNode.delegates,
           reviewedBy: aplNode.reviewed_by,
+          evidence: aplNode.evidence
+            ? { payloads: aplNode.evidence.payloads, retentionDays: aplNode.evidence.retention_days }
+            : undefined,
         };
         break;
       case 'engine-task':
@@ -276,13 +282,17 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
     case 'human-input':
         wNode.type = 'human';
         wNode.humanConfig = {
+          // The deprecated alias is kept as written; the panel offers the conversion.
+          kind: aplNode.type === 'approval-gate' ? 'approval-gate' : undefined,
           assignees: aplNode.assignees || ['Reviewer'],
+          mode: aplNode.mode,
           slaHours: aplNode.sla_hours ?? ('slaHours' in aplNode ? aplNode.slaHours : undefined),
           escalateTo: aplNode.escalate_to,
           onError: aplNode.on_error,
           onTimeout: aplNode.on_timeout,
           outcomes: aplNode.outcomes,
-          formKey: 'formKey' in aplNode ? aplNode.formKey : undefined,
+          // `formId` is the deprecated alias of `formKey`; it is saved back as `formKey`.
+          formKey: aplNode.type === 'human-input' ? aplNode.formKey ?? aplNode.formId : undefined,
           formFields: [],
         };
         break;
@@ -372,6 +382,9 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           source: aplNode.id,
           target,
           label: r.if ? `if ${r.if}` : 'else',
+          // The rule's expression is carried verbatim so the round trip keeps
+          // bare CEL (`risk == "low"`) as well as `${…}` conditions.
+          ...(r.if ? { condition: r.if } : {}),
         });
       });
     } else if (aplNode.type === 'event-gateway') {
@@ -426,9 +439,12 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
   return {
     id: `wf-${Date.now()}`,
     name: apl.metadata.name,
-    metadataExtras: metadataExtras(apl.metadata),
+    metadataExtras: metadataExtras({ ...apl.metadata }),
     processKey: apl.metadata.key || apl.metadata.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
-    category: (apl.metadata.category || 'custom') as any,
+    category: apl.metadata.category ?? '',
+    ...(apl.metadata.owner !== undefined ? { owner: apl.metadata.owner } : {}),
+    ...(apl.metadata.description !== undefined ? { processDescription: apl.metadata.description } : {}),
+    ...(Array.isArray(apl.metadata.variables) ? { variables: apl.metadata.variables } : {}),
     fileType: 'apl',
     languageVersion: apl.version,
     version: '1.0.0',
@@ -444,16 +460,6 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
  */
 export function workflowToAPL(wf: WorkflowFile): APLDocument {
   const aplNodes: APLNode[] = [];
-
-  // Real gateway conditions must be expressions the engine can evaluate
-  // (e.g. `${fraudScore > 75}`). Free-text edge labels are descriptions and
-  // must never be emitted as condition expressions.
-  const toCondition = (label?: string, condition?: string): string | undefined => {
-    const raw = label?.replace(/^if\s+/i, '').trim();
-    if (condition) return condition;
-    if (raw && /^\$\{.*\}$/.test(raw)) return raw;
-    return undefined;
-  };
 
   // Helper to find outgoing edge target for non-gateway nodes
   const getNextNode = (nodeId: string, sourceType: WorkflowNode['type']): string | undefined => {
@@ -510,6 +516,9 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         model: node.agentConfig?.model,
         prompt: node.agentConfig?.systemPrompt,
         inputs: node.agentConfig?.inputs,
+        files: node.agentConfig?.files && Object.keys(node.agentConfig.files).length ? node.agentConfig.files : undefined,
+        max_files: node.agentConfig?.files && Object.keys(node.agentConfig.files).length
+          ? node.agentConfig.maxFiles : undefined,
         result_variable: node.agentConfig?.resultVariable,
         output_schema: node.agentConfig?.outputSchema,
         tools: node.agentConfig?.tools?.length ? node.agentConfig.tools : undefined,
@@ -531,18 +540,21 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         budget_usd: node.agentConfig?.budgetUsd,
         delegates: node.agentConfig?.delegates?.length ? node.agentConfig.delegates : undefined,
         reviewed_by: node.agentConfig?.reviewedBy,
+        evidence: agentEvidence(node),
         next: hasAgentRoutes(node) ? undefined : getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {
       aplNodes.push({
         ...baseNode,
-        type: 'human-input',
+        type: node.humanConfig?.kind ?? 'human-input',
         assignees: node.humanConfig?.assignees || [],
+        mode: node.humanConfig?.mode,
         sla_hours: node.humanConfig?.slaHours || undefined,
         escalate_to: node.humanConfig?.escalateTo?.length ? node.humanConfig.escalateTo : undefined,
         on_error: node.humanConfig?.onError || undefined,
         on_timeout: node.humanConfig?.onTimeout || undefined,
-        formKey: node.humanConfig?.formKey,
+        // An approval gate cannot take a form.
+        formKey: node.humanConfig?.kind === 'approval-gate' ? undefined : node.humanConfig?.formKey || undefined,
         // With outcomes every exit is an outcome's `next`.
         outcomes: node.humanConfig?.outcomes && Object.keys(node.humanConfig.outcomes).length
           ? node.humanConfig.outcomes : undefined,
@@ -601,8 +613,8 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
             ...baseNode,
             type: 'inclusive',
             rules: outEdges.map((e, idx) => {
-              const cond = toCondition(e.label, e.condition);
-              const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
+              const cond = edgeCondition(e);
+              const isElse = isElseBranch(e, idx, outEdges);
               return {
                 if: cond,
                 else: isElse ? e.target : undefined,
@@ -622,8 +634,8 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
           ...baseNode,
           type: 'condition',
           rules: outEdges.map((e, idx) => {
-            const cond = toCondition(e.label, e.condition);
-            const isElse = !cond && (e.label?.toLowerCase().includes('else') || idx === outEdges.length - 1);
+            const cond = edgeCondition(e);
+            const isElse = isElseBranch(e, idx, outEdges);
             return {
               if: cond,
               else: isElse ? e.target : undefined,
@@ -726,11 +738,13 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
   return {
     version: 'abada.io/v1',
     metadata: {
-      owner: 'studio-user',
-      ...wf.metadataExtras,
       key: wf.processKey || wf.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
       name: wf.name,
-      category: wf.category,
+      ...(wf.category ? { category: wf.category } : {}),
+      ...(wf.owner ? { owner: wf.owner } : {}),
+      ...(wf.processDescription ? { description: wf.processDescription } : {}),
+      ...(wf.variables?.length ? { variables: wf.variables } : {}),
+      ...metadataExtras(wf.metadataExtras ?? {}),
     },
     flow: {
       entry: entryNode ? entryNode.id : '',
@@ -739,14 +753,27 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
   };
 }
 
-/** Metadata keys Studio does not edit (description, owner, variables, …), kept verbatim. */
-function metadataExtras(metadata: APLDocument['metadata']): Record<string, unknown> | undefined {
-  const { key: _key, name: _name, category: _category, ...rest } = metadata;
+/** Metadata keys the properties panel edits; every other key is kept verbatim. */
+const EDITED_METADATA = new Set(['key', 'name', 'category', 'owner', 'description', 'variables']);
+
+/** Metadata keys Studio does not edit, kept verbatim (after the edited ones when saved). */
+function metadataExtras(metadata: Record<string, unknown>): Record<string, unknown> | undefined {
+  const rest = Object.fromEntries(Object.entries(metadata).filter(([key]) => !EDITED_METADATA.has(key)));
   return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 /** Route edges are labelled `on_*` or `outcome: <name>`; see `routes.ts`. */
 export { isOutcomeRouteEdge };
+
+/** An agent's `evidence` override, or undefined when it sets nothing. */
+function agentEvidence(node: WorkflowNode): { payloads?: 'none' | 'redacted' | 'full'; retention_days?: number } | undefined {
+  const evidence = node.agentConfig?.evidence;
+  if (!evidence || (evidence.payloads === undefined && evidence.retentionDays === undefined)) return undefined;
+  return {
+    ...(evidence.payloads ? { payloads: evidence.payloads } : {}),
+    ...(evidence.retentionDays !== undefined ? { retention_days: evidence.retentionDays } : {}),
+  };
+}
 
 function hasAgentRoutes(node: WorkflowNode): boolean {
   return Object.keys(node.agentConfig?.routes ?? {}).length > 0;

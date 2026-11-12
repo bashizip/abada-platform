@@ -79,6 +79,12 @@ function Assert-ProductionValues {
   $StudioHost = Get-EnvValue 'ABADA_STUDIO_HOST'
   $DocsHost = Get-EnvValue 'ABADA_DOCS_HOST'
   if ($Password.Length -lt 16) { throw 'POSTGRES_PASSWORD must contain at least 16 characters' }
+  if ((Get-EnvValue 'ABADA_FILES_ACCESS_KEY').Length -lt 16 -or (Get-EnvValue 'ABADA_FILES_SECRET_KEY').Length -lt 16) {
+    throw 'ABADA_FILES_ACCESS_KEY and ABADA_FILES_SECRET_KEY must each contain at least 16 characters (openssl rand -hex 24)'
+  }
+  if ((Get-EnvValue 'ABADA_FILES_SSE_MASTER_KEY') -notmatch '^[A-Za-z0-9+/]{43}=$') {
+    throw 'ABADA_FILES_SSE_MASTER_KEY must be a base64-encoded 32-byte key (openssl rand -base64 32)'
+  }
   if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?$' -or $Version -eq 'latest') {
     throw 'ABADA_VERSION must be an exact immutable semantic version'
   }

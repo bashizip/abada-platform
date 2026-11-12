@@ -1,4 +1,4 @@
-import type { APLAgentNode, Delegates } from './lib/apl/types.generated';
+import type { APLAgentNode, Delegates, VariableDeclaration } from './lib/apl/types.generated';
 
 /** One process an agent may delegate to (`delegates`, E20b). */
 export type AgentDelegate = Delegates[number];
@@ -70,12 +70,24 @@ export interface AgentConfig {
   /** Next steps the agent chooses from (`routes`); a node with routes has no `next`. */
   routes?: Record<string, AgentRoute>;
   inputs?: Record<string, string>;
+  /** Files the model reads (`files`, S15): name -> expression giving a file reference or a list. */
+  files?: Record<string, string>;
+  /** Most files one call may carry (`max_files`, 1–20, default 5). */
+  maxFiles?: number;
   resultVariable?: string;
   outputSchema?: Record<string, unknown>;
   maxTokens?: number;
   timeoutMs?: number;
   maxAttempts?: number;
   retryBackoffMs?: number;
+  /** What the step journal keeps of this agent's payloads; only stricter than the project policy (`evidence`). */
+  evidence?: AgentEvidence;
+}
+
+export interface AgentEvidence {
+  payloads?: 'none' | 'redacted' | 'full';
+  /** Days the journal keeps the payloads (`retention_days`). */
+  retentionDays?: number;
 }
 
 export type DMNValue = string | number | boolean;
@@ -108,7 +120,14 @@ export interface DMNConfig {
 }
 
 export interface HumanConfig {
+  /**
+   * The APL block: `human-input` (default) or the deprecated `approval-gate` alias, kept as written so
+   * saving never rewrites it; the panel offers the conversion.
+   */
+  kind?: 'human-input' | 'approval-gate';
   assignees: string[];
+  /** Authoring hint for several assignees (`mode`); the engine does not enforce it. */
+  mode?: 'serial' | 'parallel';
   /** Service level in hours: the engine escalates the open task in place when it is missed. */
   slaHours?: number;
   /** Groups added as candidates when the task is escalated (`escalate_to`). */
@@ -220,11 +239,18 @@ export interface WorkflowEdge {
 }
 
 export interface WorkflowFile {
-  /** APL `metadata` keys Studio does not edit (description, owner, variables), kept verbatim. */
+  /** APL `metadata` keys Studio does not edit, kept verbatim. */
   metadataExtras?: Record<string, unknown>;
   id: string;
   name: string;
-  category: 'finance' | 'onboarding' | 'claims' | 'supply_chain' | 'custom';
+  /** APL `metadata.category`: free text, authoring metadata only. Empty is left out of the YAML. */
+  category: string;
+  /** APL `metadata.owner`: authoring metadata only, not executed. */
+  owner?: string;
+  /** APL `metadata.description`; the project document keeps its own `description`. */
+  processDescription?: string;
+  /** APL `metadata.variables`, in declaration order; keys Studio does not edit stay on each entry. */
+  variables?: VariableDeclaration[];
   fileType: 'apl' | 'bpmn' | 'dmn' | 'prompt' | 'json';
   version: string;
   updatedAt: string;

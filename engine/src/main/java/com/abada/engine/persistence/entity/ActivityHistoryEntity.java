@@ -35,6 +35,7 @@ public class ActivityHistoryEntity {
     public String getActor() { return actor; }
     public void setActor(String value) { actor = value; }
     public Instant getOccurredAt() { return occurredAt; }
+    public void setOccurredAt(Instant value) { occurredAt = value; }
     public String getTraceId() { return traceId; }
     public void setTraceId(String value) { traceId = value; }
     public String getDetailsJson() { return detailsJson; }

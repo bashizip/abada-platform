@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SimulationLog } from '@/types';
+import type { PathView } from '@/lib/run/instancePath';
 
 export function useDryRunSimulation() {
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
@@ -11,6 +12,8 @@ export function useDryRunSimulation() {
   const [dryRunFingerprint, setDryRunFingerprint] = useState<string | null>(null);
   const [lastDryRunPayload, setLastDryRunPayload] = useState<Record<string, unknown>>({});
   const [activeSimulationNodeId, setActiveSimulationNodeId] = useState<string | null>(null);
+  /** The path the dry run took, drawn with the instance path layers. */
+  const [dryRunPath, setDryRunPath] = useState<PathView | undefined>(undefined);
 
   return {
     isSimulating,
@@ -27,5 +30,7 @@ export function useDryRunSimulation() {
     setLastDryRunPayload,
     activeSimulationNodeId,
     setActiveSimulationNodeId,
+    dryRunPath,
+    setDryRunPath,
   };
 }

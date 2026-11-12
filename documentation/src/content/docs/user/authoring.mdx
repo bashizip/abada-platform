@@ -1,6 +1,7 @@
 ---
 title: Author processes in APL
 description: APL is Abada's process language — readable YAML that Studio draws as a diagram and the engine compiles directly. Document structure, nodes, validation, and Dry Run vs Deploy & Start.
+updated: 1.2.0
 ---
 
 import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
@@ -155,24 +156,129 @@ flow:
   pasted APL. Documents live in the project's `processes/` folder and save
   automatically; a stale save is refused instead of overwriting someone
   else's edit.
-- **Describe it.** The bar at the bottom of the canvas drafts or refines a
-  process from plain language through the configured AI provider. Each step
-  becomes its own node: extraction goes to an agent, "if … otherwise" to a
-  condition, approval by a role to a human task, and actions to engine tasks.
-  When no provider is configured, or no valid process comes back, the bar says
-  why and nothing is generated. A candidate that still misses a branch or a
-  human step the request asked for opens with a warning naming what is
-  missing. You review the result before it applies.
-- **Decision tables** have a matrix editor (inputs, rows, hit policy,
-  `otherwise`).
+- **Describe it.** The bar at the bottom of the canvas drafts a process, or a
+  change to the open one, from plain language. Your prompt opens the AI draft
+  workspace; nothing reaches the canvas until you apply. See
+  [Drafting with AI](#drafting-with-ai).
+- **The palette** draws every step exactly as the canvas does: circles for
+  events, diamonds for gateways, cards for work. Type in **Find a node** to
+  filter (by name, purpose or APL type, so `dmn` finds the decision table);
+  <kbd>Enter</kbd> adds the first match. Click a step to add it after the
+  selected one, already connected, or drag it onto the canvas where you want
+  it. Arrow keys move through the list.
+- **The Properties panel** edits every property of the selected step. It
+  opens with the step's name and description, then one section per concern
+  (for an agent: model and prompt, output contract, routing, retries, tools,
+  review, evidence). Sections fold and remember how you left them. Each field
+  shows its APL key in small type, and an engine error appears under the
+  field or rule it is about, with the count on the section heading.
+- **The process itself** is edited in the Properties panel when no step is
+  selected (click empty canvas). Set the name, description, category and
+  owner; the engine does not act on the last three, they are for people
+  reading the process. The key can change only until the process is first
+  saved: its deployed versions and instances are filed under it, so it is
+  fixed after that. **Variables** declares the start payload and what steps
+  write, each with a type, **required** and **sensitive**. Sensitive values
+  are masked in redacted agent evidence. Required documents the start payload
+  but the engine does not check it yet. Declaring any variable turns on the
+  engine's warning for expressions that read an unknown name. Engine issues
+  about the process, such as a variable declared twice, appear under the
+  field they name; the rest are listed at the top. Metadata keys the panel
+  does not show are kept as written.
+- **Decision tables** are edited in the panel: the decision key, what happens
+  when several rules match (first match, unique match, collect all), the
+  inputs, the outputs, and the rules in order. Type output values as text,
+  numbers, `true`/`false`, or `"quoted"` text; an empty cell means the rule
+  does not set that output. Reorder rules by dragging the handle, with the
+  arrow buttons, or with <kbd>Alt</kbd>+arrow keys on the handle. The
+  **otherwise** fallback stays last: it applies only when no rule matched.
+  **Expand** opens the whole table in a wide drawer.
+
+  ![A decision table in the properties panel: hit policy, inputs, outputs and the rules in order](../../../assets/screens/1.2/decision-table-properties.webp)
+- **For each**, **agent evidence** and the **assignment mode** of a human task
+  are edited in the panel too. A step saved as the deprecated `approval-gate`
+  stays one when you save; the panel offers to convert it to a human task.
 - **Agent steps** pick their tools from the project's tool servers, with each
   tool's policy: a step may tighten a policy (for example require approval)
   but never loosen it, and an approval-required tool asks who approves it.
   Loop limits (turns, tokens, budget), routes, delegates and the inputs and
   outputs of a call-process step are edited in the inspector, with the
   engine's rules checked as you type.
+- **Task forms.** A human task picks its form in the Properties panel. The
+  form's fields are listed there for quick changes (label, required, order);
+  **Open full editor** opens the form designer in a large panel: the field
+  palette on the left, the form in the middle, the selected field's
+  properties on the right. Drag fields into sections and rows of up to four
+  fields; on a selected field, arrow keys move it or change its width and
+  <kbd>Delete</kbd> removes it. A section can start a wizard step. Each field
+  can have rules (required, minimum and maximum, length, a pattern) and a
+  **Show only when** condition such as `vat_registered == true`. **Preview**
+  shows the form as the person filling it sees it, at desktop or phone
+  width: short forms keep generous spacing, long ones tighten and use more
+  columns on a wide screen. <kbd>Esc</kbd> closes the designer and asks first
+  when there are unsaved changes. The engine enforces the form, not only the
+  browser: it takes a copy of the form when you deploy the process and checks
+  every completion against that copy. Editing a form therefore applies to
+  tasks of the next deployment; tasks already open keep the rules they
+  started with.
+
+  ![A task in the Task Inbox with a sectioned form: Employer fields in two columns and a Document section with the scan upload](../../../assets/screens/1.2/inbox-sectioned-form.webp)
+- **File fields.** A **File** field takes one document, or several with
+  **Several files** (with a minimum and maximum count). **Accepted files**
+  lists extensions or types such as `.pdf, image/*`, and **Largest file**
+  caps the size within the engine's limit (10 MB unless configured). The
+  person filling the task drops files on the field, sees each upload's
+  progress, previews images and PDFs and can remove a file before
+  submitting. The engine checks each file's actual contents (a picture
+  renamed `.pdf` is refused, programs always are), keeps the file in RustFS
+  and gives the process a reference: name, type, size and checksum, never
+  the bytes. The file appears as a chip in the instance's variables, and
+  people who may see the instance download it through the engine. Details:
+  [process files](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/process-files.md).
 - **Undo and redo** cover every edit of the open process (<kbd>⌘Z</kbd> /
   <kbd>Ctrl+Z</kbd>, <kbd>⇧⌘Z</kbd> / <kbd>Ctrl+Y</kbd>), 100 steps per process.
+
+## Drafting with AI
+
+The bar at the bottom of the canvas turns a description into a draft. Pin it
+open, collapse it to a small **Draft with AI** button, or hide it; the choice
+is remembered for you in this browser. <kbd>⌘K</kbd> (<kbd>Ctrl</kbd>+<kbd>K</kbd>
+on Windows and Linux) opens it whatever its setting, and so do the ✦ button
+in the canvas toolbar and **Use prompt** on an empty canvas; <kbd>Esc</kbd>
+puts it back.
+
+On a process that has steps, the bar refines that process; choose **New
+process** to start another one. When you send the prompt, the **AI draft
+workspace** opens over the Studio:
+
+- **The draft** in the centre is drawn as the canvas draws it, and updates with
+  each answer: new steps fade in, removed ones fade out, the others move to
+  their new place. **YAML** shows the APL source, and **Diff vs current** marks
+  what the draft adds, changes or removes compared with the process on the
+  canvas. Engine validation is badged on the steps, with the count in the
+  header.
+- **The conversation** on the right keeps your prompt and each refinement, with
+  the model's one-line account of what it changed. **Undo to here** returns the
+  draft to an earlier turn; the later turns are set aside until you restore
+  them or send a new refinement.
+- **Your own edits.** Click a step to change its properties. Your edit becomes
+  part of the draft, and the next refinement starts from it.
+- **While the model works** you can read the draft, switch views or cancel. If
+  no valid change comes back, the turn says why and the draft is unchanged;
+  **Try again** or **Edit prompt**.
+
+**Apply to Studio** puts the draft on the canvas as one change: one undo
+(<kbd>⌘Z</kbd>) restores the process as it was. **Discard** leaves the canvas
+untouched. Nothing is deployed from the workspace; deploying stays a separate
+step.
+
+What the model sees: the authoring service sends it the current draft and your
+latest prompt, not the conversation. It runs in the engine's authoring service,
+never inside a running process. The answer comes whole (no streaming), and
+**Cancel** stops waiting for it; the engine still finishes the call it started.
+The draft lives in the page only, so leaving the page asks first. Drafting
+needs the **Owner** or **Maintainer** role in the project and a configured AI
+provider; without one, the workspace says so and nothing is drafted.
 
 ## Validation
 
@@ -184,6 +290,11 @@ The engine is the only APL validator, and Studio asks it directly:
 - **Errors** (`ABADA-APL-VALIDATION-001`) block **Apply to diagram** and
   **Deploy & Start**: a broken route, a cycle without a repeat limit, a model
   outside the engine's allow-list, an expression that is not valid CEL.
+  Decision-table rules are checked one by one: an empty or invalid condition,
+  a condition reading a name that is not one of the table's inputs, a second
+  `otherwise`, and, under unique match, two rules with the same condition. Two
+  different conditions that can both hold under unique match are only caught
+  when the table runs.
 - **Warnings** never block. `ABADA-APL-SCHEMA-001` flags an unknown field —
   usually a typo such as `confidence_treshold` — or a wrong type;
   `ABADA-APL-VARIABLE-001` flags an undeclared variable.

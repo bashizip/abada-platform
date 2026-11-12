@@ -1,0 +1,19 @@
+version: abada.io/v1
+metadata:
+  key: supplier_onboarding
+  name: Supplier Onboarding
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: review
+    - id: review
+      type: human-input
+      description: Review the supplier before it is approved
+      assignees:
+        - procurement
+      formKey: supplier-onboarding
+      next: done
+    - id: done
+      type: end

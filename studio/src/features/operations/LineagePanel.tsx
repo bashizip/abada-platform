@@ -7,16 +7,18 @@ interface LineagePanelProps {
   instanceId: string;
   /** Opens a related instance; links are plain text without it. */
   onOpenInstance?: (instanceId: string) => void;
+  /** Inside the instance drawer: no strip chrome, and says so when there is no lineage. */
+  embedded?: boolean;
 }
 
 const humanize = (value: string) => value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 const STATUS_TONE: Record<string, string> = {
-  RUNNING: 'text-[#2A9D8F]',
-  COMPLETED: 'text-[#90A955]',
-  FAILED: 'text-[#E76F51]',
-  CANCELLED: 'text-[#A89F91]',
-  SUSPENDED: 'text-[#F4A261]',
+  RUNNING: 'text-mineral-teal',
+  COMPLETED: 'text-sage-green',
+  FAILED: 'text-desert-rose',
+  CANCELLED: 'text-sand',
+  SUSPENDED: 'text-saffron',
 };
 
 /**
@@ -24,7 +26,7 @@ const STATUS_TONE: Record<string, string> = {
  * down to this instance, and the children its call steps started. Hidden for
  * an instance that neither was called nor called anything.
  */
-export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceId, onOpenInstance }) => {
+export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceId, onOpenInstance, embedded = false }) => {
   const [lineage, setLineage] = useState<LineageDTO | null>(null);
 
   useEffect(() => {
@@ -36,22 +38,26 @@ export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceI
     return () => { cancelled = true; };
   }, [projectId, instanceId]);
 
-  if (!lineage || (lineage.ancestors.length === 0 && lineage.children.length === 0)) return null;
+  if (!lineage || (lineage.ancestors.length === 0 && lineage.children.length === 0)) {
+    return embedded ? (
+      <p className="py-2 text-xs text-sand">This instance was not called by another process and has called none.</p>
+    ) : null;
+  }
 
   const link = (target: LineageLinkDTO) => onOpenInstance ? (
     <button type="button" onClick={() => onOpenInstance(target.instanceId)}
-      className="font-semibold text-[#EAE3D9] underline-offset-2 hover:text-[#F4A261] hover:underline"
+      className="font-semibold text-linen underline-offset-2 hover:text-saffron hover:underline"
       title={target.instanceId}>
       {humanize(target.processDefinitionId)}
     </button>
-  ) : <span className="font-semibold text-[#EAE3D9]" title={target.instanceId}>{humanize(target.processDefinitionId)}</span>;
+  ) : <span className="font-semibold text-linen" title={target.instanceId}>{humanize(target.processDefinitionId)}</span>;
 
   return (
-    <div className="shrink-0 border-b border-[#3A322E] bg-[#1A1614] px-4 py-2 text-[11px] text-[#A89F91]"
+    <div className={embedded ? 'py-1 text-xs text-sand' : 'shrink-0 border-b border-hairline bg-charcoal px-4 py-2 text-[11px] text-sand'}
       aria-label="Process lineage">
       {lineage.ancestors.length > 0 && (
         <div className="flex flex-wrap items-center gap-1">
-          <Workflow className="h-3.5 w-3.5 text-[#F4A261]" aria-hidden />
+          <Workflow className="h-3.5 w-3.5 text-saffron" aria-hidden />
           <span className="mr-1">Called by</span>
           {lineage.ancestors.map((ancestor, index) => (
             <React.Fragment key={ancestor.instanceId}>
@@ -66,7 +72,7 @@ export const LineagePanel: React.FC<LineagePanelProps> = ({ projectId, instanceI
       {lineage.children.length > 0 && (
         <div className={lineage.ancestors.length > 0 ? 'mt-1.5' : ''}>
           <div className="mb-1 flex items-center gap-1">
-            <Workflow className="h-3.5 w-3.5 text-[#F4A261]" aria-hidden />
+            <Workflow className="h-3.5 w-3.5 text-saffron" aria-hidden />
             <span>Called processes ({lineage.children.length})</span>
           </div>
           <ul className="space-y-0.5 pl-5">

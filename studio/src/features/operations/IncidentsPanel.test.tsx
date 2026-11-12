@@ -126,4 +126,24 @@ describe('incidents panel', () => {
     await settle();
     expect(api.retryIncident).toHaveBeenCalledWith('proj', 'inc-1', { toolOutcome: 'NOT_PERFORMED' });
   });
+
+  it('opens the incident\'s instance on its step from the step name, not from an action', async () => {
+    const onOpenIncident = vi.fn();
+    api.getIncidents.mockResolvedValue([incident({ type: 'LOOP_EXHAUSTED' })]);
+    const container = render(<IncidentsPanel projectId="proj" canRetry modelFor={() => null} onOpenIncident={onOpenIncident} />);
+    await settle();
+
+    click(button(container, 'Draft Reply')!);
+    expect(onOpenIncident).toHaveBeenCalledWith(expect.objectContaining({ id: 'inc-1', activityId: 'draft_reply' }));
+    click(button(container, 'Retry')!);
+    await settle();
+    expect(onOpenIncident).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the incidents its caller loads instead of polling for them', async () => {
+    const container = render(<IncidentsPanel projectId="proj" instanceId="instance-1" canRetry={false} incidents={[incident({})]} />);
+    await settle();
+    expect(api.getIncidents).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('1 open');
+  });
 });

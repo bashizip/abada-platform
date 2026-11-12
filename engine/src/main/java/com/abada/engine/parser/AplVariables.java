@@ -102,7 +102,6 @@ final class AplVariables {
         Map<String, JsonNode> nodes = new HashMap<>();
         root.path("flow").path("nodes").forEach(node -> nodes.put(node.path("id").asText(), node));
 
-        checkDecisionRules(definition, pointerById, warnings);
 
         JsonNode declarations = root.path("metadata").path("variables");
         if (!declarations.isArray()) return warnings;
@@ -139,6 +138,9 @@ final class AplVariables {
                             predecessors, pointerById, reported, warnings);
                 }
             });
+            task.agentWork().files().forEach((name, expression) ->
+                    check(task.id(), identifiers(expression), "file '" + name + "'", declared, nodes,
+                            predecessors, pointerById, reported, warnings));
         }
         definition.getAllAgentRoutes().forEach((nodeId, routes) -> {
             // A route's when reads the agent's own result besides what earlier steps wrote.
@@ -153,26 +155,6 @@ final class AplVariables {
             }
         });
         return warnings;
-    }
-
-    private static void checkDecisionRules(ParsedProcessDefinition definition, Map<String, String> pointerById,
-            List<BpmnValidationIssue> warnings) {
-        for (DecisionTableMeta table : definition.getDecisionTables().values()) {
-            Set<String> inputs = new HashSet<>();
-            table.inputs().forEach(input -> inputs.add(input.name()));
-            for (int index = 0; index < table.rules().size(); index++) {
-                DecisionTableMeta.DecisionTableRule rule = table.rules().get(index);
-                if (rule.otherwise() || rule.when() == null) continue;
-                for (String identifier : identifiers(rule.when())) {
-                    if (inputs.contains(identifier)) continue;
-                    warnings.add(warning(pointerById.get(table.id()) + "/rules/" + index + "/when", table.id(),
-                            "decision-table '" + table.id() + "' rule " + index + " reads '" + identifier
-                                    + "', which is not one of the table inputs",
-                            "A 'when' rule only sees the table's declared inputs; add '" + identifier
-                                    + "' to 'inputs' or fix the name."));
-                }
-            }
-        }
     }
 
     private static void check(String owner, Set<String> reads, String context, Set<String> declared,

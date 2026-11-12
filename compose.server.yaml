@@ -14,9 +14,18 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the server environment file}
     restart: always
 
+  rustfs:
+    environment:
+      RUSTFS_ACCESS_KEY: ${ABADA_FILES_ACCESS_KEY:?Set ABADA_FILES_ACCESS_KEY in the server environment file}
+      RUSTFS_SECRET_KEY: ${ABADA_FILES_SECRET_KEY:?Set ABADA_FILES_SECRET_KEY in the server environment file}
+      RUSTFS_SSE_S3_MASTER_KEY: ${ABADA_FILES_SSE_MASTER_KEY:?Set ABADA_FILES_SSE_MASTER_KEY in the server environment file}
+    restart: always
+
   abada-engine:
     environment:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the server environment file}
+      ABADA_FILES_ACCESS_KEY: ${ABADA_FILES_ACCESS_KEY:?Set ABADA_FILES_ACCESS_KEY in the server environment file}
+      ABADA_FILES_SECRET_KEY: ${ABADA_FILES_SECRET_KEY:?Set ABADA_FILES_SECRET_KEY in the server environment file}
       ABADA_SECURITY_MODE: oidc
       OIDC_ISSUER_URI: https://auth.${ABADA_DOMAIN:?Set ABADA_DOMAIN}/realms/abada
       OIDC_AUDIENCE: abada-frontend

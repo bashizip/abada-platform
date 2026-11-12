@@ -167,6 +167,35 @@ class SecurityAuthorizationContractTest {
     }
 
     @Test
+    void fileEndpointsNeedAValidTokenAndTheirPermission() throws Exception {
+        String project = ProjectConstants.DEFAULT_PROJECT_ID;
+        String upload = "/v1/projects/" + project + "/tasks/missing/files";
+        String download = "/v1/projects/" + project + "/files/00000000-0000-4000-8000-000000000000";
+        for (String token : new String[] {null, "invalid", "expired"}) {
+            var get = get(download);
+            var post = post(upload).param("field", "f").param("name", "a.pdf")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM).content(new byte[] {'%', 'P', 'D', 'F', '-'});
+            if (token != null) {
+                get.header("Authorization", "Bearer " + token);
+                post.header("Authorization", "Bearer " + token);
+            }
+            mvc.perform(get).andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+            mvc.perform(post).andExpect(status().isUnauthorized());
+        }
+        mvc.perform(get(download).header("X-Auth-Request-User", "forged-admin")).andExpect(status().isUnauthorized());
+        // Uploading is a task write; reading a worker's file needs the worker permission.
+        assertForbidden(post(upload).param("field", "f").param("name", "a.pdf")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM).content(new byte[] {1}), "operator");
+        assertForbidden(get("/v1/external-tasks/missing/files/00000000-0000-4000-8000-000000000000")
+                .param("workerId", "w"), "tasks");
+        // A signed-in user who is not a member of another project learns nothing about it.
+        mvc.perform(get("/v1/projects/someone-elses-project/files/00000000-0000-4000-8000-000000000000")
+                        .header("Authorization", "Bearer tasks"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void enforcesEveryPermissionBoundary() throws Exception {
         assertForbidden(post("/v1/processes/deploy").contentType(MediaType.MULTIPART_FORM_DATA), "tasks");
         assertForbidden(post("/v1/processes/start").param("processId", "missing"), "tasks");
@@ -380,6 +409,17 @@ class SecurityAuthorizationContractTest {
         // Operations access and administration do not include evidence payloads.
         assertForbidden(get(payloads), "operator");
         assertForbidden(get(payloads), "admin");
+        // The resolved inputs of a decision-table application are evidence too.
+        String decisionInputs = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID
+                + "/instances/missing/decisions/missing/inputs";
+        mvc.perform(get(decisionInputs)).andExpect(status().isUnauthorized());
+        mvc.perform(get(decisionInputs).header("Authorization", "Bearer invalid")).andExpect(status().isUnauthorized());
+        mvc.perform(get(decisionInputs).header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(get(decisionInputs).header("X-Auth-Request-User", "forged")
+                        .header("X-Auth-Request-Groups", "abada-evidence-reader"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(get(decisionInputs), "operator");
+        assertForbidden(get(decisionInputs), "admin");
 
         // Deciding a tool approval: authenticated people only, never a worker credential.
         String decision = "/v1/tasks/missing/decision";

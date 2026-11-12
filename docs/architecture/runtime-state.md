@@ -237,6 +237,9 @@ read and written only inside the locked command of their process instance.
 | Agent delegation | V32: `agent_steps.child_instance_id` links a `DELEGATION` step to the child it started; delegates are pinned in `process_definitions.call_targets` under `<node>#delegate:<process>`; the child's `started_by_agent` holds the agent's identity. A `STARTED` delegation parks the external task as `AWAITING_CHILD` and creates the child in the step command; the child's `CHILD_DONE` job finishes the step under the external-task lock and reopens the work without locking the parent instance | Retain this model |
 | Tool approvals | V31: `tasks.kind` (`USER` / `TOOL_APPROVAL`) and `tasks.agent_step_id`; `agent_steps.decided_at` with the decider in `resolved_by`. A `PROPOSED` step parks its external task as `AWAITING_APPROVAL` (no lease, never acquired) and opens the approval on the agent's token in the same step command (external task, then instance). A decision locks the external task, then the approval task, never the instance, and never moves the token; boundaries and cancel retire both through the by-token retirement | Retain this model |
 | Agent evidence and cost | V30: per step a working copy (`request_enc`/`result_enc`, cleared when the task is completed or cancelled) and an evidence copy shaped by the project/node policy, purged after `purge_after` by a `SKIP LOCKED` sweep; engine-computed `cost_usd` from `model_prices` (effective-dated); attempt-reported tokens priced on `external_tasks` when not journaled; project policy on `projects` | Retain this model |
+| Files as agent input | S15: an agent node's `files` are resolved in the transaction that locks the work, from `process_files` rows only (no object-store call): each must be `ATTACHED` to the instance and within `max_files` and `abada.agent.files.max-bytes`, or the work fails for good in that transaction (`AGENT_FILE_INVALID` / `AGENT_FILE_LIMIT`, then `on_error` or a `WORK_FAILED` incident). The descriptor carries references, never bytes; the lease holder downloads the declared files outside any transaction. V44: `agent_steps.files_json` records, per model call, the files the engine verified against the worker's claim (id, sha256), kept after payload purge | Retain this model |
+| Administration audit trail | V43: `admin_audit_events`, append-only. A change the database holds (projects and members, worker bindings, AI providers, tool credentials, evidence, file and Insight policies, deployments, rollbacks, proposal reviews and adoptions) writes its `SUCCESS` row in its own transaction (`Propagation.MANDATORY`), so a rolled-back change leaves no event. Users and groups live in the identity provider: their row is written in a new transaction once the provider has accepted the change. A refused call (403 from the security filter or a service, or a project role check answered 404) writes a `DENIED` row in its own transaction and never fails the response. Rows hold non-sensitive before/after values only; names that denote secrets are stripped. PostgreSQL refuses UPDATE, DELETE and TRUNCATE with a trigger for every role. Read with a keyset cursor on `id` | Retention and SIEM export are 1.3 candidates |
+| Task forms | V41: the FORM resource each human node's `formKey` resolves to is validated and pinned at deployment in `process_definitions.form_snapshots` (JSON by node id: key, resource id, revision, sha256, schema) and cached per deployment id (immutable). Completion validates submitted values against it inside the completion transaction; no remote call. Versions without a snapshot keep the unchecked live form | Retain this model |
 | Call-process lineage | `process_instances.parent_instance_id/parent_token_id/parent_activity_id/root_instance_id/call_depth` (V29); child versions pinned in `process_definitions.call_targets`. A child is created in its parent's command; its end schedules a durable `CHILD_DONE` job (`jobs.related_instance_id`, one per child) and never locks the parent. Cancels cascade parent → child in one transaction | Retain this model |
 | Incidents | `incidents` rows (V24) opened inside the command that stops a token (exhausted loop, message wait without `correlationKey`) or finds task work failed for good with no `on_error` (`WORK_FAILED`); resolved by an operator retry (for agent work optionally on another allowed model, stored per task in `external_tasks.model_override`, V26) or when the instance is cancelled or failed | Add more incident types as runtime conditions need them |
 | Boundaries and service levels | Task timeouts and SLA escalations are `jobs` rows of kind `BOUNDARY_TIMEOUT` / `SLA` (V26) created with the waiting token and cancelled in the command that moves it; a boundary retires the task's work atomically; tasks carry `due_at` / `escalated_at`; rate-limit deferrals are counted in `external_tasks.deferrals`. Work rows are locked before the instance row | Add a non-interrupting branch boundary if a use case needs one |
@@ -260,10 +263,47 @@ security review and operational runbooks remain 1.0 RC gates; see the roadmap.
   workflow row lock.
 - Require an idempotency key or protocol identity where a client can repeat a
   mutation after losing the response.
+- Hold a pooled database connection only for the transaction or statement that
+  needs it, never for an HTTP request. `spring.jpa.open-in-view` is `false` for
+  every profile: with it on, Spring kept an EntityManager, and Hibernate kept
+  its connection, for the whole request, so each open project event stream
+  (up to 30 minutes) pinned one connection and a few watching clients
+  exhausted the pool for every request, worker and scheduler on the replica.
+  Long-lived or asynchronous requests (event streams) do their checks in short
+  transactions on the request thread and stream without a connection.
+  `EventStreamConnectionPoolTest` opens three times more streams than the pool
+  has connections against PostgreSQL and requires zero checked-out
+  connections and a responsive API.
 
 Exactly-once refers to committed workflow state transitions. Calls to external
 systems are at-least-once unless their own idempotency contract prevents a
 duplicate side effect.
+
+## Process files
+
+Since 1.2 (M5 S9) human-task forms take files. The bytes are the one kind of
+state PostgreSQL does not hold: they live in RustFS, the S3-compatible object
+store every self-hosted installation runs. PostgreSQL keeps the `process_files`
+row (metadata and state), so it still decides what a process may see. The
+contract is [process files](../reference/process-files.md).
+
+- **Upload** happens before any workflow command: the engine streams the body
+  to RustFS, then inserts a `PENDING` row in its own short transaction. A row
+  never names an object that was not written; an object without a row is an
+  orphan the sweep removes.
+- **Attach** happens inside the task completion command, after the form
+  check: the file rows are locked with the task and instance, become
+  `ATTACHED`, and the variable gets their references. The command makes no
+  call to RustFS, so invariant 3 holds and an object-store outage cannot block
+  or half-apply a completion.
+- **Read** is a query: authorization on the row, an audit row in its own
+  transaction, then the bytes streamed from RustFS with no transaction open.
+- **Delete** is durable work in the rows (`DELETING`, lease owner, lease
+  expiry, attempts, last error), acquired with `FOR UPDATE SKIP LOCKED`
+  (invariant 5). The object is deleted outside any transaction and the row is
+  removed only by the replica still holding it; deleting an absent object is a
+  success, so the sweep is at-least-once and idempotent. The orphan scan runs
+  under a singleton lease row (`file_sweep_leases`).
 
 ## Cache policy
 

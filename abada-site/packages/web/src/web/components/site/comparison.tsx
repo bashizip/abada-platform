@@ -19,7 +19,8 @@ const ROWS: { capability: string; note?: string; frameworks: Cell; legacy: Cell;
     abada: "yes",
   },
   {
-    capability: "PostgreSQL as the only database",
+    capability: "Self-hosted storage only: PostgreSQL and RustFS",
+    note: "Process state in PostgreSQL, task files in RustFS",
     frameworks: "partial",
     legacy: "partial",
     abada: "yes",

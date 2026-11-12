@@ -52,10 +52,12 @@ public class ToolCredentialService {
     private final ProjectAccessService access;
     private final AesEncryption encryption;
     private final ActivityHistoryService history;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
 
     public ToolCredentialService(ToolCredentialRepository credentials, ExternalTaskRepository externalTasks,
             AbadaEngine engine, ProjectAccessService access, AesEncryption encryption,
-            ActivityHistoryService history) {
+            ActivityHistoryService history, com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.credentials = credentials;
         this.externalTasks = externalTasks;
         this.engine = engine;
@@ -99,6 +101,10 @@ public class ToolCredentialService {
         credentials.save(row);
         history.record(created ? "TOOL_CREDENTIAL_CREATED" : "TOOL_CREDENTIAL_ROTATED", null, null, null,
                 Map.of("projectId", projectId, "credential", name));
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.TOOL_CREDENTIAL_SAVE,
+                com.abada.engine.audit.AdminAuditActions.TARGET_TOOL_CREDENTIAL, name, projectId,
+                com.abada.engine.audit.AdminAuditDetails.create().put("created", created)
+                        .put("secretChanged", true));
         return new CredentialSummary(row.getName(), row.getSecretHint(), row.getUpdatedAt());
     }
 
@@ -111,6 +117,8 @@ public class ToolCredentialService {
         credentials.delete(row);
         history.record("TOOL_CREDENTIAL_DELETED", null, null, null,
                 Map.of("projectId", projectId, "credential", name));
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.TOOL_CREDENTIAL_DELETE,
+                com.abada.engine.audit.AdminAuditActions.TARGET_TOOL_CREDENTIAL, name, projectId, null);
     }
 
     /**

@@ -1,6 +1,9 @@
 package com.abada.engine.project;
 
 import com.abada.engine.api.ApiErrorCode;
+import com.abada.engine.audit.AdminAuditActions;
+import com.abada.engine.audit.AdminAuditDetails;
+import com.abada.engine.audit.AdminAuditRecorder;
 import com.abada.engine.api.ApiException;
 import com.abada.engine.insight.InsightProposalService.InsightConflictException;
 import com.abada.engine.persistence.entity.PrincipalEntity;
@@ -31,10 +34,12 @@ public class ProjectService {
     private final ProjectProcessDocumentRepository documents;
     private final ProjectFolderRepository folders;
     private final ProjectAccessService access;
+    private final AdminAuditRecorder audit;
 
     public ProjectService(ProjectRepository projects, ProjectMemberRepository members,
             PrincipalRepository principals, ProjectProcessDocumentRepository documents,
-            ProjectFolderRepository folders, ProjectAccessService access) {
+            ProjectFolderRepository folders, ProjectAccessService access, AdminAuditRecorder audit) {
+        this.audit = audit;
         this.projects = projects;
         this.members = members;
         this.principals = principals;
@@ -74,6 +79,9 @@ public class ProjectService {
         owner.setCreatedBy(identity.username());
         members.save(owner);
         seedDefaultFolders(project.getId(), now);
+        audit.recordSuccess(AdminAuditActions.PROJECT_CREATE, AdminAuditActions.TARGET_PROJECT, project.getId(),
+                project.getId(), AdminAuditDetails.create().put("slug", project.getSlug())
+                        .put("name", project.getName()));
         return project;
     }
 
@@ -106,10 +114,16 @@ public class ProjectService {
         ProjectEntity project = access.requireActive(projectId, Role.OWNER);
         if (project.getEntityVersion() != expectedVersion) throw conflict();
         validateName(name);
+        AdminAuditDetails details = AdminAuditDetails.create()
+                .change("name", project.getName(), name.strip())
+                .change("description", project.getDescription(), normalizeDescription(description));
         project.setName(name.strip());
         project.setDescription(normalizeDescription(description));
         project.setUpdatedAt(Instant.now());
-        return projects.save(project);
+        ProjectEntity saved = projects.save(project);
+        audit.recordSuccess(AdminAuditActions.PROJECT_UPDATE, AdminAuditActions.TARGET_PROJECT, projectId, projectId,
+                details);
+        return saved;
     }
 
     @Transactional
@@ -120,9 +134,14 @@ public class ProjectService {
             throw new ApiException(HttpStatus.BAD_REQUEST, ApiErrorCode.ENGINE_COMMAND_REJECTED,
                     "The compatibility Default project cannot be archived");
         }
+        ProjectEntity.Status before = project.getStatus();
         project.setStatus(archived ? ProjectEntity.Status.ARCHIVED : ProjectEntity.Status.ACTIVE);
         project.setUpdatedAt(Instant.now());
-        return projects.save(project);
+        ProjectEntity saved = projects.save(project);
+        audit.recordSuccess(archived ? AdminAuditActions.PROJECT_ARCHIVE : AdminAuditActions.PROJECT_RESTORE,
+                AdminAuditActions.TARGET_PROJECT, projectId, projectId,
+                AdminAuditDetails.create().change("status", before, saved.getStatus()));
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -143,6 +162,10 @@ public class ProjectService {
                     "At least one project role is required");
         }
         ProjectMemberEntity member = members.findByProjectIdAndPrincipalId(projectId, principalId).orElse(null);
+        boolean added = member == null;
+        List<String> rolesBefore = added ? null : sorted(member.getRoles());
+        List<String> lanesBefore = added ? null : sorted(member.getReviewLanes());
+        List<String> groupsBefore = added ? null : sorted(member.getTaskGroups());
         if (member == null) {
             if (expectedVersion != null && expectedVersion != 0) throw conflict();
             member = new ProjectMemberEntity();
@@ -168,7 +191,13 @@ public class ProjectService {
         Set<String> groups = new LinkedHashSet<>();
         if (taskGroups != null) taskGroups.forEach(g -> groups.add(access.normalizeTaskGroup(g)));
         member.setTaskGroups(groups);
-        return members.save(member);
+        ProjectMemberEntity saved = members.save(member);
+        audit.recordSuccess(AdminAuditActions.PROJECT_MEMBER_PUT, AdminAuditActions.TARGET_PRINCIPAL, principalId,
+                projectId, AdminAuditDetails.create().put("principal", principal.getUsername()).put("added", added)
+                        .change("roles", rolesBefore, sorted(saved.getRoles()))
+                        .change("reviewLanes", lanesBefore, sorted(saved.getReviewLanes()))
+                        .change("taskGroups", groupsBefore, sorted(saved.getTaskGroups())));
+        return saved;
     }
 
     @Transactional
@@ -180,6 +209,13 @@ public class ProjectService {
         if (member.getRoles().contains(Role.OWNER)
                 && members.countByProjectIdAndRole(projectId, Role.OWNER) <= 1) throw lastOwner();
         members.delete(member);
+        audit.recordSuccess(AdminAuditActions.PROJECT_MEMBER_REMOVE, AdminAuditActions.TARGET_PRINCIPAL, principalId,
+                projectId, AdminAuditDetails.create().put("roles", sorted(member.getRoles())));
+    }
+
+    private static List<String> sorted(java.util.Collection<?> values) {
+        if (values == null) return List.of();
+        return values.stream().map(String::valueOf).sorted().toList();
     }
 
     public long processCount(String projectId) { return documents.countByProjectId(projectId); }

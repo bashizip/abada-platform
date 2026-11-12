@@ -9,10 +9,13 @@ primary button. The palette mirrors `studio/src/index.css`.
   template and PatternFly class mapping is inherited. Only the page shell and
   styles change.
 - `login/template.ftl` is Keycloak 21.1.1's `base/login/template.ftl` with the
-  Studio brand header and SVG favicon. Re-diff it when the Keycloak image in
+  Studio brand header, the four-roles line under the card ("Agents advise ·
+  Rules decide · Humans approve · PostgreSQL remembers") and SVG favicon. Re-diff it when the Keycloak image in
   `compose.dev.yaml` is upgraded.
 - `login/resources/css/abada.css` holds all styling; it loads after
-  Keycloak's `login.css`.
+  Keycloak's `login.css`. The page arrives with the Studio's short rise
+  (240 ms, standard easing), off under `prefers-reduced-motion`. Autofilled
+  fields keep the dark field colour, also while focused.
 - `login/messages/messages_en.properties` holds the page title and tagline.
 - `login/resources/js/sounds.js` adds the same interaction sounds as Studio
   (button taps, keystrokes in non-password fields, link navigation). It uses

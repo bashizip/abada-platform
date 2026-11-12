@@ -43,8 +43,34 @@ Codes are stable machine contracts. API v1 currently defines:
 `INVALID_REQUEST`, `BPMN_VALIDATION_FAILED`, `ENGINE_COMMAND_REJECTED`,
 `RESOURCE_NOT_FOUND`, `CONCURRENT_MODIFICATION`,
 `AUTHENTICATION_REQUIRED`, `ACCESS_DENIED`, `IDEMPOTENCY_CONFLICT`,
-`WORKER_LOCK_NOT_OWNED`, `WORKER_LOCK_EXPIRED`, and `INTERNAL_ERROR`.
+`WORKER_LOCK_NOT_OWNED`, `WORKER_LOCK_EXPIRED`, and `INTERNAL_ERROR`; 1.1 and
+1.2 added `AGENT_STEP_REJECTED`, `WORK_RETIRED`, `REPLAY_REQUIRED`,
+`AI_PROVIDER_TEST_FAILED`, `FORM_INVALID`, and for process files
+`FILE_REJECTED`, `OBJECT_STORE_UNAVAILABLE` and `FILE_UNAVAILABLE`.
 Messages are for people and may become more precise without a version change.
+
+## Process files
+
+Since 1.2 (M5 S9); the contract is [process files](process-files.md).
+
+| Endpoint | Who | Result |
+| --- | --- | --- |
+| `POST /v1/projects/{projectId}/tasks/{taskId}/files?field=&name=` | a user who may complete the task (`task:write`) | 201 `{ fileId, name, contentType, size, sha256, state: "PENDING", createdAt }`. Body: the file, with `Content-Length`. 400/413/415 `FILE_REJECTED` (`details.reason`), 503 `OBJECT_STORE_UNAVAILABLE` |
+| `GET /v1/projects/{projectId}/files/{fileId}` | the uploader of a pending file; for an attached file, instance readers of the project and the users of the instance's tasks | the bytes, as an attachment; 404 for anyone else; 410 `FILE_UNAVAILABLE` |
+| `GET /v1/projects/{projectId}/files/{fileId}/metadata` | as above | the file's metadata and state |
+| `DELETE /v1/projects/{projectId}/files/{fileId}` | the uploader, while the file is pending | 204; 409 once attached |
+| `GET`, `PUT /v1/projects/{projectId}/file-policy` | members; owners to change | `{ retentionDays }` (null keeps attached files) |
+| `GET /v1/external-tasks/{id}/files/{fileId}?workerId=` | the worker holding the task's lease (`worker:execute`) | the bytes of a file attached to the task's instance; for an agent task, only a file its node declares in `files` (404 otherwise); 409 `WORKER_LOCK_NOT_OWNED` without the lease |
+
+Completing a task with a file field takes the file ids; the engine replaces
+them by references in the same transaction. Refusals use `FORM_INVALID` with
+the file rules listed in [runtime semantics](runtime-semantics.md#forms).
+
+An agent task's locked work (`agentWork`) lists the files its call may read in
+`resolvedFiles` (`name`, `fileId`, `fileName`, `contentType`, `sizeBytes`,
+`sha256`; never bytes). A `MODEL_CALL` step's `request.files`
+(`[{ fileId, sha256 }]`) is checked against them, and the instance's agent-step
+evidence returns the verified `files` of each call (1.2, S15).
 
 ## Bounded list filters
 
@@ -102,7 +128,8 @@ uses a digest of the comment, never the text.
 
 `GET /api/v1/projects/{projectId}/incidents` lists a project's incidents,
 newest first (`open=true` by default; `page`, `size` ≤ 100), for project
-viewers, operators and owners. `GET /api/v1/process-instances/{id}/incidents`
+viewers, operators and owners; `processInstanceId` narrows the list to one
+instance of the project (an instance of another project yields an empty list). `GET /api/v1/process-instances/{id}/incidents`
 lists one instance's incidents, open and resolved (operations read scope).
 Each `IncidentDTO` has `id`, `projectId`, `processInstanceId`, `tokenId`,
 `activityId`, `type`, `message`, `createdAt`, `resolvedAt` and `resolution`
@@ -297,10 +324,35 @@ empty body and the `/status` endpoint reports `configured: false`.
   authenticated request, so a freshly created user becomes project-searchable
   only after their first sign-in to the engine — see
   [`docs/operations/studio-administration.md`](../operations/studio-administration.md).
-- Audit history for these mutations is logged in the engine audit trail but
-  not yet exposed as a UI; see
-  [`studio-app-spec.md`](../development/studio-app-spec.md) for the deferred
-  audit-tab work.
+- Each successful change is recorded in the administration audit trail (below)
+  once Keycloak has accepted it, in its own transaction; a refused call is
+  recorded as `DENIED`. Passwords are never recorded.
+
+### Administration audit trail (1.2)
+
+Every administrative change and every refused attempt, newest first. Administrator
+role only; a refused read is itself recorded (`audit.read`, `DENIED`).
+
+| Method | Path | Behavior |
+|---|---|---|
+| `GET` | `/api/v1/admin/audit` | One page of events. Filters (all optional, exact match): `from`, `to` (ISO-8601 instants, `to` exclusive), `actor`, `action`, `targetType`, `targetId`, `projectId`, `outcome` (`SUCCESS`, `DENIED`). `limit` 1–200 (default 50). `cursor` continues with older events (the previous page's `nextCursor`); `after=<id>` returns only events newer than `id`, for live updates. Answers `{ items, nextCursor }`, `Cache-Control: no-store`. |
+| `GET` | `/api/v1/admin/audit/export` | The same filters as CSV (`text/csv`, attachment), newest first, at most 10 000 rows. Cells a spreadsheet would read as a formula are prefixed with `'`. |
+| `GET` | `/api/v1/admin/audit/catalog` | The recorded actions and outcomes, for filters. |
+
+An event is `{ id, occurredAt, actor, actorPrincipalId, actorRoles, action,
+targetType, targetId, projectId, outcome, traceId, clientIp, details }`.
+`details` holds non-sensitive before/after values (`{ field: { before, after } }`)
+or facts such as `apiKeyChanged: true`; secrets, tokens and key material are
+never written. A change the database holds is recorded in its own transaction,
+so a rolled-back change leaves no `SUCCESS` event; PostgreSQL refuses UPDATE,
+DELETE and TRUNCATE on the table. Actions: `user.create`, `user.update`,
+`user.group.assign`, `user.group.revoke`, `group.create`, `project.create`,
+`project.update`, `project.archive`, `project.restore`, `project.member.put`,
+`project.member.remove`, `project.worker.put`, `ai-provider.save`,
+`ai-provider.delete`, `tool-credential.save`, `tool-credential.delete`,
+`evidence-policy.update`, `file-policy.update`, `insight-policy.update`,
+`process.deploy`, `process.rollback`, `proposal.review`, `proposal.adopt`,
+`audit.read`.
 
 ### Error envelope
 

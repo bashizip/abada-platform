@@ -40,11 +40,16 @@ public class ProjectTaskController {
     private final IdempotencyService idempotencyService;
     private final TaskGroupResolver taskGroupResolver;
     private final com.abada.engine.core.agent.ToolApprovalService toolApprovals;
+    private final com.abada.engine.project.ProjectTreeService trees;
+    private final com.fasterxml.jackson.databind.ObjectMapper json;
 
     public ProjectTaskController(AbadaEngine engine, UserContextProvider context,
             ProjectAccessService access, UserStatsService userStats,
             IdempotencyService idempotencyService, TaskGroupResolver taskGroupResolver,
-            com.abada.engine.core.agent.ToolApprovalService toolApprovals) {
+            com.abada.engine.core.agent.ToolApprovalService toolApprovals,
+            com.abada.engine.project.ProjectTreeService trees, com.fasterxml.jackson.databind.ObjectMapper json) {
+        this.trees = trees;
+        this.json = json;
         this.toolApprovals = toolApprovals;
         this.engine = engine;
         this.context = context;
@@ -86,6 +91,38 @@ public class ProjectTaskController {
             @PathVariable String taskId) {
         access.require(projectId, Role.VIEWER, Role.OPERATOR, Role.OWNER);
         return ResponseEntity.ok(toDetails(requireVisible(projectId, taskId)));
+    }
+
+    /**
+     * The form the task's user fills: the one pinned to the task's definition
+     * version (the form the engine enforces on completion), or, for versions
+     * deployed before forms were pinned, the project's current form.
+     */
+    @GetMapping("/{taskId}/form")
+    public ResponseEntity<TaskFormDto> form(@PathVariable String projectId, @PathVariable String taskId) {
+        access.require(projectId, Role.VIEWER, Role.OPERATOR, Role.OWNER);
+        TaskInstance task = requireVisible(projectId, taskId);
+        var pinned = engine.taskForm(task);
+        if (pinned.isPresent()) {
+            var form = pinned.get();
+            return ResponseEntity.ok(new TaskFormDto(form.formKey(), true, form.revision(), form.schema()));
+        }
+        String formKey = task.getFormKey();
+        var live = trees.findFormByKey(projectId, formKey);
+        if (live.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND, "This task has no form");
+        }
+        try {
+            return ResponseEntity.ok(new TaskFormDto(formKey, false, live.get().getEntityVersion(),
+                    json.readTree(live.get().getContent())));
+        } catch (java.io.IOException exception) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.INVALID_REQUEST,
+                    "Form '" + formKey + "' is not valid JSON");
+        }
+    }
+
+    /** A task's form; {@code pinned} is false when it is the project's current form, which the engine does not enforce. */
+    public record TaskFormDto(String formKey, boolean pinned, Long revision, com.fasterxml.jackson.databind.JsonNode schema) {
     }
 
     @PostMapping("/{taskId}/claim")

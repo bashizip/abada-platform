@@ -92,6 +92,21 @@ DEV_EXTERNAL_FIXTURE=("${DEV[@]}" -f "$ROOT_DIR/deployment/tests/compose.externa
 assert_config_clean "${DEV_EXTERNAL_FIXTURE[@]}"
 "${DEV[@]}" config --format json >"$TMP_DIR/dev-config.json"
 jq -e '.services.postgres.ports == null and .services["keycloak-db"].ports == null' "$TMP_DIR/dev-config.json" >/dev/null
+# Process files (S9): RustFS is a required service, reached only by the engine on
+# the internal data network, with its console off, a volume and a health check.
+jq -e '
+  .services.rustfs.image == "rustfs/rustfs:1.0.3"
+  and .services.rustfs.ports == null
+  and (.services.rustfs.networks | keys) == ["data"]
+  and .services.rustfs.environment.RUSTFS_CONSOLE_ENABLE == "false"
+  and (.services.rustfs.environment.RUSTFS_SSE_S3_MASTER_KEY | test("^[A-Za-z0-9+/]{43}=$"))
+  and ([.services.rustfs.volumes[] | .source] | index("rustfs_data") != null)
+  and (.services.rustfs.healthcheck.test | join(" ") | contains("9000/health"))
+  and .services["abada-engine"].depends_on.rustfs.condition == "service_healthy"
+  and .services["abada-engine"].environment.ABADA_FILES_ENDPOINT == "http://rustfs:9000"
+  and .services["abada-engine"].environment.ABADA_FILES_ACCESS_KEY == .services.rustfs.environment.RUSTFS_ACCESS_KEY
+  and .services["abada-engine"].environment.ABADA_FILES_SECRET_KEY == .services.rustfs.environment.RUSTFS_SECRET_KEY' \
+  "$TMP_DIR/dev-config.json" >/dev/null
 jq -e '[.services[] | has("build")] | any | not' "$TMP_DIR/dev-config.json" >/dev/null
 "${DEV[@]}" config --services > "$TMP_DIR/dev-services"
 "${DEV_TELEMETRY[@]}" config --services > "$TMP_DIR/dev-telemetry-services"
@@ -133,6 +148,9 @@ ABADA_REGISTRY=ghcr.io/bashizip
 ABADA_VERSION=1.0.0-rc.3-test
 POSTGRES_PASSWORD=test-only-production-password
 ABADA_ENCRYPTION_KEY=dGVzdC1vbmx5LWVuY3J5cHRpb24ta2V5LTMyLWJ5dGU=
+ABADA_FILES_ACCESS_KEY=test-only-files-access-key
+ABADA_FILES_SECRET_KEY=test-only-files-secret-key
+ABADA_FILES_SSE_MASTER_KEY=dGVzdC1vbmx5LWZpbGVzLXNzZS1rZXktMzItYnl0ZXM=
 ABADA_API_HOST=api.abada.test
 ABADA_STUDIO_HOST=studio.abada.test
 ABADA_DOCS_HOST=docs.abada.test
@@ -161,6 +179,21 @@ assert_config_clean "${PROD_TELEMETRY[@]}"
 "${PROD[@]}" config --format json >"$TMP_DIR/prod-config.json"
 grep -q 'ABADA_API_URL: https://api.abada.test/api' "$TMP_DIR/prod-config"
 jq -e '.services.postgres.ports == null' "$TMP_DIR/prod-config.json" >/dev/null
+jq -e '.services.rustfs.ports == null and .services.rustfs.restart == "always"
+  and .services.rustfs.environment.RUSTFS_ACCESS_KEY == "test-only-files-access-key"
+  and .services["abada-engine"].environment.ABADA_FILES_SECRET_KEY == "test-only-files-secret-key"
+  and .services["abada-engine"].depends_on.rustfs.condition == "service_healthy"' "$TMP_DIR/prod-config.json" >/dev/null
+if grep -q 'abada-dev-files' "$TMP_DIR/prod-config"; then
+  echo "Production configuration uses the development file-storage credentials" >&2
+  exit 1
+fi
+grep -v '^ABADA_FILES_SSE_MASTER_KEY=' "$TMP_DIR/prod.env" >"$TMP_DIR/prod-no-files-key.env"
+if docker compose --env-file "$TMP_DIR/prod-no-files-key.env" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.prod.yaml" \
+  config --quiet >"$TMP_DIR/missing-files.out" 2>&1; then
+  echo "Production configuration unexpectedly accepted a missing file-storage encryption key" >&2
+  exit 1
+fi
+grep -q 'ABADA_FILES_SSE_MASTER_KEY' "$TMP_DIR/missing-files.out"
 jq -e '[.services[] | has("build")] | any | not' "$TMP_DIR/prod-config.json" >/dev/null
 jq -e '(.services | has("abada-tenda") | not) and (.services | has("abada-orun") | not) and (.services | has("abada-studio")) and (.services | has("abada-docs"))' \
   "$TMP_DIR/prod-config.json" >/dev/null
@@ -200,6 +233,14 @@ expect_preflight_failure "$TMP_DIR/invalid-cors.env" 'production CORS origin mus
 cp "$TMP_DIR/prod.env" "$TMP_DIR/missing-encryption-key.env"
 sed -i.bak 's|^ABADA_ENCRYPTION_KEY=.*|ABADA_ENCRYPTION_KEY=not-a-key|' "$TMP_DIR/missing-encryption-key.env"
 expect_preflight_failure "$TMP_DIR/missing-encryption-key.env" 'ABADA_ENCRYPTION_KEY must be a base64-encoded 32-byte key'
+
+cp "$TMP_DIR/prod.env" "$TMP_DIR/invalid-files-key.env"
+sed -i.bak 's|^ABADA_FILES_SSE_MASTER_KEY=.*|ABADA_FILES_SSE_MASTER_KEY=not-a-key|' "$TMP_DIR/invalid-files-key.env"
+expect_preflight_failure "$TMP_DIR/invalid-files-key.env" 'ABADA_FILES_SSE_MASTER_KEY must be a base64-encoded 32-byte key'
+
+cp "$TMP_DIR/prod.env" "$TMP_DIR/weak-files-secret.env"
+sed -i.bak 's|^ABADA_FILES_SECRET_KEY=.*|ABADA_FILES_SECRET_KEY=short|' "$TMP_DIR/weak-files-secret.env"
+expect_preflight_failure "$TMP_DIR/weak-files-secret.env" 'ABADA_FILES_SECRET_KEY must each contain at least 16 characters'
 
 cp "$TMP_DIR/prod.env" "$TMP_DIR/missing-grafana-secret.env"
 sed -i.bak 's|GRAFANA_ADMIN_PASSWORD=test-only-grafana-password|GRAFANA_ADMIN_PASSWORD=|' "$TMP_DIR/missing-grafana-secret.env"
@@ -248,6 +289,9 @@ fi
 }
 grep -q 'Generated POSTGRES_PASSWORD' "$TMP_DIR/server-doctor.out"
 grep -Eq '^ABADA_ENCRYPTION_KEY=[A-Za-z0-9+/]{43}=$' "$TMP_DIR/server.env"
+grep -Eq '^ABADA_FILES_SSE_MASTER_KEY=[A-Za-z0-9+/]{43}=$' "$TMP_DIR/server.env"
+grep -Eq '^ABADA_FILES_ACCESS_KEY=[0-9a-f]{48}$' "$TMP_DIR/server.env"
+grep -Eq '^ABADA_FILES_SECRET_KEY=[0-9a-f]{48}$' "$TMP_DIR/server.env"
 [[ "$(ls -l "$TMP_DIR/server.env" | cut -c1-10)" == "-rw-------" ]]
 SERVER=(docker compose --env-file "$TMP_DIR/server.env" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.server.yaml")
 assert_config_clean "${SERVER[@]}"
@@ -264,7 +308,9 @@ jq -e '
   and ([.services.traefik.ports[] | .host_ip // ""] | all(. == "" or . == "0.0.0.0"))
   and (.services.traefik.command | index("--api.insecure=true") | not)
   and .services.postgres.ports == null and .services["keycloak-db"].ports == null
-  and .services.keycloak.ports == null
+  and .services.keycloak.ports == null and .services.rustfs.ports == null
+  and .services.rustfs.environment.RUSTFS_SSE_S3_MASTER_KEY != "YWJhZGEtZGV2LW9ubHktc3NlLW1hc3Rlci1rZXktMDA="
+  and .services["abada-engine"].environment.ABADA_FILES_ACCESS_KEY == .services.rustfs.environment.RUSTFS_ACCESS_KEY
   and ([.services[] | has("build")] | any | not)' \
   "$TMP_DIR/server-config.json" >/dev/null
 if grep -Eq 'abada-dev|abada_dev_|realm-dev.json|\.localhost' "$TMP_DIR/server-config.json"; then
@@ -362,6 +408,10 @@ test -f "$TMP_DIR/compose.server.yaml"
 test -f "$TMP_DIR/docker/keycloak/import/realm-server.json"
 test -x "$TMP_DIR/deployment/gcp/startup.sh"
 grep -q '^ABADA_ENGINE_IMAGE=ghcr.io/bashizip/abada-engine:1.0.0-rc.3-test$' "$TMP_DIR/release/.env.server.example"
+for env_example in .env.dev.example .env.server.example .env.prod.example; do
+  grep -q '^ABADA_RUSTFS_IMAGE=rustfs/rustfs:1.0.3$' "$TMP_DIR/release/$env_example"
+done
+grep -q 'rustfs_data:' "$TMP_DIR/compose.yaml"
 cmp -s "$ROOT_DIR/LICENSE" "$TMP_DIR/LICENSE"
 test -f "$TMP_DIR/deployment/telemetry/config.alloy"
 test ! -e "$TMP_DIR/deployment/telemetry/promtail.yaml"

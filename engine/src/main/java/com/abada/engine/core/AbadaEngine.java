@@ -79,7 +79,10 @@ public class AbadaEngine {
     private final ToolRegistryService toolRegistry;
     private final com.abada.engine.persistence.repository.AgentStepRepository agentSteps;
     private final com.abada.engine.core.delegation.CallTargetService callTargets;
+    private final com.abada.engine.forms.FormSnapshotService formSnapshots;
+    private final com.abada.engine.files.ProcessFileService processFiles;
     private final com.abada.engine.core.replay.StartInputService startInputs;
+    private final com.abada.engine.core.agent.DecisionInputEvidenceRecorder decisionInputs;
     private final com.abada.engine.persistence.repository.ForEachItemRepository forEachItems;
     private final int maxForEachItems;
     private final int maxForEachParallel;
@@ -128,13 +131,19 @@ public class AbadaEngine {
             @Value("${abada.call-process.resume-immediately:true}") boolean resumeChildImmediately,
             com.abada.engine.security.AesEncryption encryption,
             com.abada.engine.core.replay.StartInputService startInputs,
+            com.abada.engine.core.agent.DecisionInputEvidenceRecorder decisionInputs,
             com.abada.engine.persistence.repository.ForEachItemRepository forEachItems,
             @Value("${abada.for-each.max-items:100}") int maxForEachItems,
-            @Value("${abada.for-each.max-parallel:20}") int maxForEachParallel) {
+            @Value("${abada.for-each.max-parallel:20}") int maxForEachParallel,
+            com.abada.engine.forms.FormSnapshotService formSnapshots,
+            com.abada.engine.files.ProcessFileService processFiles) {
+        this.formSnapshots = formSnapshots;
+        this.processFiles = processFiles;
         this.forEachItems = forEachItems;
         this.maxForEachItems = maxForEachItems;
         this.maxForEachParallel = maxForEachParallel;
         this.startInputs = startInputs;
+        this.decisionInputs = decisionInputs;
         this.encryption = encryption;
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
@@ -248,8 +257,15 @@ public class AbadaEngine {
                 issues.addAll(parseResult.report().issues());
                 throw new com.abada.engine.bpmn.compatibility.BpmnValidationException(issues);
             }
+            // Task forms are pinned now, with this version: editing a form never changes open tasks.
+            com.abada.engine.forms.FormSnapshotService.Resolution forms = formSnapshots.resolve(projectId, definition);
+            if (!forms.ok()) {
+                List<com.abada.engine.bpmn.compatibility.BpmnValidationIssue> issues = new ArrayList<>(forms.errors());
+                issues.addAll(parseResult.report().issues());
+                throw new com.abada.engine.bpmn.compatibility.BpmnValidationException(issues);
+            }
             ProcessDefinitionEntity persisted = saveProcessDefinition(parseResult, schema, projectId, toolBindings,
-                    callTargets.toJson(calls.targets()));
+                    callTargets.toJson(calls.targets()), formSnapshots.toJson(forms.snapshots()));
             historyService.record("PROCESS_DEFINITION_DEPLOYED", null, definition.getId(), null,
                     Map.of("deploymentId", persisted.getDeploymentId(), "version", persisted.getVersion(),
                             "projectId", projectId));
@@ -442,6 +458,7 @@ public class AbadaEngine {
             // Root starts only: a child's inputs come from its parent, and replaying the parent replays them.
             startInputs.record(instance, deployment.getDeploymentId(), initialVariables, Instant.now());
         }
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
 
@@ -552,6 +569,18 @@ public class AbadaEngine {
             }
         }
 
+        // The pinned form is the contract: hidden fields' values are dropped, broken rules roll the command back.
+        java.util.Optional<com.abada.engine.forms.FormSnapshotService.Pinned> pinnedForm = pinnedForm(instance, activityId);
+        List<String> discardedFields = List.of();
+        if (pinnedForm.isPresent()) {
+            com.abada.engine.forms.FormSubmission.Result checked = com.abada.engine.forms.FormSubmission.check(
+                    pinnedForm.get().snapshot().formKey(), pinnedForm.get().form(), instance.getVariables(), variables);
+            // File fields: the submitted ids become references; metadata only, no object-store call (S9).
+            variables = processFiles.attach(pinnedForm.get().snapshot().formKey(), pinnedForm.get().form(),
+                    instance.getId(), instance.getDefinition().getId(), currentTask.getId(), activityId, user,
+                    checked.accepted());
+            discardedFields = checked.discarded();
+        }
         if (variables != null && !variables.isEmpty()) {
             instance.putAllVariables(variables);
         }
@@ -566,6 +595,11 @@ public class AbadaEngine {
         taskManager.completeTask(currentTask);
         persistTask(currentTask);
         Map<String, Object> details = new LinkedHashMap<>();
+        if (pinnedForm.isPresent()) {
+            details.put("form", pinnedForm.get().snapshot().formKey());
+            details.put("formRevision", pinnedForm.get().snapshot().revision());
+            if (!discardedFields.isEmpty()) details.put("discardedHiddenFields", discardedFields);
+        }
         if (chosen != null) {
             // The decision is evidence; the comment text stays in the process variable only.
             details.put("outcome", chosen.name());
@@ -592,6 +626,7 @@ public class AbadaEngine {
             return;
         }
         List<UserTaskPayload> nextTasks = instance.advance(completedTokenRef);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -600,6 +635,69 @@ public class AbadaEngine {
         persistRuntimeState(instance);
 
         armWork(instance, nextTasks);
+    }
+
+    /** The form pinned to this human node when the instance's definition version was deployed. */
+    private java.util.Optional<com.abada.engine.forms.FormSnapshotService.Pinned> pinnedForm(ProcessInstance instance,
+            String activityId) {
+        String deploymentId = instance.getProcessDefinitionDeploymentId();
+        if (deploymentId == null) return java.util.Optional.empty();
+        ProcessDefinitionEntity deployment = persistenceService.findProcessDefinitionByDeploymentId(deploymentId);
+        if (deployment == null) return java.util.Optional.empty();
+        return formSnapshots.pinnedFor(deploymentId, deployment.getFormSnapshots(), activityId);
+    }
+
+    /**
+     * The form a task's user fills: the one pinned to its definition version,
+     * or, for versions deployed before forms were pinned, the project's
+     * current form for the key. Empty when the task has no form.
+     */
+    public java.util.Optional<TaskForm> taskForm(TaskInstance task) {
+        ProcessInstance instance = getProcessInstanceById(task.getProcessInstanceId());
+        if (instance == null) return java.util.Optional.empty();
+        java.util.Optional<com.abada.engine.forms.FormSnapshotService.Pinned> pinned =
+                pinnedForm(instance, task.getTaskDefinitionKey());
+        if (pinned.isPresent()) {
+            var snapshot = pinned.get().snapshot();
+            return java.util.Optional.of(new TaskForm(snapshot.formKey(), true, snapshot.revision(), snapshot.schema()));
+        }
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * Where a file for a task's form field may be uploaded (S9): an open task
+     * the user may complete, whose pinned form has a {@code file} field with
+     * this id. Read-only; throws when any of that does not hold.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public com.abada.engine.files.ProcessFileService.UploadTarget fileUploadTarget(String taskId, String user,
+            List<String> groups, String fieldId) {
+        TaskInstance task = getTaskById(taskId).orElseThrow(() -> new ProcessEngineException("Task not found"));
+        requireUserTask(task);
+        ProcessInstance instance = getProcessInstanceById(task.getProcessInstanceId());
+        if (instance == null) throw new ProcessEngineException("Task not found");
+        requireActive(instance);
+        String principalId = IdentityContext.get().map(Identity::principalId).orElse(null);
+        taskManager.checkCanComplete(task, user, taskGroupResolver.effectiveGroups(instance.getProjectId(),
+                principalId, groups));
+        java.util.Optional<com.abada.engine.forms.FormSnapshotService.Pinned> pinned =
+                pinnedForm(instance, task.getTaskDefinitionKey());
+        if (pinned.isEmpty()) {
+            throw new ProcessEngineException("Task '" + task.getTaskDefinitionKey()
+                    + "' has no pinned form; files are uploaded to file fields of pinned forms only");
+        }
+        com.abada.engine.forms.FormSchema.Field field = pinned.get().form().field(fieldId);
+        if (field == null || !field.type().equals("file")) {
+            throw new ProcessEngineException("The form of task '" + task.getTaskDefinitionKey()
+                    + "' has no file field '" + fieldId + "'");
+        }
+        return new com.abada.engine.files.ProcessFileService.UploadTarget(instance.getProjectId(),
+                instance.getDefinition().getId(), instance.getId(), task.getId(), task.getTaskDefinitionKey(), user,
+                field);
+    }
+
+    /** A task's form: {@code pinned} is false when it is the live project form. */
+    public record TaskForm(String formKey, boolean pinned, Long revision, com.fasterxml.jackson.databind.JsonNode schema) {
     }
 
     @AtomicRuntimeCommand
@@ -944,6 +1042,7 @@ public class AbadaEngine {
         parent.putAllVariables(outputs);
         retireTaskJobs(parent, parentTokenId);
         List<UserTaskPayload> nextTasks = parent.advance(parentTokenId);
+        recordFlowsTaken(parent);
         recordDecisionTableAudits(parent);
         recordLoopExhaustions(parent);
         if (parent.isCompleted() && parent.getEndDate() == null) {
@@ -1205,6 +1304,7 @@ public class AbadaEngine {
         instance.putAllVariables(variables);
         retireTaskJobs(instance, tokenId);
         List<UserTaskPayload> nextTasks = instance.advance(tokenId);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -1333,6 +1433,7 @@ public class AbadaEngine {
         // The token leaves its task normally: its timeout and SLA timers must never fire.
         retireTaskJobs(instance, instance.waitingTokenId(tokenRef));
         List<UserTaskPayload> nextTasks = instance.advance(tokenRef);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -1563,6 +1664,7 @@ public class AbadaEngine {
         }
         List<UserTaskPayload> nextTasks = instance.retryIncident(incident.getTokenId());
         incidentService.resolve(incident, IncidentService.RESOLVED_BY_RETRY);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -1769,6 +1871,7 @@ public class AbadaEngine {
         }
         retireWork(instance, Set.of(token));
         List<UserTaskPayload> nextTasks = instance.leaveViaBoundary(token, boundary);
+        recordFlowsTaken(instance);
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
         if (instance.isCompleted() && instance.getEndDate() == null) {
@@ -2036,13 +2139,21 @@ public class AbadaEngine {
         }
     }
 
+    /** One FLOW_TAKEN history row per sequence flow taken in this command, in the same transaction. */
+    private void recordFlowsTaken(ProcessInstance instance) {
+        historyService.recordFlows(instance, instance.takeFlowsTaken());
+    }
+
     private void recordDecisionTableAudits(ProcessInstance instance) {
         for (DecisionTableAudit audit : instance.takeDecisionAudits()) {
+            // The input values go to evidence under the project's policy; history keeps names and the evidence id.
+            String evidenceId = decisionInputs.record(instance, audit, Instant.now());
             historyService.record("DECISION_TABLE_APPLIED", instance, audit.activityId(), Map.of(
                     "decisionKey", audit.decisionKey(),
                     "matchedRuleIndexes", audit.matchedRuleIndexes(),
                     "inputNames", audit.inputNames(),
-                    "outputNames", audit.outputNames()));
+                    "outputNames", audit.outputNames(),
+                    "evidenceId", evidenceId));
             recordDecisionFact(instance, audit);
         }
     }
@@ -2465,11 +2576,11 @@ public class AbadaEngine {
 
     private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema,
             String projectId) {
-        return saveProcessDefinition(parseResult, schema, projectId, null, null);
+        return saveProcessDefinition(parseResult, schema, projectId, null, null, null);
     }
 
     private ProcessDefinitionEntity saveProcessDefinition(BpmnParseResult parseResult, DefinitionSchema schema,
-            String projectId, String toolBindings, String pinnedCalls) {
+            String projectId, String toolBindings, String pinnedCalls, String pinnedForms) {
         ParsedProcessDefinition definition = parseResult.definition();
         String checksum = sha256(definition.getRawXml());
         ProcessDefinitionEntity latest = persistenceService
@@ -2478,7 +2589,8 @@ public class AbadaEngine {
         // called process makes a new version.
         if (latest != null && checksum.equals(latest.getChecksum())
                 && java.util.Objects.equals(toolBindings, latest.getToolBindings())
-                && java.util.Objects.equals(pinnedCalls, latest.getCallTargets())) {
+                && java.util.Objects.equals(pinnedCalls, latest.getCallTargets())
+                && java.util.Objects.equals(pinnedForms, latest.getFormSnapshots())) {
             return latest;
         }
         ProcessDefinitionEntity entity = new ProcessDefinitionEntity();
@@ -2496,6 +2608,7 @@ public class AbadaEngine {
         entity.setCompilerVersion(schema == DefinitionSchema.APL_NATIVE ? "apl-1" : "1");
         entity.setToolBindings(toolBindings);
         entity.setCallTargets(pinnedCalls);
+        entity.setFormSnapshots(pinnedForms);
         entity.setDeployedBy(IdentityContext.get().map(Identity::username).orElse(null));
         try {
             entity.setCompatibilityReport(om.writeValueAsString(parseResult.report()));

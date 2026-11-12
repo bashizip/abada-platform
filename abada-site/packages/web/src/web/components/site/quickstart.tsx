@@ -12,7 +12,7 @@ const STEPS = [
   {
     n: "2",
     title: "Open Studio",
-    body: "Studio, the engine, the agent worker and PostgreSQL come up together on your machine.",
+    body: "Studio, the engine, the agent worker, PostgreSQL and RustFS come up together on your machine.",
   },
   {
     n: "3",
@@ -63,8 +63,8 @@ export function Quickstart() {
             </h2>
 
             <p className="prose-lead mt-5 text-t2">
-              One command brings up Studio, the engine, the agent worker and PostgreSQL on your
-              machine. Run a real AI-driven process end to end and inspect every decision.
+              One command brings up Studio, the engine, the agent worker, PostgreSQL and RustFS on
+              your machine. Run a real AI-driven process end to end and inspect every decision.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">

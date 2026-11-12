@@ -104,6 +104,19 @@ class PostgresTokenUpgradeTest {
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword()); var statement = connection.createStatement()) {
             // Undo V38, V37, V36, V35, V34, V33, V32, V31, V30, V29, V28, V27, V26, V25, V24, then V23.
+            // V44: files of agent model calls.
+            statement.execute("alter table agent_steps drop column files_json");
+            // V43: administration audit trail (the append-only trigger goes with the table).
+            statement.execute("drop table admin_audit_events");
+            statement.execute("drop function admin_audit_events_append_only()");
+            // V42: process files.
+            statement.execute("drop table process_files");
+            statement.execute("drop table file_sweep_leases");
+            statement.execute("alter table projects drop column file_retention_days");
+            // V41: pinned task forms.
+            statement.execute("alter table process_definitions drop column form_snapshots");
+            // V40: decision-input evidence.
+            statement.execute("drop table decision_input_evidence");
             // V39: live provider models and the price catalog.
             statement.execute("drop table model_catalog_prices");
             statement.execute("drop table ai_provider_models");
@@ -165,7 +178,7 @@ class PostgresTokenUpgradeTest {
             for (String table : List.of("tasks", "external_tasks", "jobs", "event_subscriptions")) {
                 statement.execute("alter table " + table + " drop column token_id");
             }
-            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39')");
+            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44')");
             legacyState(statement, joinId, "b", "[\"b\"]", "{\"join\":2}", "{\"join\":[\"a\"]}");
             legacyState(statement, raceId, "race_e0", "[\"race_e0\",\"race_e1\"]", "{}", "{}");
             legacyState(statement, reviewId, "review", "[\"review\"]", "{}", "{}");
@@ -335,7 +348,6 @@ class PostgresTokenUpgradeTest {
                         "spring.datasource.hikari.maximum-pool-size=3",
                         "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
                         "spring.jpa.hibernate.ddl-auto=validate",
-                        "spring.jpa.open-in-view=false",
                         "spring.flyway.enabled=true",
                         "spring.task.scheduling.enabled=false",
                         "abada.outbox.dispatcher.enabled=false",

@@ -12,7 +12,17 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // The design-token test reads index.css as text (`?raw`); keep it intact.
+    css: { include: [/src\/index\.css/] },
+    // Timing tests (`*.perf.test.tsx`) run alone, after every other file, so
+    // parallel workers do not compete with them for the CPU.
+    projects: [
+      {
+        extends: true,
+        test: { name: 'unit', include: ['src/**/*.test.ts', 'src/**/*.test.tsx'], exclude: ['src/**/*.perf.test.tsx', 'node_modules/**'] },
+      },
+      { extends: true, test: { name: 'perf', include: ['src/**/*.perf.test.tsx'], sequence: { groupOrder: 1 } } },
+    ],
     coverage: {
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts', 'src/**/*.tsx'],

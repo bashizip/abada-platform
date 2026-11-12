@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright e2e (M5 S12): scratch engine database and run output
+e2e/.data
+e2e/test-results
+playwright-report

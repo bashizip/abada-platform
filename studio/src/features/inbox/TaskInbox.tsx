@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle,
+  ChevronLeft,
   Clock,
   FileText,
   Inbox,
@@ -10,10 +11,14 @@ import {
   User,
   XCircle,
 } from 'lucide-react';
-import { EngineAPI, EngineUserTaskDTO } from '@/api/engine';
+import { EngineAPI, EngineUserTaskDTO, FormRejectedError } from '@/api/engine';
 import { decisionError, decisionPayload, humanize, TaskOutcome } from './decision';
 import { ToolApprovalCard } from './ToolApprovalCard';
-import { ProjectAPI } from '@/api/projects';
+import { FormFiles, FormFilesContext } from './fileFieldModel';
+import { discardFile, fetchFileBlob, uploadTaskFile } from '@/api/files';
+import { FileAccessContext } from '@/components/json/fileAccess';
+import { JsonViewer } from '@/components/json/JsonViewer';
+import { jsonHeight } from '@/components/json/jsonLayout';
 import { useToast } from '@/components/ToastContext';
 import {
   FormRenderer,
@@ -21,7 +26,9 @@ import {
 import {
   FormSchema,
   formValuesFromSchema,
+  submittedValues,
   validateForm,
+  violationMessages,
 } from '@/features/inbox/formSchema';
 
 type Filter = 'all' | 'AVAILABLE' | 'CLAIMED';
@@ -39,23 +46,25 @@ const STATUS_META: Record<string, { label: string; chip: string; dot: string }> 
   FAILED: { label: 'Failed', chip: 'bg-[#E76F51]/10 text-[#E76F51] border-[#E76F51]/30', dot: 'bg-[#E76F51]' },
 };
 
-function decodeBase64(content: string): string {
-  try {
-    return decodeURIComponent(escape(atob(content)));
-  } catch {
-    return atob(content);
-  }
-}
-
 export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { showToast } = useToast();
   const [tasks, setTasks] = useState<EngineUserTaskDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedTask, setSelectedTask] = useState<EngineUserTaskDTO | null>(null);
+  // File fields upload to the selected task (M5 S9); the bytes go through the engine to file storage.
+  const selectedTaskId = selectedTask?.id;
+  const selectedProjectId = selectedTask?.projectId;
+  const formFiles = useMemo<FormFiles | null>(() => (selectedTaskId && selectedProjectId ? {
+    upload: (fieldId, file, onProgress, signal) => uploadTaskFile(selectedProjectId, selectedTaskId, fieldId, file, onProgress, signal),
+    discard: (fileId) => discardFile(selectedProjectId, fileId),
+    read: (fileId) => fetchFileBlob(selectedProjectId, fileId),
+  } : null), [selectedTaskId, selectedProjectId]);
+  const fileAccess = useMemo(() => (selectedProjectId ? { projectId: selectedProjectId } : null), [selectedProjectId]);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [schema, setSchema] = useState<FormSchema | null>(null);
+  const [formPinned, setFormPinned] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [comment, setComment] = useState('');
@@ -82,15 +91,19 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
 
   const loadForm = useCallback(async (task: EngineUserTaskDTO) => {
     setSchema(null);
+    setFormPinned(false);
     setFormValues({});
     setFormErrors({});
     if (!task.formKey || !task.projectId) return;
     setFormLoading(true);
     try {
-      const resource = await ProjectAPI.resolveForm(task.projectId, task.formKey);
-      const parsed = JSON.parse(decodeBase64(resource.contentBase64)) as FormSchema;
-      if (parsed && Array.isArray(parsed.fields)) {
+      const form = await EngineAPI.getTaskForm(task.id, task.projectId);
+      const parsed = form?.schema;
+      if (!form) {
+        showToast('error', `Form '${task.formKey}' was not found in the project`);
+      } else if (parsed && Array.isArray(parsed.fields)) {
         setSchema(parsed);
+        setFormPinned(form.pinned);
         setFormValues(formValuesFromSchema(parsed, task.variables ?? {}));
       } else {
         showToast('error', `Form '${task.formKey}' is not a valid form schema`);
@@ -119,6 +132,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
       if (closes && selectedTask) setSelectedTask(null);
       await fetchTasks();
     } catch (err) {
+      // The engine checks the form too: show its refusal on the fields it names.
+      if (err instanceof FormRejectedError && schema) setFormErrors(violationMessages(schema, err.violations));
       showToast('error', err instanceof Error ? err.message : 'Action failed');
     } finally {
       setActionLoading(false);
@@ -144,13 +159,13 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
     if (!selectedTask?.projectId) return;
     let variables: Record<string, unknown> = {};
     if (schema) {
-      const errors = validateForm(schema, formValues);
+      const errors = validateForm(schema, formValues, { variables: selectedTask.variables ?? {} });
       setFormErrors(errors);
       if (Object.keys(errors).length > 0) {
         showToast('error', 'Please fix the highlighted form fields');
         return;
       }
-      variables = { ...formValues };
+      variables = submittedValues(schema, formValues, selectedTask.variables ?? {});
     }
     void runAction(() => EngineAPI.completeTask(selectedTask.id, variables, selectedTask.projectId!), 'Task completed');
   };
@@ -158,7 +173,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const handleDecision = (outcome: TaskOutcome) => {
     if (!selectedTask?.projectId) return;
     if (schema) {
-      const errors = validateForm(schema, formValues);
+      const errors = validateForm(schema, formValues, { variables: selectedTask.variables ?? {} });
       setFormErrors(errors);
       if (Object.keys(errors).length > 0) {
         showToast('error', 'Please fix the highlighted form fields');
@@ -168,7 +183,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
     const problem = decisionError(outcome, comment);
     setCommentError(problem);
     if (problem) return;
-    const decision = decisionPayload(outcome, comment, formValues, schema?.fields.map((field) => field.id) ?? []);
+    const submitted = schema ? submittedValues(schema, formValues, selectedTask.variables ?? {}) : {};
+    const decision = decisionPayload(outcome, comment, submitted, Object.keys(submitted));
     void runAction(() => EngineAPI.decideTask(selectedTask.id, decision, selectedTask.projectId!),
       `Decision recorded: ${humanize(outcome.name)}`);
   };
@@ -185,7 +201,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
   return (
     <div className="flex flex-1 overflow-hidden bg-[#1A1614] text-[#EAE3D9]">
       {/* Task list */}
-      <div className="w-80 border-r border-[#3A322E] flex flex-col bg-[#25201D] shrink-0">
+      {/* On a phone the list and the open task take turns; side by side from md up. */}
+      <div className={`w-full md:w-80 border-r border-[#3A322E] flex-col bg-[#25201D] shrink-0 ${selectedTask ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-[#3A322E]">
           <h2 className="text-lg font-semibold text-[#EAE3D9] flex items-center gap-2">
             <Inbox className="text-[#2A9D8F]" />
@@ -266,11 +283,15 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
       </div>
 
       {/* Task detail */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={`flex-1 min-w-0 flex-col overflow-hidden ${selectedTask ? 'flex' : 'hidden md:flex'}`}>
         {selectedTask ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="p-8 max-w-3xl mx-auto w-full space-y-5">
-              <div className="flex items-start justify-between gap-4 pb-5 border-b border-[#3A322E]">
+            <div className="p-4 md:p-8 max-w-3xl mx-auto w-full space-y-5">
+              <button type="button" onClick={() => setSelectedTask(null)}
+                className="md:hidden flex items-center gap-1 text-xs text-sand hover:text-linen">
+                <ChevronLeft className="w-3.5 h-3.5" /> All tasks
+              </button>
+              <div className="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-[#3A322E]">
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-2xl font-bold text-[#EAE3D9]">{selectedTask.name || 'Unnamed task'}</h1>
@@ -361,15 +382,23 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   <h3 className="text-sm font-semibold text-[#F4A261] mb-4 flex items-center gap-2">
                     <FileText className="w-4 h-4" />
                     Task Form
-                    <span className="ml-auto text-[10px] font-mono text-[#A89F91]">{selectedTask.formKey}</span>
+                    <span className="ml-auto text-[10px] font-mono text-[#A89F91]"
+                      title={formPinned ? 'Pinned to this version: the engine checks every value on completion'
+                        : 'The project\'s current form: deployed before forms were pinned, not checked by the engine'}>
+                      {selectedTask.formKey}{formPinned ? ' · checked by the engine' : ''}
+                    </span>
                   </h3>
-                  <FormRenderer
-                    schema={schema}
-                    values={formValues}
-                    onChange={setFormValues}
-                    errors={formErrors}
-                    readOnly={selectedTask.status !== 'CLAIMED'}
-                  />
+                  <FormFilesContext.Provider value={formFiles}>
+                    <FormRenderer
+                      schema={schema}
+                      values={formValues}
+                      onChange={setFormValues}
+                      errors={formErrors}
+                      onErrors={setFormErrors}
+                      variables={selectedTask.variables ?? {}}
+                      readOnly={selectedTask.status !== 'CLAIMED'}
+                    />
+                  </FormFilesContext.Provider>
                   {selectedTask.status === 'CLAIMED' && outcomes.length === 0 && (
                     <div className="mt-4 flex justify-end">
                       <button
@@ -447,9 +476,10 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
               {selectedTask.variables && Object.keys(selectedTask.variables).length > 0 && (
                 <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-5 shadow-warm-md">
                   <h3 className="text-sm font-semibold text-[#A89F91] mb-3">Process variables</h3>
-                  <pre className="text-[11px] font-mono text-[#EAE3D9] bg-[#1A1614] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
-                    {JSON.stringify(selectedTask.variables, null, 2)}
-                  </pre>
+                  <FileAccessContext.Provider value={fileAccess}>
+                    <JsonViewer data={selectedTask.variables} label="variables" compact defaultDepth={1}
+                      height={jsonHeight(selectedTask.variables, 1, 14)} />
+                  </FileAccessContext.Provider>
                 </div>
               )}
             </div>

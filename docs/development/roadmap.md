@@ -1,11 +1,12 @@
-# Abada roadmap — 1.0.0-rc.6 → 1.1.0
+# Abada roadmap — 1.0.0-rc.6 → 1.2.0
 
 This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `roadmap-to-1.1.0-rc.md`, `abada-studio-execution-plan.md` and
 `saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
-Last reviewed: 2026-09-27. Horizon: 12 weeks, 2026-09-28 → 2026-12-18.
+Last reviewed: 2026-11-12. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
+(1.1.0 on 2026-10-14); M5 is the Studio-experience iteration.
 
 ## Product definition
 
@@ -18,7 +19,7 @@ Abada is the governed runtime for AI-driven business processes:
 - Every AI decision leaves evidence an auditor can read later. Every
   AI-proposed change to a process is backed by replay evidence and approved by
   people under a review policy. Nothing auto-applies.
-- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure.
+- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure up to 1.1; from 1.2, self-hosted installations also require RustFS (self-hosted S3-compatible object storage) for process files. Managed cloud deployments will use GCP Cloud Storage or AWS S3 later.
 
 Target users: regulated and sovereignty-sensitive organisations (banks,
 telcos, public sector) that must run on their own infrastructure.
@@ -31,6 +32,7 @@ telcos, public sector) that must run on their own infrastructure.
 | M2 Real process shapes | 10-19 → 11-06 | 1.1.0-rc.1 | Rework loop (agent drafts → human rejects with comment → agent revises → approve) survives an engine kill mid-loop |
 | M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible; a triage agent delegates a sub-case to a governed child process, the parent resumes with its result and the lineage is visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
+| M5 Studio experience | 10-19 → 12-04 | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
 
 ## M1 — Truth and safety
 
@@ -94,6 +96,44 @@ Full specifications: [`m4-task-specs.md`](m4-task-specs.md). Released as `1.1.0`
 - [x] E18 Site: `/investors` page and a claims register checked by the build; demo-video script (the recording and the Astro migration are not done)
 - [x] E19 1.1.0 gate report, upgrade notes, pilot runbook: [release notes](../release-notes/1.1.0-release-notes.md), [upgrade section](../operations/upgrading.md), [pilot runbook](../operations/pilot-runbook.md), [gate report](1.1-gate-report-2026-10-14.md); published 2026-10-14
 
+## M5 — Studio experience
+
+Full specifications: [`m5-task-specs.md`](m5-task-specs.md).
+
+**Scope frozen on 2026-11-12.** 1.2.0 ships S1–S15 in full, on 2026-12-04;
+the public launch follows (r/java 2026-12-08, Show HN 2026-12-15). Nothing
+else enters 1.2.0. 1.2.x brings new features only, not items deferred from
+this list, so the cut line below no longer applies to M5: a slip moves the
+release date, not the scope.
+
+Pacing is a
+presentation concern: the engine keeps executing at full speed and the Studio
+plays the event stream back at a human pace, always showing how far behind it is.
+
+- [x] S1 Motion foundation and design tokens (shared durations/easings on `motion`, reduced-motion, no more repeated hex colours)
+- [x] S2 The path taken, at a glance: engine records the flow each token took; on the diagram the path is dense, numbered and drawn on top, decisions show the matched branch, unreached nodes fade (hover to explore, toggle to show all)
+- [x] S3 Paced playback of running instances and Dry Run (calm / brisk / instant, lag badge, *Jump to now*; incidents and terminal states never held back)
+- [x] S4 Incident on the node: highlighted failing node, Retry / Retry on another model in a card anchored to it, the retry shown step by step
+- [x] S5 Live audit trail open from the start of the instance, entries appearing one by one in sync with the canvas
+- [x] S6 Operations redesign (design mock first; KPIs, live list, canvas-centred instance view, split of the 900-line files)
+- [x] S7 Node properties and palette: every node kind fully editable in the properties panel (decision tables first: rules, reorder, rule-level engine validation), the palette drawn in the canvas shapes, the matched rule in Operations
+- [x] S8 Form designer: compact controls whose density adapts to the form size; a large editor panel; sections, columns and steps; richer field types; validation and `visible_when` enforced by the engine
+- [x] S9 File upload in human tasks: bytes in RustFS (self-hosted S3-compatible object storage, required for self-hosted installations, started by Compose and the installer), metadata in PostgreSQL (Flyway `V42`), references in variables, attach in the completion transaction, RBAC and audit
+- [x] S10 Administration audit trail: append-only `admin_audit_events` (Flyway `V43`) written in the mutation's transaction, denied attempts included, no secrets; filterable table with live updates and CSV export
+- [x] S11 Execution variables and JSON everywhere: same small font for keys and values, collapsible tree with search for many/nested variables, JSON view; one highlighted `JsonViewer` replaces every raw JSON block
+- [x] S12 NL authoring workspace: pinnable/collapsible NL bar; on submit a large dialog to refine the draft with a live diagram, YAML and diff, then apply to the Studio as one undoable change
+- [x] S13 Documentation: Studio version on every page, "New" sidebar badges driven by `since:` frontmatter, user-friendly release notes and a *What's new* entry
+- [x] S14 User guide, screenshots, 1.2.0 release notes and gate report
+- [x] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
+
+## M6 — 1.2.x (next release, after 1.2.0 on 2026-12-04)
+
+New features only (see the M5 scope freeze). Full specifications:
+[`m6-task-specs.md`](m6-task-specs.md). Planned on 2026-11-12; dates are set
+when 1.2.0 ships.
+
+- [ ] N1 Office and text files as agent input: S15 extended beyond images and PDF. Text formats (CSV, TXT, JSON, Markdown) sent as text; Excel converted to structured text per sheet; Word converted to PDF or text; the conversion runs on the installation's own infrastructure, never at the model provider; the evidence keeps the sha256 of the original file and of the converted content; typed errors for an unsupported format or a conversion over its limits
+
 ## Parallel track — design partners
 
 | By end of | Goal |
@@ -113,10 +153,11 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 | M2 | E6 polish | E2, E3 |
 | M3 | E13, E12 SSE (keep polling), then agent-proposed delegation in E20 (keep plain call-process) | E9, E10 |
 | M4 | E21, E17, E18 Astro migration | E14, E15 |
+| M5 | Nothing: scope frozen 2026-11-12, every task ships in 1.2.0 | S1–S15 |
 
 ## Deferred (1.2 or later)
 
-TypeScript and Python worker SDKs; Abada MCP
+GCP Cloud Storage and AWS S3 object-store backends for managed cloud deployments; TypeScript and Python worker SDKs; Abada MCP
 server; SaaS track (multi-tenancy, billing); BPMN coverage beyond import;
 `tenda/` and `orun/` (archive); identity-administration UI beyond the IdP;
 infrastructure certification (Track B of the former 1.1 roadmap) — kept as a

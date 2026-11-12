@@ -47,12 +47,14 @@ public class InsightProposalService {
     private final InsightProposalReviewRepository reviews;
     private final ActivityHistoryService history;
     private final com.abada.engine.core.replay.ReplayService replays;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
 
     public InsightProposalService(InsightProposalRepository proposals,
             ProcessDefinitionRepository definitions, InsightProposalGenerator generator,
             AbadaEngine engine, InsightApprovalPolicyRepository policies,
             InsightProposalReviewRepository reviews, ActivityHistoryService history,
-            com.abada.engine.core.replay.ReplayService replays) {
+            com.abada.engine.core.replay.ReplayService replays, com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.replays = replays;
         this.proposals = proposals;
         this.definitions = definitions;
@@ -178,6 +180,10 @@ public class InsightProposalService {
                 Map.of("proposalId", proposalId, "actor", actor, "decision", decision.name(),
                         "status", proposal.getStatus().name(), "targetVersion", proposal.getTargetVersion(),
                         "adoptedVersion", proposal.getAdoptedVersion() == null ? -1 : proposal.getAdoptedVersion()));
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.PROPOSAL_REVIEW,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROPOSAL, Long.toString(proposalId), projectId,
+                com.abada.engine.audit.AdminAuditDetails.create().put("process", proposal.getDefinitionKey())
+                        .put("decision", decision).put("status", proposal.getStatus()));
         return proposal;
     }
 
@@ -242,6 +248,12 @@ public class InsightProposalService {
         proposal.setStatus(InsightProposalEntity.Status.ADOPTED);
         proposal.setAdoptedDeploymentId(deployed.getDeploymentId());
         proposal.setAdoptedVersion(deployed.getVersion());
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.PROPOSAL_ADOPT,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROPOSAL, String.valueOf(proposal.getId()),
+                proposal.getProjectId(), com.abada.engine.audit.AdminAuditDetails.create()
+                        .put("process", deployed.getProcessKey())
+                        .change("version", latest.getVersion(), deployed.getVersion())
+                        .put("deploymentId", deployed.getDeploymentId()));
     }
 
     public static class InsightNotFoundException extends RuntimeException {

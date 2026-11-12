@@ -55,3 +55,20 @@ export function callProcessProblem(config: CallProcessConfig): string | null {
   }
   return null;
 }
+
+/** The first problem the engine would report for a for-each's own fields (E21), or null. */
+export function forEachProblem(config: CallProcessConfig): string | null {
+  const loop = config.forEach;
+  if (!loop) return null;
+  if (!loop.items?.trim()) return 'Give the expression that evaluates to the list.';
+  if (!VARIABLE.test(loop.itemInput ?? '')) return 'Name the child variable that receives each item.';
+  if (loop.itemInput in (config.inputs ?? {})) return `"${loop.itemInput}" receives the item; it cannot also be an input.`;
+  if (!Number.isInteger(loop.maxItems) || loop.maxItems < 1 || loop.maxItems > 1000) {
+    return 'Max items is a whole number from 1 to 1000.';
+  }
+  if (loop.maxParallel !== undefined && (!Number.isInteger(loop.maxParallel) || loop.maxParallel < 1 || loop.maxParallel > 50)) {
+    return 'Max parallel is a whole number from 1 to 50.';
+  }
+  if (!VARIABLE.test(loop.results ?? '')) return 'Name the variable that receives the list of results.';
+  return null;
+}

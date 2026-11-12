@@ -23,7 +23,10 @@ export const CanvasMarkers: React.FC<{ prefix: string }> = ({ prefix }) => (
           markerUnits="userSpaceOnUse"
           orient="auto"
         >
-          <path d="M 0 0 L 10 4 L 0 8 z" fill={EDGE_COLORS[variant]} />
+          {variant === 'unreached'
+            // Not reached: a small open arrowhead, so the faded layer reads apart from the path without colour.
+            ? <path d="M 3 1.5 L 9 4 L 3 6.5" fill="none" stroke={EDGE_COLORS[variant]} strokeWidth="1.2" strokeLinejoin="round" />
+            : <path d="M 0 0 L 10 4 L 0 8 z" fill={EDGE_COLORS[variant]} />}
         </marker>
       ))}
     </defs>

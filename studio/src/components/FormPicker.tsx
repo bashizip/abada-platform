@@ -2,23 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FileJson, Loader2, Plus } from 'lucide-react';
 import { ProjectAPI, ProjectFormDTO } from '@/api/projects';
 import { FormEditor } from '@/features/designer/FormEditor';
+import { emptyFormSchema, formResourceOf } from '@/lib/forms/formResource';
+import { FormQuickEdit } from '@/components/FormQuickEdit';
 import { FormSchema } from '@/features/inbox/formSchema';
 import { useToast } from '@/components/ToastContext';
 
 const slugOf = (name: string): string => name.replace(/\.json$/i, '');
-
-function slugify(value: string): string {
-  const slug = value.toLowerCase().trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
-  return slug || 'new-form';
-}
-
-function b64of(json: string): string {
-  const bytes = new TextEncoder().encode(json);
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)));
-}
 
 interface FormPickerProps {
   projectId?: string;
@@ -30,7 +19,8 @@ interface FormPickerProps {
 /**
  * Picks the task form referenced by a human node's formKey. Lists the
  * project's FORM resources by bare slug, allows a custom key, and can create a
- * new form (FormEditor) and link it in place.
+ * new form (FormEditor) and link it in place. A linked form can be tweaked
+ * inline (FormQuickEdit) or opened in the full editor.
  */
 export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChange }) => {
   const { showToast } = useToast();
@@ -92,10 +82,10 @@ export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChan
     }
     setCreating(true);
     try {
-      const slug = slugify(schema.title || 'new-form');
-      const json = JSON.stringify(schema, null, 2);
-      await ProjectAPI.createResource(projectId, `${slug}.json`, 'FORM', 'application/json',
-        b64of(json), formsFolderId);
+      const { name, contentBase64 } = formResourceOf(schema);
+      const slug = slugOf(name);
+      await ProjectAPI.createResource(projectId, name, 'FORM', 'application/json',
+        contentBase64, formsFolderId);
       onChange(slug);
       setCustomMode(false);
       setShowCreate(false);
@@ -112,11 +102,11 @@ export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChan
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <div className="relative flex-1 min-w-0">
-          <FileJson className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#2A9D8F] pointer-events-none" />
+          <FileJson className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-mineral-teal pointer-events-none" />
           <select
             value={selectValue}
             onChange={(e) => handleSelect(e.target.value)}
-            className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl pl-8 pr-3 py-2 text-xs text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F] disabled:opacity-60"
+            className="w-full bg-charcoal border border-hairline rounded-xl pl-8 pr-3 py-2 text-xs text-linen focus:outline-none focus:border-mineral-teal disabled:opacity-60"
             disabled={loading || !projectId}
           >
             <option value="">No form</option>
@@ -129,14 +119,14 @@ export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChan
             <option value="__custom__">Custom key…</option>
           </select>
           {loading && (
-            <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A89F91] animate-spin" />
+            <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-sand animate-spin" />
           )}
         </div>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
           disabled={!projectId}
-          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-2 rounded-lg border border-[#2A9D8F]/40 bg-[#2A9D8F]/10 text-[#2A9D8F] hover:bg-[#2A9D8F]/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-2 rounded-lg border border-mineral-teal/40 bg-mineral-teal/10 text-mineral-teal hover:bg-mineral-teal/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           title="Create a new form and link it to this task"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -150,28 +140,27 @@ export const FormPicker: React.FC<FormPickerProps> = ({ projectId, value, onChan
           value={value || ''}
           onChange={(e) => onChange(e.target.value || undefined)}
           placeholder="e.g. loan-approval"
-          className="w-full bg-[#1A1614] border border-[#3A322E] rounded-xl px-3 py-2 text-xs font-mono text-[#EAE3D9] focus:outline-none focus:border-[#2A9D8F]"
+          className="w-full bg-charcoal border border-hairline rounded-xl px-3 py-2 text-xs font-mono text-linen focus:outline-none focus:border-mineral-teal"
         />
       )}
 
       {value && !known && (
-        <p className="flex items-center gap-1 text-[10px] text-[#E76F51]">
+        <p className="flex items-center gap-1 text-[10px] text-desert-rose">
           <AlertTriangle className="w-3 h-3" />
           No project form matches this key.
         </p>
       )}
 
+      {value && known && projectId && <FormQuickEdit key={value} projectId={projectId} formKey={value} />}
+
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-7xl h-[90vh]">
-            <FormEditor
-              initialSchema={{ title: 'New Form', fields: [] }}
-              saving={creating}
-              onClose={() => setShowCreate(false)}
-              onSave={(schema) => void handleCreate(schema)}
-            />
-          </div>
-        </div>
+        <FormEditor
+          initialSchema={emptyFormSchema()}
+          location="new form in forms/"
+          saving={creating}
+          onClose={() => setShowCreate(false)}
+          onSave={(schema) => void handleCreate(schema)}
+        />
       )}
     </div>
   );

@@ -168,6 +168,23 @@ export interface ActivityInstanceDTO {
   executionId: string;
 }
 
+/** The sequence flow a token took, recorded by the engine in a FLOW_TAKEN history event (1.2+). */
+export interface FlowTakenDTO {
+  /** Null only for a loop's on_exhausted route, which has no sequence flow. */
+  id?: string | null;
+  from: string;
+  to: string;
+  tokenId?: string;
+  /** The pass the token started at `to` when it is a loop step. */
+  loopIteration?: number | null;
+  /** The gateway rule that matched. */
+  condition?: string;
+  /** The gateway's else (default) branch was taken. */
+  else?: boolean;
+  /** The route that sent the token: OUTCOME, ROUTE, ERROR, TIMEOUT, LOW_CONFIDENCE, INVALID_OUTPUT, LOOP_EXHAUSTED. */
+  route?: { kind: string; code?: string };
+}
+
 export interface ActivityHistoryDTO {
   id: string;
   processInstanceId: string;
@@ -178,12 +195,18 @@ export interface ActivityHistoryDTO {
   occurredAt: string;
   traceId?: string;
   details: Record<string, unknown>;
+  /** For FLOW_TAKEN events: the flow taken (also in `details.flow`). */
+  flow?: FlowTakenDTO | null;
 }
+
+/** Upper bound of history pages read for one instance (100 events each). */
+const HISTORY_MAX_PAGES = 50;
 
 import { config } from '@/config/runtime';
 import { keycloak } from '@/auth/keycloakClient';
 import { getUserFromToken } from '@/auth/keycloakClient';
 import { apiError, authenticatedFetch } from '@/api/authenticatedFetch';
+import type { FormSchema, FormViolation } from '@/features/inbox/formSchema';
 
 export interface ProcessDefinitionDTO {
   projectId?: string;
@@ -288,6 +311,31 @@ export interface WorkerHealthDTO {
   lastErrorMessage?: string | null;
   consecutiveFailures: number;
   lastWorkerId?: string | null;
+}
+
+/** A task's form as the engine serves it: `pinned` is false for the project's current, unenforced form. */
+export interface TaskFormDTO {
+  formKey: string;
+  pinned: boolean;
+  revision?: number;
+  schema: FormSchema;
+}
+
+/** A completion the task's pinned form refused (422 FORM_INVALID); nothing was committed. */
+export class FormRejectedError extends Error {
+  constructor(message: string, readonly violations: FormViolation[]) {
+    super(message);
+    this.name = 'FormRejectedError';
+  }
+}
+
+async function taskCommandError(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null) as
+    { message?: string; code?: string; details?: { violations?: FormViolation[] } } | null;
+  if (res.status === 422 && body?.code === 'FORM_INVALID' && Array.isArray(body.details?.violations)) {
+    return new FormRejectedError('The engine refused some form values; fix the highlighted fields', body.details.violations);
+  }
+  return new Error(body?.message || fallback);
 }
 
 export class EngineAPI {
@@ -486,9 +534,11 @@ export class EngineAPI {
     return res.json();
   }
 
-  static async getIncidents(projectId: string, open = true): Promise<IncidentDTO[]> {
+  /** A project's incidents, newest first; `processInstanceId` narrows them to one instance. */
+  static async getIncidents(projectId: string, open = true, processInstanceId?: string): Promise<IncidentDTO[]> {
+    const instance = processInstanceId ? `&processInstanceId=${encodeURIComponent(processInstanceId)}` : '';
     const res = await authenticatedFetch(
-      `${this.BASE_URL}/projects/${projectId}/incidents?open=${open}&size=100`,
+      `${this.BASE_URL}/projects/${projectId}/incidents?open=${open}&size=100${instance}`,
       { headers: this.getHeaders() },
     );
     if (!res.ok) throw await apiError(res);
@@ -586,13 +636,26 @@ export class EngineAPI {
     return tree.childActivityInstances || [];
   }
 
+  /**
+   * The instance's whole history, oldest first: every page is read (up to
+   * HISTORY_MAX_PAGES), since the path taken is rebuilt from all of it.
+   */
   static async getInstanceHistory(instanceId: string, projectId: string): Promise<ActivityHistoryDTO[]> {
-    const res = await authenticatedFetch(
-      `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/history?size=100`,
-      { headers: this.getHeaders() }
-    );
-    if (!res.ok) throw new Error(`Failed to fetch instance history: ${res.statusText}`);
-    return res.json();
+    const page = async (index: number) => {
+      const res = await authenticatedFetch(
+        `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/history?size=100&page=${index}`,
+        { headers: this.getHeaders() }
+      );
+      if (!res.ok) throw new Error(`Failed to fetch instance history: ${res.statusText}`);
+      return res;
+    };
+    const first = await page(0);
+    const events = await first.json() as ActivityHistoryDTO[];
+    const pages = Math.min(Number(first.headers?.get?.('X-Total-Pages')) || 1, HISTORY_MAX_PAGES);
+    if (pages <= 1) return events;
+    const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, index) =>
+      page(index + 1).then((res) => res.json() as Promise<ActivityHistoryDTO[]>)));
+    return [...events, ...rest.flat()];
   }
 
   static async getDefinitionForInstance(
@@ -641,12 +704,38 @@ export class EngineAPI {
     return res.json();
   }
 
+  /**
+   * One page of the project tasks the caller may see, with the engine's total
+   * (the engine never lists tasks outside the caller's users and groups).
+   */
+  static async getTaskPage(projectId: string, status: string, size = 100): Promise<{ items: EngineUserTaskDTO[]; total: number }> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks?status=${encodeURIComponent(status)}&page=0&size=${size}`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.statusText}`);
+    const items = await res.json() as EngineUserTaskDTO[];
+    const total = Number(res.headers.get('X-Total-Count'));
+    return { items, total: Number.isFinite(total) && res.headers.has('X-Total-Count') ? total : items.length };
+  }
+
   static async getTaskDetail(taskId: string, projectId: string): Promise<EngineUserTaskDTO> {
     const res = await authenticatedFetch(
       `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}`,
       { headers: this.getHeaders() },
     );
     if (!res.ok) throw new Error(`Failed to fetch task: ${res.statusText}`);
+    return res.json();
+  }
+
+  /** The form the engine enforces for this task (pinned at deploy), or the project's current one; null when none. */
+  static async getTaskForm(taskId: string, projectId: string): Promise<TaskFormDTO | null> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/form`,
+      { headers: this.getHeaders() },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Failed to load the task form: ${res.statusText}`);
     return res.json();
   }
 
@@ -688,10 +777,7 @@ export class EngineAPI {
       headers: this.getHeaders(),
       body: JSON.stringify(variables)
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || `Failed to complete task: ${res.statusText}`);
-    }
+    if (!res.ok) throw await taskCommandError(res, `Failed to complete task: ${res.statusText}`);
     return res.json();
   }
 
@@ -711,10 +797,7 @@ export class EngineAPI {
       headers: this.getHeaders(),
       body: JSON.stringify(decision)
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || `Failed to submit the decision: ${res.statusText}`);
-    }
+    if (!res.ok) throw await taskCommandError(res, `Failed to submit the decision: ${res.statusText}`);
     return res.json();
   }
 

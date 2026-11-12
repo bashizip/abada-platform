@@ -78,7 +78,7 @@ fi
 # edits the domain and ACME email.
 SERVER_SECRETS=(POSTGRES_PASSWORD KEYCLOAK_DB_PASSWORD KEYCLOAK_ADMIN_PASSWORD
   ABADA_KEYCLOAK_ADMIN_CLIENT_SECRET ABADA_AGENT_OIDC_CLIENT_SECRET
-  ABADA_OPERATOR_PASSWORD ABADA_REVIEWER_PASSWORD)
+  ABADA_OPERATOR_PASSWORD ABADA_REVIEWER_PASSWORD ABADA_FILES_ACCESS_KEY ABADA_FILES_SECRET_KEY)
 
 BASE_COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/compose.yaml" -f "$ROOT_DIR/compose.$MODE.yaml")
 if [[ "$TELEMETRY" == "true" ]]; then
@@ -117,6 +117,15 @@ validate_production_values() {
   [[ ${#postgres_password} -ge 16 ]] || { echo "Error: POSTGRES_PASSWORD must contain at least 16 characters" >&2; exit 65; }
   [[ "$(env_value ABADA_ENCRYPTION_KEY)" =~ ^[A-Za-z0-9+/]{43}=$ ]] || {
     echo "Error: ABADA_ENCRYPTION_KEY must be a base64-encoded 32-byte key (openssl rand -base64 32)" >&2; exit 65;
+  }
+  local files_access files_secret
+  files_access="$(env_value ABADA_FILES_ACCESS_KEY)"
+  files_secret="$(env_value ABADA_FILES_SECRET_KEY)"
+  [[ ${#files_access} -ge 16 && ${#files_secret} -ge 16 ]] || {
+    echo "Error: ABADA_FILES_ACCESS_KEY and ABADA_FILES_SECRET_KEY must each contain at least 16 characters (openssl rand -hex 24)" >&2; exit 65;
+  }
+  [[ "$(env_value ABADA_FILES_SSE_MASTER_KEY)" =~ ^[A-Za-z0-9+/]{43}=$ ]] || {
+    echo "Error: ABADA_FILES_SSE_MASTER_KEY must be a base64-encoded 32-byte key (openssl rand -base64 32)" >&2; exit 65;
   }
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ && "$version" != "latest" ]] || {
     echo "Error: ABADA_VERSION must be an exact immutable semantic version" >&2; exit 65;
@@ -233,6 +242,11 @@ generate_server_secrets() {
   if [[ -z "$(env_value ABADA_ENCRYPTION_KEY)" ]]; then
     set_env_value ABADA_ENCRYPTION_KEY "$(generate_encryption_key)"
     generated+=(ABADA_ENCRYPTION_KEY)
+  fi
+  # RustFS server-side encryption key for process files; must stay stable.
+  if [[ -z "$(env_value ABADA_FILES_SSE_MASTER_KEY)" ]]; then
+    set_env_value ABADA_FILES_SSE_MASTER_KEY "$(generate_encryption_key)"
+    generated+=(ABADA_FILES_SSE_MASTER_KEY)
   fi
   if [[ ${#generated[@]} -gt 0 ]]; then
     echo "Generated ${generated[*]} in $ENV_FILE."

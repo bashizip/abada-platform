@@ -59,7 +59,7 @@ answer is allowed to change, who approves it, or what the auditor sees afterward
 
 | Audience | Hook | Where they are |
 | --- | --- | --- |
-| Java/Spring devs, Camunda 7 / Flowable users | A self-hosted, PostgreSQL-only engine that imports your Camunda 7 BPMN and adds governed AI | r/java, r/SpringBoot, JUGs, Baeldung/Java Weekly, Devoxx |
+| Java/Spring devs, Camunda 7 / Flowable users | A self-hosted engine on PostgreSQL (and RustFS for task files from 1.2) that imports your Camunda 7 BPMN and adds governed AI | r/java, r/SpringBoot, JUGs, Baeldung/Java Weekly, Devoxx |
 | AI / agent engineers | Guardrails that live in the engine, not the prompt — and agents that improve only through replayed, approved, reversible changes | r/LocalLLaMA, r/AI_Agents, AI Engineer meetups, HN |
 | Platform / DevOps, self-hosters | One command, Docker only, your infra, no licence server | r/selfhosted, selfh.st, awesome-selfhosted |
 | Architects in regulated industries | Audit trail of every model call, human approval, sovereignty | LinkedIn, banking/insurance tech meetups |
@@ -77,7 +77,7 @@ answer is allowed to change, who approves it, or what the auditor sees afterward
 > let a model answer write directly to a system of record. That is fine for a demo and
 > unacceptable for refunds, KYC or claims.
 >
-> Abada is a process engine (Java 21, Spring Boot, PostgreSQL only) where:
+> Abada is a process engine (Java 21, Spring Boot, PostgreSQL and RustFS, both self-hosted) where:
 >
 > - the model call runs outside the database transaction, as durable external work;
 > - the engine — not the model, the worker or the UI — validates the answer against a

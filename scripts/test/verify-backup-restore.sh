@@ -25,4 +25,23 @@ RESTORED_DEFINITIONS="$("${COMPOSE[@]}" exec -T postgres psql -U abada -d "$REST
 [[ "$SOURCE_DEFINITIONS" == "$RESTORED_DEFINITIONS" ]] || { echo "Error: process definition count differs after restore" >&2; exit 1; }
 
 "${COMPOSE[@]}" exec -T postgres dropdb -U abada "$RESTORE_DB"
+
+# Process files (1.2): RustFS keeps the bytes. Back up its volume after the
+# database dump, so every file row in the dump has its object in the archive;
+# objects newer than the dump are orphans the engine's sweep removes.
+"${COMPOSE[@]}" exec -T rustfs tar -C /data -cf - . >"$TMP_DIR/rustfs.tar"
+test -s "$TMP_DIR/rustfs.tar"
+mkdir -p "$TMP_DIR/rustfs"
+tar -xf "$TMP_DIR/rustfs.tar" -C "$TMP_DIR/rustfs"
+BUCKET="$("${COMPOSE[@]}" exec -T abada-engine printenv ABADA_FILES_BUCKET 2>/dev/null || echo abada-files)"
+BUCKET="${BUCKET//$'\r'/}"
+MISSING=0
+while IFS= read -r key; do
+  [[ -z "$key" ]] && continue
+  [[ -e "$TMP_DIR/rustfs/$BUCKET/$key" ]] || { echo "Missing object for a file row: $key" >&2; MISSING=$((MISSING + 1)); }
+done < <("${COMPOSE[@]}" exec -T postgres psql -U abada -d abada_engine -Atc \
+  "select object_key from process_files where state <> 'DELETING'")
+[[ "$MISSING" -eq 0 ]] || { echo "Error: $MISSING file rows have no object in the RustFS backup" >&2; exit 1; }
+FILES="$("${COMPOSE[@]}" exec -T postgres psql -U abada -d abada_engine -Atc "select count(*) from process_files where state <> 'DELETING'")"
+echo "RustFS volume archived: every one of $FILES file rows has its object"
 echo "Backup/restore verification passed"

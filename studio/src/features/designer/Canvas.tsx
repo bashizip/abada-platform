@@ -1,4 +1,4 @@
-import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -12,7 +12,9 @@ import {
   Node,
   BackgroundVariant,
   MiniMap,
+  NodeToolbar,
   Panel,
+  Position,
   ViewportPortal,
   useReactFlow,
 } from '@xyflow/react';
@@ -28,10 +30,12 @@ import {
   Redo2,
   Trash2,
   Undo2,
+  Sparkles,
   Unlock,
   Wand2,
   Workflow,
 } from 'lucide-react';
+import { NL_BAR_SHORTCUT_LABEL } from '@/lib/authoring/nlBarPrefs';
 import '@xyflow/react/dist/style.css';
 import { canvasNodeTypes, outcomeKindsBySource, toCanvasNode } from './nodes';
 import { AbadaEdge, type AbadaEdgeData } from './EdgeRenderer';
@@ -46,10 +50,19 @@ import type { LayoutMode } from '@/lib/layout/elkLayout';
 import { savePreferredLayout, hasSavedLayout } from '@/lib/run/layoutPrefs';
 import { playCue } from '@/lib/sound';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
-import { WorkflowNode, WorkflowEdge, EventSubtype, GatewaySubtype } from '@/types';
+import { WorkflowNode, WorkflowEdge } from '@/types';
+import { NODE_KIND_MIME, isNodeKind, kindSpec, type NodeKind } from './nodes/nodeCatalog';
+import { sizeOf } from '@/lib/layout/nodeGeometry';
 import { analyzeLoops } from '@/lib/apl/loopAnalysis';
 import type { Route } from '@/lib/apl/routes';
 import { ConnectMenu } from './ConnectMenu';
+import { palette } from '@/lib/tokens';
+import type { PathView } from '@/lib/run/instancePath';
+import { usePathArrivals } from './pathArrivals';
+import type { RetryPhase } from '@/lib/run/retryPhase';
+import { useReducedMotion } from '@/lib/motion';
+import { useFocusNode } from './useFocusNode';
+import { PathLegend } from './PathLegend';
 
 interface CanvasProps {
   nodes: WorkflowNode[];
@@ -68,9 +81,16 @@ interface CanvasProps {
   issueCounts?: Map<string, number>;
   /** Receives auto-laid-out nodes on editable canvases (read-only ones keep a local view). */
   onAutoLayout?: (nodes: WorkflowNode[]) => void;
-  onAddNode: (type: WorkflowNode['type'], subtype?: EventSubtype | GatewaySubtype) => void;
+  /** Adds a node of a palette kind: at `at` (flow coordinates) when dropped on the canvas. */
+  onAddNode: (kind: NodeKind, at?: { x: number; y: number }) => void;
   onOpenAplEditor: () => void;
   onFocusPrompt: () => void;
+  /** The nodes of a draft just applied from the AI workspace play their landing once. */
+  landing?: boolean;
+  /** The Diagram / APL YAML switch, drawn in the canvas toolbar row so the two never overlap. */
+  modeSwitch?: React.ReactNode;
+  /** Runs this layout once per new `seq` (an applied AI draft is tidied). */
+  layoutRequest?: { mode: LayoutMode; seq: number };
   onToast?: (message: string) => void;
   processKey?: string;
   isSimulating: boolean;
@@ -89,6 +109,27 @@ interface CanvasProps {
    * with the animated flow dash (no token dot), mirroring the dry run.
    */
   nextPathEdges?: string[];
+  /**
+   * Instance views: the path taken, where the instance is now and what it
+   * never reached. Draws the three path layers and the legend; the untaken
+   * part of the diagram fades unless "Show full diagram" is on.
+   */
+  path?: PathView;
+  /** Paced playback (M5 S3): each step the path adds draws its edge and pulses its node once. */
+  animateArrivals?: boolean;
+  /** Instance views: open incident id per node; a new id pulses the node once (M5 S4). */
+  incidentPulses?: Record<string, string>;
+  /** Instance views: phase of a retry in progress per node, shown at the playback pace (M5 S4). */
+  retryPhases?: Record<string, RetryPhase>;
+  /** Instance views: the node the audit-trail entry under the pointer is about (M5 S5). */
+  highlightNodeId?: string | null;
+  /**
+   * Brings a node into view. A new `key` pans (and zooms in if needed) to the
+   * node, unless the user moved the canvas in the last few seconds.
+   */
+  focus?: { nodeId: string; key: string } | null;
+  /** Content anchored to a node: it follows pan and zoom and stays readable (an incident card). */
+  nodeOverlay?: { nodeId: string; content: React.ReactNode } | null;
   readOnly?: boolean;
   /** Document undo/redo (editable canvases only). */
   onUndo?: () => void;
@@ -131,6 +172,9 @@ const CanvasInner: React.FC<CanvasProps> = ({
   onAddNode,
   onOpenAplEditor,
   onFocusPrompt,
+  landing = false,
+  modeSwitch,
+  layoutRequest,
   onToast,
   processKey,
   isSimulating,
@@ -140,6 +184,13 @@ const CanvasInner: React.FC<CanvasProps> = ({
   activePathEdges = [],
   activeTokenEdges = [],
   nextPathEdges = [],
+  path,
+  animateArrivals = false,
+  incidentPulses,
+  retryPhases,
+  highlightNodeId,
+  focus,
+  nodeOverlay,
   readOnly = false,
   onUndo,
   onRedo,
@@ -148,10 +199,28 @@ const CanvasInner: React.FC<CanvasProps> = ({
 }) => {
   const markerPrefix = `abada-canvas-${useId().replace(/:/g, '')}`;
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter, getNode, getZoom, screenToFlowPosition } = useReactFlow();
+  const reducedMotion = useReducedMotion();
   const [guides, setGuides] = useState<Alignment | null>(null);
   const [minimapChoice, setMinimapChoice] = useState<boolean | null>(null);
   const showMinimap = minimapChoice ?? rawNodes.length > MINIMAP_AUTO_NODES;
+
+  /** A palette entry dragged over the canvas can be dropped. */
+  const onPaletteDragOver = useCallback((event: React.DragEvent) => {
+    if (!event.dataTransfer.types.includes(NODE_KIND_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  /** Dropped: the node is centred on the drop point. */
+  const onPaletteDrop = useCallback((event: React.DragEvent) => {
+    const kind = event.dataTransfer.getData(NODE_KIND_MIME);
+    if (!isNodeKind(kind)) return;
+    event.preventDefault();
+    const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const { width, height } = sizeOf({ type: kindSpec(kind).type });
+    onAddNode(kind, { x: Math.round(point.x - width / 2), y: Math.round(point.y - height / 2) });
+  }, [onAddNode, screenToFlowPosition]);
 
   const layout = useDiagramLayout({
     nodes: rawNodes,
@@ -160,6 +229,18 @@ const CanvasInner: React.FC<CanvasProps> = ({
     onApplyPositions: readOnly ? undefined : onAutoLayout,
     onError: (message) => onToast?.(`Auto-layout failed: ${message}`),
   });
+
+  // A layout asked for from outside (an AI draft just applied is tidied once). A process still
+  // waiting for its first layout gets that one instead.
+  const handledLayoutRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!layoutRequest || handledLayoutRequest.current === layoutRequest.seq) return;
+    handledLayoutRequest.current = layoutRequest.seq;
+    if (layoutPending || readOnly || rawNodes.length === 0) return;
+    void layout.runLayout(layoutRequest.mode);
+    // Only a new request runs the layout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutRequest?.seq]);
 
   const view: CanvasView = useMemo(
     () => ({ direction: layout.direction, readOnly, layout: layout.layout }),
@@ -173,34 +254,64 @@ const CanvasInner: React.FC<CanvasProps> = ({
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const slots = useMemo(() => outcomeSlots(rawEdges), [rawEdges]);
   const lanes = useMemo(() => parallelLanes(rawEdges), [rawEdges]);
+  const [showFullDiagram, setShowFullDiagram] = useState(false);
+  const arrivals = usePathArrivals(path, animateArrivals);
 
   const reactFlowNodes: Node[] = useMemo(() =>
-    layout.displayNodes.map((node) => toCanvasNode(node, {
-      status: executionStatuses[node.id] || 'idle',
-      isActiveSim: activeSimulationNodeId === node.id,
-      isLiveCurrent: activeLiveNodeIds.includes(node.id),
-      outcomeKinds: outcomeKinds.get(node.id),
-      // A loop step shows its bound; a cycle into a step without a usable one is flagged.
-      loopState: loops.targets.has(node.id) ? loops.targets.get(node.id) ?? 'bounded'
-        : node.loop ? 'bounded' : undefined,
-      issueCount: issueCounts?.get(node.id),
-      selected: selectedNodeId === node.id,
-    })),
-  [layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
-    loops, issueCounts]);
+    layout.displayNodes.map((node) => {
+      const visits = path?.visits[node.id];
+      const now = path?.now[node.id];
+      const canvasNode = toCanvasNode(node, {
+        status: executionStatuses[node.id] || 'idle',
+        isActiveSim: activeSimulationNodeId === node.id,
+        // On an instance path only a running token glows; waiting and incidents have their own ring.
+        isLiveCurrent: activeLiveNodeIds.includes(node.id) && (!path || !now || now === 'running'),
+        outcomeKinds: outcomeKinds.get(node.id),
+        // A loop step shows its bound; a cycle into a step without a usable one is flagged.
+        // Instance views show what ran instead of authoring badges.
+        loopState: path ? undefined : loops.targets.has(node.id) ? loops.targets.get(node.id) ?? 'bounded'
+          : node.loop ? 'bounded' : undefined,
+        issueCount: path ? undefined : issueCounts?.get(node.id),
+        ...(path ? {
+          pathLayer: visits || now ? 'taken' : showFullDiagram ? undefined : 'unreached',
+          visitOrders: visits,
+          nowState: now,
+          join: path.joins[node.id],
+          childResults: path.children[node.id],
+          pathHint: nodePathHint(path, node.id),
+          arrivalSeq: arrivals.nodes.has(node.id) ? arrivals.seq : undefined,
+          incidentSeq: incidentPulses?.[node.id],
+          retryPhase: retryPhases?.[node.id],
+          trailHighlight: highlightNodeId === node.id,
+        } : {}),
+        selected: selectedNodeId === node.id,
+      });
+      // A draft just applied from the AI workspace lands once (M5 S12).
+      return landing ? { ...canvasNode, className: 'abada-land-node' } : canvasNode;
+    }),
+  [landing, layout.displayNodes, activeSimulationNodeId, activeLiveNodeIds, executionStatuses, selectedNodeId, outcomeKinds,
+    loops, issueCounts, path, showFullDiagram, arrivals, incidentPulses, retryPhases, highlightNodeId]);
 
   const reactFlowEdges: Edge<AbadaEdgeData>[] = useMemo(() =>
     rawEdges.map(edge => {
       const hasToken = activeTokenEdges.includes(edge.id);
       const isNext = nextPathEdges.includes(edge.id);
       const incident = !!selectedNodeId && (edge.source === selectedNodeId || edge.target === selectedNodeId);
+      const takenCount = path?.edgeCounts[edge.id];
+      const pathLayer = !path ? undefined : takenCount ? 'taken' as const
+        : showFullDiagram ? undefined : 'unreached' as const;
       return {
         id: edge.id,
         source: edge.source,
         target: edge.target,
         type: 'abadaEdge',
         selected: selectedEdgeId === edge.id,
+        // The path is drawn above every other edge.
+        zIndex: pathLayer === 'taken' ? 1 : 0,
         data: {
+          pathLayer,
+          takenCount,
+          arrivalSeq: arrivals.edges.has(edge.id) ? arrivals.seq : undefined,
           label: edge.label,
           kind: edgeKindOf(edge),
           outcomeSlot: slots.get(edge.id),
@@ -214,7 +325,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
           isDimmed: !readOnly && !!selectedNodeId && !incident,
         },
       };
-    }), [rawEdges, slots, lanes, selectedNodeId, selectedEdgeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges]);
+    }), [rawEdges, slots, lanes, selectedNodeId, selectedEdgeId, readOnly, isSimulating, activeSimulationNodeId, activePathEdges, activeTokenEdges, nextPathEdges, path, showFullDiagram, arrivals]);
 
   /**
    * A connection from a task asks what it means (next, error, timeout, an
@@ -301,6 +412,11 @@ const CanvasInner: React.FC<CanvasProps> = ({
 
   const focusCanvas = useCallback(() => wrapperRef.current?.focus({ preventScroll: true }), []);
 
+  /* Brings the focused node into view (an incident arriving), unless the user just moved the canvas. */
+  const onUserMove = useFocusNode(focus, {
+    ready: layout.ready, direction: layout.direction, reducedMotion, viewport: { getNode, getZoom, setCenter },
+  });
+
   const onNodesDelete = useCallback((deletedNodes: Node[]) => {
     if (readOnly) return;
     deletedNodes.forEach((node) => onDeleteNode(node.id));
@@ -325,7 +441,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
       tabIndex={-1}
       onKeyDown={onKeyDown}
       aria-label="Process diagram"
-      className="flex-1 h-full w-full bg-[#1A1614] relative outline-none"
+      className="flex-1 h-full w-full bg-charcoal relative outline-none"
     >
       <CanvasMarkers prefix={markerPrefix} />
       {pendingConnect && menuAt && (() => {
@@ -360,9 +476,12 @@ const CanvasInner: React.FC<CanvasProps> = ({
             onNodeDragStop={onNodeDragStop}
             onNodesDelete={onNodesDelete}
             onPaneClick={onPaneClick}
+            onDragOver={readOnly ? undefined : onPaletteDragOver}
+            onDrop={readOnly ? undefined : onPaletteDrop}
+            onMoveStart={(event) => { if (event) onUserMove(); }}
             connectionMode={ConnectionMode.Loose}
             connectionLineType={ConnectionLineType.SmoothStep}
-            connectionLineStyle={{ stroke: '#F4A261', strokeWidth: 2 }}
+            connectionLineStyle={{ stroke: palette.saffron, strokeWidth: 2 }}
             deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
@@ -386,19 +505,42 @@ const CanvasInner: React.FC<CanvasProps> = ({
                 nodeStrokeWidth={0}
                 nodeBorderRadius={4}
                 maskColor="rgba(26, 22, 20, 0.72)"
-                bgColor="#25201D"
-                style={{ border: '1px solid #3A322E', borderRadius: 12, overflow: 'hidden' }}
+                bgColor={palette.mocha}
+                style={{ border: `1px solid ${palette.hairline}`, borderRadius: 12, overflow: 'hidden' }}
                 ariaLabel="Diagram overview"
               />
             )}
-            {(rawNodes.length > 0 || canUndo || canRedo) && (
-              <LayoutToolbar
+            {((rawNodes.length > 0 || canUndo || canRedo) || modeSwitch) && (
+              <Panel position="top-left" className="flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2">
+              {(rawNodes.length > 0 || canUndo || canRedo) && <LayoutToolbar
                 mode={layout.mode}
                 busy={layout.busy}
                 onLayout={layout.runLayout}
                 showLayout={rawNodes.length > 0}
                 history={!readOnly && onUndo && onRedo ? { onUndo, onRedo, canUndo, canRedo } : undefined}
+                onDraft={readOnly ? undefined : onFocusPrompt}
+              />}
+              {modeSwitch}
+              </Panel>
+            )}
+            {path && (
+              <PathLegend
+                source={path.source}
+                showFullDiagram={showFullDiagram}
+                onToggleFullDiagram={() => setShowFullDiagram((value) => !value)}
+                raised={showMinimap && rawNodes.length > 0}
               />
+            )}
+            {nodeOverlay && (
+              <NodeToolbar
+                nodeId={nodeOverlay.nodeId}
+                isVisible
+                position={layout.direction === 'vertical' ? Position.Right : Position.Bottom}
+                offset={14}
+                className="nodrag nopan nowheel"
+              >
+                {nodeOverlay.content}
+              </NodeToolbar>
             )}
             <CanvasControls
               nodes={rawNodes}
@@ -416,30 +558,30 @@ const CanvasInner: React.FC<CanvasProps> = ({
 
       {rawNodes.length === 0 && !readOnly && (
         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-          <div className="pointer-events-auto w-[520px] max-w-[calc(100%-3rem)] rounded-2xl border border-[#3A322E] bg-[#25201D]/95 p-6 shadow-warm-lg text-center">
-            <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-[#F4A261]/10 border border-[#F4A261]/30 flex items-center justify-center">
-              <Workflow className="w-5 h-5 text-[#F4A261]" />
+          <div className="pointer-events-auto w-[520px] max-w-[calc(100%-3rem)] rounded-2xl border border-hairline bg-mocha/95 p-6 shadow-warm-lg text-center">
+            <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-saffron/10 border border-saffron/30 flex items-center justify-center">
+              <Workflow className="w-5 h-5 text-saffron" />
             </div>
-            <h2 className="text-sm font-semibold text-[#EAE3D9]">Start with an empty APL process</h2>
-            <p className="text-xs text-[#A89F91] mt-1 mb-5">Choose a visual node, paste canonical YAML, or describe the process in plain language.</p>
+            <h2 className="text-sm font-semibold text-linen">Start with an empty APL process</h2>
+            <p className="text-xs text-sand mt-1 mb-5">Choose a visual node, paste canonical YAML, or describe the process in plain language.</p>
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => onAddNode('event')}
-                className="rounded-xl border border-[#F4A261]/30 bg-[#F4A261]/10 p-3 text-left hover:border-[#F4A261] transition-colors">
-                <CirclePlay className="w-4 h-4 text-[#F4A261] mb-2" />
+              <button onClick={() => onAddNode('start')}
+                className="rounded-xl border border-saffron/30 bg-saffron/10 p-3 text-left hover:border-saffron transition-colors">
+                <CirclePlay className="w-4 h-4 text-saffron mb-2" />
                 <span className="block text-xs font-semibold">Start node</span>
-                <span className="block text-[10px] text-[#A89F91] mt-1">Build visually</span>
+                <span className="block text-[10px] text-sand mt-1">Build visually</span>
               </button>
               <button onClick={onOpenAplEditor}
-                className="rounded-xl border border-[#2A9D8F]/30 bg-[#2A9D8F]/10 p-3 text-left hover:border-[#2A9D8F] transition-colors">
-                <Code2 className="w-4 h-4 text-[#2A9D8F] mb-2" />
+                className="rounded-xl border border-mineral-teal/30 bg-mineral-teal/10 p-3 text-left hover:border-mineral-teal transition-colors">
+                <Code2 className="w-4 h-4 text-mineral-teal mb-2" />
                 <span className="block text-xs font-semibold">Paste APL</span>
-                <span className="block text-[10px] text-[#A89F91] mt-1">YAML editor</span>
+                <span className="block text-[10px] text-sand mt-1">YAML editor</span>
               </button>
               <button onClick={onFocusPrompt}
-                className="rounded-xl border border-[#9D4EDD]/30 bg-[#9D4EDD]/10 p-3 text-left hover:border-[#9D4EDD] transition-colors">
-                <Bot className="w-4 h-4 text-[#9D4EDD] mb-2" />
+                className="rounded-xl border border-amethyst/30 bg-amethyst/10 p-3 text-left hover:border-amethyst transition-colors">
+                <Bot className="w-4 h-4 text-amethyst mb-2" />
                 <span className="block text-xs font-semibold">Use prompt</span>
-                <span className="block text-[10px] text-[#A89F91] mt-1">Generate APL</span>
+                <span className="block text-[10px] text-sand mt-1">Generate APL</span>
               </button>
             </div>
           </div>
@@ -449,18 +591,33 @@ const CanvasInner: React.FC<CanvasProps> = ({
   );
 };
 
+/** What the path says about a node, for its tooltip. */
+function nodePathHint(path: PathView, nodeId: string): string | undefined {
+  const visits = path.visits[nodeId];
+  if (!visits) return path.now[nodeId] === 'incident' ? 'Incident — the instance stopped here' : path.notReached[nodeId];
+  const parts = [visits.length > 1 ? `Ran ${visits.length} times — steps ${visits.join(', ')}` : `Step ${visits[0]} of the path`];
+  const decided = path.decided[nodeId];
+  if (decided?.length) parts.push(`Took ${decided.join(' and ')}`);
+  const now = path.now[nodeId];
+  if (now === 'running') parts.push('Running now');
+  if (now === 'waiting') parts.push('Waiting for a person');
+  if (now === 'incident') parts.push('Incident — the instance stopped here');
+  if (now === 'ended') parts.push('Finished here');
+  return parts.join(' · ');
+}
+
 /** Guide lines (flow space) for the centre line a dragged node will snap to. */
 const AlignmentGuides: React.FC<{ guides: Alignment }> = ({ guides }) => (
   <ViewportPortal>
     {guides.guideX !== undefined && (
       <div
-        className="pointer-events-none absolute left-0 top-0 border-l border-dashed border-[#F4A261]/70"
+        className="pointer-events-none absolute left-0 top-0 border-l border-dashed border-saffron/70"
         style={{ transform: `translate(${guides.guideX}px, -10000px)`, height: 20000 }}
       />
     )}
     {guides.guideY !== undefined && (
       <div
-        className="pointer-events-none absolute left-0 top-0 border-t border-dashed border-[#F4A261]/70"
+        className="pointer-events-none absolute left-0 top-0 border-t border-dashed border-saffron/70"
         style={{ transform: `translate(-10000px, ${guides.guideY}px)`, width: 20000 }}
       />
     )}
@@ -487,28 +644,39 @@ const LayoutToolbar: React.FC<{
   onLayout: (mode: LayoutMode) => void;
   showLayout: boolean;
   history?: { onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean };
-}> = ({ mode, busy, onLayout, showLayout, history }) => (
-  <Panel position="top-left">
+  /** Opens the natural-language bar, whatever its display mode (M5 S12). */
+  onDraft?: () => void;
+}> = ({ mode, busy, onLayout, showLayout, history, onDraft }) => (
     <div
       role="group"
       aria-label="Edit history and auto layout"
-      className="flex items-center gap-0.5 rounded-xl border border-[#3A322E] bg-[#25201D]/95 p-1 shadow-warm-md"
+      className="flex items-center gap-0.5 rounded-xl border border-hairline bg-mocha/95 p-1 shadow-warm-md"
     >
       {history && (
         <>
           <button type="button" onClick={history.onUndo} disabled={!history.canUndo} title={UNDO_HINT} aria-label="Undo"
-            className="flex items-center rounded-lg px-1.5 py-1 text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#A89F91]">
+            className="flex items-center rounded-lg px-1.5 py-1 text-sand transition-colors hover:bg-mocha-hover hover:text-linen disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-sand">
             <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           <button type="button" onClick={history.onRedo} disabled={!history.canRedo} title={REDO_HINT} aria-label="Redo"
-            className="flex items-center rounded-lg px-1.5 py-1 text-[#A89F91] transition-colors hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#A89F91]">
+            className="flex items-center rounded-lg px-1.5 py-1 text-sand transition-colors hover:bg-mocha-hover hover:text-linen disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-sand">
             <Redo2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
-          {showLayout && <span className="mx-1 h-4 w-px bg-[#3A322E]" aria-hidden="true" />}
+          {showLayout && <span className="mx-1 h-4 w-px bg-hairline" aria-hidden="true" />}
+        </>
+      )}
+      {onDraft && (
+        <>
+          <button type="button" onClick={onDraft} title={`Draft with AI (${NL_BAR_SHORTCUT_LABEL})`}
+            aria-label={`Draft with AI (${NL_BAR_SHORTCUT_LABEL})`}
+            className="flex items-center rounded-lg px-1.5 py-1 text-amethyst transition-colors hover:bg-mocha-hover hover:text-amethyst-light">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          {showLayout && <span className="mx-1 h-4 w-px bg-hairline" aria-hidden="true" />}
         </>
       )}
       {showLayout && (
-      <span className="flex w-6 items-center justify-center text-[#A89F91]" aria-hidden="true">
+      <span className="flex w-6 items-center justify-center text-sand" aria-hidden="true">
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Workflow className="h-3.5 w-3.5" />}
       </span>
       )}
@@ -522,8 +690,8 @@ const LayoutToolbar: React.FC<{
           aria-pressed={mode === value}
           className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium transition-colors disabled:cursor-wait ${
             mode === value
-              ? 'bg-[#F4A261]/15 text-[#F4A261]'
-              : 'text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]'
+              ? 'bg-saffron/15 text-saffron'
+              : 'text-sand hover:bg-mocha-hover hover:text-linen'
           }`}
         >
           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -531,7 +699,6 @@ const LayoutToolbar: React.FC<{
         </button>
       ))}
     </div>
-  </Panel>
 );
 
 /**
@@ -570,7 +737,7 @@ const CanvasControls: React.FC<{
           aria-label="Toggle overview map"
           aria-pressed={showMinimap}
         >
-          <MapIcon className={`w-4 h-4 ${showMinimap ? 'text-[#F4A261]' : ''}`} />
+          <MapIcon className={`w-4 h-4 ${showMinimap ? 'text-saffron' : ''}`} />
         </ControlButton>
         {processKey && (
           <ControlButton
@@ -580,7 +747,7 @@ const CanvasControls: React.FC<{
               : 'Lock Layout — save current positions for running instances'}
             aria-label="Lock Layout"
           >
-            {locked ? <Lock className="w-4 h-4 text-[#2A9D8F]" /> : <Unlock className="w-4 h-4" />}
+            {locked ? <Lock className="w-4 h-4 text-mineral-teal" /> : <Unlock className="w-4 h-4" />}
           </ControlButton>
         )}
         {!readOnly && selectedNodeId && (
@@ -589,7 +756,7 @@ const CanvasControls: React.FC<{
             title="Delete selected node"
             aria-label="Delete selected node"
           >
-            <Trash2 className="w-4 h-4 text-[#E76F51]" />
+            <Trash2 className="w-4 h-4 text-desert-rose" />
           </ControlButton>
         )}
       </Controls>

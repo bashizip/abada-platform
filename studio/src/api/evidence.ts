@@ -29,6 +29,17 @@ export interface EvidencePolicy {
 }
 
 /** One journaled agent step as project members see it (no payloads). */
+/** A file a model call read (S15). */
+export interface AgentStepFile {
+  /** The name the agent node declares in `files`. */
+  name: string;
+  fileId: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  sha256: string;
+}
+
 export interface AgentStepEvidence {
   id: string;
   externalTaskId: string;
@@ -40,6 +51,8 @@ export interface AgentStepEvidence {
   policy?: string;
   state: string;
   model?: string;
+  /** The prompt version the worker reported for the step, when it reports one. */
+  promptVersion?: string;
   promptTokens?: number;
   completionTokens?: number;
   costUsd?: number;
@@ -53,10 +66,25 @@ export interface AgentStepEvidence {
   decidedAt?: string;
   /** The child process a DELEGATION step started. */
   childInstanceId?: string;
+  /**
+   * The files a MODEL_CALL step was given (S15), as the engine verified them: metadata
+   * only, kept whatever the payload policy. Absent when the call carried no file.
+   */
+  files?: AgentStepFile[] | null;
   errorType?: string;
 }
 
 /** The evidence copy of one step's payloads, as the evidence policy kept them. */
+/** What one decision-table application read, as the evidence policy kept it; no `inputs` under `none`. */
+export interface DecisionInputs {
+  evidenceId: string;
+  activityId: string;
+  decisionKey?: string | null;
+  payloadMode: 'none' | 'redacted' | 'full';
+  redacted: boolean;
+  inputs?: Record<string, unknown> | null;
+}
+
 export interface AgentStepPayloads {
   stepId: string;
   payloadMode: 'none' | 'redacted' | 'full';
@@ -150,6 +178,14 @@ export class EvidenceAPI {
   static async payloads(projectId: string, instanceId: string, stepId: string): Promise<AgentStepPayloads> {
     const res = await authenticatedFetch(`${config.apiUrl}/v1/projects/${projectId}/instances/`
       + `${encodeURIComponent(instanceId)}/agent-steps/${encodeURIComponent(stepId)}/payloads`);
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  /** Evidence readers only (403 otherwise; 410 once purged); every read is recorded in the instance history. */
+  static async decisionInputs(projectId: string, instanceId: string, evidenceId: string): Promise<DecisionInputs> {
+    const res = await authenticatedFetch(`${config.apiUrl}/v1/projects/${projectId}/instances/`
+      + `${encodeURIComponent(instanceId)}/decisions/${encodeURIComponent(evidenceId)}/inputs`);
     if (!res.ok) throw await apiError(res);
     return res.json();
   }

@@ -142,7 +142,7 @@ export default function InvestorsPage() {
                 <a href={LICENSE_URL} className="text-signal underline-offset-4 hover:underline">
                   GNU AGPL-3.0
                 </a>
-                ; the worker SDK is Apache-2.0. It runs on one PostgreSQL database, with no required cloud service; the running platform never contacts us, and the installer's one anonymous report can be switched off.
+                ; the worker SDK is Apache-2.0. It runs on PostgreSQL and RustFS, both self-hosted, with no required cloud service; the running platform never contacts us, and the installer's one anonymous report can be switched off.
               </>
             }
           />

@@ -219,10 +219,26 @@ html.login-pf,
   border-color: rgba(231, 111, 81, 0.6);
 }
 
-.card-pf input:-webkit-autofill {
+/*
+ * Browser autofill paints its own light background. An inset shadow covers
+ * it, and the focus ring must keep that shadow (a plain focus box-shadow
+ * would replace it and the light colour shows through); the long transition
+ * keeps Chrome from fading its colour back in.
+ */
+.card-pf input:-webkit-autofill,
+.card-pf input:-webkit-autofill:hover,
+.card-pf input:autofill {
   -webkit-text-fill-color: var(--abada-warm-linen);
-  -webkit-box-shadow: 0 0 0 1000px var(--abada-bg-charcoal) inset;
   caret-color: var(--abada-warm-linen);
+  -webkit-box-shadow: 0 0 0 1000px var(--abada-bg-charcoal) inset;
+  box-shadow: 0 0 0 1000px var(--abada-bg-charcoal) inset;
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
+.card-pf input:-webkit-autofill:focus,
+.card-pf input:autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--abada-bg-charcoal) inset, 0 0 0 3px rgba(157, 78, 221, 0.18);
+  box-shadow: 0 0 0 1000px var(--abada-bg-charcoal) inset, 0 0 0 3px rgba(157, 78, 221, 0.18);
 }
 
 .card-pf input[type="checkbox"],
@@ -246,7 +262,8 @@ html.login-pf,
   font-weight: 600;
   border-radius: 12px;
   padding: 10px 24px;
-  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out,
+    transform 150ms ease-out, box-shadow 150ms ease-out;
 }
 
 .card-pf .pf-c-button::after {
@@ -266,6 +283,17 @@ html.login-pf,
 .card-pf .btn-primary:hover,
 .card-pf .btn-primary:focus {
   background: var(--abada-amethyst-hover);
+}
+
+.card-pf .pf-c-button.pf-m-primary:hover,
+.card-pf .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px -6px rgba(157, 78, 221, 0.45);
+}
+
+.card-pf .pf-c-button.pf-m-primary:active,
+.card-pf .btn-primary:active {
+  transform: translateY(0);
 }
 
 .card-pf .pf-c-button.pf-m-primary:focus-visible,
@@ -455,5 +483,100 @@ html.login-pf,
     padding: 24px 20px 20px;
     border: 1px solid var(--abada-surface-mocha-border);
     box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* ---------- The four roles, under the card ---------- */
+
+.abada-pillars {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 16px;
+  max-width: 520px;
+  margin: 20px auto 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--abada-sand);
+}
+
+.abada-pillars li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.abada-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.abada-dot-agent { background: #B06EE6; }
+.abada-dot-rule { background: var(--abada-saffron); }
+.abada-dot-human { background: #34BDAE; }
+.abada-dot-record { background: #90A955; }
+
+/* ---------- Arrival: the same short rise as Studio (240 ms, standard easing) ---------- */
+
+@keyframes abadaRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes abadaGlow {
+  0% { box-shadow: 0 0 0 0 rgba(157, 78, 221, 0.55); }
+  100% { box-shadow: 0 0 12px rgba(157, 78, 221, 0.25); }
+}
+
+#kc-header-wrapper,
+.card-pf,
+.abada-pillars {
+  animation: abadaRise 240ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.card-pf { animation-delay: 80ms; }
+
+.abada-pillars { animation-delay: 160ms; }
+
+.abada-pillars li {
+  animation: abadaRise 240ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.abada-pillars li:nth-child(1) { animation-delay: 220ms; }
+.abada-pillars li:nth-child(2) { animation-delay: 280ms; }
+.abada-pillars li:nth-child(3) { animation-delay: 340ms; }
+.abada-pillars li:nth-child(4) { animation-delay: 400ms; }
+
+.abada-brand-mark {
+  animation: abadaGlow 700ms cubic-bezier(0.2, 0, 0, 1) 120ms both;
+}
+
+/* A thin warm edge on top of the card. */
+.card-pf {
+  position: relative;
+}
+
+.card-pf::before {
+  content: "";
+  position: absolute;
+  inset: 0 24px auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(157, 78, 221, 0.6), rgba(244, 162, 97, 0.5), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #kc-header-wrapper,
+  .card-pf,
+  .abada-pillars,
+  .abada-pillars li,
+  .abada-brand-mark {
+    animation: none;
+  }
+
+  .card-pf .pf-c-button.pf-m-primary:hover,
+  .card-pf .btn-primary:hover {
+    transform: none;
   }
 }

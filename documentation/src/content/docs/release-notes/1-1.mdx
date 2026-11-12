@@ -1,0 +1,23 @@
+---
+title: What's new in 1.1
+description: Real process shapes, agents that act under governance, and governed improvement.
+---
+
+1.1.0 shipped on 14 October 2026 (1.1.2 is the current patch). In short:
+
+- **Real process shapes.** Bounded loops, review decisions with a required
+  comment, error and timeout boundaries, service levels with escalation, and
+  fallback models when a provider is unavailable.
+- **Agents that act.** Tools from MCP servers with read, write and
+  approval-required policies; a person approves a risky call before it runs;
+  every model and tool call is journaled, so a crash never repeats a write;
+  cost per instance is visible.
+- **Governed delegation.** An agent can start a declared child process through
+  the engine, and the parent resumes with its result.
+- **Governed improvement.** Insight finds where an agent is overridden, proposes
+  a change, replays it on past cases, and nothing is adopted until reviewers
+  approve the replay diff; rollback is one click.
+
+The technical notes for each 1.1 version (upgrade steps, migrations and known
+limitations) are in
+[docs/release-notes](https://github.com/bashizip/abada-platform/tree/main/docs/release-notes).

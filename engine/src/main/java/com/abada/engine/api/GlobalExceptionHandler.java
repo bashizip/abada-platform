@@ -31,6 +31,19 @@ import org.slf4j.LoggerFactory;
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private final org.springframework.beans.factory.ObjectProvider<com.abada.engine.audit.AdminAuditRecorder> audit;
+
+    public GlobalExceptionHandler(
+            org.springframework.beans.factory.ObjectProvider<com.abada.engine.audit.AdminAuditRecorder> audit) {
+        this.audit = audit;
+    }
+
+    /** A refused administrative call leaves a DENIED event in the administration audit trail (S10). */
+    private void auditDenied(HttpServletRequest request, String reason) {
+        var recorder = audit.getIfAvailable();
+        if (recorder != null) recorder.deniedIfAdministrative(request, reason);
+    }
+
     @ExceptionHandler(BpmnValidationException.class)
     public ResponseEntity<ErrorResponse> handleBpmnValidation(
             BpmnValidationException ex, HttpServletRequest request) {
@@ -41,6 +54,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApiException(ApiException ex, HttpServletRequest request) {
+        if (ex.status() == HttpStatus.FORBIDDEN) auditDenied(request, ex.code().name());
         return ResponseEntity.status(ex.status()).body(ApiErrors.response(ex.status(), ex.code(), ex.getMessage(),
                 request.getRequestURI(), ex.details()));
     }
@@ -61,6 +75,24 @@ public class GlobalExceptionHandler {
                 request));
     }
 
+    /** The object store did not answer; the message names the operation, never a credential (S9). */
+    @ExceptionHandler(com.abada.engine.files.ObjectStoreUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleObjectStoreUnavailable(
+            com.abada.engine.files.ObjectStoreUnavailableException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiErrors.response(
+                HttpStatus.SERVICE_UNAVAILABLE, ApiErrorCode.OBJECT_STORE_UNAVAILABLE,
+                "File storage is unavailable; try again later", request.getRequestURI(), Map.of()));
+    }
+
+    /** The submitted values break the task's pinned form; nothing was committed. Values are never echoed. */
+    @ExceptionHandler(com.abada.engine.forms.FormSubmission.RejectedException.class)
+    public ResponseEntity<ErrorResponse> handleFormRejected(com.abada.engine.forms.FormSubmission.RejectedException ex,
+            HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(ApiErrors.response(
+                HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.FORM_INVALID, ex.getMessage(), request.getRequestURI(),
+                Map.of("form", ex.formKey(), "violations", ex.violations())));
+    }
+
     @ExceptionHandler(ProcessEngineException.class)
     public ResponseEntity<ErrorResponse> handleProcessEngineException(ProcessEngineException ex,
             HttpServletRequest request) {
@@ -75,6 +107,7 @@ public class GlobalExceptionHandler {
                     ApiErrorCode.WORKER_LOCK_EXPIRED, message, request));
         }
         if (normalizedMessage.contains("not authorized") || normalizedMessage.contains("does not own")) {
+            auditDenied(request, ApiErrorCode.ACCESS_DENIED.name());
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiErrors.response(HttpStatus.FORBIDDEN,
                     ApiErrorCode.ACCESS_DENIED, message, request));
         }

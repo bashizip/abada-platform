@@ -21,7 +21,7 @@ interface Draft {
   environmentKeyHint: string | null;
 }
 
-const inputClass = 'mt-1 w-full rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 text-xs text-[#EAE3D9] placeholder-[#5A524A] focus:border-[#2A9D8F] focus:outline-none focus:ring-1 focus:ring-[#2A9D8F]/30';
+const inputClass = 'mt-1 w-full rounded-lg border border-hairline bg-charcoal-deep px-2.5 py-2 text-xs text-linen placeholder-stone focus:border-mineral-teal focus:outline-none focus:ring-1 focus:ring-mineral-teal/30';
 
 const draftFrom = (provider: AiProvider): Draft => ({
   id: provider.id,
@@ -52,13 +52,13 @@ const draftForPreset = (type: string, existingIds: string[]): Draft => {
 const KeyChip: React.FC<{ provider: AiProvider }> = ({ provider }) => {
   switch (keyStatusOf(provider)) {
     case 'studio':
-      return <span className="rounded-full border border-[#90A955]/40 bg-[#90A955]/10 px-2 py-0.5 text-[10px] text-[#90A955]">Key saved in Studio {provider.apiKeyHint}</span>;
+      return <span className="rounded-full border border-sage-green/40 bg-sage-green/10 px-2 py-0.5 text-[10px] text-sage-green">Key saved in Studio {provider.apiKeyHint}</span>;
     case 'environment':
-      return <span className="rounded-full border border-[#2A9D8F]/40 bg-[#2A9D8F]/10 px-2 py-0.5 text-[10px] text-[#2A9D8F]" title="The key is set in the server's environment file; saving a key here overrides it">Key from server {provider.environmentKeyHint}</span>;
+      return <span className="rounded-full border border-mineral-teal/40 bg-mineral-teal/10 px-2 py-0.5 text-[10px] text-mineral-teal" title="The key is set in the server's environment file; saving a key here overrides it">Key from server {provider.environmentKeyHint}</span>;
     case 'disabled':
-      return <span className="rounded-full border border-[#3A322E] px-2 py-0.5 text-[10px] text-[#A89F91]">Disabled</span>;
+      return <span className="rounded-full border border-hairline px-2 py-0.5 text-[10px] text-sand">Disabled</span>;
     default:
-      return <span className="rounded-full border border-[#E76F51]/40 bg-[#E76F51]/10 px-2 py-0.5 text-[10px] text-[#E76F51]">No key — not used</span>;
+      return <span className="rounded-full border border-desert-rose/40 bg-desert-rose/10 px-2 py-0.5 text-[10px] text-desert-rose">No key — not used</span>;
   }
 };
 
@@ -219,8 +219,8 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
 
   const testBanner = (id: string) => testResult?.id === id && (
     <div className={`mt-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${testResult.result.success
-      ? 'border-[#90A955]/30 bg-[#90A955]/10 text-[#90A955]'
-      : 'border-[#E76F51]/30 bg-[#E76F51]/10 text-[#E76F51]'}`}>
+      ? 'border-sage-green/30 bg-sage-green/10 text-sage-green'
+      : 'border-desert-rose/30 bg-desert-rose/10 text-desert-rose'}`}>
       {testResult.result.success ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
       <div className="min-w-0 break-words">
         <p>{testResult.result.message}</p>
@@ -233,8 +233,8 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 py-3 text-xs text-[#A89F91]">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#2A9D8F]" /> Loading AI providers...
+      <div className="flex items-center gap-2 py-3 text-xs text-sand">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-mineral-teal" /> Loading AI providers...
       </div>
     );
   }
@@ -248,15 +248,15 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
         : preset.keyHelp;
     return (
       <div className="space-y-3">
-        <h3 className="text-[10px] font-medium uppercase tracking-wider text-[#A89F91]">
+        <h3 className="text-[10px] font-medium uppercase tracking-wider text-sand">
           {draft.isNew && !draft.environmentKeyHint ? `Add ${preset.label}` : `Edit ${draft.displayName}`}
         </h3>
-        <label className="block text-[10px] text-[#A89F91]">API key
+        <label className="block text-[10px] text-sand">API key
           <input type="password" autoComplete="off" value={draft.apiKey}
             onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })}
             placeholder={keyPlaceholder} className={inputClass} />
         </label>
-        <label className="block text-[10px] text-[#A89F91]">Default model
+        <label className="block text-[10px] text-sand">Default model
           <input value={draft.defaultModel} list="ai-provider-draft-models"
             onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })}
             placeholder={preset.defaultModel ?? 'model id'} className={`${inputClass} font-mono`} />
@@ -264,8 +264,8 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
             {suggestions(draft.id, parsePatterns(draft.patterns), null).map((model) => <option key={model} value={model} />)}
           </datalist>
         </label>
-        <details className="rounded-lg border border-[#3A322E] px-3 py-2 text-[10px] text-[#A89F91]" open={draft.providerType === 'openai-compatible'}>
-          <summary className="cursor-pointer select-none text-[#EAE3D9]">Advanced</summary>
+        <details className="rounded-lg border border-hairline px-3 py-2 text-[10px] text-sand" open={draft.providerType === 'openai-compatible'}>
+          <summary className="cursor-pointer select-none text-linen">Advanced</summary>
           <div className="mt-2 space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <label className="block">Name
@@ -283,9 +283,9 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
             <label className="block">Agent models it serves (prefixes, comma-separated)
               <input value={draft.patterns} onChange={(e) => setDraft({ ...draft, patterns: e.target.value })}
                 placeholder="gemini, google/" className={`${inputClass} font-mono`} />
-              <span className="mt-1 block text-[#5A524A]">An agent node's model goes to the provider whose prefix matches it. Use * to serve every model no other provider serves.</span>
+              <span className="mt-1 block text-stone">An agent node's model goes to the provider whose prefix matches it. Use * to serve every model no other provider serves.</span>
             </label>
-            <label className="flex items-center gap-2 text-xs text-[#EAE3D9]">
+            <label className="flex items-center gap-2 text-xs text-linen">
               <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} /> Enabled
             </label>
           </div>
@@ -293,17 +293,17 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
         {testBanner(draft.id)}
         <div className="flex gap-2">
           <button type="button" onClick={() => edit(null)}
-            className="flex-1 rounded-lg border border-[#3A322E] py-2 text-xs text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]">Cancel</button>
+            className="flex-1 rounded-lg border border-hairline py-2 text-xs text-sand hover:bg-mocha-hover hover:text-linen">Cancel</button>
           <button type="button" onClick={() => void test(draft.id, draft)} disabled={testing !== null}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[#3A322E] py-2 text-xs text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:opacity-50">
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-hairline py-2 text-xs text-sand hover:bg-mocha-hover hover:text-linen disabled:opacity-50">
             {testing === draft.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />} Test
           </button>
           <button type="button" onClick={() => void save()} disabled={isSaving}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-[#2A9D8F]/50 bg-[#2A9D8F]/15 py-2 text-xs font-medium text-[#2A9D8F] disabled:opacity-50">
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-mineral-teal/50 bg-mineral-teal/15 py-2 text-xs font-medium text-mineral-teal disabled:opacity-50">
             {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} {isSaving ? 'Testing…' : 'Test & save'}
           </button>
         </div>
-        <p className="text-[10px] leading-relaxed text-[#5A524A]">
+        <p className="text-[10px] leading-relaxed text-stone">
           Saving makes one short call with this key and model; nothing is saved unless the provider answers.
         </p>
       </div>
@@ -315,13 +315,13 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
   return (
     <div className="space-y-4">
       {/* Default provider and model */}
-      <section className="space-y-2 rounded-xl border border-[#9D4EDD]/30 bg-[#1A1614] p-3">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9D4EDD]">
+      <section className="space-y-2 rounded-xl border border-amethyst/30 bg-charcoal p-3">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amethyst">
           <Sparkles className="h-3.5 w-3.5" /> Default model
         </div>
-        <p className="text-[10px] text-[#A89F91]">Used by Insight, APL authoring and as the model of new agent nodes.</p>
+        <p className="text-[10px] text-sand">Used by Insight, APL authoring and as the model of new agent nodes.</p>
         {selectable.length === 0 ? (
-          <div className="flex items-start gap-2 rounded-lg border border-[#E76F51]/30 bg-[#E76F51]/10 px-3 py-2.5 text-xs text-[#E76F51]">
+          <div className="flex items-start gap-2 rounded-lg border border-desert-rose/30 bg-desert-rose/10 px-3 py-2.5 text-xs text-desert-rose">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             No AI provider yet. Add one below; agent nodes cannot run until a provider has a key.
           </div>
@@ -330,7 +330,7 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
             <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
               <select value={defaultId} aria-label="Default provider"
                 onChange={(e) => { setDefaultId(e.target.value); setDefaultModel(byId(e.target.value)?.defaultModel ?? ''); }}
-                className="rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 text-xs text-[#EAE3D9]">
+                className="rounded-lg border border-hairline bg-charcoal-deep px-2.5 py-2 text-xs text-linen">
                 {!chosenForDefault && <option value="">Choose a provider</option>}
                 {selectable.map((provider) => (
                   <option key={provider.id} value={provider.id}>
@@ -340,28 +340,28 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
               </select>
               <input value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} list="ai-default-models"
                 aria-label="Default model" placeholder="model id"
-                className="rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 font-mono text-xs text-[#EAE3D9]" />
+                className="rounded-lg border border-hairline bg-charcoal-deep px-2.5 py-2 font-mono text-xs text-linen" />
               <datalist id="ai-default-models">
                 {chosenForDefault && suggestions(chosenForDefault.id, chosenForDefault.modelPatterns, chosenForDefault.defaultModel)
                   .map((model) => <option key={model} value={model} />)}
               </datalist>
               <button type="button" onClick={() => void saveDefault()} disabled={!defaultChanged || savingDefault}
-                className="flex items-center gap-1.5 rounded-lg border border-[#2A9D8F]/50 bg-[#2A9D8F]/15 px-3 py-2 text-xs font-medium text-[#2A9D8F] disabled:opacity-40">
+                className="flex items-center gap-1.5 rounded-lg border border-mineral-teal/50 bg-mineral-teal/15 px-3 py-2 text-xs font-medium text-mineral-teal disabled:opacity-40">
                 {savingDefault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Save
               </button>
             </div>
             {status?.insightFallback && requested && effective ? (
-              <p className="flex items-start gap-1.5 text-[11px] text-[#F4A261]">
+              <p className="flex items-start gap-1.5 text-[11px] text-saffron">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {requested.displayName} has no usable key, so {effective.displayName} · {status.insightModel} is used meanwhile. Add a key to {requested.displayName} below.
               </p>
             ) : effective ? (
-              <p className="text-[11px] text-[#A89F91]">
-                In use: <span className="text-[#EAE3D9]">{effective.displayName} · <span className="font-mono">{status?.insightModel}</span></span>
+              <p className="text-[11px] text-sand">
+                In use: <span className="text-linen">{effective.displayName} · <span className="font-mono">{status?.insightModel}</span></span>
                 {keyStatusOf(effective) === 'environment' ? ' (key from server)' : ''}
               </p>
             ) : (
-              <p className="flex items-start gap-1.5 text-[11px] text-[#E76F51]">
+              <p className="flex items-start gap-1.5 text-[11px] text-desert-rose">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> No provider has a key yet, so Insight and agent nodes cannot run.
               </p>
             )}
@@ -371,60 +371,60 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
 
       {/* Providers */}
       <section className="space-y-2">
-        <h3 className="text-[10px] font-medium uppercase tracking-wider text-[#A89F91]">Providers</h3>
+        <h3 className="text-[10px] font-medium uppercase tracking-wider text-sand">Providers</h3>
         {providers.map((provider) => (
-          <div key={provider.id} className={`rounded-lg border bg-[#14110D] px-3 py-2.5 ${provider.enabled ? 'border-[#3A322E]' : 'border-[#3A322E] opacity-70'}`}>
+          <div key={provider.id} className={`rounded-lg border bg-charcoal-deep px-3 py-2.5 ${provider.enabled ? 'border-hairline' : 'border-hairline opacity-70'}`}>
             <div className="flex items-center gap-2">
-              <span className="truncate text-xs font-medium text-[#EAE3D9]">{provider.displayName}</span>
+              <span className="truncate text-xs font-medium text-linen">{provider.displayName}</span>
               {effective?.id === provider.id && (
-                <span className="rounded-full border border-[#9D4EDD]/40 bg-[#9D4EDD]/10 px-2 py-0.5 text-[10px] text-[#9D4EDD]">Default</span>
+                <span className="rounded-full border border-amethyst/40 bg-amethyst/10 px-2 py-0.5 text-[10px] text-amethyst">Default</span>
               )}
               <KeyChip provider={provider} />
               <div className="ml-auto flex items-center gap-1">
                 <button type="button" onClick={() => void test(provider.id)} disabled={testing !== null || !provider.configured} title="Test connection" aria-label={`Test ${provider.displayName}`}
-                  className="rounded-md p-1.5 text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9] disabled:opacity-40">
+                  className="rounded-md p-1.5 text-sand hover:bg-mocha-hover hover:text-linen disabled:opacity-40">
                   {testing === provider.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
                 </button>
                 <button type="button" onClick={() => edit(draftFrom(provider))} title="Edit" aria-label={`Edit ${provider.displayName}`}
-                  className="rounded-md p-1.5 text-[#A89F91] hover:bg-[#2F2926] hover:text-[#EAE3D9]"><Pencil className="h-3.5 w-3.5" /></button>
+                  className="rounded-md p-1.5 text-sand hover:bg-mocha-hover hover:text-linen"><Pencil className="h-3.5 w-3.5" /></button>
                 {provider.saved && (
                   <button type="button" onClick={() => { setTestResult(null); setConfirmRemove(provider.id); }} title="Remove" aria-label={`Remove ${provider.displayName}`}
-                    className="rounded-md p-1.5 text-[#A89F91] hover:bg-[#2F2926] hover:text-[#E76F51]"><Trash2 className="h-3.5 w-3.5" /></button>
+                    className="rounded-md p-1.5 text-sand hover:bg-mocha-hover hover:text-desert-rose"><Trash2 className="h-3.5 w-3.5" /></button>
                 )}
               </div>
             </div>
-            <p className="mt-1 text-[10px] text-[#A89F91]">
+            <p className="mt-1 text-[10px] text-sand">
               Serves {describeRouting(provider.modelPatterns)}
-              {provider.defaultModel ? <> · default <span className="font-mono text-[#C9BFAF]">{provider.defaultModel}</span></> : null}
+              {provider.defaultModel ? <> · default <span className="font-mono text-linen-muted">{provider.defaultModel}</span></> : null}
             </p>
             {provider.configured && (
-              <p className="mt-1 flex items-center gap-1.5 text-[10px] text-[#5A524A]">
+              <p className="mt-1 flex items-center gap-1.5 text-[10px] text-stone">
                 {discovered[provider.id]?.refreshedAt
                   ? `${discovered[provider.id].models.length} models available · read ${new Date(discovered[provider.id].refreshedAt!).toLocaleString()}`
                   : 'Model list not read yet'}
                 {discovered[provider.id]?.lastError && (
-                  <span className="text-[#F4A261]" title={discovered[provider.id].lastError ?? undefined}>· last read failed</span>
+                  <span className="text-saffron" title={discovered[provider.id].lastError ?? undefined}>· last read failed</span>
                 )}
                 <button type="button" onClick={() => void refreshModels(provider.id)} disabled={refreshing !== null}
                   aria-label={`Refresh models of ${provider.displayName}`} title="Read the provider's model list now"
-                  className="rounded p-0.5 text-[#A89F91] hover:text-[#EAE3D9] disabled:opacity-40">
+                  className="rounded p-0.5 text-sand hover:text-linen disabled:opacity-40">
                   {refreshing === provider.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                 </button>
               </p>
             )}
             {provider.providerType === 'openai-compatible' && provider.baseUrl && (
-              <p className="mt-0.5 truncate font-mono text-[10px] text-[#5A524A]" title={provider.baseUrl}>{provider.baseUrl}</p>
+              <p className="mt-0.5 truncate font-mono text-[10px] text-stone" title={provider.baseUrl}>{provider.baseUrl}</p>
             )}
             {testBanner(provider.id)}
             {confirmRemove === provider.id && (
-              <div className="mt-2 flex items-center gap-2 rounded-lg border border-[#E76F51]/30 bg-[#E76F51]/10 px-3 py-2 text-xs text-[#E76F51]">
+              <div className="mt-2 flex items-center gap-2 rounded-lg border border-desert-rose/30 bg-desert-rose/10 px-3 py-2 text-xs text-desert-rose">
                 <span className="min-w-0 flex-1">
                   Remove {provider.displayName} from Studio?{provider.environmentConfigured ? ' The server key keeps it available with default settings.' : ''}
                 </span>
                 <button type="button" onClick={() => setConfirmRemove(null)}
-                  className="rounded-md border border-[#3A322E] px-2 py-1 text-[11px] text-[#A89F91] hover:text-[#EAE3D9]">Cancel</button>
+                  className="rounded-md border border-hairline px-2 py-1 text-[11px] text-sand hover:text-linen">Cancel</button>
                 <button type="button" onClick={() => void remove(provider)}
-                  className="rounded-md border border-[#E76F51]/50 bg-[#E76F51]/15 px-2 py-1 text-[11px] font-medium text-[#E76F51]">Remove</button>
+                  className="rounded-md border border-desert-rose/50 bg-desert-rose/15 px-2 py-1 text-[11px] font-medium text-desert-rose">Remove</button>
               </div>
             )}
           </div>
@@ -432,19 +432,19 @@ export const AiProvidersSettings: React.FC<{ onError: (message: string | null) =
 
         <div className="flex gap-2">
           <select value={addType} onChange={(e) => setAddType(e.target.value)} aria-label="Provider to add"
-            className="flex-1 rounded-lg border border-[#3A322E] bg-[#14110D] px-2.5 py-2 text-xs text-[#EAE3D9]">
+            className="flex-1 rounded-lg border border-hairline bg-charcoal-deep px-2.5 py-2 text-xs text-linen">
             {AI_PROVIDER_PRESETS.map((preset) => <option key={preset.type} value={preset.type}>{preset.label}</option>)}
           </select>
           <button type="button"
             onClick={() => edit(draftForPreset(addType, providers.map((provider) => provider.id)))}
-            className="flex items-center gap-1.5 rounded-lg border border-[#2A9D8F]/50 bg-[#2A9D8F]/15 px-3 py-2 text-xs font-medium text-[#2A9D8F]">
+            className="flex items-center gap-1.5 rounded-lg border border-mineral-teal/50 bg-mineral-teal/15 px-3 py-2 text-xs font-medium text-mineral-teal">
             <Plus className="h-3.5 w-3.5" /> Add provider
           </button>
         </div>
       </section>
 
-      <p className="text-[10px] leading-relaxed text-[#5A524A]">
-        Keys are stored encrypted and never shown again. A key saved here overrides the server's <code className="text-[#A89F91]">ABADA_LLM_*</code> environment key for the same provider.
+      <p className="text-[10px] leading-relaxed text-stone">
+        Keys are stored encrypted and never shown again. A key saved here overrides the server's <code className="text-sand">ABADA_LLM_*</code> environment key for the same provider.
       </p>
     </div>
   );
