@@ -5,7 +5,11 @@
 #   docker build -f documentation/Dockerfile.prod -t abada-docs:local .
 FROM node:24.18.0-alpine AS builder
 
-WORKDIR /app
+# The release check compares the documented version with the engine and Studio
+# versions, so the two version files sit where they are in the repository.
+WORKDIR /src/documentation
+COPY engine/pom.xml /src/engine/pom.xml
+COPY studio/package.json /src/studio/package.json
 
 # Copy package files
 COPY documentation/package.json documentation/package-lock.json ./
@@ -26,7 +30,7 @@ FROM nginx:1.28.0-alpine
 COPY documentation/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /src/documentation/dist /usr/share/nginx/html
 
 # Ship the licence text with the site (AGPL-3.0-only)
 COPY LICENSE /licenses/LICENSE
