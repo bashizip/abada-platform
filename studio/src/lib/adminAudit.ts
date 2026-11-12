@@ -12,8 +12,11 @@ export function dayBound(value: string, end: boolean): string | undefined {
   return start.toISOString();
 }
 
-/** Readable action name: `project.member.put` → `Project member put`. */
+const ACRONYMS = new Set(['ai', 'api', 'apl', 'csv', 'id']);
+
+/** Readable action name: `project.member.put` → `Project member put`, `ai-provider.save` → `AI provider save`. */
 export function actionLabel(action: string): string {
-  const words = action.replace(/[.-]/g, ' ').trim();
+  const words = action.split(/[.-]+/).filter(Boolean)
+    .map((word) => (ACRONYMS.has(word) ? word.toUpperCase() : word)).join(' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

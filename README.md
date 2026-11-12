@@ -223,7 +223,7 @@ integration tool (n8n); or a hosted service with an SLA today.
 
 ## Status
 
-- **Current release:** [`1.1.2`](docs/release-notes/1.1.2-release-notes.md), an
+- **Current release:** [`1.2.0`](docs/release-notes/1.2.0-release-notes.md), an
   evaluation release. Past releases and what each one added are in the
   [release notes](docs/release-notes/).
 - **Supported setup:** self-hosted Docker Compose, with one or more engine instances on

@@ -107,6 +107,7 @@ describe('audit helpers', () => {
     expect(dayBound('2026-11-12', true)).toBe('2026-11-13T00:00:00.000Z');
     expect(dayBound('12/11/2026', false)).toBeUndefined();
     expect(actionLabel('project.member.put')).toBe('Project member put');
-    expect(actionLabel('ai-provider.save')).toBe('Ai provider save');
+    expect(actionLabel('ai-provider.save')).toBe('AI provider save');
+    expect(actionLabel('tool-credential.delete')).toBe('Tool credential delete');
   });
 });
