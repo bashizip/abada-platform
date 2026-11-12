@@ -232,6 +232,16 @@ export interface APLAgentNode {
   inputs?: {
     [k: string]: string;
   };
+  /**
+   * Files the model reads (S15): name -> CEL expression giving a file reference or a list of them (from a file field of a human task). Default-deny: only files listed here reach a model, as images or PDF. A name cannot also be an input.
+   */
+  files?: {
+    [k: string]: string;
+  };
+  /**
+   * Most files one call may carry (S15); more is a typed failure, never a silent cut.
+   */
+  max_files?: number;
   result_variable?: VariableName;
   /**
    * JSON Schema 2020-12 the agent output must satisfy.

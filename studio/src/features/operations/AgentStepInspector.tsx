@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { FileChip } from '@/components/json/JsonValue';
+import { FileAccessContext } from '@/components/json/fileAccess';
 import { AlertTriangle, Bot, GitBranch, Lock, Wrench } from 'lucide-react';
 import { EvidenceAPI, formatUsd, type AgentStepEvidence, type AgentStepPayloads } from '@/api/evidence';
 import { stepTotals } from './agentSteps';
@@ -107,6 +109,22 @@ export const AgentStepInspector: React.FC<AgentStepInspectorProps> = ({ steps, p
                           : step.costUsd !== undefined && step.costUsd !== null ? formatUsd(step.costUsd) : ''}
                       </span>
                     </button>
+                    {step.files && step.files.length > 0 && (
+                      <FileAccessContext.Provider value={projectId ? { projectId } : null}>
+                        <div className="flex flex-wrap items-center gap-1 px-6 pb-0.5 text-[10px] text-sand"
+                          aria-label={`Files of step ${step.attempt}.${step.sequence}`}>
+                          <span>read</span>
+                          {step.files.map((file) => (
+                            <span key={file.fileId} className="inline-flex items-center gap-1"
+                              title={`${file.name} · sha256 ${file.sha256}`}>
+                              <FileChip file={{ fileId: file.fileId, name: file.fileName, contentType: file.contentType,
+                                size: file.size, sha256: file.sha256 }} />
+                              <span className="font-mono text-[9px] text-sand-dim">{file.sha256.slice(0, 12)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </FileAccessContext.Provider>
+                    )}
                     {(step.resolvedBy || step.childInstanceId) && (
                       <div className="flex flex-wrap gap-2 px-6 text-[10px] text-sand">
                         {step.resolvedBy && (

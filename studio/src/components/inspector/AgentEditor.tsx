@@ -6,6 +6,7 @@ import { useAplContract } from '@/lib/aplContract';
 import { issuesAt } from '@/lib/apl/issues';
 import { AgentRoutesEditor, ErrorRoutesEditor, OrderedPickList, RouteSelect, TimeoutEditor } from './RouteEditors';
 import { AgentToolsEditor } from './AgentToolsEditor';
+import { AgentFilesEditor } from './AgentFilesEditor';
 import { AgentLimitsEditor, DelegatesEditor, ReviewedByEditor } from './AgentEditors';
 import { Field, Note, NumberInput, Section } from './InspectorKit';
 import { INPUT, MONO_INPUT, TEXTAREA } from './fieldStyles';
@@ -21,6 +22,7 @@ export const AgentEditor: React.FC<NodeEditorProps> = ({
     contract?.agentBounds[field]?.[side] ?? fallback;
   const set = <K extends keyof AgentConfig>(field: K, value: AgentConfig[K]) =>
     update({ ...node, agentConfig: { ...config, [field]: value } });
+  const patch = (changes: Partial<AgentConfig>) => update({ ...node, agentConfig: { ...config, ...changes } });
 
   // The engine's allowed models, joined by the current one when it is not among them.
   const currentModel = config.model || getDefaultAgentModel();
@@ -136,6 +138,12 @@ export const AgentEditor: React.FC<NodeEditorProps> = ({
               }
             }} />
         </Field>
+      </Section>
+
+      <Section id="files" title="Files" summary="Documents the model reads: scans, photos, PDFs."
+        defaultOpen={Boolean(config.files && Object.keys(config.files).length)}
+        issues={['files', 'max_files'].flatMap((key) => issuesAt(issues, key))}>
+        <AgentFilesEditor config={config} nodes={nodes} projectId={projectId} issues={issues} patch={patch} />
       </Section>
 
       <Section id="routing" title="Routing"

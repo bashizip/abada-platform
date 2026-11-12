@@ -70,6 +70,10 @@ export interface AgentConfig {
   /** Next steps the agent chooses from (`routes`); a node with routes has no `next`. */
   routes?: Record<string, AgentRoute>;
   inputs?: Record<string, string>;
+  /** Files the model reads (`files`, S15): name -> expression giving a file reference or a list. */
+  files?: Record<string, string>;
+  /** Most files one call may carry (`max_files`, 1–20, default 5). */
+  maxFiles?: number;
   resultVariable?: string;
   outputSchema?: Record<string, unknown>;
   maxTokens?: number;
