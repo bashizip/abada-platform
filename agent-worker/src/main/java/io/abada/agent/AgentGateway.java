@@ -9,6 +9,16 @@ import java.util.Map;
 public interface AgentGateway {
     AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables) throws Exception;
 
+    /**
+     * One call that also carries the node's files (S15), already downloaded and verified.
+     * A gateway that cannot send files refuses rather than calling without them.
+     */
+    default AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables,
+            List<AgentFiles.AgentFile> files) throws Exception {
+        if (files == null || files.isEmpty()) return execute(work, variables);
+        throw new AgentConfigurationException(provider() + " does not send files to a model");
+    }
+
     /** Stable provider family reported in attempt metadata, e.g. {@code openai-compatible}. */
     String provider();
 

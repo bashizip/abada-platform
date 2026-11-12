@@ -36,6 +36,12 @@ public final class OpenAiCompatibleGateway extends AbstractAgentGateway {
     }
 
     @Override
+    public AgentResult execute(AgentWorkDescriptor work, Map<String, Object> variables,
+            List<AgentFiles.AgentFile> files) throws Exception {
+        return executeChatCompletion(target(), endpoint.apiKey(), upstream(work.model()), work, variables, files);
+    }
+
+    @Override
     public ChatTurn chat(AgentWorkDescriptor work, String model, List<Map<String, Object>> messages,
             List<ToolSpec> tools) throws Exception {
         return sendChat(target(), endpoint.apiKey(), upstream(model), work, messages, tools);
