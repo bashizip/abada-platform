@@ -824,6 +824,34 @@ fails when a page has `since` greater than the current version, or when the
 displayed version differs from the release version; link checker covers the
 new pages.
 
+**As built (2026-11-12).**
+- `dev` stays on the last release's version until the release gate bumps it,
+  so the version cannot simply be read from the build: it would announce 1.1.2
+  while describing 1.2. `documentation/release.json` names the release the
+  pages describe and its status. The build (`scripts/check-release.mjs`, with
+  `node --test` cases) fails unless the engine, Studio and documentation
+  versions agree with each other and with it: still on the previous release
+  while `in-development`, equal to `documents` once `released` (S14 flips it
+  with the version bump). It also fails when a page's `since` or `updated` is
+  later than `documents`, and when the documented minor has no release notes
+  page.
+- The version shows next to the site title on every page ("1.2.0 · in
+  development" until release), linking to the release notes.
+- Badges: `since` gives *New*, `updated` gives *Updated*, computed in the
+  Astro config from frontmatter; a *What's new in 1.2* entry (with a
+  *Preview* badge until release) heads the sidebar.
+- Release notes pages are `release-notes/1-2.mdx` and `1-1.mdx` (Starlight
+  drops dots from slugs), with an index. Screenshots for the 1.2 page come
+  with S14.
+- Studio: the engine info panel shows the Studio version with *Documentation*
+  and *What's new* links (`docsUrl` in the runtime configuration, default
+  `https://docs.abadaplatform.com`); a dismissible *What's new* card appears
+  once per browser for a minor release that has highlights, so it appears
+  when the Studio version becomes 1.2.0.
+- The documentation and Studio audits were clean again: DOMPurify, fast-uri,
+  undici, Vite and zod pinned to fixed versions in the docs; vitest, Vite and
+  fast-xml-parser raised within their majors in the Studio.
+
 ---
 
 ## S14 — Documentation, screenshots and the 1.2.0 gate
