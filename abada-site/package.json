@@ -8,8 +8,8 @@
   "scripts": {
     "dev": "cd packages/web && bunx vite",
     "build": "turbo build",
-    "check:claims": "node scripts/check-claims.mjs",
-    "build:web": "node scripts/check-claims.mjs && cd packages/web && bunx vite build",
+    "check:claims": "cd packages/web && node tools/check-claims.mjs",
+    "build:web": "cd packages/web && bun run build",
     "lint": "echo 'lint not configured'",
     "lint:fix": "echo 'lint not configured'",
     "typecheck": "turbo typecheck",
