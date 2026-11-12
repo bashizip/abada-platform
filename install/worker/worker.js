@@ -28,6 +28,7 @@ const MAX_EVENT_BYTES = 2048;
 const DAILY_EVENT_CAP = 20;
 /** Rows older than this are deleted by the daily scheduled run (13 months). */
 const RETENTION_DAYS = 395;
+const MAX_USER_AGENT_CHARS = 200;
 
 export default {
   async fetch(request, env, ctx) {
@@ -138,6 +139,7 @@ async function acceptInstallEvent(request, env, ctx) {
 const COLUMNS = [
   "received_at", "kind", "version", "install_id", "failed_step", "os", "arch", "docker_version", "profile",
   "duration_s", "llm_key_provided", "ci", "country", "region",
+  "user_agent",
 ];
 
 async function record(env, request, row, options = {}) {
@@ -156,11 +158,20 @@ async function record(env, request, row, options = {}) {
     ...row,
     country: cf.country ?? null,
     region: cf.region ?? null,
+    user_agent: userAgent(request),
   };
   const params = COLUMNS.map((column) => (values[column] === undefined ? null : values[column]));
   await env.USAGE_DB.prepare(
     `INSERT INTO install_events (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")})`
   ).bind(...params).run();
+}
+
+/** The User-Agent header, printable ASCII only and trimmed, or null when absent. */
+function userAgent(request) {
+  const raw = request.headers.get("User-Agent");
+  if (!raw) return null;
+  const clean = raw.replace(/[^\x20-\x7E]/g, "").trim().slice(0, MAX_USER_AGENT_CHARS);
+  return clean || null;
 }
 
 async function purge(env) {

@@ -59,9 +59,11 @@ and
 
 When the installer script, the version pointer (`/latest`) or a release
 archive is requested, the server records: the time, what was requested (the
-script, the version check or the archive and its release) and the coarse
-location (country and region) derived from the request. Nothing else is taken
-from the request: no address, no hash of it, no user agent.
+script, the version check or the archive and its release), the coarse
+location (country and region) derived from the request and the client's user
+agent string (for example `curl/8.7.1`), shortened to 200 characters. The user
+agent tells installs apart from browsers and crawlers that only look at the
+script. Nothing else is taken from the request: no address and no hash of it.
 
 ## What is never recorded
 

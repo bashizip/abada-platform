@@ -194,10 +194,11 @@ test("records an installer fetch with location from the edge and never the addre
   assert.equal(column(row, "kind"), "installer_fetch");
   assert.equal(column(row, "country"), "BE");
   assert.equal(column(row, "region"), "Brussels Capital");
-  // Nothing finer than region, no network owner, no address, no user agent: not even as columns.
-  assert.ok(!/city|asn|as_org|ip_hash|user_agent|timezone|continent/.test(row.sql));
+  assert.equal(column(row, "user_agent"), "curl/8.7.1");
+  // Nothing finer than region, no network owner, no address: not even as columns.
+  assert.ok(!/city|asn|as_org|ip_hash|timezone|continent/.test(row.sql));
   const stored = JSON.stringify(row);
-  for (const value of ["203.0.113.7", "Brussels\"", "Proximus", "curl/8.7.1", "5432"]) {
+  for (const value of ["203.0.113.7", "Brussels\"", "Proximus", "5432"]) {
     assert.ok(!stored.includes(value), value);
   }
 });
@@ -270,7 +271,26 @@ test("accepts a reported outcome with only the allowed fields and takes location
   assert.equal(column(row, "llm_key_provided"), 0);
   assert.equal(column(row, "country"), "BE");
   assert.ok(!JSON.stringify(row).includes("198.51.100.9"));
-  assert.ok(!/city|asn|ip_hash|user_agent/.test(row.sql));
+  assert.ok(!/city|asn|ip_hash/.test(row.sql));
+});
+
+test("stores the user agent trimmed to printable characters, and null when it is missing", async () => {
+  const { env } = environment();
+  env.USAGE_DB = usageDatabase();
+  const ctx = context();
+  const fetchWith = (headers) =>
+    worker.fetch(requestWith("https://install.abadaplatform.com/install.sh", { cf: EDGE, headers }), env, ctx);
+
+  await fetchWith({ "User-Agent": `  Mozilla/5.0 \u00e9${"x".repeat(400)}` });
+  await fetchWith({ "User-Agent": "   " });
+  await fetchWith({});
+  await ctx.done();
+
+  const agents = env.USAGE_DB.rows.map((row) => column(row, "user_agent"));
+  assert.equal(agents[0].length, 200);
+  assert.ok(agents[0].startsWith("Mozilla/5.0 xxx"));
+  assert.equal(agents[1], null);
+  assert.equal(agents[2], null);
 });
 
 test("refuses anything that is not on the list, is the wrong shape or is too large", async () => {

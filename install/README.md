@@ -73,9 +73,11 @@ stay true to this section, is
 
 Rows go to the D1 database `abada-usage` (`install_events`, see
 `worker/migrations/`). Location (country and region only) comes from Cloudflare's `request.cf` at
-request time. Nothing finer is stored: no city, network owner, time zone,
-address, hash of the address or user agent. Unique installers are counted by
-the random install id.
+request time. The request's `User-Agent` header is stored as sent, limited to
+200 printable characters, so script readers and crawlers can be told apart from
+installers (`curl/…` or `Wget/…`). Nothing finer is stored: no city, network
+owner, time zone, address or hash of the address. Unique installers are counted
+by the random install id.
 The Worker accepts only the allow-listed fields in `EVENT_FIELDS`, caps
 reports per installer and day, and deletes rows older than 395 days in a daily
 scheduled run. Recording is best effort and can never delay or fail a download.
@@ -104,6 +106,7 @@ nothing is recorded.
 ./scripts/release/usage-report.sh daily 90     # per day: downloads, reports, distinct install ids
 ./scripts/release/usage-report.sh countries    # where installs come from (country, region)
 ./scripts/release/usage-report.sh failures     # failed installs by step
+./scripts/release/usage-report.sh agents       # clients that fetched the script or archive (User-Agent)
 ./scripts/release/usage-report.sh versions | platforms | recent
 ./scripts/release/usage-report.sh raw "SELECT ..."
 ```
