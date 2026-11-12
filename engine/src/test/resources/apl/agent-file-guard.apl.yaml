@@ -1,0 +1,21 @@
+version: abada.io/v1
+metadata:
+  key: agent_file_guard
+  name: Agent file guard (S15)
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: lecture
+    - id: lecture
+      type: agent
+      model: gemini-3.6-flash
+      prompt: Read the document.
+      files:
+        doc: doc_ref
+      max_files: 1
+      result_variable: lecture
+      next: done
+    - id: done
+      type: end

@@ -138,6 +138,9 @@ final class AplVariables {
                             predecessors, pointerById, reported, warnings);
                 }
             });
+            task.agentWork().files().forEach((name, expression) ->
+                    check(task.id(), identifiers(expression), "file '" + name + "'", declared, nodes,
+                            predecessors, pointerById, reported, warnings));
         }
         definition.getAllAgentRoutes().forEach((nodeId, routes) -> {
             // A route's when reads the agent's own result besides what earlier steps wrote.

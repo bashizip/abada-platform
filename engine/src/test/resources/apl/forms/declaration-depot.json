@@ -1,0 +1,8 @@
+{
+  "title": "Declaration upload",
+  "fields": [
+    { "id": "bordereau_scan", "type": "file", "label": "Scanned declaration", "required": true,
+      "accept": [".pdf", "image/*"], "maxSize": 5000000 },
+    { "id": "annexe", "type": "file", "label": "Annex (not read by the agent)", "accept": [".pdf"] }
+  ]
+}

@@ -79,12 +79,14 @@ public class AgentStepService {
     private final com.abada.engine.llm.ModelPriceService prices;
     private final com.abada.engine.persistence.repository.ProjectRepository projects;
     private final com.abada.engine.observability.EngineMetrics metrics;
+    private final AgentFileResolver agentFiles;
 
     public AgentStepService(ExternalTaskRepository externalTasks, AgentStepRepository steps, AbadaEngine engine,
             AesEncryption encryption, ObjectMapper json, ActivityHistoryService history,
             EntityManager entityManager, com.abada.engine.llm.ModelPriceService prices,
             com.abada.engine.persistence.repository.ProjectRepository projects,
-            com.abada.engine.observability.EngineMetrics metrics) {
+            com.abada.engine.observability.EngineMetrics metrics, AgentFileResolver agentFiles) {
+        this.agentFiles = agentFiles;
         this.prices = prices;
         this.projects = projects;
         this.metrics = metrics;
@@ -196,6 +198,7 @@ public class AgentStepService {
         step.setPayloadMode(evidence.payloads().wireName());
         step.setEvidenceRequestEnc(evidenceCopy(evidence.payloads(), instance, request.request()));
         step.setPurgeAfter(Instant.now().plus(java.time.Duration.ofDays(evidence.retentionDays())));
+        if (kind == Kind.MODEL_CALL) step.setFilesJson(verifiedFiles(instance, meta.agentWork(), request.request()));
         step.setModel(request.model());
         step.setPromptVersion(request.promptVersion());
         step.setWorkerId(request.workerId());
@@ -711,6 +714,45 @@ public class AgentStepService {
 
     private static String truncate(String value, int max) {
         return value == null || value.length() <= max ? value : value.substring(0, max);
+    }
+
+    /**
+     * S15: the files a model call says it carries ({@code request.files}: fileId and
+     * sha256), checked against what the node may read in this instance now. The stored
+     * evidence is built from the {@code process_files} rows, not from the worker's
+     * claim; a file the node does not declare, or other bytes, are refused.
+     */
+    private String verifiedFiles(ProcessInstance instance, com.abada.engine.core.model.AgentWorkDescriptor work,
+            JsonNode request) {
+        JsonNode claimed = request == null ? null : request.path("files");
+        if (claimed == null || !claimed.isArray() || claimed.isEmpty()) return null;
+        java.util.List<com.abada.engine.core.model.AgentFileRef> allowed;
+        try {
+            allowed = agentFiles.resolve(work, instance);
+        } catch (AgentFileResolver.AgentFileException refused) {
+            throw invalid("The files of this call are not readable any more: " + refused.getMessage());
+        }
+        java.util.List<java.util.Map<String, Object>> verified = new java.util.ArrayList<>();
+        for (JsonNode file : claimed) {
+            String fileId = file.path("fileId").asText(null);
+            String sha256 = file.path("sha256").asText(null);
+            var match = allowed.stream().filter(ref -> ref.fileId().equals(fileId)).findFirst().orElse(null);
+            if (match == null) throw invalid("A model call may carry only the files its node declares in files");
+            if (!match.sha256().equals(sha256)) throw invalid("File " + fileId + " was sent with other contents");
+            java.util.Map<String, Object> entry = new java.util.LinkedHashMap<>();
+            entry.put("name", match.name());
+            entry.put("fileId", match.fileId());
+            entry.put("fileName", match.fileName());
+            entry.put("contentType", match.contentType());
+            entry.put("size", match.sizeBytes());
+            entry.put("sha256", match.sha256());
+            verified.add(entry);
+        }
+        try {
+            return json.writeValueAsString(verified);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static ApiException invalid(String message) {
