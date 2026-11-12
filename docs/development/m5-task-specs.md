@@ -640,6 +640,23 @@ concurrent inserts. Studio component tests for filters and the details drawer.
 **Out of scope.** Retention policy and external SIEM export (documented as a
 1.3 candidate; the table is queryable and exportable as CSV now).
 
+**As built (2026-11-12).**
+- Append-only is enforced by a PostgreSQL trigger that refuses UPDATE, DELETE
+  and TRUNCATE for every role, the owner included, instead of `GRANT INSERT,
+  SELECT`: the engine connects as the role that owns its tables, so a grant
+  would not restrict it. V43 is a Java migration because the trigger is
+  PostgreSQL only; on H2 (development) the table has no trigger.
+- Users and groups are changed in the identity provider, outside the engine's
+  database: their `SUCCESS` event is written in its own transaction after the
+  provider accepted the change.
+- A project role check answers 404 to outsiders; it is still recorded as
+  `DENIED` (`NOT_A_MEMBER` or `PROJECT_ROLE_REQUIRED`).
+- Live updates poll `GET /api/v1/admin/audit?after=<newest id>` every 5 s while
+  the first page is shown. `GET /api/v1/admin/audit/catalog` lists the actions;
+  `/export` returns CSV (at most 10,000 rows, formula-safe cells).
+- The trace ID is shown and copyable in the details drawer; it does not link to
+  an instance, because administrative actions do not run in one.
+
 ---
 
 ## S11 — Execution variables and JSON everywhere
