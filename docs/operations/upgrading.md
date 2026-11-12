@@ -93,7 +93,7 @@ Upgrade the engine, Studio and the agent worker together. Before the upgrade:
 Events written before V33 have no sequence number and are not replayed by the
 project event stream; webhook delivery is unchanged.
 
-### Upgrading to 1.2 (V40–V42, RustFS for process files)
+### Upgrading to 1.2 (V40–V44, RustFS for process files)
 
 From 1.2 a self-hosted installation needs **RustFS**, the S3-compatible object
 store that keeps files uploaded to task forms (see
@@ -102,6 +102,13 @@ store that keeps files uploaded to task forms (see
 (`process_files`, `projects.file_retention_days`, `file_sweep_leases`); none
 rewrites existing rows. Processes deployed before 1.2 have no file fields and
 run unchanged.
+
+`V43` adds `admin_audit_events`, the administration audit trail. On
+PostgreSQL it also creates a trigger that refuses UPDATE, DELETE and TRUNCATE
+on that table for every role, the table owner included: a restore keeps the
+rows, but no maintenance script can edit them. `V44` adds
+`agent_steps.files_json`, the files each agent model call read. Both are
+additive.
 
 - **One-line installer (dev):** run it again. It keeps your settings, re-pins
   the images (including `ABADA_RUSTFS_IMAGE`), appends the `ABADA_FILES_*`
