@@ -49,9 +49,11 @@ public class ProcessController {
     private final UserContextProvider context;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
 
     public ProcessController(AbadaEngine engine, UserContextProvider context, IdempotencyService idempotencyService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper, com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.engine = engine;
         this.context = context;
         this.idempotencyService = idempotencyService;
@@ -80,6 +82,11 @@ public class ProcessController {
                 new TypeReference<DeploymentResponse>() {}, () -> {
             ProcessDefinitionEntity deployed = engine.deploy(new ByteArrayInputStream(source),
                     new BpmnParseOptions(selectedProfiles, rejectVendorExtensions, strict));
+            // execute() is the deployment's transaction, with or without an idempotency key.
+            audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.PROCESS_DEPLOY,
+                    com.abada.engine.audit.AdminAuditActions.TARGET_PROCESS, deployed.getProcessKey(),
+                    deployed.getProjectId(), com.abada.engine.audit.AdminAuditDetails.create()
+                            .put("version", deployed.getVersion()).put("deploymentId", deployed.getDeploymentId()));
             return deploymentResponse(deployed);
         }));
     }

@@ -22,9 +22,18 @@ public final class ApiSecurityHandlers {
     }
 
     public static AccessDeniedHandler accessDeniedHandler(ObjectMapper objectMapper) {
-        return (request, response, exception) -> write(objectMapper, request, response,
-                HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
-                "The authenticated identity does not have permission for this operation");
+        return accessDeniedHandler(objectMapper, null);
+    }
+
+    /** As above, and records a refused administrative call in the administration audit trail (S10). */
+    public static AccessDeniedHandler accessDeniedHandler(ObjectMapper objectMapper,
+            com.abada.engine.audit.AdminAuditRecorder audit) {
+        return (request, response, exception) -> {
+            if (audit != null) audit.deniedIfAdministrative(request, ApiErrorCode.ACCESS_DENIED.name());
+            write(objectMapper, request, response,
+                    HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
+                    "The authenticated identity does not have permission for this operation");
+        };
     }
 
     public static void write(ObjectMapper objectMapper, HttpServletRequest request, HttpServletResponse response,

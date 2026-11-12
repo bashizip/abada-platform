@@ -15,12 +15,15 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http,
-            @Value("${abada.security.mode:disabled}") String mode, ObjectMapper objectMapper) throws Exception {
+            @Value("${abada.security.mode:disabled}") String mode, ObjectMapper objectMapper,
+            org.springframework.beans.factory.ObjectProvider<com.abada.engine.audit.AdminAuditRecorder> audit)
+            throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .cors(cors -> {})
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint(ApiSecurityHandlers.authenticationEntryPoint(objectMapper))
-                        .accessDeniedHandler(ApiSecurityHandlers.accessDeniedHandler(objectMapper)));
+                        .accessDeniedHandler(ApiSecurityHandlers.accessDeniedHandler(objectMapper,
+                                audit.getIfAvailable())));
 
         if ("oidc".equalsIgnoreCase(mode)) {
             authorize(http);

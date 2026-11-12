@@ -53,6 +53,13 @@ public class AiProviderService {
         this.transactions = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
     }
 
+    private com.abada.engine.audit.AdminAuditRecorder audit;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAudit(com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
+    }
+
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setDiscovery(org.springframework.beans.factory.ObjectProvider<AiModelDiscoveryService> discovery) {
         this.discoveryProvider = discovery;
@@ -128,6 +135,8 @@ public class AiProviderService {
             created.setCreatedAt(Instant.now());
             return created;
         });
+        boolean created = row.getUpdatedAt() == null;
+        java.util.Map<String, Object> before = providerSnapshot(row);
         AiProviderType type = request.providerType() != null
                 ? AiProviderType.fromId(request.providerType())
                         .orElseThrow(() -> invalid("Unknown provider type: " + request.providerType()))
@@ -178,7 +187,30 @@ public class AiProviderService {
         }
         row.setUpdatedAt(Instant.now());
         repository.saveAndFlush(row);
+        if (audit != null) {
+            // Never the key: only whether it was replaced.
+            var details = com.abada.engine.audit.AdminAuditDetails.create().put("created", created)
+                    .put("apiKeyChanged", request.apiKey() != null && !request.apiKey().isBlank());
+            java.util.Map<String, Object> after = providerSnapshot(row);
+            for (var field : after.keySet()) details.change(field, before.get(field), after.get(field));
+            audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.AI_PROVIDER_SAVE,
+                    com.abada.engine.audit.AdminAuditActions.TARGET_AI_PROVIDER, id, null, details);
+        }
         return list().stream().filter(view -> view.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    /** The non-sensitive fields of a provider, for the audit trail. */
+    private static java.util.Map<String, Object> providerSnapshot(AiProviderEntity row) {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("providerType", row.getProviderType());
+        values.put("displayName", row.getDisplayName());
+        values.put("baseUrl", row.getBaseUrl());
+        values.put("defaultModel", row.getDefaultModel());
+        values.put("modelPatterns", row.getModelPatterns());
+        values.put("timeoutMs", row.getTimeoutMs());
+        values.put("enabled", row.isEnabled());
+        values.put("insightDefault", row.isInsightDefault());
+        return values;
     }
 
     /** Removes a Studio provider; an environment provider with the same id then applies again. */
@@ -187,6 +219,12 @@ public class AiProviderService {
         AiProviderEntity row = repository.findById(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                 ApiErrorCode.RESOURCE_NOT_FOUND, "AI provider not found: " + id));
         repository.delete(row);
+        if (audit != null) {
+            audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.AI_PROVIDER_DELETE,
+                    com.abada.engine.audit.AdminAuditActions.TARGET_AI_PROVIDER, id, null,
+                    com.abada.engine.audit.AdminAuditDetails.create().put("providerType", row.getProviderType())
+                            .put("displayName", row.getDisplayName()));
+        }
     }
 
     /** Which of {@code models} no provider serves; with no models, whether any provider is configured. */

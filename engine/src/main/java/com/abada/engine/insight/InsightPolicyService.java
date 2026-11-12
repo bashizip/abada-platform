@@ -15,7 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class InsightPolicyService {
     private final InsightApprovalPolicyRepository policies;
 
-    public InsightPolicyService(InsightApprovalPolicyRepository policies) {
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
+
+    public InsightPolicyService(InsightApprovalPolicyRepository policies,
+            com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.policies = policies;
     }
 
@@ -83,6 +87,12 @@ public class InsightPolicyService {
             throw new InsightProposalService.InsightConflictException(
                     "Approval policy changed concurrently; reload before saving");
         }
+        var details = com.abada.engine.audit.AdminAuditDetails.create()
+                .change("requiredApprovals", entity.getRequiredApprovals(), requiredApprovals)
+                .change("requiredGroups", entity.getRequiredGroups(), groups)
+                .change("approvalMode", entity.getApprovalMode(), mode);
+        if (replayRequired != null) details.change("replayRequired", entity.isReplayRequired(), replayRequired);
+        if (replayMinCases != null) details.change("replayMinCases", entity.getReplayMinCases(), replayMinCases);
         entity.setRequiredApprovals(requiredApprovals);
         entity.setRequiredGroups(groups);
         entity.setApprovalMode(mode);
@@ -90,7 +100,10 @@ public class InsightPolicyService {
         if (replayMinCases != null) entity.setReplayMinCases(replayMinCases);
         entity.setUpdatedAt(Instant.now());
         entity.setUpdatedBy(actor);
-        return policies.save(entity);
+        InsightApprovalPolicyEntity saved = policies.save(entity);
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.INSIGHT_POLICY_UPDATE,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROCESS, definitionKey, projectId, details);
+        return saved;
     }
 
     private InsightApprovalPolicyEntity defaults(String projectId, String definitionKey) {
