@@ -4,6 +4,8 @@ export interface AbadaStudioConfig {
   oidcRealm: string;
   oidcClientId: string;
   starterWorkflowEnabled: boolean;
+  /** Where the documentation is served; the help links and the What's new card open it (M5 S13). */
+  docsUrl: string;
 }
 
 declare global {
@@ -26,4 +28,5 @@ export const config: AbadaStudioConfig = {
   oidcRealm: supplied.oidcRealm ?? 'abada-dev',
   oidcClientId: supplied.oidcClientId ?? 'abada-frontend',
   starterWorkflowEnabled: booleanValue(supplied.starterWorkflowEnabled, false),
+  docsUrl: (supplied.docsUrl ?? 'https://docs.abadaplatform.com').replace(/\/+$/, ''),
 };
