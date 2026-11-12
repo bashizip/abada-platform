@@ -86,6 +86,7 @@ S8 form layout + field types ── S9 file upload (engine + Studio)
 S10 admin audit trail (engine + Studio)   S11 variables + JSON viewer (after S1)
 S12 NL authoring workspace (after S1)     S13 documentation discovery
 S14 documentation, screenshots, 1.2.0 gate
+S15 files as agent input (after S9)
 ```
 
 S1 first, then S2 and S7/S8 in parallel. S2 adds the taken flow to history
@@ -817,3 +818,90 @@ new pages.
   `V41`–`V43` and the new required RustFS service, gate report per
   `1.0-rc-publication-gates.md`.
 - Exit demo recorded (see roadmap).
+
+## S15 — Files as agent input (multimodal)
+
+**Goal.** An agent node can read a file the process holds — a scanned form, a
+PDF, a photo — instead of only text. The model sees the document; the engine
+keeps the same contract: declared inputs, schema-checked output, confidence
+threshold, routes and vetoes, evidence and cost.
+
+**Why now.** S9 already stores files in RustFS and gives the process a
+reference. Today the agent worker passes that reference to the model as JSON
+text (see `docs/reference/process-files.md`), so a scanned document cannot be
+read without an OCR worker in front. Most serious intake processes (employer
+declarations, claims, KYC, invoices) start from a document.
+
+**APL.** A new optional agent field, `files`, separate from `inputs`:
+
+```yaml
+- id: lecture
+  type: agent
+  model: gemini-3.6-flash
+  prompt: Extract the declared payroll, headcount and contributions.
+  files:
+    bordereau: bordereau_scan        # CEL: a file reference or a list of them
+  output_schema: { ... }
+```
+
+- Each entry is a name and a CEL expression that must evaluate to a file
+  reference `{ fileId, ... }` or a list of them. Checked at deploy (valid
+  expression, name pattern, no clash with `inputs`) and at run time (each id
+  exists, is `ATTACHED` to this instance, is not `DELETING`).
+- Default-deny holds: a file reaches a model only if it is listed in `files`.
+  Listing a file reference in `inputs` keeps today's behaviour (metadata as
+  text, no bytes).
+- Limits per node: `max_files` (default 5) and the installation cap
+  `abada.agent.files.max-bytes` (default 20 MB per call). Over the limit is a
+  typed failure, never a silent truncation.
+
+**Engine.** The agent work descriptor carries the resolved file references
+(id, name, content type, size, sha256), never bytes. Resolution happens when
+the task is created, in the same transaction as today's input resolution; no
+call to RustFS inside a transaction.
+
+**Agent worker.**
+- Downloads each declared file through the engine with its lease
+  (`GET /api/v1/external-tasks/{id}/files/{fileId}`), checks size and sha256
+  against the descriptor, and keeps the bytes in memory only for the call
+  (nothing written to disk or logs).
+- Sends them to the model in the form the provider expects (content parts
+  for OpenAI-compatible providers, inline data for Gemini). A provider
+  capability table states which content types each gateway can send
+  (images, PDF); an unsupported type or a model without vision is a typed
+  configuration error that routes through `on_error` / incident, never a call
+  without the file.
+- `fallback_models` only falls back to models that support every declared
+  content type.
+- The system prompt treats document content as data, like `<input>` text:
+  instructions inside a document do not change the agent's contract, and the
+  engine's veto on routes still applies.
+
+**Evidence and cost.** The step journal records, per file, the id, content
+type, size and sha256 the model was given — so an auditor can prove which
+document the agent saw — never the bytes, whatever the `evidence.payloads`
+policy. Token usage from the provider is recorded as today; image/PDF tokens
+are included in the cost per instance.
+
+**Studio.** The agent properties panel gets a *Files* section (pick a file
+variable, see accepted types); the agent-step inspector shows the file chips
+(download through the engine, with the usual RBAC) next to the prompt and
+output.
+
+**Not in scope.** Audio and video; files produced by an agent (agents still
+return JSON); a separate OCR engine (an operator can still put an OCR worker
+step before the agent — documented as the option for installations that may
+not send documents to an external model); presigned URLs.
+
+**Acceptance tests.** Engine (PostgreSQL + RustFS Testcontainers): deploy
+rejects a bad `files` expression or a name clash; a reference to a file of
+another instance, a `PENDING` or a deleted file fails the step with a typed
+error; the descriptor never contains bytes. Worker: stub providers receive
+the image and the PDF in the right wire format for the OpenAI-compatible and
+Gemini gateways; sha256 mismatch, oversize and unsupported type are typed
+errors; fallback skips a model without vision; no file content in logs.
+End to end: a scanned declaration uploaded in a human task is read by an
+agent, its output passes `output_schema`, low confidence routes to manual
+entry, and the evidence shows the file's sha256. Documentation:
+`process-files.md` (the "reference, not the bytes" sentence changes with the
+code), the APL reference for `files`, and one example process.

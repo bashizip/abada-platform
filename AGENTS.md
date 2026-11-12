@@ -30,7 +30,7 @@ The doctrine every change must respect:
 
 Do not bypass or weaken the durable state machine to add agent features.
 
-The current release line is 1.0.0-rc.x. Its certified production topology is
+The current release line is 1.2.x (1.2.0 in development on `dev`). Its certified production topology is
 one or more engine instances backed by PostgreSQL; from 1.2, self-hosted
 installations also run RustFS (self-hosted, S3-compatible object storage),
 which holds the contents of files uploaded to task forms while PostgreSQL
@@ -41,8 +41,9 @@ acquisition, stable API/worker contracts and backend RBAC are in scope.
 
 Use these documents as the authoritative product contract:
 
-- `docs/development/roadmap.md` — the only active roadmap (1.0.0-rc.6 → 1.1.0),
-  with task specifications in `docs/development/m1-task-specs.md`. Older
+- `docs/development/roadmap.md` — the only active roadmap (1.0.0-rc.6 → 1.2.0),
+  with task specifications in `docs/development/m1-task-specs.md` to
+  `m5-task-specs.md`. Older
   roadmaps are superseded and kept for history only.
 - `docs/development/1.0-rc-publication-gates.md` — mandatory per-candidate
   publication evidence and GO/NO-GO sign-off.
