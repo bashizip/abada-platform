@@ -52,10 +52,19 @@ public class ProjectFileController {
     private final FilePolicyService policies;
     private final ExternalTaskRepository externalTasks;
     private final IdempotencyService idempotency;
+    private final com.abada.engine.core.agent.AgentFileResolver agentFiles;
+    private final com.abada.engine.project.WorkerCapabilityService workerCapabilities;
+    private final String securityMode;
 
     public ProjectFileController(AbadaEngine engine, UserContextProvider context, ProjectAccessService access,
             ProcessFileService files, FileReadAccess readers, FilePolicyService policies,
-            ExternalTaskRepository externalTasks, IdempotencyService idempotency) {
+            ExternalTaskRepository externalTasks, IdempotencyService idempotency,
+            com.abada.engine.core.agent.AgentFileResolver agentFiles,
+            com.abada.engine.project.WorkerCapabilityService workerCapabilities,
+            @org.springframework.beans.factory.annotation.Value("${abada.security.mode:disabled}") String securityMode) {
+        this.agentFiles = agentFiles;
+        this.workerCapabilities = workerCapabilities;
+        this.securityMode = securityMode;
         this.engine = engine;
         this.context = context;
         this.access = access;
@@ -127,10 +136,12 @@ public class ProjectFileController {
     }
 
     @Operation(summary = "Download a file for an external task",
-            description = "For the worker holding the task's lease: files attached to the task's instance.")
+            description = "For the worker holding the task's lease: files attached to the task's instance; for an "
+                    + "agent task, only the files its node declares in `files`.")
     @GetMapping("/v1/external-tasks/{id}/files/{fileId}")
     public void workerDownload(@PathVariable("id") String taskId, @PathVariable String fileId,
             @RequestParam String workerId, HttpServletResponse response) throws IOException {
+        if (!"disabled".equalsIgnoreCase(securityMode)) workerCapabilities.requireWorkerForTask(taskId);
         ExternalTaskEntity task = externalTasks.findById(taskId).orElseThrow(() -> new ApiException(
                 HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND, "External task not found"));
         if (task.getStatus() != ExternalTaskEntity.Status.LOCKED || !workerId.equals(task.getWorkerId())
@@ -144,6 +155,12 @@ public class ProjectFileController {
         }
         ProcessFileEntity row = files.require(instance.getProjectId(), fileId);
         if (row.getState() != ProcessFileEntity.State.ATTACHED || !row.getInstanceId().equals(instance.getId())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND, "File not found");
+        }
+        var serviceTask = instance.getDefinition().getServiceTask(task.getActivityId());
+        if (serviceTask != null && serviceTask.agentWork() != null
+                && !agentFiles.declares(serviceTask.agentWork(), instance, fileId)) {
+            // S15 default-deny: an agent's worker reads only the files its node declares in `files`.
             throw new ApiException(HttpStatus.NOT_FOUND, ApiErrorCode.RESOURCE_NOT_FOUND, "File not found");
         }
         stream(row, "worker", response);

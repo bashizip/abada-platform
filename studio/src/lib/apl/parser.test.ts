@@ -791,3 +791,44 @@ describe('APL round trip: process metadata', () => {
     expect(workflowToAPL(bare).metadata).toEqual({ key: 'refunds', name: 'Refunds' });
   });
 });
+
+describe('APL round trip: files as agent input (S15)', () => {
+  const intake: APLDocument = {
+    version: 'abada.io/v1',
+    metadata: { key: 'declaration_intake', name: 'Declaration intake' },
+    flow: {
+      entry: 'start',
+      nodes: [
+        { id: 'start', type: 'webhook', next: 'lecture' },
+        {
+          id: 'lecture',
+          type: 'agent',
+          model: 'gemini-3.6-flash',
+          prompt: 'Extract the declared payroll.',
+          files: { bordereau: 'bordereau_scan', annexes: 'annex_files' },
+          max_files: 3,
+          next: 'done',
+        },
+        { id: 'plain', type: 'agent', model: 'gemini-3.6-flash', prompt: 'No files.', next: 'done' },
+        { id: 'done', type: 'end' },
+      ],
+    },
+  };
+
+  it('keeps files and max_files through the canvas and a save', () => {
+    const workflow = aplToWorkflow(intake);
+    const lecture = workflow.nodes.find((node) => node.id === 'lecture');
+    expect(lecture?.agentConfig?.files).toEqual({ bordereau: 'bordereau_scan', annexes: 'annex_files' });
+    expect(lecture?.agentConfig?.maxFiles).toBe(3);
+
+    const saved = workflowToAPL(workflow).flow.nodes;
+    expect(saved.find((node) => node.id === 'lecture')).toMatchObject({
+      files: { bordereau: 'bordereau_scan', annexes: 'annex_files' },
+      max_files: 3,
+    });
+    const plain = saved.find((node) => node.id === 'plain') as unknown as Record<string, unknown>;
+    expect(plain.files).toBeUndefined();
+    expect(plain.max_files).toBeUndefined();
+    expect(stringifyAPLYaml(workflowToAPL(workflow))).toContain('bordereau: bordereau_scan');
+  });
+});

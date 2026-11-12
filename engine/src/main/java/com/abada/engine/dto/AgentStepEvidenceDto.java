@@ -37,5 +37,8 @@ public record AgentStepEvidenceDto(
         // When a person approved or rejected a PROPOSED step (E10); the decider is resolvedBy.
         Instant decidedAt,
         // The child process a DELEGATION step started (E20b).
-        String childInstanceId) {
+        String childInstanceId,
+        // S15: the files a MODEL_CALL step was given: name, fileId, fileName, contentType, size, sha256.
+        // Metadata only, kept whatever the payload policy; null when the call carried no file.
+        com.fasterxml.jackson.databind.JsonNode files) {
 }

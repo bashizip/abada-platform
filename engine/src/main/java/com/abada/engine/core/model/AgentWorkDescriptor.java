@@ -36,9 +36,21 @@ public record AgentWorkDescriptor(
         // Bounds of the tool loop (E8); omitted when the node declares none.
         @JsonInclude(JsonInclude.Include.NON_NULL) AgentLimits limits,
         // Processes the agent may delegate to (E20b), attached when the work is locked; omitted when none.
-        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AgentDelegate> delegates) implements Serializable {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AgentDelegate> delegates,
+        // S15: file name -> CEL expression giving a file reference or a list of them; default-deny,
+        // so only these files reach a model. Omitted when the node reads no file.
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, String> files,
+        // S15: most files one call may carry; omitted when the node reads no file.
+        @JsonInclude(JsonInclude.Include.NON_NULL) Integer maxFiles,
+        // S15: the files resolved and checked by the engine when the work is locked (metadata, never bytes).
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AgentFileRef> resolvedFiles) implements Serializable {
+
+    /** Default {@code max_files}. */
+    public static final int DEFAULT_MAX_FILES = 5;
 
     public AgentWorkDescriptor {
+        files = files == null ? Map.of() : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(files));
+        resolvedFiles = resolvedFiles == null ? List.of() : List.copyOf(resolvedFiles);
         inputs = inputs == null ? Map.of() : Map.copyOf(inputs);
         outputSchema = outputSchema == null ? Map.of() : Map.copyOf(outputSchema);
         tools = tools == null ? List.of() : List.copyOf(tools);
@@ -47,6 +59,16 @@ public record AgentWorkDescriptor(
         toolBindings = toolBindings == null ? List.of() : List.copyOf(toolBindings);
         prices = prices == null ? Map.of() : Map.copyOf(prices);
         delegates = delegates == null ? List.of() : List.copyOf(delegates);
+    }
+
+    public AgentWorkDescriptor(String profileVersion, String model, String prompt, Map<String, String> inputs,
+            String resultVariable, Map<String, Object> outputSchema, List<String> tools, Double confidenceThreshold,
+            Double temperature, Integer maxTokens, Long timeoutMs, Integer maxAttempts, Long retryBackoffMs,
+            List<String> fallbackModels, Map<String, ToolPolicy> toolPolicies, List<ToolBinding> toolBindings,
+            Map<String, ModelPrice> prices, AgentLimits limits, List<AgentDelegate> delegates) {
+        this(profileVersion, model, prompt, inputs, resultVariable, outputSchema, tools, confidenceThreshold,
+                temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels, toolPolicies,
+                toolBindings, prices, limits, delegates, Map.of(), null, List.of());
     }
 
     public AgentWorkDescriptor(String profileVersion, String model, String prompt, Map<String, String> inputs,
@@ -97,27 +119,39 @@ public record AgentWorkDescriptor(
     public AgentWorkDescriptor withModel(String otherModel) {
         return new AgentWorkDescriptor(profileVersion, otherModel, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, toolBindings, prices, limits, delegates);
+                fallbackModels, toolPolicies, toolBindings, prices, limits, delegates, files, maxFiles, resolvedFiles);
     }
 
     /** The same work with the current prices of its models. */
     public AgentWorkDescriptor withPrices(Map<String, ModelPrice> current) {
         return new AgentWorkDescriptor(profileVersion, model, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, toolBindings, current, limits, delegates);
+                fallbackModels, toolPolicies, toolBindings, current, limits, delegates, files, maxFiles, resolvedFiles);
     }
 
     /** The same work with the tool bindings frozen for its definition version. */
     public AgentWorkDescriptor withToolBindings(List<ToolBinding> bindings) {
         return new AgentWorkDescriptor(profileVersion, model, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, bindings, prices, limits, delegates);
+                fallbackModels, toolPolicies, bindings, prices, limits, delegates, files, maxFiles, resolvedFiles);
     }
 
     /** The same work with the delegations its definition version pinned. */
     public AgentWorkDescriptor withDelegates(List<AgentDelegate> pinned) {
         return new AgentWorkDescriptor(profileVersion, model, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, toolBindings, prices, limits, pinned);
+                fallbackModels, toolPolicies, toolBindings, prices, limits, pinned, files, maxFiles, resolvedFiles);
+    }
+
+    /** The same work with the files the engine resolved and checked for this lock (S15). */
+    public AgentWorkDescriptor withResolvedFiles(List<AgentFileRef> resolved) {
+        return new AgentWorkDescriptor(profileVersion, model, prompt, inputs, resultVariable, outputSchema,
+                tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
+                fallbackModels, toolPolicies, toolBindings, prices, limits, delegates, files, maxFiles, resolved);
+    }
+
+    /** {@code max_files}, or its default when the node reads files without setting it. */
+    public int effectiveMaxFiles() {
+        return maxFiles == null ? DEFAULT_MAX_FILES : maxFiles;
     }
 }

@@ -1,0 +1,28 @@
+version: abada.io/v1
+metadata:
+  key: agent_file_limit
+  name: Agent file limit (S15)
+flow:
+  entry: start
+  nodes:
+    - id: start
+      type: webhook
+      next: depot
+    - id: depot
+      type: human-input
+      assignees:
+        - declarations
+      formKey: declaration-depot
+      next: lecture
+    - id: lecture
+      type: agent
+      model: gemini-3.6-flash
+      prompt: Read both documents.
+      files:
+        scan: bordereau_scan
+        annex: annexe
+      max_files: 1
+      result_variable: lecture
+      next: done
+    - id: done
+      type: end

@@ -171,6 +171,18 @@ public class AgentEvidenceService {
         }
     }
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper FILES_JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private static com.fasterxml.jackson.databind.JsonNode files(AgentStepEntity step) {
+        if (step.getFilesJson() == null) return null;
+        try {
+            return FILES_JSON.readTree(step.getFilesJson());
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
     private static AgentStepEvidenceDto summary(AgentStepEntity step) {
         return new AgentStepEvidenceDto(step.getId(), step.getExternalTaskId(), step.getActivityId(),
                 step.getAttempt(), step.getSequence(), step.getKind().name(), step.getToolRef(), step.getPolicy(),
@@ -178,7 +190,7 @@ public class AgentEvidenceService {
                 step.getModel(), step.getPromptVersion(), step.getPromptTokens(), step.getCompletionTokens(),
                 step.getCostUsd(), step.isCostUnpriced(), step.getPayloadMode(), step.getResolvedBy(),
                 step.getStartedAt(), step.getFinishedAt(), step.getPurgedAt(), step.getDecidedAt(),
-                step.getChildInstanceId());
+                step.getChildInstanceId(), files(step));
     }
 
     private static ApiException invalid(String message) {

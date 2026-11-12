@@ -209,6 +209,8 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           temperature: aplNode.temperature ?? 0.2,
           tools: aplNode.tools || [],
           inputs: aplNode.inputs,
+          files: aplNode.files,
+          maxFiles: aplNode.max_files,
           resultVariable: aplNode.result_variable,
           outputSchema: aplNode.output_schema,
           maxTokens: aplNode.max_tokens,
@@ -514,6 +516,9 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         model: node.agentConfig?.model,
         prompt: node.agentConfig?.systemPrompt,
         inputs: node.agentConfig?.inputs,
+        files: node.agentConfig?.files && Object.keys(node.agentConfig.files).length ? node.agentConfig.files : undefined,
+        max_files: node.agentConfig?.files && Object.keys(node.agentConfig.files).length
+          ? node.agentConfig.maxFiles : undefined,
         result_variable: node.agentConfig?.resultVariable,
         output_schema: node.agentConfig?.outputSchema,
         tools: node.agentConfig?.tools?.length ? node.agentConfig.tools : undefined,

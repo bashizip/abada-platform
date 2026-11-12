@@ -1202,11 +1202,75 @@ public final class AplParser {
         } else if (!rawFallbacks.isMissingNode() && !rawFallbacks.isNull()) {
             throw validation("fallback_models", "agent node '" + nodeId + "' fallback_models must be a list");
         }
+        Map<String, String> files = parseAgentFiles(node, nodeId, inputs);
+        Integer maxFiles = parseMaxFiles(node, nodeId, files);
         return new AgentWorkDescriptor(profile, model,
                 prompt, inputs,
                 node.path("result_variable").asText(nodeId + "_result"), outputSchema, tools,
                 confidence, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels,
-                toolPolicies, List.of(), Map.of(), parseLimits(node, nodeId, tools));
+                toolPolicies, List.of(), Map.of(), parseLimits(node, nodeId, tools), List.of(), files, maxFiles,
+                List.of());
+    }
+
+    /** S15: the most file names one agent node may declare, and the bounds of {@code max_files}. */
+    static final int MAX_AGENT_FILE_NAMES = 10;
+    static final int MAX_AGENT_FILES = 20;
+    private static final java.util.regex.Pattern AGENT_FILE_NAME =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,63}");
+
+    /**
+     * {@code files}: name -> CEL expression giving a file reference or a list of them.
+     * Default-deny: only these files reach a model; a reference listed in {@code inputs}
+     * still travels as metadata text. Expressions are compiled by the deployment policy
+     * check; here the shape, the names and clashes with {@code inputs}.
+     */
+    private Map<String, String> parseAgentFiles(JsonNode node, String nodeId, Map<String, String> inputs) {
+        JsonNode raw = node.path("files");
+        if (raw.isMissingNode() || raw.isNull()) return Map.of();
+        if (!raw.isObject()) {
+            throw validation("files", "agent node '" + nodeId + "' files must map names to expressions");
+        }
+        Map<String, String> files = new LinkedHashMap<>();
+        var entries = raw.fields();
+        while (entries.hasNext()) {
+            var entry = entries.next();
+            String name = entry.getKey();
+            String field = "files/" + name;
+            if (!AGENT_FILE_NAME.matcher(name).matches()) {
+                throw validation(field, "agent node '" + nodeId + "' file name '" + name
+                        + "' must be letters, digits and underscores, starting with a letter or underscore");
+            }
+            if (inputs.containsKey(name)) {
+                throw validation(field, "agent node '" + nodeId + "' declares '" + name
+                        + "' both in inputs and in files; a name is either data or a file");
+            }
+            if (!entry.getValue().isTextual() || entry.getValue().asText().isBlank()) {
+                throw validation(field, "agent node '" + nodeId + "' file '" + name
+                        + "' needs an expression giving a file reference or a list of them");
+            }
+            files.put(name, entry.getValue().asText().strip());
+        }
+        if (files.isEmpty()) {
+            throw validation("files", "agent node '" + nodeId + "' files is empty; remove it or name a file");
+        }
+        if (files.size() > MAX_AGENT_FILE_NAMES) {
+            throw validation("files", "agent node '" + nodeId + "' declares more than " + MAX_AGENT_FILE_NAMES
+                    + " file names");
+        }
+        return files;
+    }
+
+    private Integer parseMaxFiles(JsonNode node, String nodeId, Map<String, String> files) {
+        if (!node.has("max_files")) return files.isEmpty() ? null : AgentWorkDescriptor.DEFAULT_MAX_FILES;
+        JsonNode raw = node.path("max_files");
+        if (!raw.canConvertToInt() || !raw.isIntegralNumber() || raw.asInt() < 1 || raw.asInt() > MAX_AGENT_FILES) {
+            throw validation("max_files", "agent node '" + nodeId + "' max_files must be an integer between 1 and "
+                    + MAX_AGENT_FILES);
+        }
+        if (files.isEmpty()) {
+            throw validation("max_files", "agent node '" + nodeId + "' sets max_files but declares no files");
+        }
+        return raw.asInt();
     }
 
     /**

@@ -100,9 +100,39 @@ Responses are `Content-Disposition: attachment` with the stored name,
 without the matching files) answers 410 `FILE_UNAVAILABLE`; RustFS not
 answering gives 503 `OBJECT_STORE_UNAVAILABLE`.
 
-Agents receive only what they declare (default-deny inputs): a file reference
-reaches a model only if the agent node lists that variable, and in 1.2 the
-first-party agent worker passes the reference, not the bytes.
+Agents receive only what they declare (default-deny). A file reference listed
+in an agent's `inputs` reaches the model as metadata text (name, type, size,
+sha256), never the bytes. A file the model must *read* is declared in the
+agent's `files` (1.2, S15):
+
+- When the work is locked, the engine resolves each `files` expression and
+  checks every reference against `process_files`, in the lock transaction and
+  without calling RustFS: the file must exist in the instance's project, be
+  `ATTACHED` to this very instance and not be `DELETING`. The work descriptor
+  then carries the references (id, name, content type, size, sha256), never
+  the bytes. A breach fails the work for good with `AGENT_FILE_INVALID`; more
+  than `max_files` files, or more than `abada.agent.files.max-bytes` (default
+  20 MB) per call, with `AGENT_FILE_LIMIT`. Either takes `on_error` or opens a
+  `WORK_FAILED` incident; nothing is cut silently.
+- The worker downloads each file through
+  `GET /api/v1/external-tasks/{id}/files/{fileId}?workerId=` while it holds the
+  lease. For an agent task the engine serves only the files its node declares
+  (404 otherwise). The worker checks size and sha256 (`AGENT_FILE_INTEGRITY`
+  on a mismatch), keeps the bytes in memory for the attempt and sends them to
+  the model: images and PDF for Gemini, OpenAI and OpenRouter, images for
+  Anthropic and other OpenAI-compatible endpoints. A model whose provider
+  cannot read a declared type is skipped in the fallback chain; with none
+  left the work fails with `AGENT_FILE_UNSUPPORTED`. A call is never made
+  without its files.
+- Each model call that carried files records them on its journal step
+  (`agent_steps.files_json`, V44): the declared name, id, file name, type,
+  size and sha256 as the engine verified them, whatever the evidence payload
+  policy and after the payloads are purged. The bytes are never journaled,
+  logged or written to the worker's disk.
+
+Installations that may not send documents to an external model keep using an
+engine-task worker (OCR on their own infrastructure) before the agent, and do
+not declare `files`.
 
 ## Deletion, retention and orphans
 

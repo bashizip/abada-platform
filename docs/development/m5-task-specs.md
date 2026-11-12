@@ -922,3 +922,28 @@ agent, its output passes `output_schema`, low confidence routes to manual
 entry, and the evidence shows the file's sha256. Documentation:
 `process-files.md` (the "reference, not the bytes" sentence changes with the
 code), the APL reference for `files`, and one example process.
+
+**As built (2026-11-12).**
+- Files are resolved when the work is **locked**, in the transaction that
+  resolves `inputs` today (inputs are resolved at lock, not at task creation),
+  so a file deleted between creation and lock is caught. A breach fails the
+  work at lock with `AGENT_FILE_INVALID` or `AGENT_FILE_LIMIT`; a null value
+  (optional upload left empty) is no file.
+- Worker error codes: `AGENT_FILE_INTEGRITY` (size or sha256 differ) and
+  `AGENT_FILE_UNSUPPORTED` (no model of the chain reads a declared type). A
+  model that answers HTTP 400 about images or files is a configuration error.
+- Wire forms, all on the OpenAI-compatible endpoint the gateways already use:
+  Gemini takes images and PDF as `image_url` data URIs; OpenAI and OpenRouter
+  take images as `image_url` and PDF as a `file` part (`file_data`); Anthropic
+  and other OpenAI-compatible endpoints take images (PNG, JPEG, WebP); DeepSeek
+  none. The table is `ProviderFileSupport` in the worker.
+- Evidence: V44 `agent_steps.files_json`. The worker names the files of each
+  model call (`request.files`: fileId, sha256); the engine checks them against
+  the node's resolved files and stores the metadata from `process_files`.
+  `EXTERNAL_TASK_LOCKED` history also lists the files handed out.
+- The worker download endpoint now serves an agent task only the files its
+  node declares, and checks the worker principal like the other worker
+  endpoints.
+- Studio: a *Files* section in the agent properties (suggestions from the file
+  fields of the process's task forms, `max_files`, accepted types) and file
+  chips with the sha256 on model-call steps in the agent-step inspector.

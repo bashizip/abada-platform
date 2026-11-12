@@ -235,6 +235,55 @@ public final class AbadaWorkerClient {
         }
     }
 
+    /**
+     * Downloads a file the task may read (S15) while the worker holds its lease. Reads at
+     * most {@code maxBytes}: a larger body is refused without being kept. The bytes are
+     * returned in memory only; callers must never log or write them.
+     */
+    public byte[] downloadFile(String taskId, String workerId, String fileId, long maxBytes) {
+        String path = "/v1/external-tasks/" + segment(taskId) + "/files/" + segment(fileId)
+                + "?workerId=" + segment(workerId);
+        try {
+            HttpRequest.Builder request = HttpRequest.newBuilder(engineBase.resolve(engineBase.getPath() + path))
+                    .timeout(Duration.ofSeconds(120)).header("Accept", "*/*").GET();
+            String token = bearerToken == null ? null : bearerToken.get();
+            if (token != null && !token.isBlank()) request.header("Authorization", "Bearer " + token);
+            HttpResponse<java.io.InputStream> response = httpClient.send(request.build(),
+                    HttpResponse.BodyHandlers.ofInputStream());
+            try (java.io.InputStream body = response.body()) {
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    byte[] error = body.readNBytes(16 * 1024);
+                    throw protocolError(new StringResponse(response, new String(error,
+                            java.nio.charset.StandardCharsets.UTF_8)));
+                }
+                byte[] bytes = body.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, maxBytes + 1));
+                if (bytes.length > maxBytes) {
+                    throw new WorkerProtocolException(413, "FILE_TOO_LARGE",
+                            "File " + fileId + " is larger than " + maxBytes + " bytes");
+                }
+                return bytes;
+            }
+        } catch (WorkerProtocolException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw new WorkerProtocolException(0, "NETWORK_ERROR", exception.getMessage());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new WorkerProtocolException(0, "INTERRUPTED", "Worker request was interrupted");
+        }
+    }
+
+    /** A streamed response whose error body was read as text, for {@link #protocolError}. */
+    private record StringResponse(HttpResponse<?> source, String body) implements HttpResponse<String> {
+        @Override public int statusCode() { return source.statusCode(); }
+        @Override public HttpRequest request() { return source.request(); }
+        @Override public java.util.Optional<HttpResponse<String>> previousResponse() { return java.util.Optional.empty(); }
+        @Override public java.net.http.HttpHeaders headers() { return source.headers(); }
+        @Override public java.util.Optional<javax.net.ssl.SSLSession> sslSession() { return source.sslSession(); }
+        @Override public URI uri() { return source.uri(); }
+        @Override public HttpClient.Version version() { return source.version(); }
+    }
+
     /** Returns the worker's registered global capabilities. */
     public String capabilities() {
         return sendEngine("/v1/workers/me", "GET", null).body();

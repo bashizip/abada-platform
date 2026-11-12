@@ -251,6 +251,19 @@ it fires, inside the command that observes the condition.
   unavailable the attempt is *deferred*: it does not consume `max_attempts`
   and is retried after the provider's `Retry-After`, with a growing delay
   (see runtime semantics).
+- **Files.** `files` maps names to CEL expressions that give a file
+  reference or a list of them (from a `file` field of a task form). It is
+  default-deny like `inputs`: only these files reach the model, which reads
+  them as images or PDF. At deployment each expression must compile, names
+  match `[A-Za-z_][A-Za-z0-9_]{0,63}` (at most 10) and none is also an input;
+  `max_files` (1–20, default 5) needs `files`. When the work is locked the
+  engine checks every referenced file is attached to this instance and within
+  `max_files` and `abada.agent.files.max-bytes`; otherwise the step fails with
+  `AGENT_FILE_INVALID` or `AGENT_FILE_LIMIT`. A value that is null (an
+  optional upload left empty) is no file. The worker's typed errors are
+  `AGENT_FILE_INTEGRITY` (bytes differ from the engine's sha256) and
+  `AGENT_FILE_UNSUPPORTED` (no model of the chain reads a declared type).
+  Instructions inside a document are data, never a change of the contract.
 - **Loops.** A boundary may return to an earlier step; that cycle needs a
   `loop` bound like any other (§2.3).
 - Boundaries replace the synthetic `<id>__outcome` gateway used before 1.1;
@@ -472,6 +485,8 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `budget_usd` | number | no | engine-computed cost for the whole task; fails closed for an unpriced model |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |
 | `fallback_models` | string[] | no | up to 3 allowed models tried while the model before is unavailable (§2.6) |
+| `files` | map name → CEL | no | files the model reads, each a file reference or a list (§2.6, 1.2) |
+| `max_files` | integer | no | 1–20, default 5; only with `files` |
 | `on_low_confidence` | nodeId | no | route when `_confidence` is missing or below `confidence_threshold` |
 | `on_invalid_output` | nodeId | no | route when the result violates `output_schema` or the completion shape |
 | `on_error` | nodeId or `[{code?, then}]` | no | route for a worker-reported BPMN error (optionally per code) or the last failed attempt (`WORK_FAILED`) |

@@ -209,6 +209,8 @@ typed node plus a versioned worker profile (`abada.agent/v1`).
 | `max_attempts` | integer | no | Durable retries before the job fails. Default 3. A rate-limited attempt that never ran does not count. |
 | `retry_backoff_ms` | integer | no | Pause between retries. Default 2 000. |
 | `fallback_models` | string[] | no | Up to 3 allowed models tried in order while the model before is rate-limited or unavailable — never because of an answer the engine rejected. |
+| `files` | map name → expression | no | Files the model reads (1.2): each expression gives a file reference or a list of them, usually a file field of an earlier task form (`bordereau: bordereau_scan`). Only these files reach a model, as images or PDF; a name cannot also be an input. The engine checks each file belongs to this instance when the work is locked. See process files. |
+| `max_files` | integer | no | 1–20, default 5. Most files one call may carry; more fails the step with `AGENT_FILE_LIMIT`. Only with `files`. |
 | `on_low_confidence` | nodeId | no | Where to go when the result's `_confidence` is missing or below `confidence_threshold`. |
 | `on_invalid_output` | nodeId | no | Where to go when the result does not match `output_schema`. |
 | `on_error` | nodeId or `[{code?, then}]` | no | Where to go when the worker reports an error code, or when the last attempt fails (code `WORK_FAILED`). Without it a last failure opens an incident. |

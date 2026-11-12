@@ -144,4 +144,14 @@ class ReplayRunnerTest {
                 new ScriptedAgent().answer(Map.of("draft_result", "v1")), decisions(Map.of()));
         assertThat(result.toolsSkipped()).containsExactly("draft");
     }
+
+    @Test
+    void anAgentThatReadsFilesStopsTheReplayInsteadOfAnsweringWithoutThem() throws Exception {
+        ParsedProcessDefinition definition = load("agent-file-guard.apl.yaml");
+        ScriptedAgent agent = new ScriptedAgent().answer(Map.of("lecture", Map.of("payroll", 1)));
+        var result = runner.run(definition, Map.of("doc_ref", Map.of("fileId", "f-1")), agent, decisions(Map.of()));
+        assertThat(result.end()).isEqualTo(End.NEEDS_EXTERNAL);
+        assertThat(result.reason()).contains("reads files");
+        assertThat(agent.seen).as("the model is never called without the document").isEmpty();
+    }
 }

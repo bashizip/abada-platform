@@ -29,6 +29,17 @@ export interface EvidencePolicy {
 }
 
 /** One journaled agent step as project members see it (no payloads). */
+/** A file a model call read (S15). */
+export interface AgentStepFile {
+  /** The name the agent node declares in `files`. */
+  name: string;
+  fileId: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  sha256: string;
+}
+
 export interface AgentStepEvidence {
   id: string;
   externalTaskId: string;
@@ -55,6 +66,11 @@ export interface AgentStepEvidence {
   decidedAt?: string;
   /** The child process a DELEGATION step started. */
   childInstanceId?: string;
+  /**
+   * The files a MODEL_CALL step was given (S15), as the engine verified them: metadata
+   * only, kept whatever the payload policy. Absent when the call carried no file.
+   */
+  files?: AgentStepFile[] | null;
   errorType?: string;
 }
 

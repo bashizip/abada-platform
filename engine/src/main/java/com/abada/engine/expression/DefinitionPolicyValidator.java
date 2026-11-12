@@ -54,6 +54,8 @@ public final class DefinitionPolicyValidator {
                         compile(expression, processId, task.id(), errorCode, namespace, issues);
                     }
                 });
+                task.agentWork().files().forEach((name, expression) ->
+                        compile(expression, processId, task.id(), errorCode, namespace, issues));
             }
         }
         definition.getAllAgentRoutes().forEach((nodeId, routes) -> routes.forEach(route -> {

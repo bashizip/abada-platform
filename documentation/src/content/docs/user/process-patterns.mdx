@@ -18,6 +18,7 @@ Studio. The [tutorial](/user/first-workflow/) uses all of them in one process.
 | Stop a step that takes too long | [`on_timeout`](#timeouts) |
 | Escalate a human task that is late, without cancelling it | [`sla_hours`, `escalate_to`](#service-levels) |
 | Survive a rate-limited or unavailable model | [`fallback_models`](#fallback-models) |
+| Let an agent read a scanned document, a photo or a PDF | [`files`](#let-an-agent-read-a-document) |
 
 ## Repeat a step with a limit
 
@@ -248,6 +249,56 @@ the attempt waits (the provider's `Retry-After`, then a growing delay capped at
 The attempt telemetry shows the model that answered and the one it replaced:
 
 ![Attempt telemetry with Executed model gpt-5-mini and Fallback for gemini-3.6-flash](../../../assets/screens/tutorial/23-fallback-telemetry.webp)
+
+## Let an agent read a document
+
+A person uploads a scan in a task form; the agent reads the file itself, not a
+text copy of it. Declare it in `files`, next to `inputs`:
+
+```yaml
+- id: upload
+  type: human-input
+  formKey: invoice-upload        # has a file field `invoice_scan`
+  next: read
+- id: read
+  type: agent
+  model: gemini-3.6-flash
+  prompt: Read the attached invoice and give its totals.
+  files:
+    invoice: invoice_scan        # a file reference, or a list of them
+  max_files: 1                   # default 5
+  output_schema: { ... }
+  confidence_threshold: 85
+  on_low_confidence: enter_by_hand
+```
+
+- **Only declared files reach the model.** When the step starts, the engine
+  checks each file belongs to this instance and is attached; a reference to
+  another case's file, too many files or more than 20 MB fail the step with
+  `AGENT_FILE_INVALID` or `AGENT_FILE_LIMIT`, which `on_error` can route.
+- **What a model can read** depends on its provider: images and PDF with
+  Gemini, OpenAI and OpenRouter; images with Anthropic and most self-hosted
+  vision models. A fallback that cannot read a file is skipped; with none left
+  the step fails with `AGENT_FILE_UNSUPPORTED`. A call is never made without
+  its files.
+- **The contract stays the same:** the answer is checked against
+  `output_schema` and `confidence_threshold`, and text written inside a
+  document is treated as data, never as instructions.
+- **Evidence.** Each model call keeps the file name, type, size and sha256 it
+  read, whatever the evidence policy; the instance's agent steps show them as
+  file chips you can download (with the usual permissions). The bytes are
+  never logged or kept by the worker.
+
+<Aside type="caution">
+Declaring `files` sends the document to the model's provider. If documents may
+not leave your infrastructure, run a self-hosted vision model, or put an OCR
+step (an engine task on your own servers) before the agent and pass its text
+in `inputs` instead.
+</Aside>
+
+In Studio, the agent's properties have a **Files** section: pick the file
+field of an earlier form, set the most files per call, and see which types
+each provider reads.
 
 ## Edit routes in Studio
 

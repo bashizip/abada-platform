@@ -67,4 +67,22 @@ describe('agent step inspector', () => {
     await settle();
     expect(container.textContent).toContain('abada-evidence-reader');
   });
+
+  it('shows the files a model call read, with their sha256, as downloadable chips', () => {
+    const sha = 'a1b2c3d4e5f6'.padEnd(64, '0');
+    const container = render(<AgentStepInspector projectId="p" instanceId="i" steps={[step({
+      sequence: 1, model: 'gemini-3.6-flash', payloadMode: 'none',
+      files: [{ name: 'bordereau', fileId: 'f-1', fileName: 'bordereau-2026-10.pdf', contentType: 'application/pdf',
+        size: 4200, sha256: sha }],
+    })]} />);
+    const files = container.querySelector('[aria-label="Files of step 1.1"]');
+    expect(files?.textContent).toContain('bordereau-2026-10.pdf');
+    expect(files?.textContent).toContain('a1b2c3d4e5f6');
+    expect(files?.querySelector('button[title^="Download bordereau-2026-10.pdf"]')).not.toBeNull();
+  });
+
+  it('shows no file line for a call without files', () => {
+    const container = render(<AgentStepInspector steps={steps} projectId="p" instanceId="i" />);
+    expect(container.querySelector('[aria-label^="Files of step"]')).toBeNull();
+  });
 });

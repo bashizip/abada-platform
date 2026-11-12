@@ -176,7 +176,14 @@ final class AgentLoop {
 
     Outcome run(LockedExternalTask task, AgentWorkDescriptor work, List<String> models,
             Function<String, AgentGateway> gatewayFor, Journal journal, McpSessionPool sessions) throws Exception {
-        return new Run(task, work, models, gatewayFor, journal, sessions).execute();
+        return run(task, work, models, gatewayFor, journal, sessions, List.of());
+    }
+
+    /** As above, with the files the call reads (S15), downloaded and verified for this attempt. */
+    Outcome run(LockedExternalTask task, AgentWorkDescriptor work, List<String> models,
+            Function<String, AgentGateway> gatewayFor, Journal journal, McpSessionPool sessions,
+            List<AgentFiles.AgentFile> files) throws Exception {
+        return new Run(task, work, models, gatewayFor, journal, sessions, files).execute();
     }
 
     /** The state of one attempt. */
@@ -187,6 +194,8 @@ final class AgentLoop {
         private final Function<String, AgentGateway> gatewayFor;
         private final Journal journal;
         private final McpSessionPool sessions;
+        private final List<AgentFiles.AgentFile> files;
+        private final List<Map<String, Object>> fileEvidence;
         private final Map<String, ToolBinding> byFunction = new LinkedHashMap<>();
         private final Map<String, AgentDelegate> delegateByFunction = new LinkedHashMap<>();
         private final List<ToolSpec> specs = new ArrayList<>();
@@ -207,7 +216,10 @@ final class AgentLoop {
         private AgentGateway.AgentUnavailableException lastUnavailable;
 
         Run(LockedExternalTask task, AgentWorkDescriptor work, List<String> models,
-                Function<String, AgentGateway> gatewayFor, Journal journal, McpSessionPool sessions) {
+                Function<String, AgentGateway> gatewayFor, Journal journal, McpSessionPool sessions,
+                List<AgentFiles.AgentFile> files) {
+            this.files = files == null ? List.of() : files;
+            this.fileEvidence = AgentFiles.metadata(this.files);
             this.task = task;
             this.work = work;
             this.models = models;
@@ -220,11 +232,18 @@ final class AgentLoop {
             if (work.toolBindings().isEmpty() && work.delegates().isEmpty()) return singleCall();
             offerTools();
             Map<String, Object> variables = task.variables() == null ? Map.of() : task.variables();
-            messages.add(Map.of("role", "system", "content", AbstractAgentGateway.renderPrompt(work, variables)));
-            messages.add(Map.of("role", "user", "content",
-                    AbstractAgentGateway.renderInputs(AbstractAgentGateway.selectInputs(work, variables))));
-            if (!task.priorWrites().isEmpty()) messages.add(priorWritesNote());
-            delta.addAll(messages);
+            Map<String, Object> system = Map.of("role", "system", "content",
+                    AbstractAgentGateway.renderPrompt(work, variables));
+            String inputs = AbstractAgentGateway.renderInputs(AbstractAgentGateway.selectInputs(work, variables));
+            messages.add(system);
+            messages.add(Map.of("role", "user", "content", AgentFiles.userContent(inputs, files, false)));
+            // The journaled conversation names the files (id, sha256); the bytes stay in memory.
+            delta.add(system);
+            delta.add(Map.of("role", "user", "content", AgentFiles.userContent(inputs, files, true)));
+            if (!task.priorWrites().isEmpty()) {
+                messages.add(priorWritesNote());
+                delta.add(priorWritesNote());
+            }
             resume();
             while (true) {
                 if (!pending.isEmpty()) {
@@ -260,7 +279,11 @@ final class AgentLoop {
             while (modelIndex < models.size()) {
                 String model = currentModel();
                 requireAffordable(model);
-                Map<String, Object> request = Map.of("turn", 1, "model", model);
+                Map<String, Object> request = new LinkedHashMap<>();
+                request.put("turn", 1);
+                request.put("model", model);
+                // The engine checks these against the node's files and keeps them as evidence.
+                if (!fileEvidence.isEmpty()) request.put("files", fileEvidence);
                 int sequence = started != null && started.request() != null
                         && model.equals(started.request().path("model").asText()) ? started.sequence() : nextSequence++;
                 started = null;
@@ -269,7 +292,8 @@ final class AgentLoop {
                 provider = gateway.provider();
                 AgentResult result;
                 try {
-                    result = gateway.execute(model.equals(work.model()) ? work : work.withModel(model), task.variables());
+                    result = gateway.execute(model.equals(work.model()) ? work : work.withModel(model), task.variables(),
+                            files);
                 } catch (AgentGateway.AgentUnavailableException unavailable) {
                     journalModel(sequence, "FAILED", request, Map.of("error", unavailable.getClass().getSimpleName()),
                             unavailable.getClass().getSimpleName(), model, null, null);
@@ -392,6 +416,7 @@ final class AgentLoop {
                     work.delegates().forEach(delegate -> offered.add(delegate.tool()));
                     request.put("tools", offered);
                     request.put("messages", List.copyOf(delta));
+                    if (!fileEvidence.isEmpty()) request.put("files", fileEvidence);
                     sequence = nextSequence++;
                 }
                 journalModel(sequence, "STARTED", request, null, null, model, null, null);
