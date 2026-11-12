@@ -126,6 +126,14 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [ ] S14 User guide, screenshots, 1.2.0 release notes and gate report
 - [ ] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
 
+## M6 — 1.2.x (next release, after 1.2.0 on 2026-12-04)
+
+New features only (see the M5 scope freeze). Full specifications:
+[`m6-task-specs.md`](m6-task-specs.md). Planned on 2026-11-12; dates are set
+when 1.2.0 ships.
+
+- [ ] N1 Office and text files as agent input: S15 extended beyond images and PDF. Text formats (CSV, TXT, JSON, Markdown) sent as text; Excel converted to structured text per sheet; Word converted to PDF or text; the conversion runs on the installation's own infrastructure, never at the model provider; the evidence keeps the sha256 of the original file and of the converted content; typed errors for an unsupported format or a conversion over its limits
+
 ## Parallel track — design partners
 
 | By end of | Goal |
