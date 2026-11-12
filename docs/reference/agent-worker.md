@@ -183,6 +183,17 @@ bounded conversation instead of a single call:
   a failed attempt. The attempt metadata names the model that answered and,
   for a fallback, the declared `requestedModel`. Logs record
   `agent_model_unavailable` with the model and error type only.
+- **Files (1.2).** For an agent node with `files`, the descriptor's
+  `resolvedFiles` lists the files the engine checked. The worker downloads
+  each with its lease (`AbadaWorkerClient.downloadFile`), checks size and
+  sha256 (`AGENT_FILE_INTEGRITY`), and sends them after the inputs: Gemini
+  takes images and PDF as `image_url` data URIs; OpenAI and OpenRouter take
+  images as `image_url` and PDF as a `file` part; Anthropic and other
+  OpenAI-compatible endpoints take images. Models that cannot carry every
+  declared type are dropped from the fallback chain (`AGENT_FILE_UNSUPPORTED`
+  when none is left); a model that refuses images with HTTP 400 is a
+  configuration error. Every model call journals the files' id and sha256,
+  never the bytes; nothing is written to disk or logged.
 - An operator who retries a `WORK_FAILED` incident may choose another allowed
   model for that task (with a recorded reason); the next fetch carries it as
   `agentWork.model`.
