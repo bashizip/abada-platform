@@ -49,11 +49,13 @@ public class AgentEvidenceService {
     private final AesEncryption encryption;
     private final ObjectMapper json;
     private final ActivityHistoryService history;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
     private final DecisionInputEvidenceRepository decisionInputs;
 
     public AgentEvidenceService(AgentStepRepository steps, ProjectRepository projects, ProjectAccessService access,
             AbadaEngine engine, AesEncryption encryption, ObjectMapper json, ActivityHistoryService history,
-            DecisionInputEvidenceRepository decisionInputs) {
+            DecisionInputEvidenceRepository decisionInputs, com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.decisionInputs = decisionInputs;
         this.steps = steps;
         this.projects = projects;
@@ -143,6 +145,11 @@ public class AgentEvidenceService {
         project.setUpdatedAt(Instant.now());
         projects.save(project);
         history.record("EVIDENCE_POLICY_CHANGED", null, null, null, details);
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.EVIDENCE_POLICY_UPDATE,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROJECT, projectId, projectId,
+                com.abada.engine.audit.AdminAuditDetails.create()
+                        .change("payloads", details.get("fromPayloads"), details.get("toPayloads"))
+                        .change("retentionDays", details.get("fromRetentionDays"), details.get("toRetentionDays")));
         return new PolicyView(project.getEvidencePayloads(), project.getEvidenceRetentionDays());
     }
 

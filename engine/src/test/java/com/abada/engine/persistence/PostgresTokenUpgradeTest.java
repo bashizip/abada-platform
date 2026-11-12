@@ -104,6 +104,9 @@ class PostgresTokenUpgradeTest {
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword()); var statement = connection.createStatement()) {
             // Undo V38, V37, V36, V35, V34, V33, V32, V31, V30, V29, V28, V27, V26, V25, V24, then V23.
+            // V43: administration audit trail (the append-only trigger goes with the table).
+            statement.execute("drop table admin_audit_events");
+            statement.execute("drop function admin_audit_events_append_only()");
             // V42: process files.
             statement.execute("drop table process_files");
             statement.execute("drop table file_sweep_leases");
@@ -173,7 +176,7 @@ class PostgresTokenUpgradeTest {
             for (String table : List.of("tasks", "external_tasks", "jobs", "event_subscriptions")) {
                 statement.execute("alter table " + table + " drop column token_id");
             }
-            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42')");
+            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43')");
             legacyState(statement, joinId, "b", "[\"b\"]", "{\"join\":2}", "{\"join\":[\"a\"]}");
             legacyState(statement, raceId, "race_e0", "[\"race_e0\",\"race_e1\"]", "{}", "{}");
             legacyState(statement, reviewId, "review", "[\"review\"]", "{}", "{}");

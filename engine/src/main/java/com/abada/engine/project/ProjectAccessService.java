@@ -22,6 +22,13 @@ public class ProjectAccessService {
     private final ProjectRepository projects;
     private final ProjectMemberRepository members;
 
+    private com.abada.engine.audit.AdminAuditRecorder audit;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAudit(com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
+    }
+
     public ProjectAccessService(ProjectRepository projects, ProjectMemberRepository members) {
         this.projects = projects;
         this.members = members;
@@ -52,7 +59,11 @@ public class ProjectAccessService {
         if (isGlobalAdmin()) return project;
         ProjectMemberEntity member = membership(projectId);
         Set<Role> granted = member == null ? Set.of() : member.getRoles();
-        if (Arrays.stream(roles).noneMatch(granted::contains)) throw notFound();
+        if (Arrays.stream(roles).noneMatch(granted::contains)) {
+            // Answered as not found, so outsiders cannot tell the project exists; recorded as refused (S10).
+            if (audit != null) audit.deniedCurrentRequest(member == null ? "NOT_A_MEMBER" : "PROJECT_ROLE_REQUIRED");
+            throw notFound();
+        }
         return project;
     }
 

@@ -23,7 +23,11 @@ public class FilePolicyService {
     private final ProjectRepository projects;
     private final ActivityHistoryService history;
 
-    public FilePolicyService(ProjectAccessService access, ProjectRepository projects, ActivityHistoryService history) {
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
+
+    public FilePolicyService(ProjectAccessService access, ProjectRepository projects, ActivityHistoryService history,
+            com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.access = access;
         this.projects = projects;
         this.history = history;
@@ -54,6 +58,10 @@ public class FilePolicyService {
         project.setUpdatedAt(Instant.now());
         projects.save(project);
         history.record("FILE_POLICY_CHANGED", null, null, null, details);
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.FILE_POLICY_UPDATE,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROJECT, projectId, projectId,
+                com.abada.engine.audit.AdminAuditDetails.create()
+                        .change("retentionDays", details.get("fromRetentionDays"), retentionDays));
         return new PolicyView(retentionDays);
     }
 }

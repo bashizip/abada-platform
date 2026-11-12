@@ -1,5 +1,8 @@
 package com.abada.engine.api;
 
+import com.abada.engine.audit.AdminAuditActions;
+import com.abada.engine.audit.AdminAuditDetails;
+import com.abada.engine.audit.AdminAuditRecorder;
 import com.abada.engine.dto.AdminGroupDTO;
 import com.abada.engine.dto.AdminUserDTO;
 import com.abada.engine.dto.CreateUserRequest;
@@ -23,6 +26,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Platform administration REST surface.
  * Proxies user and group management to the configured external IdP (Keycloak).
  * All endpoints require the abada-admin role.
+ *
+ * <p>Users and groups live in the identity provider, outside the engine's database,
+ * so each change is recorded in the administration audit trail in its own
+ * transaction once the provider has accepted it (S10). Passwords are never recorded.
  */
 @RestController
 @RequestMapping("/v1/admin")
@@ -30,9 +37,11 @@ public class AdminController {
 
     private final IdentityAdminService identityAdmin;
     private final IdentityProperties identityProperties;
+    private final AdminAuditRecorder audit;
 
     public AdminController(IdentityAdminService identityAdmin,
-            IdentityProperties identityProperties) {
+            IdentityProperties identityProperties, AdminAuditRecorder audit) {
+        this.audit = audit;
         this.identityAdmin = identityAdmin;
         this.identityProperties = identityProperties;
     }
@@ -70,6 +79,10 @@ public class AdminController {
         if (created == null) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+        audit.recordExternalSuccess(AdminAuditActions.USER_CREATE, AdminAuditActions.TARGET_USER, created.id(),
+                AdminAuditDetails.create().put("username", created.username()).put("email", created.email())
+                        .put("enabled", created.enabled()).put("groups", created.groups())
+                        .put("initialPasswordSet", request.password() != null && !request.password().isBlank()));
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -79,10 +92,20 @@ public class AdminController {
         if (!identityProperties.isConfigured()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
+        AdminUserDTO before = identityAdmin.getUser(id);
         AdminUserDTO updated = identityAdmin.updateUser(id, request);
         if (updated == null) {
             return ResponseEntity.notFound().build();
         }
+        AdminAuditDetails details = AdminAuditDetails.create().put("username", updated.username());
+        if (before != null) {
+            details.change("email", before.email(), updated.email())
+                    .change("firstName", before.firstName(), updated.firstName())
+                    .change("lastName", before.lastName(), updated.lastName())
+                    .change("enabled", before.enabled(), updated.enabled())
+                    .change("groups", before.groups(), updated.groups());
+        }
+        audit.recordExternalSuccess(AdminAuditActions.USER_UPDATE, AdminAuditActions.TARGET_USER, id, details);
         return ResponseEntity.ok(updated);
     }
 
@@ -93,6 +116,8 @@ public class AdminController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         identityAdmin.assignGroup(userId, groupId);
+        audit.recordExternalSuccess(AdminAuditActions.USER_GROUP_ASSIGN, AdminAuditActions.TARGET_USER, userId,
+                AdminAuditDetails.create().put("groupId", groupId));
         return ResponseEntity.noContent().build();
     }
 
@@ -103,6 +128,8 @@ public class AdminController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         identityAdmin.revokeGroup(userId, groupId);
+        audit.recordExternalSuccess(AdminAuditActions.USER_GROUP_REVOKE, AdminAuditActions.TARGET_USER, userId,
+                AdminAuditDetails.create().put("groupId", groupId));
         return ResponseEntity.noContent().build();
     }
 
@@ -127,6 +154,8 @@ public class AdminController {
         if (created == null) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+        audit.recordExternalSuccess(AdminAuditActions.GROUP_CREATE, AdminAuditActions.TARGET_GROUP, created.id(),
+                AdminAuditDetails.create().put("name", created.name()));
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 

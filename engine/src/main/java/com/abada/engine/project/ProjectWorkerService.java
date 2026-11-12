@@ -22,10 +22,12 @@ public class ProjectWorkerService {
     private final ProjectAccessService access;
     private final ExternalTaskRepository externalTasks;
     private final ProcessInstanceRepository processInstances;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
 
     public ProjectWorkerService(ProjectWorkerBindingRepository bindings, PrincipalRepository principals,
             ProjectAccessService access, ExternalTaskRepository externalTasks,
-            ProcessInstanceRepository processInstances) {
+            ProcessInstanceRepository processInstances, com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.bindings = bindings;
         this.principals = principals;
         this.access = access;
@@ -50,12 +52,18 @@ public class ProjectWorkerService {
         List<String> normalized = normalize(topics);
         var binding = bindings.findByProjectIdAndPrincipalId(projectId, principalId)
                 .orElseGet(ProjectWorkerBindingEntity::new);
+        String topicsBefore = binding.getTopics();
         binding.setProjectId(projectId);
         binding.setPrincipalId(principalId);
         binding.setTopics(String.join(",", normalized));
         if (binding.getCreatedAt() == null) binding.setCreatedAt(Instant.now());
         if (binding.getCreatedBy() == null) binding.setCreatedBy(access.identity().username());
-        return bindings.save(binding);
+        ProjectWorkerBindingEntity saved = bindings.save(binding);
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.PROJECT_WORKER_PUT,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PRINCIPAL, principalId, projectId,
+                com.abada.engine.audit.AdminAuditDetails.create().put("principal", principal.getUsername())
+                        .change("topics", topicsBefore, saved.getTopics()));
+        return saved;
     }
 
     @Transactional(readOnly = true)

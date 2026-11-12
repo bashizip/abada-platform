@@ -49,11 +49,13 @@ public class DefinitionVersionService {
     private final AbadaEngine engine;
     private final PersistenceService persistence;
     private final ActivityHistoryService history;
+    private final com.abada.engine.audit.AdminAuditRecorder audit;
 
     public DefinitionVersionService(com.abada.engine.persistence.repository.ProjectRepository projects,
             ProcessDefinitionRepository definitions, ProcessInstanceRepository instances,
             InsightProposalRepository proposals, AbadaEngine engine, PersistenceService persistence,
-            ActivityHistoryService history) {
+            ActivityHistoryService history, com.abada.engine.audit.AdminAuditRecorder audit) {
+        this.audit = audit;
         this.projects = projects;
         this.definitions = definitions;
         this.instances = instances;
@@ -120,6 +122,11 @@ public class DefinitionVersionService {
                 "projectId", projectId, "fromVersion", latest.getVersion(), "restoredVersion", source.getVersion(),
                 "newVersion", deployed.getVersion(), "deploymentId", deployed.getDeploymentId(),
                 "actor", actor, "commented", true, "runningOnReplacedVersion", unaffected));
+        audit.recordSuccess(com.abada.engine.audit.AdminAuditActions.PROCESS_ROLLBACK,
+                com.abada.engine.audit.AdminAuditActions.TARGET_PROCESS, processKey, projectId,
+                com.abada.engine.audit.AdminAuditDetails.create().put("restoredVersion", source.getVersion())
+                        .change("version", latest.getVersion(), deployed.getVersion())
+                        .put("deploymentId", deployed.getDeploymentId()).put("comment", reason));
         return deployed;
     }
 
