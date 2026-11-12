@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdminAuditTrail } from './AdminAuditTrail';
 import {
   Check,
   ChevronDown,
@@ -7,7 +8,6 @@ import {
   FolderKanban,
   KeyRound,
   Loader2,
-  Lock,
   Plus,
   Search,
   Shield,
@@ -203,7 +203,7 @@ abada.identity.admin:
           {activeTab === 'users' && <AdminUsersPanel />}
           {activeTab === 'groups' && <AdminGroupsPanel />}
           {activeTab === 'projects' && <AdminProjectsPanel activeProject={activeProject} />}
-          {activeTab === 'audit' && <AdminAuditPlaceholder />}
+          {activeTab === 'audit' && <AdminAuditTrail />}
         </div>
       </div>
       </div>
@@ -768,34 +768,3 @@ const AdminProjectsPanel: React.FC<{ activeProject?: Project | null }> = ({ acti
     </div>
   );
 };
-
-// ── Audit Placeholder ──
-
-const AdminAuditPlaceholder: React.FC = () => (
-  <div className="space-y-4">
-    <PanelHeader
-      icon={<ClipboardList className="w-4 h-4 text-[#9D4EDD]" />}
-      accent=""
-      title="Audit Trail"
-      description="Every administrative action, tamper-evident."
-    />
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-[#3A322E] bg-[#25201D]/50 py-20 shadow-warm-md">
-      <div className="relative">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#9D4EDD]/40 to-[#25201D] border border-[#9D4EDD]/30 glow-amethyst-subtle">
-          <Lock className="w-6 h-6 text-[#EAE3D9]" />
-        </div>
-        <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 bg-[#F4A261]" />
-          <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-[#F4A261] border-2 border-[#25201D]" />
-        </span>
-      </div>
-      <p className="text-sm font-semibold text-[#EAE3D9] mt-5">Audit trail coming soon</p>
-      <p className="text-xs text-[#A89F91] mt-1.5 max-w-sm text-center">
-        Track every administrative action — actor, action, target, and trace ID — recorded transactionally with the mutation it audits.
-      </p>
-      <span className="mt-5 rounded-full border border-[#F4A261]/30 bg-[#F4A261]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4A261]">
-        Planned · Phase 4
-      </span>
-    </div>
-  </div>
-);
