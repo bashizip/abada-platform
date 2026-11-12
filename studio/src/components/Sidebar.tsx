@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FolderTree, ChevronDown, Layers, Activity, RotateCcw, ExternalLink } from 'lucide-react';
+import { STUDIO_VERSION, docsLink, releaseNotesLink } from '@/lib/studioRelease';
+import { FolderTree, ChevronDown, Layers, Activity, RotateCcw, ExternalLink, BookOpen } from 'lucide-react';
 import { WorkflowFile } from '@/types';
 import { EngineAPI, ProcessDefinitionDTO, ProcessInstanceDTO, EngineInfoResponse } from '@/api/engine';
 import { ProjectExplorer } from '@/components/ProjectExplorer';
@@ -166,6 +167,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex justify-between text-sand">
                   <span>Persistence</span>
                   <span className="text-amethyst">{engineInfo.engine.persistence}</span>
+                </div>
+                <div className="flex justify-between text-sand">
+                  <span>Studio</span>
+                  <span className="text-sage-green">{STUDIO_VERSION}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-hairline pt-2">
+                  <a href={docsLink()} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-amethyst hover:text-amethyst-bright">
+                    <BookOpen className="h-3 w-3" aria-hidden="true" /> Documentation
+                  </a>
+                  <a href={releaseNotesLink()} target="_blank" rel="noreferrer"
+                    className="text-sand hover:text-linen">What's new</a>
                 </div>
               </div>
             ) : (

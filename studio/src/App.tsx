@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
+import { WhatsNewCard } from '@/components/WhatsNewCard';
 import { SidePanel } from '@/components/SidePanel';
 import { Canvas } from '@/features/designer/Canvas';
 import { PropertiesInspector } from '@/components/PropertiesInspector';
@@ -564,6 +565,7 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-[#1A1614] text-[#EAE3D9] overflow-hidden">
       {!authenticated && <SignInGate />}
+      {authenticated && workspaceStatus === 'ready' && <WhatsNewCard />}
       {authenticated && workspaceStatus !== 'ready' && (
         <div className="flex flex-1 items-center justify-center bg-[#1A1614] p-6">
           <div className="w-full max-w-md rounded-2xl border border-[#3A322E] bg-[#25201D] p-6 text-center shadow-warm-lg">
