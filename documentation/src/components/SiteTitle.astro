@@ -1,0 +1,49 @@
+---
+// The site title followed by the release these pages describe (M5 S13), on every page.
+import Default from '@astrojs/starlight/components/SiteTitle.astro';
+import { notesSlug, readRelease, versionLabel } from '../lib/release.mjs';
+
+const release = readRelease();
+const development = release.status === 'in-development';
+---
+
+<div class="abada-site-title">
+  <Default {...Astro.props} />
+  <a class="abada-version" href={`/${notesSlug(release.documents)}/`} data-status={release.status}
+    title={development ? `These pages describe ${versionLabel(release)}, not yet released` : `These pages describe ${versionLabel(release)}`}>
+    {development ? `${release.documents} · in development` : release.documents}
+  </a>
+</div>
+
+<style>
+  .abada-site-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+  .abada-version {
+    flex-shrink: 0;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .abada-version:hover {
+    color: var(--sl-color-white);
+    border-color: var(--sl-color-accent);
+  }
+  .abada-version[data-status='in-development'] {
+    border-color: var(--sl-color-orange);
+  }
+  @media (max-width: 50rem) {
+    .abada-version[data-status='in-development'] {
+      max-width: 9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+</style>

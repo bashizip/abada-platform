@@ -1,6 +1,10 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
+import { minorOf, notesSlug, readRelease, withBadges } from './src/lib/release.mjs';
+
+// M5 S13: the release the pages describe, and New / Updated badges from page frontmatter.
+const release = readRelease();
 
 export default defineConfig({
   site: 'https://abada-engine-docs.vercel.app',
@@ -33,7 +37,15 @@ export default defineConfig({
         },
       ],
       customCss: ['./src/styles/custom.css'],
-      sidebar: [
+      components: {
+        SiteTitle: './src/components/SiteTitle.astro',
+      },
+      sidebar: withBadges([
+        {
+          label: `What's new in ${minorOf(release.documents)}`,
+          slug: notesSlug(release.documents),
+          ...(release.status === 'in-development' ? { badge: { text: 'Preview', variant: 'caution' } } : {}),
+        },
         {
           label: 'Start here',
           items: [
@@ -131,7 +143,15 @@ export default defineConfig({
             { label: 'Authoritative contracts', slug: 'reference/contracts' },
           ],
         },
-      ],
+        {
+          label: 'Release notes',
+          items: [
+            { label: 'All releases', slug: 'release-notes' },
+            { label: '1.2', slug: 'release-notes/1-2' },
+            { label: '1.1', slug: 'release-notes/1-1' },
+          ],
+        },
+      ]),
     }),
   ],
 });
