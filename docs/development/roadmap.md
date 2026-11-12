@@ -122,9 +122,9 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [x] S10 Administration audit trail: append-only `admin_audit_events` (Flyway `V43`) written in the mutation's transaction, denied attempts included, no secrets; filterable table with live updates and CSV export
 - [x] S11 Execution variables and JSON everywhere: same small font for keys and values, collapsible tree with search for many/nested variables, JSON view; one highlighted `JsonViewer` replaces every raw JSON block
 - [x] S12 NL authoring workspace: pinnable/collapsible NL bar; on submit a large dialog to refine the draft with a live diagram, YAML and diff, then apply to the Studio as one undoable change
-- [ ] S13 Documentation: Studio version on every page, "New" sidebar badges driven by `since:` frontmatter, user-friendly release notes and a *What's new* entry
-- [ ] S14 User guide, screenshots, 1.2.0 release notes and gate report
-- [ ] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
+- [x] S13 Documentation: Studio version on every page, "New" sidebar badges driven by `since:` frontmatter, user-friendly release notes and a *What's new* entry
+- [x] S14 User guide, screenshots, 1.2.0 release notes and gate report
+- [x] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
 
 ## M6 — 1.2.x (next release, after 1.2.0 on 2026-12-04)
 

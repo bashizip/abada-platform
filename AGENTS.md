@@ -30,7 +30,7 @@ The doctrine every change must respect:
 
 Do not bypass or weaken the durable state machine to add agent features.
 
-The current release line is 1.2.x (1.2.0 in development on `dev`). Its certified production topology is
+The current release line is 1.2.x (1.2.0 released; 1.2.x features in development on `dev`). Its certified production topology is
 one or more engine instances backed by PostgreSQL; from 1.2, self-hosted
 installations also run RustFS (self-hosted, S3-compatible object storage),
 which holds the contents of files uploaded to task forms while PostgreSQL
