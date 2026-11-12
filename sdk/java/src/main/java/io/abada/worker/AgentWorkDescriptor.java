@@ -15,6 +15,10 @@ import java.util.Map;
  *        the engine prices calls itself, so a worker never reports cost
  * @param limits bounds of the tool loop; null when the node declares none
  * @param delegates processes the agent may delegate to; empty when none
+ * @param files the node's file declarations (name -> expression); empty when it reads no file
+ * @param maxFiles most files one call may carry; null when the node reads no file
+ * @param resolvedFiles the files the engine resolved and checked for this lock: metadata
+ *        only; download each through the engine with the lease and check size and sha256
  */
 public record AgentWorkDescriptor(
         String profileVersion,
@@ -35,14 +39,30 @@ public record AgentWorkDescriptor(
         List<ToolBinding> toolBindings,
         Map<String, ModelPrice> prices,
         AgentLimits limits,
-        List<AgentDelegate> delegates) {
+        List<AgentDelegate> delegates,
+        Map<String, String> files,
+        Integer maxFiles,
+        List<AgentFileRef> resolvedFiles) {
 
     public AgentWorkDescriptor {
+        files = files == null ? Map.of() : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(files));
+        resolvedFiles = resolvedFiles == null ? List.of() : List.copyOf(resolvedFiles);
         delegates = delegates == null ? List.of() : List.copyOf(delegates);
         fallbackModels = fallbackModels == null ? List.of() : List.copyOf(fallbackModels);
         toolPolicies = toolPolicies == null ? Map.of() : Map.copyOf(toolPolicies);
         toolBindings = toolBindings == null ? List.of() : List.copyOf(toolBindings);
         prices = prices == null ? Map.of() : Map.copyOf(prices);
+    }
+
+    /** Descriptor without files (protocol v1 before S15). */
+    public AgentWorkDescriptor(String profileVersion, String model, String prompt, Map<String, String> inputs,
+            String resultVariable, Map<String, Object> outputSchema, List<String> tools, Double confidenceThreshold,
+            Double temperature, Integer maxTokens, Long timeoutMs, Integer maxAttempts, Long retryBackoffMs,
+            List<String> fallbackModels, Map<String, String> toolPolicies, List<ToolBinding> toolBindings,
+            Map<String, ModelPrice> prices, AgentLimits limits, List<AgentDelegate> delegates) {
+        this(profileVersion, model, prompt, inputs, resultVariable, outputSchema, tools, confidenceThreshold,
+                temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs, fallbackModels, toolPolicies,
+                toolBindings, prices, limits, delegates, Map.of(), null, List.of());
     }
 
     /** Descriptor without delegations (protocol v1 before E20b). */
@@ -99,6 +119,7 @@ public record AgentWorkDescriptor(
     public AgentWorkDescriptor withModel(String otherModel) {
         return new AgentWorkDescriptor(profileVersion, otherModel, prompt, inputs, resultVariable, outputSchema,
                 tools, confidenceThreshold, temperature, maxTokens, timeoutMs, maxAttempts, retryBackoffMs,
-                fallbackModels, toolPolicies, toolBindings, prices, limits, delegates);
+                fallbackModels, toolPolicies, toolBindings, prices, limits, delegates, files, maxFiles,
+                resolvedFiles);
     }
 }
