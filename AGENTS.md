@@ -43,7 +43,7 @@ Use these documents as the authoritative product contract:
 
 - `docs/development/roadmap.md` — the only active roadmap (1.0.0-rc.6 → 1.2.0),
   with task specifications in `docs/development/m1-task-specs.md` to
-  `m5-task-specs.md`. Older
+  `m7-task-specs.md`. Older
   roadmaps are superseded and kept for history only.
 - `docs/development/1.0-rc-publication-gates.md` — mandatory per-candidate
   publication evidence and GO/NO-GO sign-off.

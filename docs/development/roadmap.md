@@ -5,8 +5,9 @@ This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
-Last reviewed: 2026-11-12. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
-(1.1.0 on 2026-10-14); M5 is the Studio-experience iteration.
+Last reviewed: 2026-11-13. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
+(1.1.0 on 2026-10-14); M5 is the Studio-experience iteration. M6 and M7 are
+planned after 1.2.0; their dates are set when 1.2.0 ships.
 
 ## Product definition
 
@@ -19,7 +20,13 @@ Abada is the governed runtime for AI-driven business processes:
 - Every AI decision leaves evidence an auditor can read later. Every
   AI-proposed change to a process is backed by replay evidence and approved by
   people under a review policy. Nothing auto-applies.
-- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure up to 1.1; from 1.2, self-hosted installations also require RustFS (self-hosted S3-compatible object storage) for process files. Managed cloud deployments will use GCP Cloud Storage or AWS S3 later.
+- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure up to 1.1; from 1.2, self-hosted installations also require RustFS (self-hosted S3-compatible object storage) for process files.
+- Two distributions of one product (from M7). **Self-hosted** (Docker Compose
+  and the installer, RustFS, your OIDC provider) stays the default and is not
+  changed by cloud work. **Kubernetes / cloud-native** (a Helm chart, on
+  premises or in a public cloud) runs the same images, the same engine and the
+  same migrations, and may use managed PostgreSQL, S3 or GCP Cloud Storage and
+  an external secret store. No feature exists in one distribution only.
 
 Target users: regulated and sovereignty-sensitive organisations (banks,
 telcos, public sector) that must run on their own infrastructure.
@@ -33,6 +40,7 @@ telcos, public sector) that must run on their own infrastructure.
 | M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible; a triage agent delegates a sub-case to a governed child process, the parent resumes with its result and the lineage is visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
 | M5 Studio experience | 10-19 → 12-04 | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
+| M7 Cloud and Kubernetes native | after 1.2.0 | 1.2.x (C1–C3), 1.3.0 (C4–C8) | The same release images are installed with Compose on a VM and with the Helm chart on kind and on GKE Autopilot; the same end-to-end test passes on all three; an engine pod is killed mid-agent-task and another pod finishes the work with no duplicate model call; the Compose stack and the installer needed no change |
 
 ## M1 — Truth and safety
 
@@ -134,6 +142,28 @@ when 1.2.0 ships.
 
 - [ ] N1 Office and text files as agent input: S15 extended beyond images and PDF. Text formats (CSV, TXT, JSON, Markdown) sent as text; Excel converted to structured text per sheet; Word converted to PDF or text; the conversion runs on the installation's own infrastructure, never at the model provider; the evidence keeps the sha256 of the original file and of the converted content; typed errors for an unsupported format or a conversion over its limits
 
+## M7 — Cloud and Kubernetes native (after 1.2.0)
+
+Full specifications: [`m7-task-specs.md`](m7-task-specs.md). Planned on
+2026-11-13; dates are set when 1.2.0 ships. C1–C3 are new capability and ship
+in a 1.2.x release; C4–C8 ship in 1.3.0.
+
+Abada gains a second distribution, Kubernetes / cloud-native, next to the
+self-hosted one. **Guardrails:** the Compose stack, the installer and RustFS
+stay the default and are not modified for this milestone; cloud adapters are
+opt-in and off by default; both distributions run the same images and
+migrations; nothing new contacts us; the Compose release gate keeps running
+unchanged next to the new Kubernetes gate.
+
+- [ ] C1 Helm chart (`charts/abada`, OCI on ghcr): engine, Studio and agent worker; autoscaling and disruption budgets; Ingress or Gateway API; NetworkPolicy; non-root and read-only root filesystem; `existingSecret` for every credential; external PostgreSQL and OIDC required; RustFS or an S3-compatible endpoint for files; values profiles for on-premises, GKE and EKS; replaces `k8s/base`
+- [ ] C2 Engine on Kubernetes: leases released and in-flight commands finished on SIGTERM; Flyway run by a Helm pre-install/pre-upgrade Job, engine pods validate only; no dependency on local `/app/data`; every `@Scheduled` job proven safe with N replicas (model discovery and price catalog included); Studio runtime configuration from environment
+- [ ] C3 Kubernetes gate in CI: chart lint and schema check, install on kind, the release end-to-end test against it, pod-kill and rolling-upgrade scenarios with no duplicate state transition
+- [ ] C4 Cloud object stores: AWS S3 and GCP Cloud Storage behind the existing `ObjectStore` interface, with server-side encryption and workload identity; RustFS stays the default and the only store in Compose
+- [ ] C5 Managed PostgreSQL: Cloud SQL and Amazon RDS certified; lease acquisition (`SKIP LOCKED`, advisory locks) tested behind PgBouncer in transaction mode or the limitation documented; optional IAM database authentication
+- [ ] C6 Identity and secrets: OIDC certified with Microsoft Entra ID, Amazon Cognito and Google Identity Platform (Keycloak stays the reference); External Secrets Operator supported; no secret in chart values
+- [ ] C7 Observability on Kubernetes: ServiceMonitor for the Prometheus Operator, OTLP to a cluster collector, the bundled dashboards packaged as an optional ConfigMap
+- [ ] C8 Supply chain and certification: cosign-signed images and chart, SBOM per image, a GKE Autopilot reference cluster passing the C3 gate, new rows in the deployment support matrix, upgrade guide from Compose to Kubernetes (PostgreSQL and object-store migration) and 1.3.0 release notes
+
 ## Parallel track — design partners
 
 | By end of | Goal |
@@ -154,11 +184,13 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 | M3 | E13, E12 SSE (keep polling), then agent-proposed delegation in E20 (keep plain call-process) | E9, E10 |
 | M4 | E21, E17, E18 Astro migration | E14, E15 |
 | M5 | Nothing: scope frozen 2026-11-12, every task ships in 1.2.0 | S1–S15 |
+| M7 | C7 dashboards, then C6 provider matrix beyond Entra ID, then C5 RDS (keep Cloud SQL) | C1, C2, C3, the guardrails |
 
 ## Deferred (1.2 or later)
 
-GCP Cloud Storage and AWS S3 object-store backends for managed cloud deployments; TypeScript and Python worker SDKs; Abada MCP
-server; SaaS track (multi-tenancy, billing); BPMN coverage beyond import;
+TypeScript and Python worker SDKs; Abada MCP
+server; hosted Abada Cloud / SaaS track (multi-tenancy, billing), to be decided
+after M7 ships; BPMN coverage beyond import;
 `tenda/` and `orun/` (archive); identity-administration UI beyond the IdP;
 infrastructure certification (Track B of the former 1.1 roadmap) — kept as a
 release-notes limitation until scheduled.
@@ -167,3 +199,7 @@ Call-process and for-each moved out of this list on 2026-09-27 into M3 (E20)
 and M4 (E21): governed delegation lets agents coordinate without leaving the
 engine's control. Both reuse the E2 token model and the E9 journal rather than
 new machinery.
+
+GCP Cloud Storage and AWS S3 object-store backends, and the public-cloud part of
+infrastructure certification, moved out of this list on 2026-11-13 into M7
+(C4, C8).
