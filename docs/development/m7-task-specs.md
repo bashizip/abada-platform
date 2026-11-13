@@ -47,7 +47,8 @@ first.
    Kubernetes gate next to it. A release needs both.
 
 Hosted Abada Cloud (SaaS: multi-tenancy, billing, operated by us) is out of
-scope and stays in the deferred list until M7 has shipped.
+scope here; it is M8 ([`m8-task-specs.md`](m8-task-specs.md)) and builds on
+this milestone.
 
 ---
 

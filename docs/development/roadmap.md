@@ -7,7 +7,8 @@ This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 
 Last reviewed: 2026-11-13. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
 (1.1.0 on 2026-10-14); M5 is the Studio-experience iteration. M6 and M7 are
-planned after 1.2.0; their dates are set when 1.2.0 ships.
+planned after 1.2.0; their dates are set when 1.2.0 ships. M8 (hosted Abada
+Cloud, 2.0.0) follows M7.
 
 ## Product definition
 
@@ -27,6 +28,9 @@ Abada is the governed runtime for AI-driven business processes:
   premises or in a public cloud) runs the same images, the same engine and the
   same migrations, and may use managed PostgreSQL, S3 or GCP Cloud Storage and
   an external secret store. No feature exists in one distribution only.
+- From M8, a hosted service, **Abada Cloud** (multi-tenant SaaS operated by
+  us), runs the same engine. Self-hosted installations keep working as a
+  single implicit tenant with no visible change.
 
 Target users: regulated and sovereignty-sensitive organisations (banks,
 telcos, public sector) that must run on their own infrastructure.
@@ -41,6 +45,7 @@ telcos, public sector) that must run on their own infrastructure.
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
 | M5 Studio experience | 10-19 → 12-04 | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
 | M7 Cloud and Kubernetes native | after 1.2.0 | 1.2.x (C1–C3), 1.3.0 (C4–C8) | The same release images are installed with Compose on a VM and with the Helm chart on kind and on GKE Autopilot; the same end-to-end test passes on all three; an engine pod is killed mid-agent-task and another pod finishes the work with no duplicate model call; the Compose stack and the installer needed no change |
+| M8 Abada Cloud (SaaS) | after M7 | 2.0.0 | Two organisations sign up self-service, choose a plan and a region, deploy a process and run an agent; the isolation suite proves neither can see the other's definitions, instances, tasks, files, workers, audit or usage through the API, a worker, Studio or a webhook; usage is metered and an invoice issued; one organisation exports everything and the export runs unchanged on a self-hosted 2.0.0 install |
 
 ## M1 — Truth and safety
 
@@ -164,6 +169,34 @@ unchanged next to the new Kubernetes gate.
 - [ ] C7 Observability on Kubernetes: ServiceMonitor for the Prometheus Operator, OTLP to a cluster collector, the bundled dashboards packaged as an optional ConfigMap
 - [ ] C8 Supply chain and certification: cosign-signed images and chart, SBOM per image, a GKE Autopilot reference cluster passing the C3 gate, new rows in the deployment support matrix, upgrade guide from Compose to Kubernetes (PostgreSQL and object-store migration) and 1.3.0 release notes
 
+## M8 — Abada Cloud: hosted SaaS (2.0.0, after M7)
+
+Full specifications: [`m8-task-specs.md`](m8-task-specs.md). Planned on
+2026-11-13; dates are set when M7 ships. A major release: tenancy changes the
+schema, the API and the worker protocol, and the service needs pricing,
+billing and operations that do not exist yet. Depends on M7 (the chart, the
+cloud object stores and managed PostgreSQL are its foundation).
+
+**Guardrails:** one engine and one AGPL codebase for every distribution; no
+governance or runtime capability exists only in the hosted service; a
+self-hosted installation runs as one implicit tenant and its operators see no
+change; tenant isolation is enforced in the database, not only in code; a
+tenant can always leave with all of its data and run it self-hosted.
+
+- [ ] P1 Tenancy model decision record: pooled tier (shared database, `tenant_id` and PostgreSQL row-level security) and dedicated tier (one M7 Helm release per tenant); what each plan gets; decided and recorded before any code
+- [ ] P2 Tenant in the engine: `tenant_id` on every tenant-owned table (Flyway, fresh and upgrade paths, self-hosted rows backfilled to the default tenant); row-level security policies; tenant context from the JWT and the worker credential; every query, lease, scheduler, timer and outbox row scoped
+- [ ] P3 Isolation beyond the database: files under a per-tenant prefix with a per-tenant encryption key; worker credentials and the external worker protocol scoped per tenant; model providers, MCP servers and secrets per tenant; webhooks, caches, metrics labels and logs tenant-aware; fair work acquisition and rate limits against noisy neighbours
+- [ ] P4 Control plane (`abada-cloud`): sign-up, organisations, plans, provisioning of pooled and dedicated tenants, suspension, deletion with a verified purge; operator console
+- [ ] P5 Identity: hosted accounts with MFA for small teams; per-tenant SSO federation (OIDC, then SAML) for organisations that bring their own IdP; invitations and roles per tenant
+- [ ] P6 Metering and quotas: usage events written through the transactional outbox (instances started, agent calls, tokens and model spend, storage, seats); quotas and spend caps enforced by the engine; usage visible to the tenant in Studio
+- [ ] P7 Pricing and billing: plans and prices decided (free tier, team, business, enterprise/dedicated); billing provider with card and African payment rails (mobile money); invoices, VAT, trials, dunning, plan changes
+- [ ] P8 Models in the hosted service: bring-your-own provider key per tenant, or Abada-managed models billed by metered spend; per-tenant spend caps; the evidence record unchanged
+- [ ] P9 Regions and data residency: at least one EU and one African region at launch, a tenant pinned to its region, backups kept in-region, residency stated in the contract
+- [ ] P10 Portability: export a tenant (definitions, versions, instances and history, audit, files, configuration without secrets) and import it into a self-hosted install; tested on every release
+- [ ] P11 Operations: SLOs and the SLA per plan, status page, on-call and incident process, per-tenant backup and point-in-time restore, a disaster-recovery exercise before launch
+- [ ] P12 Security, compliance and legal: external penetration test focused on tenant isolation; SOC 2 Type I / ISO 27001 readiness plan; terms of service, DPA, privacy policy and sub-processor list; licence position for the control plane and contributions (CLA or DCO) settled with counsel
+- [ ] P13 Launch: pricing page and sign-up on the site, hosted-service documentation, migration guide self-hosted ⇄ cloud, 2.0.0 release notes and gate report
+
 ## Parallel track — design partners
 
 | By end of | Goal |
@@ -185,12 +218,12 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 | M4 | E21, E17, E18 Astro migration | E14, E15 |
 | M5 | Nothing: scope frozen 2026-11-12, every task ships in 1.2.0 | S1–S15 |
 | M7 | C7 dashboards, then C6 provider matrix beyond Entra ID, then C5 RDS (keep Cloud SQL) | C1, C2, C3, the guardrails |
+| M8 | Dedicated tier (launch pooled only), SAML (keep OIDC), second region per continent, Studio usage charts (keep the numbers) | P2, P3, P6, P10, P12 isolation test, the guardrails |
 
 ## Deferred (1.2 or later)
 
 TypeScript and Python worker SDKs; Abada MCP
-server; hosted Abada Cloud / SaaS track (multi-tenancy, billing), to be decided
-after M7 ships; BPMN coverage beyond import;
+server; BPMN coverage beyond import;
 `tenda/` and `orun/` (archive); identity-administration UI beyond the IdP;
 infrastructure certification (Track B of the former 1.1 roadmap) — kept as a
 release-notes limitation until scheduled.
@@ -202,4 +235,4 @@ new machinery.
 
 GCP Cloud Storage and AWS S3 object-store backends, and the public-cloud part of
 infrastructure certification, moved out of this list on 2026-11-13 into M7
-(C4, C8).
+(C4, C8). The SaaS track (multi-tenancy, billing) moved into M8 the same day.
