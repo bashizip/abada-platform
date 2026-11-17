@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install report: who installed Abada, when, from where and with what result.
 #
-#   scripts/release/usage-report.sh [summary|daily|countries|failures|versions|platforms|recent|raw "<sql>"] [--local] [DAYS]
+#   scripts/release/usage-report.sh [summary|daily|countries|failures|versions|platforms|agents|recent|raw "<sql>"] [--local] [DAYS]
 #
 # Reads the D1 database `abada-usage` behind install.abadaplatform.com (install/README.md,
 # "Install events"). Needs `wrangler` logged in to the Cloudflare account. Rows older than
@@ -23,7 +23,7 @@ DAYS=30
 RAW_SQL=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    summary|daily|countries|failures|versions|platforms|recent) MODE="$1" ;;
+    summary|daily|countries|failures|versions|platforms|agents|recent) MODE="$1" ;;
     raw) MODE="raw"; shift; RAW_SQL="${1:?raw needs an SQL statement}" ;;
     --local) LOCAL="--local" ;;
     ''|*[!0-9]*) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -87,6 +87,10 @@ case "$MODE" in
   platforms)
     query "OS, CPU and Docker" \
       "SELECT os, arch, docker_version, COUNT(*) AS installs FROM install_events WHERE kind='install_succeeded' AND COALESCE(ci,0)=0 AND received_at >= ${SINCE} GROUP BY os, arch, docker_version ORDER BY installs DESC LIMIT 30"
+    ;;
+  agents)
+    query "Clients by User-Agent (recorded since migration 0003; older rows show no agent)" \
+      "SELECT COALESCE(user_agent,'(none)') AS user_agent, SUM(kind='installer_fetch') AS script_fetches, SUM(kind='version_check') AS version_checks, SUM(kind='bundle_download') AS bundle_downloads, SUM(kind IN ('install_succeeded','install_failed')) AS reports FROM install_events WHERE received_at >= ${SINCE} GROUP BY user_agent ORDER BY COUNT(*) DESC LIMIT 40"
     ;;
   recent)
     query "Most recent reports" \
