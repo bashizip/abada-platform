@@ -94,9 +94,13 @@ L6 then gives Java the API client, so every language offers both parts.
 
 ## Repositories (decided 2026-11-22)
 
-One repository per SDK, under the same owner as `abada-platform`:
+One repository per SDK, in the Abada GitHub organisation:
 `abada-sdk-python`, `abada-sdk-dotnet`, `abada-sdk-typescript`,
-`abada-sdk-go`. Each language's tooling expects it (a Go module at the root of
+`abada-sdk-go`. `abada-platform` moves from the personal account `bashizip`
+into that organisation (for example `abada/abada-platform`; the organisation
+name is to be confirmed) before the first SDK repository is created, so the
+SDKs are created there directly and the Go module path
+(`github.com/<organisation>/abada-sdk-go`) never has to change. Each language's tooling expects it (a Go module at the root of
 its repository, package pages on PyPI, NuGet and npm pointing at the SDK's own
 README and issues); each SDK's CI runs only its own toolchain; contributors
 for one language find a small repository in that language; and a fix ships
