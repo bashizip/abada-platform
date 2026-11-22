@@ -197,6 +197,27 @@ tenant can always leave with all of its data and run it self-hosted.
 - [ ] P12 Security, compliance and legal: external penetration test focused on tenant isolation; SOC 2 Type I / ISO 27001 readiness plan; terms of service, DPA, privacy policy and sub-processor list; licence position for the control plane and contributions (CLA or DCO) settled with counsel
 - [ ] P13 Launch: pricing page and sign-up on the site, hosted-service documentation, migration guide self-hosted ⇄ cloud, 2.0.0 release notes and gate report
 
+## Track — Worker SDKs in more languages (unscheduled)
+
+Full specifications: [`sdk-task-specs.md`](sdk-task-specs.md). Added on
+2026-11-22, not yet scheduled: dates and the release each SDK ships in are set
+when a milestone takes it. The language order below is a proposal to confirm.
+
+Teams that adopt Abada already write their workers, and above all their AI
+agents, in Python, TypeScript, Go or C#. External-worker protocol v1 is plain
+REST and JSON, frozen and described by the generated OpenAPI document
+(`/api/v3/api-docs`, checked by `OpenApiContractTest`), so a new SDK needs no
+engine change. The Java SDK (`sdk/java`) stays the reference: every SDK
+reaches the same surface and passes the same conformance suite. All SDKs are
+Apache-2.0, like the Java one.
+
+- [ ] L1 Protocol conformance kit: the OpenAPI document published as a release asset; a language-neutral conformance suite (fetch-and-lock, heartbeat, complete, failure with `deferred` and `errorCode`, BPMN error, idempotency-key reuse, `409` retry, protocol-version check, unknown fields ignored, agent steps, tool credentials, file download within the lease) run against a real engine in CI for the Java SDK first
+- [ ] L2 Python SDK (`sdk/python`, PyPI): sync and asyncio clients at parity with the Java SDK, including the `abada.agent/v1` descriptor, the step journal, tool credentials and file inputs, so agents written with Python AI libraries run as governed Abada workers; typed models, trace-context propagation; passes L1
+- [ ] L3 TypeScript / JavaScript SDK (`sdk/typescript`, npm): Node.js first (ESM, typed), same surface and L1 suite; a Deno and Bun check if it costs nothing extra
+- [ ] L4 Go SDK (`sdk/go`, Go module): same surface and L1 suite; context-aware calls for cancellation on shutdown
+- [ ] L5 .NET SDK (`sdk/dotnet`, NuGet, C#): same surface and L1 suite; targets the current .NET LTS, for enterprise teams on Microsoft stacks
+- [ ] L6 Release and documentation: every SDK versioned with the engine and published by the release workflow; a quick-start per language in the user guide; the README, site and claims register list only the SDKs that have shipped
+
 ## Parallel track — design partners
 
 | By end of | Goal |
@@ -222,7 +243,7 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 
 ## Deferred (1.2 or later)
 
-TypeScript and Python worker SDKs; Abada MCP
+Abada MCP
 server; BPMN coverage beyond import;
 `tenda/` and `orun/` (archive); identity-administration UI beyond the IdP;
 infrastructure certification (Track B of the former 1.1 roadmap) — kept as a
@@ -236,3 +257,6 @@ new machinery.
 GCP Cloud Storage and AWS S3 object-store backends, and the public-cloud part of
 infrastructure certification, moved out of this list on 2026-11-13 into M7
 (C4, C8). The SaaS track (multi-tenancy, billing) moved into M8 the same day.
+
+TypeScript and Python worker SDKs moved out of this list on 2026-11-22 into
+the worker SDK track (L2, L3), together with Go and .NET (L4, L5).
