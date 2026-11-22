@@ -214,15 +214,19 @@ and described by the generated OpenAPI document (`/api/v3/api-docs`, checked
 by `OpenApiContractTest`), so no SDK needs an engine change. All SDKs are
 Apache-2.0, like the Java worker SDK.
 
-Language order (decided): Python, .NET, TypeScript, Go.
+Language order (decided): Python, .NET, TypeScript, Go. One repository per SDK
+(`abada-sdk-python`, `abada-sdk-dotnet`, `abada-sdk-typescript`,
+`abada-sdk-go`), each with its own version; `abada-platform` publishes the
+OpenAPI document and the conformance suite that every SDK runs. The Java
+worker SDK stays in `sdk/java` for now.
 
-- [ ] L1 Conformance kit: the OpenAPI document published as a release asset; a language-neutral suite run against a real engine in CI, with worker scenarios (fetch-and-lock, heartbeat, complete, failure with `deferred` and `errorCode`, BPMN error, idempotency-key reuse, `409` retry, protocol-version check, unknown fields ignored, agent steps, tool credentials, file download within the lease) and API scenarios (deploy, start, message, signal, query, claim and complete a human task, typed errors, pagination); the Java worker SDK passes the worker scenarios first
-- [ ] L2 Python SDK (`sdk/python`, PyPI): worker and API clients, sync and asyncio; the `abada.agent/v1` descriptor, step journal, tool credentials and file inputs, so agents written with Python AI libraries run as governed Abada workers; passes L1
-- [ ] L3 .NET SDK (`sdk/dotnet`, NuGet, C#): worker and API clients; current .NET LTS, `async`/`await` with `CancellationToken`, fits ASP.NET Core and worker-service hosts; passes L1
-- [ ] L4 TypeScript / JavaScript SDK (`sdk/typescript`, npm): worker and API clients; Node.js LTS first, ESM with types; passes L1
-- [ ] L5 Go SDK (`sdk/go`, Go module): worker and API clients; `context.Context` on every call; passes L1
+- [ ] L1 Conformance kit: the OpenAPI document and the suite published as release assets of `abada-platform` (the suite also as a container); a language-neutral suite run against a real engine in CI, with worker scenarios (fetch-and-lock, heartbeat, complete, failure with `deferred` and `errorCode`, BPMN error, idempotency-key reuse, `409` retry, protocol-version check, unknown fields ignored, agent steps, tool credentials, file download within the lease) and API scenarios (deploy, start, message, signal, query, claim and complete a human task, typed errors, pagination); the Java worker SDK passes the worker scenarios first
+- [ ] L2 Python SDK (`abada-sdk-python`, PyPI): worker and API clients, sync and asyncio; the `abada.agent/v1` descriptor, step journal, tool credentials and file inputs, so agents written with Python AI libraries run as governed Abada workers; passes L1
+- [ ] L3 .NET SDK (`abada-sdk-dotnet`, NuGet, C#): worker and API clients; current .NET LTS, `async`/`await` with `CancellationToken`, fits ASP.NET Core and worker-service hosts; passes L1
+- [ ] L4 TypeScript / JavaScript SDK (`abada-sdk-typescript`, npm): worker and API clients; Node.js LTS first, ESM with types; passes L1
+- [ ] L5 Go SDK (`abada-sdk-go`, Go module): worker and API clients; `context.Context` on every call; passes L1
 - [ ] L6 Java API client: `sdk/java` gains the API client next to its worker client, so every language offers both; passes L1
-- [ ] L7 Release and documentation: every SDK versioned with the engine and published by the release workflow; a quick-start per language in the user guide; the README, site and claims register list only the SDKs that have shipped
+- [ ] L7 Release and documentation: each SDK repository publishes its own versions after passing the pinned suite; the engine release gate runs the shipped SDKs against each candidate; a quick-start per language in the user guide; the README, site and claims register list only the SDKs that have shipped
 
 ## Parallel track — design partners
 

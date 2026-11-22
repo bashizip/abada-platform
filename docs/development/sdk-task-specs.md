@@ -84,9 +84,32 @@ L6 then gives Java the API client, so every language offers both parts.
    `tracestate` passed through.
 5. **Apache-2.0**, with its own `LICENSE`, so code built on it carries no AGPL
    obligations.
-6. **Versioned with the engine** (`1.x.y` like `io.abada:abada-worker-client`)
-   and published by the release workflow, never by hand.
+6. **Its own repository and its own version.** Each SDK lives in its own
+   repository (see *Repositories* below), follows semantic versioning on its
+   own schedule, states the protocol and engine versions it supports (for
+   example "protocol v1, engine 1.2 or later") and is published by its
+   repository's release workflow, never by hand.
 7. **No telemetry.** An SDK contacts only the engine it is given.
+
+## Repositories (decided 2026-11-22)
+
+One repository per SDK, under the same owner as `abada-platform`:
+`abada-sdk-python`, `abada-sdk-dotnet`, `abada-sdk-typescript`,
+`abada-sdk-go`. Each language's tooling expects it (a Go module at the root of
+its repository, package pages on PyPI, NuGet and npm pointing at the SDK's own
+README and issues); each SDK's CI runs only its own toolchain; contributors
+for one language find a small repository in that language; and a fix ships
+without waiting for an engine release.
+
+`abada-platform` stays the source of truth for the contract: it publishes the
+OpenAPI document and the L1 conformance suite with every engine release, and
+each SDK repository runs that suite in CI against the engine's published
+container image. A change to protocol v1 or REST API v1 lands in
+`abada-platform` first; the SDKs follow, and the suite tells each one what it
+still lacks.
+
+The Java worker SDK stays in `sdk/java` for now (L6 adds its API client
+there); moving it to `abada-sdk-java` is a later, separate decision.
 
 ---
 
@@ -95,7 +118,10 @@ L6 then gives Java the API client, so every language offers both parts.
 **Goal.** One test suite, independent of language, that proves an SDK speaks
 protocol v1 and REST API v1 correctly against a real engine.
 
-- Publish the OpenAPI document as a release asset. Extend
+- Publish the OpenAPI document and the conformance suite as release assets
+  of `abada-platform`, with the suite also runnable as a container, so SDK
+  repositories pin a version and run it without checking out the engine.
+  Extend
   `engine/src/test/resources/contracts/api-v1-contract.json` so the frozen
   surface also lists the worker operations it does not cover today: agent
   steps (`POST /v1/external-tasks/{id}/steps`) and tool credentials
@@ -124,7 +150,7 @@ deliberately broken driver fails them.
 
 ## L2 — Python SDK
 
-`sdk/python`, published to PyPI. Supported Python versions: the ones upstream
+`abada-sdk-python`, published to PyPI. Supported Python versions: the ones upstream
 still supports at release time.
 
 - Worker and API clients, each synchronous and `asyncio`, with the same
@@ -141,7 +167,7 @@ still supports at release time.
 
 ## L3 — .NET SDK
 
-`sdk/dotnet`, published to NuGet, C#. Targets the current .NET LTS.
+`abada-sdk-dotnet`, published to NuGet, C#. Targets the current .NET LTS.
 
 - Worker and API clients; `async`/`await` with `CancellationToken` on every
   call; `HttpClient` through `IHttpClientFactory` and registration helpers for
@@ -152,14 +178,14 @@ still supports at release time.
 
 ## L4 — TypeScript / JavaScript SDK
 
-`sdk/typescript`, published to npm. Node.js current LTS first, ESM with type
+`abada-sdk-typescript`, published to npm. Node.js current LTS first, ESM with type
 declarations, `fetch` from the platform (no HTTP dependency). Deno and Bun are
 checked in CI only if they pass without code changes. Worker and API clients,
 same examples as L2. Passes L1.
 
 ## L5 — Go SDK
 
-`sdk/go`, a Go module. Worker and API clients; every call takes a
+`abada-sdk-go`, a Go module at the repository root. Worker and API clients; every call takes a
 `context.Context`. On cancellation, a worker-loop helper stops heartbeating
 and lets unfinished leases expire instead of reporting results it did not
 produce; it always stops a task's heartbeat before reporting that task's
@@ -174,8 +200,13 @@ does not change. Passes the API scenarios of L1.
 
 ## L7 — Release and documentation
 
-- The release workflow builds, tests (L1) and publishes every SDK with the
-  engine version; a failed SDK blocks the release like a failed engine test.
+- Each SDK repository has a release workflow that builds, runs the pinned
+  L1 suite and publishes to its registry; an SDK that fails the suite is not
+  published.
+- The engine release checklist (`1.0-rc-publication-gates.md`) gains one line:
+  the new conformance suite is published, and the shipped SDKs are run against
+  the release candidate before it is published, so a protocol change cannot
+  break them unnoticed.
 - A quick-start per language in the user guide (`documentation/`), for both
   the worker and the API client, and a table of SDKs and their status in the
   README.
@@ -184,8 +215,6 @@ does not change. Passes the API scenarios of L1.
 
 ## Open questions
 
-1. Monorepo (`sdk/<language>` in this repository, released together) or one
-   repository per SDK? This file assumes the monorepo, like `sdk/java`.
-2. Package names: `abada` or `abada-sdk` on PyPI, `Abada.Sdk` on NuGet and
+1. Package names: `abada` or `abada-sdk` on PyPI, `Abada.Sdk` on NuGet and
    `@abada/sdk` on npm need to be checked for availability and reserved
    before L2 starts.
