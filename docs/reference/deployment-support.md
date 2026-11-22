@@ -19,9 +19,11 @@ release-certified one so documentation never broadens the current guarantee.
 `1.2.0` (the Studio experience release) is published as an evaluation release with the
 executable Compose configuration, preflight, archive and
 PostgreSQL/Testcontainers evidence. It does not claim a completed public-cloud
-production certification. Public TLS, external-OIDC reference-host testing,
-multi-host failover, rolling upgrades and supply-chain certification are not
-yet scheduled on the [roadmap](../development/roadmap.md).
+production certification. Kubernetes (Helm) deployment, managed PostgreSQL and
+object stores, rolling upgrades, external-OIDC provider testing and
+supply-chain certification are scheduled in M7 of the
+[roadmap](../development/roadmap.md); until their evidence is recorded they are
+not part of the certified topology.
 
 Abada release images must publish `linux/amd64` and `linux/arm64` manifests.
 The original `1.0.0-rc.1` images are a documented exception: they contain only

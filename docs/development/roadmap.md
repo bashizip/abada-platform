@@ -5,8 +5,10 @@ This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
-Last reviewed: 2026-11-12. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
-(1.1.0 on 2026-10-14); M5 is the Studio-experience iteration.
+Last reviewed: 2026-11-22. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
+(1.1.0 on 2026-10-14); M5 shipped as 1.2.0 (tagged 2026-11-12, published
+2026-11-22). M6 and M7 come next; their dates are not set yet. The SDK track
+(L1–L2) runs next to M6. M8 (hosted Abada Cloud, 2.0.0) follows M7.
 
 ## Product definition
 
@@ -19,7 +21,16 @@ Abada is the governed runtime for AI-driven business processes:
 - Every AI decision leaves evidence an auditor can read later. Every
   AI-proposed change to a process is backed by replay evidence and approved by
   people under a review policy. Nothing auto-applies.
-- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure up to 1.1; from 1.2, self-hosted installations also require RustFS (self-hosted S3-compatible object storage) for process files. Managed cloud deployments will use GCP Cloud Storage or AWS S3 later.
+- Self-hosted, AGPL-3.0 (worker SDK Apache-2.0), PostgreSQL as the only required infrastructure up to 1.1; from 1.2, self-hosted installations also require RustFS (self-hosted S3-compatible object storage) for process files.
+- Two distributions of one product (from M7). **Self-hosted** (Docker Compose
+  and the installer, RustFS, your OIDC provider) stays the default and is not
+  changed by cloud work. **Kubernetes / cloud-native** (a Helm chart, on
+  premises or in a public cloud) runs the same images, the same engine and the
+  same migrations, and may use managed PostgreSQL, S3 or GCP Cloud Storage and
+  an external secret store. No feature exists in one distribution only.
+- From M8, a hosted service, **Abada Cloud** (multi-tenant SaaS operated by
+  us), runs the same engine. Self-hosted installations keep working as a
+  single implicit tenant with no visible change.
 
 Target users: regulated and sovereignty-sensitive organisations (banks,
 telcos, public sector) that must run on their own infrastructure.
@@ -32,7 +43,9 @@ telcos, public sector) that must run on their own infrastructure.
 | M2 Real process shapes | 10-19 → 11-06 | 1.1.0-rc.1 | Rework loop (agent drafts → human rejects with comment → agent revises → approve) survives an engine kill mid-loop |
 | M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible; a triage agent delegates a sub-case to a governed child process, the parent resumes with its result and the lineage is visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
-| M5 Studio experience | 10-19 → 12-04 | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
+| M5 Studio experience | 10-19 → 11-12 (published 11-22) | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
+| M7 Cloud and Kubernetes native | after 1.2.0 | 1.2.x (C1–C3), 1.3.0 (C4–C8) | The same release images are installed with Compose on a VM and with the Helm chart on kind and on GKE Autopilot; the same end-to-end test passes on all three; an engine pod is killed mid-agent-task and another pod finishes the work with no duplicate model call; the Compose stack and the installer needed no change |
+| M8 Abada Cloud (SaaS) | after M7 | 2.0.0 | Two organisations sign up self-service, choose a plan and a region, deploy a process and run an agent; the isolation suite proves neither can see the other's definitions, instances, tasks, files, workers, audit or usage through the API, a worker, Studio or a webhook; usage is metered and an invoice issued; one organisation exports everything and the export runs unchanged on a self-hosted 2.0.0 install |
 
 ## M1 — Truth and safety
 
@@ -100,7 +113,8 @@ Full specifications: [`m4-task-specs.md`](m4-task-specs.md). Released as `1.1.0`
 
 Full specifications: [`m5-task-specs.md`](m5-task-specs.md).
 
-**Scope frozen on 2026-11-12.** 1.2.0 ships S1–S15 in full, on 2026-12-04;
+**Scope frozen on 2026-11-12.** 1.2.0 ships S1–S15 in full. It was tagged on
+2026-11-12 and published on 2026-11-22, ahead of the planned 2026-12-04;
 the public launch follows (r/java 2026-12-08, Show HN 2026-12-15). Nothing
 else enters 1.2.0. 1.2.x brings new features only, not items deferred from
 this list, so the cut line below no longer applies to M5: a slip moves the
@@ -126,13 +140,94 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [x] S14 User guide, screenshots, 1.2.0 release notes and gate report
 - [x] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
 
-## M6 — 1.2.x (next release, after 1.2.0 on 2026-12-04)
+## M6 — 1.2.x (next release, after 1.2.0, published 2026-11-22)
 
 New features only (see the M5 scope freeze). Full specifications:
 [`m6-task-specs.md`](m6-task-specs.md). Planned on 2026-11-12; dates are set
 when 1.2.0 ships.
 
 - [ ] N1 Office and text files as agent input: S15 extended beyond images and PDF. Text formats (CSV, TXT, JSON, Markdown) sent as text; Excel converted to structured text per sheet; Word converted to PDF or text; the conversion runs on the installation's own infrastructure, never at the model provider; the evidence keeps the sha256 of the original file and of the converted content; typed errors for an unsupported format or a conversion over its limits
+
+## M7 — Cloud and Kubernetes native (after 1.2.0)
+
+Full specifications: [`m7-task-specs.md`](m7-task-specs.md). Planned on
+2026-11-13; dates are set when 1.2.0 ships. C1–C3 are new capability and ship
+in a 1.2.x release; C4–C8 ship in 1.3.0.
+
+Abada gains a second distribution, Kubernetes / cloud-native, next to the
+self-hosted one. **Guardrails:** the Compose stack, the installer and RustFS
+stay the default and are not modified for this milestone; cloud adapters are
+opt-in and off by default; both distributions run the same images and
+migrations; nothing new contacts us; the Compose release gate keeps running
+unchanged next to the new Kubernetes gate.
+
+- [ ] C1 Helm chart (`charts/abada`, OCI on ghcr): engine, Studio and agent worker; autoscaling and disruption budgets; Ingress or Gateway API; NetworkPolicy; non-root and read-only root filesystem; `existingSecret` for every credential; external PostgreSQL and OIDC required; RustFS or an S3-compatible endpoint for files; values profiles for on-premises, GKE and EKS; replaces `k8s/base`
+- [ ] C2 Engine on Kubernetes: leases released and in-flight commands finished on SIGTERM; Flyway run by a Helm pre-install/pre-upgrade Job, engine pods validate only; no dependency on local `/app/data`; every `@Scheduled` job proven safe with N replicas (model discovery and price catalog included); Studio runtime configuration from environment
+- [ ] C3 Kubernetes gate in CI: chart lint and schema check, install on kind, the release end-to-end test against it, pod-kill and rolling-upgrade scenarios with no duplicate state transition
+- [ ] C4 Cloud object stores: AWS S3 and GCP Cloud Storage behind the existing `ObjectStore` interface, with server-side encryption and workload identity; RustFS stays the default and the only store in Compose
+- [ ] C5 Managed PostgreSQL: Cloud SQL and Amazon RDS certified; lease acquisition (`SKIP LOCKED`, advisory locks) tested behind PgBouncer in transaction mode or the limitation documented; optional IAM database authentication
+- [ ] C6 Identity and secrets: OIDC certified with Microsoft Entra ID, Amazon Cognito and Google Identity Platform (Keycloak stays the reference); External Secrets Operator supported; no secret in chart values
+- [ ] C7 Observability on Kubernetes: ServiceMonitor for the Prometheus Operator, OTLP to a cluster collector, the bundled dashboards packaged as an optional ConfigMap
+- [ ] C8 Supply chain and certification: cosign-signed images and chart, SBOM per image, a GKE Autopilot reference cluster passing the C3 gate, new rows in the deployment support matrix, upgrade guide from Compose to Kubernetes (PostgreSQL and object-store migration) and 1.3.0 release notes
+
+## M8 — Abada Cloud: hosted SaaS (2.0.0, after M7)
+
+Full specifications: [`m8-task-specs.md`](m8-task-specs.md). Planned on
+2026-11-13; dates are set when M7 ships. A major release: tenancy changes the
+schema, the API and the worker protocol, and the service needs pricing,
+billing and operations that do not exist yet. Depends on M7 (the chart, the
+cloud object stores and managed PostgreSQL are its foundation).
+
+**Guardrails:** one engine and one AGPL codebase for every distribution; no
+governance or runtime capability exists only in the hosted service; a
+self-hosted installation runs as one implicit tenant and its operators see no
+change; tenant isolation is enforced in the database, not only in code; a
+tenant can always leave with all of its data and run it self-hosted.
+
+- [ ] P1 Tenancy model decision record: pooled tier (shared database, `tenant_id` and PostgreSQL row-level security) and dedicated tier (one M7 Helm release per tenant); what each plan gets; decided and recorded before any code
+- [ ] P2 Tenant in the engine: `tenant_id` on every tenant-owned table (Flyway, fresh and upgrade paths, self-hosted rows backfilled to the default tenant); row-level security policies; tenant context from the JWT and the worker credential; every query, lease, scheduler, timer and outbox row scoped
+- [ ] P3 Isolation beyond the database: files under a per-tenant prefix with a per-tenant encryption key; worker credentials and the external worker protocol scoped per tenant; model providers, MCP servers and secrets per tenant; webhooks, caches, metrics labels and logs tenant-aware; fair work acquisition and rate limits against noisy neighbours
+- [ ] P4 Control plane (`abada-cloud`): sign-up, organisations, plans, provisioning of pooled and dedicated tenants, suspension, deletion with a verified purge; operator console
+- [ ] P5 Identity: hosted accounts with MFA for small teams; per-tenant SSO federation (OIDC, then SAML) for organisations that bring their own IdP; invitations and roles per tenant
+- [ ] P6 Metering and quotas: usage events written through the transactional outbox (instances started, agent calls, tokens and model spend, storage, seats); quotas and spend caps enforced by the engine; usage visible to the tenant in Studio
+- [ ] P7 Pricing and billing: plans and prices decided (free tier, team, business, enterprise/dedicated); billing provider with card and African payment rails (mobile money); invoices, VAT, trials, dunning, plan changes
+- [ ] P8 Models in the hosted service: bring-your-own provider key per tenant, or Abada-managed models billed by metered spend; per-tenant spend caps; the evidence record unchanged
+- [ ] P9 Regions and data residency: at least one EU and one African region at launch, a tenant pinned to its region, backups kept in-region, residency stated in the contract
+- [ ] P10 Portability: export a tenant (definitions, versions, instances and history, audit, files, configuration without secrets) and import it into a self-hosted install; tested on every release
+- [ ] P11 Operations: SLOs and the SLA per plan, status page, on-call and incident process, per-tenant backup and point-in-time restore, a disaster-recovery exercise before launch
+- [ ] P12 Security, compliance and legal: external penetration test focused on tenant isolation; SOC 2 Type I / ISO 27001 readiness plan; terms of service, DPA, privacy policy and sub-processor list; licence position for the control plane and contributions (CLA or DCO) settled with counsel
+- [ ] P13 Launch: pricing page and sign-up on the site, hosted-service documentation, migration guide self-hosted ⇄ cloud, 2.0.0 release notes and gate report
+
+## Track — SDKs in more languages (next to M6, 1.2.x)
+
+Full specifications: [`sdk-task-specs.md`](sdk-task-specs.md). Added and
+decided on 2026-11-22. L1 and L2 ship in 1.2.x next to M6; their dates are set
+when 1.2.0 ships, like M6. L3–L7 follow in that order; the release each one
+ships in is set when L2 has shipped.
+
+Teams that adopt Abada already write their workers, their AI agents and the
+applications that start processes in Python, C#, TypeScript or Go. Each SDK
+has two parts: a **worker client** for external-worker protocol v1 and an
+**API client** for the application side of REST API v1 (deploy, start
+instances, send messages and signals, query instances and history, claim and
+complete human tasks, retry incidents). Both are plain REST and JSON, frozen
+and described by the generated OpenAPI document (`/api/v3/api-docs`, checked
+by `OpenApiContractTest`), so no SDK needs an engine change. All SDKs are
+Apache-2.0, like the Java worker SDK.
+
+Language order (decided): Python, .NET, TypeScript, Go. One repository per SDK
+(`abada-sdk-python`, `abada-sdk-dotnet`, `abada-sdk-typescript`,
+`abada-sdk-go`), each with its own version; `abada-platform` publishes the
+OpenAPI document and the conformance suite that every SDK runs. The Java
+worker SDK stays in `sdk/java` for now.
+
+- [ ] L1 Conformance kit: the OpenAPI document and the suite published as release assets of `abada-platform` (the suite also as a container); a language-neutral suite run against a real engine in CI, with worker scenarios (fetch-and-lock, heartbeat, complete, failure with `deferred` and `errorCode`, BPMN error, idempotency-key reuse, `409` retry, protocol-version check, unknown fields ignored, agent steps, tool credentials, file download within the lease) and API scenarios (deploy, start, message, signal, query, claim and complete a human task, typed errors, pagination); the Java worker SDK passes the worker scenarios first
+- [ ] L2 Python SDK (`abada-sdk-python`, PyPI): worker and API clients, sync and asyncio; the `abada.agent/v1` descriptor, step journal, tool credentials and file inputs, so agents written with Python AI libraries run as governed Abada workers; passes L1
+- [ ] L3 .NET SDK (`abada-sdk-dotnet`, NuGet, C#): worker and API clients; current .NET LTS, `async`/`await` with `CancellationToken`, fits ASP.NET Core and worker-service hosts; passes L1
+- [ ] L4 TypeScript / JavaScript SDK (`abada-sdk-typescript`, npm): worker and API clients; Node.js LTS first, ESM with types; passes L1
+- [ ] L5 Go SDK (`abada-sdk-go`, Go module): worker and API clients; `context.Context` on every call; passes L1
+- [ ] L6 Java API client: `sdk/java` gains the API client next to its worker client, so every language offers both; passes L1
+- [ ] L7 Release and documentation: each SDK repository publishes its own versions after passing the pinned suite; the engine release gate runs the shipped SDKs against each candidate; a quick-start per language in the user guide; the README, site and claims register list only the SDKs that have shipped
 
 ## Parallel track — design partners
 
@@ -154,11 +249,13 @@ If a milestone slips by more than a week, cut from the bottom, never the exit de
 | M3 | E13, E12 SSE (keep polling), then agent-proposed delegation in E20 (keep plain call-process) | E9, E10 |
 | M4 | E21, E17, E18 Astro migration | E14, E15 |
 | M5 | Nothing: scope frozen 2026-11-12, every task ships in 1.2.0 | S1–S15 |
+| M7 | C7 dashboards, then C6 provider matrix beyond Entra ID, then C5 RDS (keep Cloud SQL) | C1, C2, C3, the guardrails |
+| M8 | Dedicated tier (launch pooled only), SAML (keep OIDC), second region per continent, Studio usage charts (keep the numbers) | P2, P3, P6, P10, P12 isolation test, the guardrails |
 
 ## Deferred (1.2 or later)
 
-GCP Cloud Storage and AWS S3 object-store backends for managed cloud deployments; TypeScript and Python worker SDKs; Abada MCP
-server; SaaS track (multi-tenancy, billing); BPMN coverage beyond import;
+Abada MCP
+server; BPMN coverage beyond import;
 `tenda/` and `orun/` (archive); identity-administration UI beyond the IdP;
 infrastructure certification (Track B of the former 1.1 roadmap) — kept as a
 release-notes limitation until scheduled.
@@ -167,3 +264,11 @@ Call-process and for-each moved out of this list on 2026-09-27 into M3 (E20)
 and M4 (E21): governed delegation lets agents coordinate without leaving the
 engine's control. Both reuse the E2 token model and the E9 journal rather than
 new machinery.
+
+GCP Cloud Storage and AWS S3 object-store backends, and the public-cloud part of
+infrastructure certification, moved out of this list on 2026-11-13 into M7
+(C4, C8). The SaaS track (multi-tenancy, billing) moved into M8 the same day.
+
+TypeScript and Python worker SDKs moved out of this list on 2026-11-22 into
+the SDK track (L2, L4), together with .NET and Go (L3, L5) and an API client
+in every language.
