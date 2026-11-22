@@ -6,8 +6,8 @@ This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
 Last reviewed: 2026-11-22. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
-(1.1.0 on 2026-10-14); M5 is the Studio-experience iteration. M6 and M7 are
-planned after 1.2.0; their dates are set when 1.2.0 ships. The SDK track
+(1.1.0 on 2026-10-14); M5 shipped as 1.2.0 (tagged 2026-11-12, published
+2026-11-22). M6 and M7 come next; their dates are not set yet. The SDK track
 (L1–L2) runs next to M6. M8 (hosted Abada Cloud, 2.0.0) follows M7.
 
 ## Product definition
@@ -43,7 +43,7 @@ telcos, public sector) that must run on their own infrastructure.
 | M2 Real process shapes | 10-19 → 11-06 | 1.1.0-rc.1 | Rework loop (agent drafts → human rejects with comment → agent revises → approve) survives an engine kill mid-loop |
 | M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible; a triage agent delegates a sub-case to a governed child process, the parent resumes with its result and the lineage is visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
-| M5 Studio experience | 10-19 → 12-04 | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
+| M5 Studio experience | 10-19 → 11-12 (published 11-22) | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
 | M7 Cloud and Kubernetes native | after 1.2.0 | 1.2.x (C1–C3), 1.3.0 (C4–C8) | The same release images are installed with Compose on a VM and with the Helm chart on kind and on GKE Autopilot; the same end-to-end test passes on all three; an engine pod is killed mid-agent-task and another pod finishes the work with no duplicate model call; the Compose stack and the installer needed no change |
 | M8 Abada Cloud (SaaS) | after M7 | 2.0.0 | Two organisations sign up self-service, choose a plan and a region, deploy a process and run an agent; the isolation suite proves neither can see the other's definitions, instances, tasks, files, workers, audit or usage through the API, a worker, Studio or a webhook; usage is metered and an invoice issued; one organisation exports everything and the export runs unchanged on a self-hosted 2.0.0 install |
 
@@ -113,7 +113,8 @@ Full specifications: [`m4-task-specs.md`](m4-task-specs.md). Released as `1.1.0`
 
 Full specifications: [`m5-task-specs.md`](m5-task-specs.md).
 
-**Scope frozen on 2026-11-12.** 1.2.0 ships S1–S15 in full, on 2026-12-04;
+**Scope frozen on 2026-11-12.** 1.2.0 ships S1–S15 in full. It was tagged on
+2026-11-12 and published on 2026-11-22, ahead of the planned 2026-12-04;
 the public launch follows (r/java 2026-12-08, Show HN 2026-12-15). Nothing
 else enters 1.2.0. 1.2.x brings new features only, not items deferred from
 this list, so the cut line below no longer applies to M5: a slip moves the
@@ -139,7 +140,7 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [x] S14 User guide, screenshots, 1.2.0 release notes and gate report
 - [x] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
 
-## M6 — 1.2.x (next release, after 1.2.0 on 2026-12-04)
+## M6 — 1.2.x (next release, after 1.2.0, published 2026-11-22)
 
 New features only (see the M5 scope freeze). Full specifications:
 [`m6-task-specs.md`](m6-task-specs.md). Planned on 2026-11-12; dates are set
