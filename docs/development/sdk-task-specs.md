@@ -88,7 +88,8 @@ L6 then gives Java the API client, so every language offers both parts.
    repository (see *Repositories* below), follows semantic versioning on its
    own schedule, states the protocol and engine versions it supports (for
    example "protocol v1, engine 1.2 or later") and is published by its
-   repository's release workflow, never by hand.
+   repository's release workflow, never by hand. The Java SDK keeps its
+   current place and versioning in `sdk/java` until it moves.
 7. **No telemetry.** An SDK contacts only the engine it is given.
 
 ## Repositories (decided 2026-11-22)
