@@ -131,9 +131,9 @@ my-project/
 ├── processes/           # process documents, *.apl.yaml (Studio's default extension)
 ├── resources/           # project resources: JSON schemas, MCP tool servers (TOOL_SERVER, YAML), other files
 ├── forms/               # task forms from the Form Designer, <formKey>.json (FORM resources)
-├── media/               # media resources
-├── agents/              # agent resources
-└── tests/               # test resources
+├── media/               # files placed there in Studio (generic resources)
+├── agents/              # reserved root folder; no special meaning in the engine today
+└── tests/               # reserved root folder; no special meaning in the engine today
 ```
 
 What the files are:
@@ -146,7 +146,9 @@ What the files are:
   `formKey` (`forms/<key>.json`); deployment pins the form to the version
   (`form_snapshots`, V41). They are exported and imported as they are.
 - **Other resources** keep their kind (`RESOURCE`, `TOOL_SERVER`) and content
-  type. A tool server's `credential` is a name: the secret itself stays in
+  type. `media/`, `agents/` and `tests/` only hold what users put there
+  (generic resources); G1 copies them as they are and gives them no new
+  meaning. Agents themselves are `agent` nodes inside APL. A tool server's `credential` is a name: the secret itself stays in
   `tool_credentials`, encrypted with `ABADA_ENCRYPTION_KEY`, and is never
   exported.
 
