@@ -110,14 +110,37 @@ changes.
   unchanged.
 - Every step is opt-in. A project that does not use Git sees no change.
 
-Steps ship in order, each usable on its own. No code starts before the Show HN
-launch. The release each step ships in is set later.
+Steps ship in order, each usable on its own. The release each step ships in
+is set later. 1.2.0 is the release Abada is marketed with; Git sync is not
+needed for that.
+
+**Target.** A developer creates an Abada project on their machine (for
+example with a VS Code extension), imports it into Studio, and Git keeps the
+local copy and a Studio hosted anywhere in sync. G1–G3 build the parts that
+need no new tool: one project layout, provenance by commit, a project that
+follows a branch. G4 and the editor extension come on top of them.
+
+**Project layout.** One project per repository, plain files, diff-friendly.
+
+```text
+my-project/
+├── abada.project.yaml        # project name and description; no secret, no runtime data
+├── processes/                # follows the Studio project tree (folders allowed)
+│   └── *.apl.yaml            # one APL document per process
+├── tests/*.test.yaml         # later: declarative scenarios (not part of G1)
+└── README.md                 # ignored by import
+```
+
+`.apl.yaml` is the extension already used by the examples and the APL
+reference. There is no `decisions/` folder: decision tables live inside APL
+(ADR-002), and so do human-input forms and scripts. BPMN files are not part of
+the layout; BPMN stays an import path into APL.
 
 ### G1 — Project export and import as APL files
 
-**Work.** Export a project as a folder of `.apl.yaml` files that follows the
-project tree already shown in Studio, plus a small `abada.project.yaml`
-(project name and description, no secret, no runtime data). Import such a
+**Work.** Export a project in the layout above: its documents as
+`processes/**/*.apl.yaml` following the Studio project tree, plus
+`abada.project.yaml`. Import such a
 folder through the existing document service: a new key creates a document,
 an existing key saves a new revision under the usual `If-Match` check, and a
 stale revision is refused, never overwritten. Serialisation is deterministic
@@ -174,7 +197,10 @@ through a pull request rather than adopted in place.
 - A rollback in a Git-managed project works and shows the drift.
 - Works with a self-hosted Git server with no Internet access.
 
-### G4 — Commit from Studio (later, on demand)
+### G4 — Two-way sync between a local project and Studio (later)
 
-Studio commits an edit to a working branch and opens a pull or merge request.
-Planned only when a pilot asks for it.
+Studio commits an edit to a working branch and opens a pull or merge request,
+so that a project edited locally and in a hosted Studio stays in sync through
+Git, conflicts shown and never overwritten. A local authoring tool (for
+example a VS Code extension that validates `.apl.yaml` files against
+`GET /v1/apl/schema`) builds on the same layout. Planned once G3 is in use.
