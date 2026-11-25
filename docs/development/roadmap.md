@@ -5,7 +5,7 @@ This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
-Last reviewed: 2026-11-22. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
+Last reviewed: 2026-11-25. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
 (1.1.0 on 2026-10-14); M5 shipped as 1.2.0 (tagged 2026-11-12, published
 2026-11-22). M6 and M7 come next; their dates are not set yet. The SDK track
 (L1–L2) runs next to M6. M8 (hosted Abada Cloud, 2.0.0) follows M7.
@@ -144,9 +144,16 @@ plays the event stream back at a human pace, always showing how far behind it is
 
 New features only (see the M5 scope freeze). Full specifications:
 [`m6-task-specs.md`](m6-task-specs.md). Planned on 2026-11-12; dates are set
-when 1.2.0 ships.
+when 1.2.0 ships. Git sync (G1–G4) added on 2026-11-25: opt-in and additive,
+it changes nothing for projects that do not use it. Target: create a project
+locally (for example in VS Code), import it into Studio, and keep the local
+copy and a Studio hosted anywhere in sync through Git.
 
 - [ ] N1 Office and text files as agent input: S15 extended beyond images and PDF. Text formats (CSV, TXT, JSON, Markdown) sent as text; Excel converted to structured text per sheet; Word converted to PDF or text; the conversion runs on the installation's own infrastructure, never at the model provider; the evidence keeps the sha256 of the original file and of the converted content; typed errors for an unsupported format or a conversion over its limits
+- [ ] G1 Git sync, step 1 (opt-in): export a project as its Studio tree (`processes/*.apl.yaml`, `forms/*.json` from the Form Designer, `resources/`, `media/`, `agents/`, `tests/`) plus `abada.project.yaml`, and import it through the existing revisions; no secret exported; deterministic serialisation, byte-identical round trip; no schema change — [spec](m6-task-specs.md#g--git-sync-opt-in-additive)
+- [ ] G2 Git sync, step 2: optional repository, ref and commit SHA recorded on each deployed definition version and shown in Studio and the audit; CI recipe for GitHub Actions and GitLab CI using `POST /v1/apl/validate`
+- [ ] G3 Git sync, step 3: per-project Git-managed mode, off by default: pull from a linked branch (webhook or schedule), deploy with the SHA, that project read-only in Studio; E16 rollback kept with drift shown; any Git server, offline included
+- [ ] G4 Git sync, step 4 (later): two-way sync between a local project and Studio: commit from Studio to a branch and open a pull or merge request; a local authoring tool (for example a VS Code extension) on the same layout
 
 ## M7 — Cloud and Kubernetes native (after 1.2.0)
 

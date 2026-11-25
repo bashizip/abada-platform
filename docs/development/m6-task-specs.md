@@ -88,3 +88,138 @@ both hashes.
 **Documentation.** `process-files.md` (formats, where conversion runs,
 limits), the APL reference for `files`, the user guide section *Let an agent
 read a document*, and one example process reading a spreadsheet.
+
+---
+
+## G — Git sync (opt-in, additive)
+
+**Goal.** Teams keep their process definitions in their own Git repository,
+review changes with the tools they already use, and trace every deployed
+version back to a commit.
+
+**Guardrails.** Decisions already in this roadmap win; nothing that works today
+changes.
+- APL (YAML) stays the format; BPMN stays an import boundary; decision tables
+  and forms stay inside APL.
+- PostgreSQL stays authoritative for Studio documents, with the optimistic
+  revisions of the project envelope. Definition versions stay immutable.
+- Insight adoption (E15) and one-click rollback (E16) keep working in every
+  project.
+- No new required service, no new dependency at install time, nothing that
+  contacts us. Existing secrets keep `ABADA_ENCRYPTION_KEY`; M7 C6 is
+  unchanged.
+- Every step is opt-in. A project that does not use Git sees no change.
+
+Steps ship in order, each usable on its own. The release each step ships in
+is set later. 1.2.0 is the release Abada is marketed with; Git sync is not
+needed for that.
+
+**Target.** A developer creates an Abada project on their machine (for
+example with a VS Code extension), imports it into Studio, and Git keeps the
+local copy and a Studio hosted anywhere in sync. G1–G3 build the parts that
+need no new tool: one project layout, provenance by commit, a project that
+follows a branch. G4 and the editor extension come on top of them.
+
+**Project layout.** One project per repository. The repository is the Studio
+project tree as it exists today: the six locked root folders seeded for every
+project (`ProjectTreeService.SYSTEM_ROOT_FOLDER_NAMES`, V14), their user
+sub-folders, and the files in them, under the names Studio shows.
+
+```text
+my-project/
+├── abada.project.yaml   # project name and description, the kind of each resource; no secret, no runtime data
+├── processes/           # process documents, *.apl.yaml (Studio's default extension)
+├── resources/           # project resources: JSON schemas, MCP tool servers (TOOL_SERVER, YAML), other files
+├── forms/               # task forms from the Form Designer, <formKey>.json (FORM resources)
+├── media/               # files placed there in Studio (generic resources)
+├── agents/              # reserved root folder; no special meaning in the engine today
+└── tests/               # reserved root folder; no special meaning in the engine today
+```
+
+What the files are:
+- **Processes** are APL documents (`project_process_documents`), saved as
+  `.apl.yaml`. Decision tables and scripts are part of APL (ADR-002, the
+  `script` field), so there is no `decisions/*.dmn` or `scripts/` folder. BPMN
+  stays an import path into APL.
+- **Forms** are separate files, created with the Form Designer and stored as
+  FORM project resources in JSON. A `human-input` node points to one with
+  `formKey` (`forms/<key>.json`); deployment pins the form to the version
+  (`form_snapshots`, V41). They are exported and imported as they are.
+- **Other resources** keep their kind (`RESOURCE`, `TOOL_SERVER`) and content
+  type. `media/`, `agents/` and `tests/` only hold what users put there
+  (generic resources); G1 copies them as they are and gives them no new
+  meaning. Agents themselves are `agent` nodes inside APL. A tool server's `credential` is a name: the secret itself stays in
+  `tool_credentials`, encrypted with `ABADA_ENCRYPTION_KEY`, and is never
+  exported.
+
+### G1 — Project export and import as APL files
+
+**Work.** Export a project in the layout above: every folder, process
+document and resource of its tree (forms included), plus `abada.project.yaml`.
+Import such a folder through the existing document and tree services: a new
+key or path creates a document or resource, an existing one saves a new
+revision under the usual revision check, and a stale revision is refused,
+never overwritten. Serialisation is deterministic
+(fixed key order, fixed indentation, final newline) so that a diff shows only
+real changes. Archived documents are exported only on request.
+
+**Not in scope.** Instances, history, Insight data, files uploaded in tasks
+(RustFS), credentials and settings: this is the source of the processes, not a backup.
+
+**Acceptance.**
+- Export, import into an empty project, export again: the two folders are
+  identical, byte for byte.
+- Import over a document edited in the meantime is refused with the usual
+  revision conflict.
+- Moving a node on the canvas changes only the layout lines in the diff.
+- A form edited in the Form Designer shows as a change to its
+  `forms/<key>.json` file only; a process using it still pins it at deploy.
+- No Flyway migration; the existing document API tests still pass.
+
+### G2 — Deployed versions traced to a commit
+
+**Work.** Deployment accepts optional source fields: repository URL, ref and
+commit SHA. They are stored on the definition version (one Flyway migration
+adding nullable columns, empty for every existing version) and shown in Studio
+next to the version and in the audit. A documented CI recipe for GitHub
+Actions and GitLab CI validates each file with `POST /v1/apl/validate` and
+deploys from the main branch with the commit SHA. Abada itself still does not
+talk to any Git server.
+
+**Acceptance.**
+- A version deployed with a SHA shows it in Studio and in the admin audit; a
+  version deployed without one behaves exactly as today.
+- Upgrade test from the previous schema with existing versions.
+- The recipe runs against a real engine in CI.
+
+### G3 — Git-managed projects (read-only, per project)
+
+**Work.** An owner can link one project to a repository and branch. Abada
+pulls on a webhook or on a schedule (HTTPS token or SSH deploy key, stored
+encrypted like tool credentials), imports with G1, and deploys with G2
+traceability. Only that project's documents become read-only in Studio, with
+a banner naming the repository and commit. GitHub, self-hosted GitLab, Gitea
+and Forgejo work the same way, since only plain Git is used. Unlinking
+returns the project to normal editing.
+
+E16 rollback stays available as an emergency action: Studio then shows that
+the deployed version differs from the branch head until Git catches up.
+Insight proposals in a Git-managed project are exported as a patch to apply
+through a pull request rather than adopted in place.
+
+**Acceptance.**
+- A push to the linked branch is deployed with its SHA; a push that fails
+  validation deploys nothing and shows the error.
+- Studio refuses edits to a Git-managed project and accepts them in every
+  other project.
+- A rollback in a Git-managed project works and shows the drift.
+- Works with a self-hosted Git server with no Internet access.
+
+### G4 — Two-way sync between a local project and Studio (later)
+
+Studio commits an edit to a working branch and opens a pull or merge request,
+so that a project edited locally and in a hosted Studio stays in sync through
+Git, conflicts shown and never overwritten. A local authoring tool (for
+example a VS Code extension that validates `.apl.yaml` files against
+`GET /v1/apl/schema`) builds on the same layout, processes and Form Designer
+forms alike. Planned once G3 is in use.
