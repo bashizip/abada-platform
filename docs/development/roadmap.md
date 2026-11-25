@@ -5,10 +5,12 @@ This is the only active roadmap. It replaces `roadmap-to-1.0.md`,
 `saas-roadmap.md`, which are kept for history in `docs/archive/`. Release publication gates in
 `1.0-rc-publication-gates.md` still apply to every candidate.
 
-Last reviewed: 2026-11-22. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
+Last reviewed: 2026-11-25. Horizon: 2026-09-28 → 2026-12-04. M1–M4 shipped early
 (1.1.0 on 2026-10-14); M5 shipped as 1.2.0 (tagged 2026-11-12, published
-2026-11-22). M6 and M7 come next; their dates are not set yet. The SDK track
-(L1–L2) runs next to M6. M8 (hosted Abada Cloud, 2.0.0) follows M7.
+2026-11-22). M6 and M7 come next; their dates are not set yet. M6 now also
+carries governed projects (Git, OpenBao vault, Transit encryption) across
+1.2.1–1.2.3. The SDK track (L1–L2) runs next to M6. M8 (hosted Abada Cloud,
+2.0.0) follows M7.
 
 ## Product definition
 
@@ -44,6 +46,7 @@ telcos, public sector) that must run on their own infrastructure.
 | M3 Agents that act | 11-09 → 11-27 | 1.1.0-rc.2 | Agent uses MCP read tools, proposes an approval-required write, human approves; a crash does not repeat the write; cost per instance visible; a triage agent delegates a sub-case to a governed child process, the parent resumes with its result and the lineage is visible |
 | M4 Governed improvement | 11-30 → 12-18 | 1.1.0 | Override-rate finding → proposal replayed on the last 20 real cases → approved from the replay diff; one-click rollback |
 | M5 Studio experience | 10-19 → 11-12 (published 11-22) | 1.2.0 | Open a finished instance and tell at a glance which path it took and why; start an instance and watch it run step by step at a calm pace with the audit trail writing itself; an engine task fails, the node shows the incident and a Retry in place, the retry plays out on screen; a human fills a sectioned form with a file upload; a decision table is edited in the properties panel; an NL prompt is refined in the workspace and applied; the admin audit shows who changed what |
+| M6 Governed projects | after 1.2.0, dates open | 1.2.1, 1.2.2, 1.2.3 | A project lives in its own Git repository with no secret in any commit; a change made in dev is opened as a PR/MR from Abada, passes `abada validate` and `abada test` in CI, is merged and deployed to a read-only prod that records the commit SHA; the worker resolves `${secret:…}` from OpenBao just before the call and the value appears nowhere; a restart with an HSM unseals unattended; a `sensitive` field is stored Transit-encrypted and shows masked to an unauthorised role |
 | M7 Cloud and Kubernetes native | after 1.2.0 | 1.2.x (C1–C3), 1.3.0 (C4–C8) | The same release images are installed with Compose on a VM and with the Helm chart on kind and on GKE Autopilot; the same end-to-end test passes on all three; an engine pod is killed mid-agent-task and another pod finishes the work with no duplicate model call; the Compose stack and the installer needed no change |
 | M8 Abada Cloud (SaaS) | after M7 | 2.0.0 | Two organisations sign up self-service, choose a plan and a region, deploy a process and run an agent; the isolation suite proves neither can see the other's definitions, instances, tasks, files, workers, audit or usage through the API, a worker, Studio or a webhook; usage is metered and an invoice issued; one organisation exports everything and the export runs unchanged on a self-hosted 2.0.0 install |
 
@@ -140,13 +143,36 @@ plays the event stream back at a human pace, always showing how far behind it is
 - [x] S14 User guide, screenshots, 1.2.0 release notes and gate report
 - [x] S15 Files as agent input (multimodal): an agent node declares `files`; the agent worker downloads them through the engine with its lease and sends them to vision-capable models (images, PDF); file id and sha256 in the evidence, never the bytes; typed error when a model cannot read the type
 
-## M6 — 1.2.x (next release, after 1.2.0, published 2026-11-22)
+## M6 — 1.2.x (next releases, after 1.2.0, published 2026-11-22)
 
 New features only (see the M5 scope freeze). Full specifications:
-[`m6-task-specs.md`](m6-task-specs.md). Planned on 2026-11-12; dates are set
-when 1.2.0 ships.
+[`m6-task-specs.md`](m6-task-specs.md). N1 planned on 2026-11-12; governed
+projects (G, V, K) added from the 1.2.x roadmap of 2026-11-14. Target dates
+for 1.2.1, 1.2.2 and 1.2.3 are open; the release N1 ships in is not set.
+
+Governed projects make Abada governable and auditable for regulated sectors
+without giving up sovereignty: a project is a Git repository and Git is the
+only source of truth in production (G), no secret exists outside an OpenBao
+vault (V), and sensitive business fields are encrypted with OpenBao Transit so
+Abada never holds the key (K). The vault ships first, with the repository
+layout, so that no commit ever holds a secret. The source document names the
+features A, B and C; G, V and K avoid a clash with M7's C1–C8. Points that
+disagree with the rest of this roadmap are listed at the end of the specs.
+
+| Release | Content |
+| --- | --- |
+| 1.2.1 Foundations | G1, V1 |
+| 1.2.2 Synchronisation | G2, V2 |
+| 1.2.3 Review | G3, K1 |
+| M7 | Kubernetes auth and cloud KMS auto-unseal for OpenBao |
 
 - [ ] N1 Office and text files as agent input: S15 extended beyond images and PDF. Text formats (CSV, TXT, JSON, Markdown) sent as text; Excel converted to structured text per sheet; Word converted to PDF or text; the conversion runs on the installation's own infrastructure, never at the model provider; the evidence keeps the sha256 of the original file and of the converted content; typed errors for an unsupported format or a conversion over its limits
+- [ ] G1 Projects in Git (1.2.1): one project per repository with a stable, diff-friendly layout (`abada.project.yaml`, processes, environments, `secrets.manifest.yaml`, YAML test scenarios); export and import identical byte for byte; manual push; every deployed definition keeps its commit SHA; production read-only in Abada and never deployed without a traced commit; GitHub, self-hosted GitLab (offline), Gitea and Forgejo
+- [ ] G2 Git synchronisation (1.2.2): webhooks, a push visible in Abada in under a minute; two-way sync in dev (an Abada edit is committed to a working branch), one-way Git → Abada in prod; conflicts detected, never overwritten; branch ↔ environment mapping (`dev` → dev, `main` → prod); running instances stay on their version
+- [ ] G3 Review from Abada (1.2.3): open a PR/MR from Abada and show its status; `abada validate` and `abada test` CLI with GitHub Actions and GitLab CI templates; production deployed from `main` or a tag; optional signed commits (GPG or SSH) verified at deployment; GitHub App or OAuth, GitLab token, SSH deploy key
+- [ ] V1 OpenBao vault, required (1.2.1): bundled OpenBao or the customer's Vault/OpenBao, required in every installation; `${secret:<name>}` references resolved late by the worker, never in variables, history, logs or exports; deployment refused when the manifest names a missing secret; automatic masking in logs; `abada validate` finds plain-text secrets; AppRole, KV v2, one generated policy per project and environment, rotation without redeployment, OpenBao audit correlated with the Abada audit; write-only Studio screen; Shamir and SoftHSM
+- [ ] V2 HSM and external vaults (1.2.2): auto-unseal over PKCS#11 with Nitrokey NetHSM, Utimaco/Thales and Securosys, a guide per HSM and a documented fallback chain; the customer's external vault; dynamic database credentials per task; PKCS#11 tests in CI with SoftHSM
+- [ ] K1 Transit encryption of sensitive fields (1.2.3, needs V1): fields marked `sensitive: true` encrypted on write by OpenBao Transit and stored encrypted in the database, history and exports; decryption only for authorised tasks and roles, each one audited; key rotation by progressive rewrap without interrupting running instances. Open: deterministic hash for exact-match search (for example by tax number)
 
 ## M7 — Cloud and Kubernetes native (after 1.2.0)
 
@@ -169,6 +195,11 @@ unchanged next to the new Kubernetes gate.
 - [ ] C6 Identity and secrets: OIDC certified with Microsoft Entra ID, Amazon Cognito and Google Identity Platform (Keycloak stays the reference); External Secrets Operator supported; no secret in chart values
 - [ ] C7 Observability on Kubernetes: ServiceMonitor for the Prometheus Operator, OTLP to a cluster collector, the bundled dashboards packaged as an optional ConfigMap
 - [ ] C8 Supply chain and certification: cosign-signed images and chart, SBOM per image, a GKE Autopilot reference cluster passing the C3 gate, new rows in the deployment support matrix, upgrade guide from Compose to Kubernetes (PostgreSQL and object-store migration) and 1.3.0 release notes
+
+The 1.2.x roadmap also places OpenBao's Kubernetes auth method and cloud KMS
+auto-unseal (external KMS plugins, OpenBao 2.6.0+) in M7, after V1–V2. Which C
+task carries them, and whether External Secrets Operator in C6 stays next to
+the native OpenBao integration, is open.
 
 ## M8 — Abada Cloud: hosted SaaS (2.0.0, after M7)
 
