@@ -120,35 +120,49 @@ local copy and a Studio hosted anywhere in sync. G1–G3 build the parts that
 need no new tool: one project layout, provenance by commit, a project that
 follows a branch. G4 and the editor extension come on top of them.
 
-**Project layout.** One project per repository, plain files, diff-friendly.
+**Project layout.** One project per repository. The repository is the Studio
+project tree as it exists today: the six locked root folders seeded for every
+project (`ProjectTreeService.SYSTEM_ROOT_FOLDER_NAMES`, V14), their user
+sub-folders, and the files in them, under the names Studio shows.
 
 ```text
 my-project/
-├── abada.project.yaml        # project name and description; no secret, no runtime data
-├── processes/                # follows the Studio project tree (folders allowed)
-│   └── *.apl.yaml            # one APL document per process
-├── tests/*.test.yaml         # later: declarative scenarios (not part of G1)
-└── README.md                 # ignored by import
+├── abada.project.yaml   # project name and description, the kind of each resource; no secret, no runtime data
+├── processes/           # process documents, *.apl.yaml (Studio's default extension)
+├── resources/           # project resources: JSON schemas, MCP tool servers (TOOL_SERVER, YAML), other files
+├── forms/               # task forms from the Form Designer, <formKey>.json (FORM resources)
+├── media/               # media resources
+├── agents/              # agent resources
+└── tests/               # test resources
 ```
 
-`.apl.yaml` is the extension already used by the examples and the APL
-reference. There is no `decisions/` folder: decision tables live inside APL
-(ADR-002), and so do human-input forms and scripts. BPMN files are not part of
-the layout; BPMN stays an import path into APL.
+What the files are:
+- **Processes** are APL documents (`project_process_documents`), saved as
+  `.apl.yaml`. Decision tables and scripts are part of APL (ADR-002, the
+  `script` field), so there is no `decisions/*.dmn` or `scripts/` folder. BPMN
+  stays an import path into APL.
+- **Forms** are separate files, created with the Form Designer and stored as
+  FORM project resources in JSON. A `human-input` node points to one with
+  `formKey` (`forms/<key>.json`); deployment pins the form to the version
+  (`form_snapshots`, V41). They are exported and imported as they are.
+- **Other resources** keep their kind (`RESOURCE`, `TOOL_SERVER`) and content
+  type. A tool server's `credential` is a name: the secret itself stays in
+  `tool_credentials`, encrypted with `ABADA_ENCRYPTION_KEY`, and is never
+  exported.
 
 ### G1 — Project export and import as APL files
 
-**Work.** Export a project in the layout above: its documents as
-`processes/**/*.apl.yaml` following the Studio project tree, plus
-`abada.project.yaml`. Import such a
-folder through the existing document service: a new key creates a document,
-an existing key saves a new revision under the usual `If-Match` check, and a
-stale revision is refused, never overwritten. Serialisation is deterministic
+**Work.** Export a project in the layout above: every folder, process
+document and resource of its tree (forms included), plus `abada.project.yaml`.
+Import such a folder through the existing document and tree services: a new
+key or path creates a document or resource, an existing one saves a new
+revision under the usual revision check, and a stale revision is refused,
+never overwritten. Serialisation is deterministic
 (fixed key order, fixed indentation, final newline) so that a diff shows only
 real changes. Archived documents are exported only on request.
 
-**Not in scope.** Instances, history, Insight data, files, credentials and
-settings: this is the source of the processes, not a backup.
+**Not in scope.** Instances, history, Insight data, files uploaded in tasks
+(RustFS), credentials and settings: this is the source of the processes, not a backup.
 
 **Acceptance.**
 - Export, import into an empty project, export again: the two folders are
@@ -156,6 +170,8 @@ settings: this is the source of the processes, not a backup.
 - Import over a document edited in the meantime is refused with the usual
   revision conflict.
 - Moving a node on the canvas changes only the layout lines in the diff.
+- A form edited in the Form Designer shows as a change to its
+  `forms/<key>.json` file only; a process using it still pins it at deploy.
 - No Flyway migration; the existing document API tests still pass.
 
 ### G2 — Deployed versions traced to a commit
@@ -203,4 +219,5 @@ Studio commits an edit to a working branch and opens a pull or merge request,
 so that a project edited locally and in a hosted Studio stays in sync through
 Git, conflicts shown and never overwritten. A local authoring tool (for
 example a VS Code extension that validates `.apl.yaml` files against
-`GET /v1/apl/schema`) builds on the same layout. Planned once G3 is in use.
+`GET /v1/apl/schema`) builds on the same layout, processes and Form Designer
+forms alike. Planned once G3 is in use.
